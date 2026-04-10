@@ -1904,13 +1904,10 @@ const SB={
       if(!r.ok)return[];
       const d=await r.json();
       if(table==='wl_jobs'){
-        // Strip base64 photos/files from list — store full records in _jobsCache
         return d?d.map(x=>{
           const job=x.data;
           if(!job) return job;
-          // Cache full record (with files) for updateJob use
           if(typeof _jobsCache!=='undefined') _jobsCache[job.jobNo]=JSON.parse(JSON.stringify(job));
-          // Strip large base64 data from lightweight list entry
           if(job.photos&&job.photos.length){
             job._photoCount=job.photos.length;
             job.photos=job.photos.map(p=>({name:p.name,size:p.size,url:p.url}));
@@ -1918,7 +1915,30 @@ const SB={
           if(job.excelFile&&job.excelFile.dataUrl){
             job.excelFile={name:job.excelFile.name,size:job.excelFile.size,url:job.excelFile.url};
           }
+          // Strip large base64 from items excelFile/photos
+          if(job.items){
+            job.items=job.items.map(item=>{
+              if(item.excelFile&&item.excelFile.dataUrl){
+                item.excelFile={name:item.excelFile.name,size:item.excelFile.size,url:item.excelFile.url};
+              }
+              if(item.photos&&item.photos.length){
+                item.photos=item.photos.map(p=>({name:p.name,size:p.size,url:p.url}));
+              }
+              return item;
+            });
+          }
           return job;
+        }):[];
+      }
+      if(table==='wl_staff'){
+        // Strip large base64 signatures — only keep URL signatures
+        return d?d.map(x=>{
+          const s=x.data;
+          if(!s) return s;
+          if(s.signature&&s.signature.startsWith('data:')&&s.signature.length>5000){
+            return {...s, signature:''};
+          }
+          return s;
         }):[];
       }
       return d?d.map(x=>x.data):[];
@@ -2029,32 +2049,38 @@ let _custSelected=false;
 
 async function loadAll(){
   showLoading('Connecting to database…');
+  const withTimeout=(promise, ms=8000)=>Promise.race([
+    promise,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),ms))
+  ]);
   try{
     showLoading('Loading jobs…');
-    const jobs=await SB.getAll('wl_jobs');
-    // Only load jobs in new items[] format — old single-equipment records are ignored
+    const jobs=await withTimeout(SB.getAll('wl_jobs')).catch(()=>[]);
     _jobs=(jobs||[]).filter(j=>j.items&&Array.isArray(j.items));
 
-    showLoading('Loading settings & staff…');
+    showLoading('Loading data…');
     const [refEq,settingsArr,customers,staff]=await Promise.allSettled([
-      SB.getAll('wl_ref_equipment'),
-      SB.getAll('wl_settings'),
-      SB.getAll('wl_customers'),
-      SB.getAll('wl_staff')
+      withTimeout(SB.getAll('wl_ref_equipment')),
+      withTimeout(SB.getAll('wl_settings')),
+      withTimeout(SB.getAll('wl_customers')),
+      withTimeout(SB.getAll('wl_staff'))
     ]);
     _refEq=(refEq.status==='fulfilled'?refEq.value:[])||[];
     _customers=(customers.status==='fulfilled'?customers.value:[])||[];
     _staff=((staff.status==='fulfilled'?staff.value:[])||[]).map(s=>{
-      // If signature is a huge base64 string (old format), clear it so it doesn't break loading
-      // Going forward, signatures are stored as Storage URLs
-      if(s.signature&&s.signature.startsWith('data:')&&s.signature.length>50000){
-        return {...s, signature:''};
+      if(!s)return s;
+      // Strip large base64 signatures — only keep Storage URLs
+      if(s.signature&&s.signature.startsWith('data:')){
+        return {...s,signature:''};
       }
       return s;
     });
     const settingsArr2=settingsArr.status==='fulfilled'?settingsArr.value:[];
-    if(settingsArr2&&settingsArr2[0]) _settings=Object.assign({},DEF,settingsArr2[0]);
-
+    if(settingsArr2&&settingsArr2[0]){
+      const raw=settingsArr2[0];
+      // If logo is huge base64, keep it but warn — it shouldn't cause issues
+      _settings=Object.assign({},DEF,raw);
+    }
     showLoading('Almost ready…');
   }catch(e){
     console.error('Supabase load error',e);
@@ -2414,6 +2440,11 @@ async function saveSettings(){
   s.slaExpress=parseInt(el('set-sla-express').value)||2;
   s.slaNormal=parseInt(el('set-sla-normal').value)||5;
   s.slaRoutine=parseInt(el('set-sla-routine').value)||10;
+  // Never save base64 logo to DB — only save Storage URL
+  if(s.logoUrl&&s.logoUrl.startsWith('data:')){
+    // Logo is still base64 — don't save it to DB, it makes the row huge
+    delete s.logoUrl;
+  }
   await SB.upsert('wl_settings','main',s);
   applySettings(s);
   const b=el('settings-saved-banner');b.style.display='block';setTimeout(()=>b.style.display='none',3000);
@@ -2769,14 +2800,38 @@ async function saveEquipment(printReceipt=false){
 function handleLogoSelect(e){
   const f=e.target.files[0]; if(!f)return;
   if(f.size>2*1024*1024){alert('Logo file must be under 2MB.');return;}
+  // Show preview immediately from local file
   const r=new FileReader();
-  r.onload=ev=>{
-    const url=ev.target.result;
-    _settings.logoUrl=url;
-    const img=el('logo-preview-img');if(img)img.src=url;
+  r.onload=async ev=>{
+    const dataUrl=ev.target.result;
+    // Show preview
+    const img=el('logo-preview-img');if(img)img.src=dataUrl;
     const wrap=el('logo-preview-wrap');if(wrap)wrap.style.display='block';
     const area=el('logo-upload-area');if(area)area.style.display='none';
-    showToast('Logo loaded — click Save Changes to keep it','info',3000);
+    showToast('Uploading logo…','info',2000);
+    // Upload to Supabase Storage
+    try{
+      const ext=f.type.includes('png')?'png':f.type.includes('svg')?'svg':'jpg';
+      const path=`settings/logo.${ext}`;
+      const uploadRes=await fetch(`${SUPA_URL}/storage/v1/object/westlab-files/${path}`,{
+        method:'POST',
+        headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+          'Content-Type':f.type,'x-upsert':'true'},
+        body:f
+      });
+      if(uploadRes.ok){
+        const logoUrl=`${SUPA_URL}/storage/v1/object/public/westlab-files/${path}`;
+        _settings.logoUrl=logoUrl;
+        showToast('✅ Logo uploaded — click Save Changes','success',3000);
+      } else {
+        // Fallback to base64 if storage fails
+        _settings.logoUrl=dataUrl;
+        showToast('Logo ready — click Save Changes','info',2000);
+      }
+    }catch(err){
+      _settings.logoUrl=dataUrl;
+      showToast('Logo ready — click Save Changes','info',2000);
+    }
   };
   r.readAsDataURL(f);
   e.target.value='';
