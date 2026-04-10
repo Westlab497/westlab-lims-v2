@@ -2046,6 +2046,26 @@ const DEF={labName:'Westlab',accredNum:'SAMM 1234',accredBody:'SAMM / ILAC MRA',
 // In-memory cache
 let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[];
 let _custSelected=false;
+const CUST_TABLE='wl_customers';
+let _extraEquipment=[];
+let _jobsCache={};
+let _certPreviewJobNo=null;
+let _certPreviewItemIdx=0;
+let _notifications=[];
+let _traceSelected=[];
+let currentPhotos=[];
+let currentExcel=null;
+let _excelFile=null;
+let _editingJobNo=null;
+let assigningJobNo=null;
+let reassigningJobNo=null;
+let calJobNo=null, calItemIdx=0;
+let approvalJobNo=null, approvalItemIdx=null;
+let _assignItemJobNo=null, _assignItemIdx=null;
+let _custSuggestIdx=-1;
+let _staffSigData='';
+let _refEqCertFile=null;
+let currentUser=null;
 
 async function loadAll(){
   showLoading('Connecting to database…');
@@ -2201,7 +2221,6 @@ function rebuildUsers(){
   });
 }
 
-let currentUser=null;
 
 // ── LOGIN ──
 
@@ -2550,7 +2569,6 @@ async function commitCertNo(){
 }
 
 // ── PHOTO UPLOAD ──
-let currentPhotos=[];
 
 function handlePhotoSelect(e){Array.from(e.target.files).forEach(f=>readPhoto(f));e.target.value='';}
 function handlePhotoDrop(e){
@@ -2591,8 +2609,6 @@ async function uploadPhotosToStorage(jobNo){
 }
 
 // ── PDF UPLOAD ──
-let currentExcel=null;
-let _excelFile=null;
 
 function handleExcelSelect(e){
   const f=e.target.files[0]; if(!f)return;
@@ -2996,7 +3012,6 @@ document.addEventListener('click',e=>{
 });
 
 // ── MULTI-ITEM EQUIPMENT ──
-let _extraEquipment=[];
 function addExtraEquipment(){
   const idx=_extraEquipment.length;
   _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:''});
@@ -3122,7 +3137,6 @@ function printJobReceipt(jobs){
   frame.style.display='block';
   setTimeout(()=>{window.print();setTimeout(()=>{frame.style.display='none';},500);},200);
 }
-let _editingJobNo=null;
 function openEditJobModal(jobNo){
   const j=getJob(jobNo); if(!j)return;
   _editingJobNo=jobNo;
@@ -3190,7 +3204,6 @@ async function saveEditJob(){
   showToast('✅ Job updated successfully','success');
   addAudit('✏️',`Job <strong>${_editingJobNo}</strong> edited`);
 }
-let assigningJobNo=null;
 // ── POPULATE USER DROPDOWNS ──
 function populateApprovedByDropdown(){
   const sel=el('cal-approved-by'); if(!sel)return;
@@ -3257,7 +3270,6 @@ async function confirmAssign(){
 }
 
 // ── RE-ASSIGN ──
-let reassigningJobNo=null;
 function openReassignModal(jobNo){
   reassigningJobNo=jobNo;
   const j=getJob(jobNo);
@@ -3283,7 +3295,6 @@ async function confirmReassign(){
 }
 
 // ── CALIBRATION ──
-let calJobNo=null, calItemIdx=0;
 async function openCalModal(jobNo, itemIdx=0){
   calJobNo=jobNo; calItemIdx=itemIdx;
   currentExcel=null; _excelFile=null;
@@ -3366,7 +3377,6 @@ async function openCalModal(jobNo, itemIdx=0){
   openModal('modal-perform-cal');
 }
 // ── TRACEABILITY SEARCH & SELECT ──
-let _traceSelected=[];
 
 function traceSearchInput(val){
   const box=el('trace-suggestions');
@@ -3526,7 +3536,6 @@ async function submitCalibration(){
 }
 
 // ── APPROVAL (Jay) ──
-let approvalJobNo=null, approvalItemIdx=null;
 
 function openApproveItemModal(jobNo, itemIdx){
   approvalJobNo=jobNo; approvalItemIdx=itemIdx;
@@ -3723,7 +3732,6 @@ function renderEquipmentTable(){
 }
 
 // ── ASSIGN ITEM (item-level) ──
-let _assignItemJobNo=null, _assignItemIdx=null;
 function openAssignItemModal(jobNo, itemIdx){
   const j=getJob(jobNo); if(!j)return;
   const item=j.items&&j.items[itemIdx];
@@ -3799,7 +3807,6 @@ function showCertForItem(jobNo, itemIdx){
   if(btnP1) btnP1.style.display='inline-flex';
   openModal('modal-cert-preview');
 }
-let _certPreviewItemIdx=0;
 
 // ── RENDER MY JOBS (item-level) ──
 function renderMyJobs(){
@@ -4039,7 +4046,6 @@ function getJob(jobNo){ return _jobs.find(j=>j.jobNo===jobNo)||null; }
 // ── JOB CACHE — full records stored in memory, stripped list for rendering ──
 // _jobs = lightweight list (no base64) for tables/dashboard
 // _jobsCache = full records indexed by jobNo for updates
-const _jobsCache={};
 
 function cacheFullJob(job){
   if(job&&job.jobNo) _jobsCache[job.jobNo]=job;
@@ -4719,7 +4725,6 @@ async function openApproveModal(jobNo){
 
 // ── REFERENCE EQUIPMENT ──
 // ── REF EQ CERT FILE ──
-let _refEqCertFile=null;
 function handleRefEqCertSelect(e){
   const f=e.target.files[0]; if(!f)return;
   _refEqCertFile=f;
@@ -4938,7 +4943,6 @@ async function deleteRefEq(id){
 }
 
 // ── VIEW COMPLETED CERTIFICATE ──
-let _certPreviewJobNo=null;
 
 // showCertFromJob — shows cert for first item (backward compat alias)
 function showCertFromJob(jobNo){
@@ -4950,7 +4954,6 @@ function showCertFromJob(jobNo){
 }
 
 // ── CUSTOMER DATABASE ──
-const CUST_TABLE='wl_customers';
 
 function toggleDealerField(){
   const type=el('cust-type').value;
@@ -5167,7 +5170,6 @@ function viewCustomerDetail(custId){
 }
 
 // ── CUSTOMER AUTOCOMPLETE (in New Job modal) ──
-let _custSuggestIdx=-1;
 
 function customerSearchInput(val){
   _custSelected=false;
@@ -5562,7 +5564,6 @@ function renderPersonnel(){
 }
 
 // ── STAFF SIGNATURE HANDLING ──
-let _staffSigData='';
 function handleStaffSigSelect(e){
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader();
@@ -5803,7 +5804,6 @@ async function checkRecalReminders(){
 }
 
 // ── IN-APP NOTIFICATIONS ──
-let _notifications=[];
 function addNotification(icon, text, jobNo=''){
   _notifications.unshift({icon,text,jobNo,time:new Date().toISOString(),read:false});
   if(_notifications.length>50) _notifications=_notifications.slice(0,50);
