@@ -2044,7 +2044,14 @@ async function loadAll(){
     ]);
     _refEq=(refEq.status==='fulfilled'?refEq.value:[])||[];
     _customers=(customers.status==='fulfilled'?customers.value:[])||[];
-    _staff=(staff.status==='fulfilled'?staff.value:[])||[];
+    _staff=((staff.status==='fulfilled'?staff.value:[])||[]).map(s=>{
+      // If signature is a huge base64 string (old format), clear it so it doesn't break loading
+      // Going forward, signatures are stored as Storage URLs
+      if(s.signature&&s.signature.startsWith('data:')&&s.signature.length>50000){
+        return {...s, signature:''};
+      }
+      return s;
+    });
     const settingsArr2=settingsArr.status==='fulfilled'?settingsArr.value:[];
     if(settingsArr2&&settingsArr2[0]) _settings=Object.assign({},DEF,settingsArr2[0]);
 
@@ -5605,13 +5612,33 @@ async function saveStaff(){
     if(pw.length<4){alert('Password must be at least 4 characters.');return;}
   }
   const existing=_staff.find(s=>s.username===(isEdit?editUsername:username));
+  // Upload signature to Storage if a new one was selected
+  let sigUrl=existing?.signature||'';
+  if(_staffSigData&&_staffSigData.startsWith('data:')){
+    try{
+      // Convert base64 to blob and upload
+      const res=await fetch(_staffSigData);
+      const blob=await res.blob();
+      const ext=blob.type.includes('png')?'png':'jpg';
+      const path=`signatures/${username}_sig.${ext}`;
+      const uploadRes=await fetch(`${SUPA_URL}/storage/v1/object/westlab-files/${path}`,{
+        method:'POST',
+        headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+          'Content-Type':blob.type,'x-upsert':'true'},
+        body:blob
+      });
+      if(uploadRes.ok){
+        sigUrl=`${SUPA_URL}/storage/v1/object/public/westlab-files/${path}`;
+      }
+    }catch(e){console.warn('Signature upload failed:',e);}
+  }
   const record={
     username, name,
     certName: el('staff-cert-name').value.trim()||name,
     display:role==='Signatory'?'Approved Signatory':'Engineer / Technician',
     role,
     password:pw||(existing?.password||''),
-    signature:_staffSigData||(existing?.signature||''),
+    signature:sigUrl,
     active:existing?.active!==false,
     createdAt:existing?.createdAt||new Date().toISOString()
   };
