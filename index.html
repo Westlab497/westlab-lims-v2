@@ -4974,8 +4974,16 @@ async function saveRefEquipment(){
   if(_refEqCertFile){
     try{
       const path=`ref-equipment/${id}/${_refEqCertFile.name.replace(/\s/g,'_')}`;
-      certFileUrl=await SB.uploadFile('westlab-files',path,_refEqCertFile);
-      certFileName=_refEqCertFile.name;
+      const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
+        method:'POST',
+        headers:{'X-File-Path':path,'Content-Type':_refEqCertFile.type||'application/pdf'},
+        body:_refEqCertFile
+      });
+      if(uploadRes.ok){
+        const r2res=await uploadRes.json();
+        certFileUrl=r2res.url||`https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/${path}`;
+        certFileName=_refEqCertFile.name;
+      }
     }catch(e){console.error('Cert upload failed:',e);}
   }
   const record={
