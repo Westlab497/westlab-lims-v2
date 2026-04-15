@@ -1952,7 +1952,13 @@ const SB={
           return s;
         }):[];
       }
-      return d?d.map(x=>x.data):[];
+      return d?d.map(x=>{
+        // Handle both formats: {id, data:{...}} and old direct {id, company, ...}
+        if(x.data) return x.data;
+        // Old format — data stored directly in row
+        const {id, updated_at, ...rest} = x;
+        return Object.keys(rest).length ? {...rest, id} : null;
+      }).filter(Boolean):[];
     }catch(e){console.warn('getAll failed for',table,e);return[];}
   },
   async upsert(table,id,data){
@@ -5166,7 +5172,10 @@ function populateDealerDropdown(selectedId){
 }
 
 function openAddCustomerModal(){
-  document.getElementById('customer-modal-title').textContent='🏢 Add Customer';
+  console.log('openAddCustomerModal called');
+  const titleEl=document.getElementById('customer-modal-title');
+  console.log('title el:', titleEl);
+  if(titleEl) titleEl.textContent='🏢 Add Customer';
   document.getElementById('cust-edit-id').value='';
   el('cust-type').value='Direct';
   toggleDealerField();
@@ -5261,10 +5270,13 @@ async function deleteCustomer(custId){
 }
 
 function renderCustomerTable(){
+  try{
   const q=(el('cust-search')?.value||'').toLowerCase();
   const tf=el('cust-filter-type')?.value||'';
   const tbody=el('customer-tbody'); if(!tbody)return;
-  const filtered=_customers.filter(c=>{
+  // Safety filter - remove any null/invalid entries
+  const validCustomers=_customers.filter(c=>c&&c.company);
+  const filtered=validCustomers.filter(c=>{
     const ms=!q||(c.company||'').toLowerCase().includes(q)||
       (c.attention||'').toLowerCase().includes(q)||
       (c.email||'').toLowerCase().includes(q)||
@@ -5272,16 +5284,16 @@ function renderCustomerTable(){
     const ts=!tf||c.type===tf;
     return ms&&ts;
   });
-  const dealers=_customers.filter(c=>c.type==='Dealer').length;
-  const endUsers=_customers.filter(c=>c.type==='EndUser').length;
+  const dealers=validCustomers.filter(c=>c.type==='Dealer').length;
+  const endUsers=validCustomers.filter(c=>c.type==='EndUser').length;
   const totalJobs=_jobs.filter(j=>j.status!=='Deleted').length;
-  el('cust-kpi-total').textContent=_customers.length;
-  el('cust-kpi-dealers').textContent=dealers;
-  el('cust-kpi-endusers').textContent=endUsers;
-  el('cust-kpi-jobs').textContent=totalJobs;
-  el('cust-sub').textContent=`${_customers.length} customers · ${dealers} dealers · ${endUsers} end users`;
+  const kpi1=el('cust-kpi-total');if(kpi1)kpi1.textContent=validCustomers.length;
+  const kpi2=el('cust-kpi-dealers');if(kpi2)kpi2.textContent=dealers;
+  const kpi3=el('cust-kpi-endusers');if(kpi3)kpi3.textContent=endUsers;
+  const kpi4=el('cust-kpi-jobs');if(kpi4)kpi4.textContent=totalJobs;
+  const sub=el('cust-sub');if(sub)sub.textContent=`${validCustomers.length} customers · ${dealers} dealers · ${endUsers} end users`;
   if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏢</div><p>${_customers.length?'No matching customers.':'No customers yet. Click "+ Add Customer" to add.'}</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏢</div><p>${validCustomers.length?'No matching customers.':'No customers yet. Click "+ New Customer" to add.'}</p></div></td></tr>`;
     return;
   }
   const typeBadge={
@@ -5295,10 +5307,7 @@ function renderCustomerTable(){
       ?`<span style="color:var(--purple);font-weight:600;">🤝 ${c.dealerName}</span>`
       :'—';
     return `<tr>
-      <td>
-        <strong>${c.company}</strong>
-        ${c.attention?`<br/><span style="font-size:11px;color:var(--text-muted);">${c.attention}</span>`:''}
-      </td>
+      <td><strong>${c.company}</strong>${c.attention?`<br/><span style="font-size:11px;color:var(--text-muted);">${c.attention}</span>`:''}</td>
       <td>${typeBadge[c.type]||typeBadge.Direct}</td>
       <td>${dealerInfo}</td>
       <td>${c.tel||'—'}</td>
@@ -5311,6 +5320,11 @@ function renderCustomerTable(){
       </td>
     </tr>`;
   }).join('');
+  }catch(err){
+    console.error('renderCustomerTable error:',err);
+    const tbody=el('customer-tbody');
+    if(tbody) tbody.innerHTML=`<tr><td colspan="7" style="color:red;padding:20px;">Error loading customers: ${err.message}</td></tr>`;
+  }
 }
 
 function viewCustomerDetail(custId){
