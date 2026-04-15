@@ -1954,10 +1954,12 @@ const SB={
   async incSeq(){
     const cur=await this.getSeq();
     const next=cur+1;
-    await fetch(`${SUPA_URL}/rest/v1/wl_sequences?id=eq.job_seq`,{
-      method:'PATCH',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json'},
-      body:JSON.stringify({val:next})
+    // Use POST with merge-duplicates (upsert) — creates the row if it doesn't exist
+    await fetch(`${SUPA_URL}/rest/v1/wl_sequences`,{
+      method:'POST',
+      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+        'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({id:'job_seq',val:next})
     });
     return next;
   },
@@ -2499,10 +2501,11 @@ async function setJobCounter(){
   const yr=new Date().getFullYear().toString().slice(-2);
   const next=`WL${yr}-${String(val).padStart(5,'0')}`;
   if(!confirm(`Set next job number to ${next}?\n\nMake sure this number is not already in use.`))return;
-  await fetch(`${SUPA_URL}/rest/v1/wl_sequences?id=eq.job_seq`,{
-    method:'PATCH',
-    headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({val:val-1})
+  await fetch(`${SUPA_URL}/rest/v1/wl_sequences`,{
+    method:'POST',
+    headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+      'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    body:JSON.stringify({id:'job_seq',val:val-1})
   });
   el('set-job-counter').value='';
   showToast(`✅ Job counter set — next job will be ${next}`,'success',4000);
@@ -2518,10 +2521,11 @@ async function setCertCounter(){
   const next=`WLCS${yr}${mm}${String(val).padStart(4,'0')}`;
   if(!confirm(`Set next certificate number to ${next}?\n\nMake sure this number is not already in use.`))return;
   const yk=yr;
-  await fetch(`${SUPA_URL}/rest/v1/wl_sequences?id=eq.cert_seq_${yk}`,{
-    method:'PATCH',
-    headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({val:val-1})
+  await fetch(`${SUPA_URL}/rest/v1/wl_sequences`,{
+    method:'POST',
+    headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+      'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    body:JSON.stringify({id:'cert_seq_'+yk,val:val-1})
   });
   el('set-cert-counter').value='';
   showToast(`✅ Cert counter set — next cert will be ${next}`,'success',4000);
