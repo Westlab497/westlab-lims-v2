@@ -531,6 +531,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-sub" id="dash-date">—</div>
         </div>
         <div style="display:flex;gap:10px;" id="dash-admin-btns">
+          <button class="btn btn-outline" onclick="testSupabaseWrite()" style="font-size:11px;">🔍 Test DB</button>
           <button class="btn btn-outline" onclick="showView('approval')">📬 Approval Queue</button>
           <button class="btn btn-primary" onclick="openNewJobModal()">+ New Job</button>
         </div>
@@ -2268,6 +2269,40 @@ function rebuildUsers(){
 
 // ── LOGIN ──
 
+// ── DIAGNOSTIC TEST ──
+async function testSupabaseWrite(){
+  showToast('🔍 Testing Supabase connection…','info',3000);
+  try{
+    // Test read
+    const r1=await fetch(`${SUPA_URL}/rest/v1/wl_customers?select=id&limit=1`,
+      {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
+    const readStatus=r1.status;
+    const readBody=await r1.text();
+
+    // Test write
+    const testId='DIAG-'+Date.now();
+    const r2=await fetch(`${SUPA_URL}/rest/v1/wl_customers`,{
+      method:'POST',
+      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+        'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({id:testId,data:{company:'DIAGNOSTIC TEST'},updated_at:new Date().toISOString()})
+    });
+    const writeStatus=r2.status;
+    const writeBody=await r2.text();
+
+    // Delete test record
+    await fetch(`${SUPA_URL}/rest/v1/wl_customers?id=eq.${testId}`,{
+      method:'DELETE',
+      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
+    });
+
+    const msg=`READ: ${readStatus}\nWRITE: ${writeStatus}\n${writeStatus>=300?'ERROR: '+writeBody:'✅ Supabase working!'}`;
+    alert(msg);
+    console.log('Diagnostic result:',{readStatus,readBody,writeStatus,writeBody});
+  }catch(e){
+    alert('Connection error: '+e.message);
+  }
+}
 function doLogin(){
   const u=document.getElementById('login-username').value.trim().toLowerCase();
   const p=document.getElementById('login-password').value;
