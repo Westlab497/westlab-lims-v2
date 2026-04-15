@@ -2793,6 +2793,7 @@ async function saveEquipment(printReceipt=false){
   const saveBtnText=saveBtn?saveBtn.textContent:'';
   if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Saving…';}
   try{
+  const assignTo=el('eq-assign-to').value||null;
   const assignNote=el('eq-assign-note').value.trim();
   const promisedDate=el('eq-promised-date').value||'';
   const receiveDate=el('eq-receive-date').value;
