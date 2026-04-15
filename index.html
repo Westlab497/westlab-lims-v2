@@ -1106,7 +1106,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <label class="form-label">Customer / Company Name <span class="req">*</span></label>
         <div style="display:flex;gap:8px;">
           <input class="form-control" id="eq-company" placeholder="Type to search customer database…" autocomplete="off" oninput="customerSearchInput(this.value)" onkeydown="customerSearchKeydown(event)" style="flex:1;"/>
-          <button class="btn btn-outline btn-sm" onclick="openModal('modal-add-customer')" title="Add new customer" style="white-space:nowrap;flex-shrink:0;">+ New</button>
+          <button class="btn btn-outline btn-sm" onclick="openAddCustomerModal()" title="Add new customer" style="white-space:nowrap;flex-shrink:0;">+ New</button>
         </div>
         <!-- Dropdown suggestions -->
         <div id="customer-suggestions" style="display:none;position:absolute;top:100%;left:0;right:40px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
@@ -2600,14 +2600,24 @@ async function setCertCounter(){
 }
 // ── JOB NUMBER ──
 async function peekJobNo(){
+  try{
   const yr=new Date().getFullYear().toString().slice(-2);
   const seq=await SB.getSeq();
   return 'WL'+yr+'-'+String(seq+1).padStart(5,'0');
+  }catch(_err){
+    console.error("peekJobNo error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+  }
 }
 async function commitJobNo(){
+  try{
   const yr=new Date().getFullYear().toString().slice(-2);
   const seq=await SB.incSeq();
   return 'WL'+yr+'-'+String(seq).padStart(5,'0');
+  }catch(_err){
+    console.error("commitJobNo error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+  }
 }
 
 // ── CERT NUMBER — format: WLCS26040001 ──
@@ -2619,16 +2629,26 @@ function getCertMonthStr(){
   return String(new Date().getMonth()+1).padStart(2,'0'); // e.g. "04"
 }
 async function peekCertNo(){
+  try{
   const yk=getCertYearKey();
   const mm=getCertMonthStr();
   const seq=await SB.getCertSeq(yk);
   return 'WLCS'+yk+mm+String(seq+1).padStart(4,'0');
+  }catch(_err){
+    console.error("peekCertNo error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+  }
 }
 async function commitCertNo(){
+  try{
   const yk=getCertYearKey();
   const mm=getCertMonthStr();
   const seq=await SB.incCertSeq(yk);
   return 'WLCS'+yk+mm+String(seq).padStart(4,'0');
+  }catch(_err){
+    console.error("commitCertNo error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+  }
 }
 
 // ── PHOTO UPLOAD ──
@@ -2704,6 +2724,7 @@ function validateAndSetPDF(f){
 }
 
 async function uploadExcelToStorage(jobNo, certNo){
+  try{
   if(!_excelFile) return currentExcel||null;
   const safeName=(_excelFile.name||'data.pdf').replace(/[^a-zA-Z0-9._-]/g,'_');
   const path=`jobs/${jobNo}/${certNo||jobNo}_${safeName}`;
@@ -2725,6 +2746,10 @@ async function uploadExcelToStorage(jobNo, certNo){
   if(progressEl) progressEl.style.width='0%';
 
   return {name:_excelFile.name, size:_excelFile.size, url};
+  }catch(_err){
+    console.error("uploadExcelToStorage error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+  }
 }
 function showExcelAttached(){
   el('excel-attached').style.display='block';
@@ -3463,7 +3488,6 @@ async function openCalModal(jobNo, itemIdx=0){
     // Restore ambient split fields
     if(cd.temp){const m=cd.temp.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-temp-val').value=m[1].trim();el('cal-temp-pm').value=m[2].trim();}}
     if(cd.humidity){const m=cd.humidity.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-humidity-val').value=m[1].trim();el('cal-humidity-pm').value=m[2].trim();}}
-    if(cd.pressure){const m=cd.pressure.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-pressure-val').value=m[1].trim();el('cal-pressure-pm').value=m[2].trim();}}
     // Restore traceability rows
     if(cd.traceRows&&cd.traceRows.length){
       _traceSelected=cd.traceRows.map(r=>({
@@ -4890,46 +4914,6 @@ function buildCertPage1HTML(cd,s){
 
 // ── UPDATED APPROVAL MODAL ──
 // (replaces openApproveModal to show cert page 1 details + download link)
-async function openApproveModal(jobNo){
-  approvalJobNo=jobNo;
-  const j=await getJobFull(jobNo);
-  if(!j)return;
-  const s=_settings;
-  const cd=j.calData||{};
-
-  // Summary bar
-  el('approve-job-summary').innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px;">
-      <div><span style="color:var(--text-muted);">Job No.:</span> <strong>${j.jobNo}</strong></div>
-      <div><span style="color:var(--text-muted);">Cert No.:</span> <strong>${cd.cert_no||'—'}</strong></div>
-      <div><span style="color:var(--text-muted);">Date of Cal.:</span> ${cd.date||'—'}</div>
-      <div><span style="color:var(--text-muted);">Customer:</span> ${j.custName}</div>
-      <div><span style="color:var(--text-muted);">Equipment:</span> ${j.eqName} ${j.serial?'('+j.serial+')':''}</div>
-      <div><span style="color:var(--text-muted);">Submitted by:</span> ${USERS[cd.submittedBy]?.name||cd.submittedBy||'—'}</div>
-    </div>`;
-
-  // Result
-  const calResult=cd.result||'—';
-  el('approve-cal-result').innerHTML=`
-    <strong style="font-size:14px;color:${calResult==='Pass'?'var(--green)':calResult==='Fail'?'var(--red)':'var(--amber)'}">${calResult}</strong>
-    &nbsp;·&nbsp; Date: ${cd.date||'—'} &nbsp;·&nbsp; Cert: ${cd.cert_no||'—'}`;
-  // File
-  if(j.excelFile){
-    el('approve-excel-section').style.display='block';
-    el('approve-excel-name').textContent=j.excelFile.name;
-  } else {
-    el('approve-excel-section').style.display='none';
-  }
-
-  el("approve-comments").value="";
-  const _wrap=el("approval-cert-preview-wrap");const _btn=el("toggle-cert-preview-btn");
-  if(_wrap){_wrap.style.display="none";_wrap.innerHTML="";}
-  if(_btn)_btn.textContent="📄 View Certificate Page 1";
-  openModal('modal-approve-job');
-}
-
-// ── REFERENCE EQUIPMENT ──
-// ── REF EQ CERT FILE ──
 function handleRefEqCertSelect(e){
   const f=e.target.files[0]; if(!f)return;
   _refEqCertFile=f;
@@ -5156,11 +5140,16 @@ async function deleteRefEq(id){
 
 // showCertFromJob — shows cert for first item (backward compat alias)
 async function showCertFromJob(jobNo){
+  try{
   const j=getJob(jobNo); if(!j)return;
   const items=j.items||[];
   const idx=items.findIndex(i=>i.calData);
   if(idx>=0) await showCertForItem(jobNo,idx);
   else showToast('No calibration data found for this job','warn',3000);
+  }catch(_err){
+    console.error("showCertFromJob error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+  }
 }
 
 // ── CUSTOMER DATABASE ──
@@ -5210,6 +5199,9 @@ function openEditCustomerModal(custId){
 }
 
 async function saveCustomer(){
+  const saveBtn=document.querySelector('#modal-add-customer .btn-primary');
+  const saveBtnText=saveBtn?saveBtn.textContent:'';
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Saving…';}
   try{
   const company=el('cust-company').value.trim();
   if(!company){alert('Company name is required.');return;}
@@ -5241,10 +5233,13 @@ async function saveCustomer(){
   }
   closeModal('modal-add-customer');
   renderCustomerTable();
+  showToast(`✅ Customer "${company}" ${editId?'updated':'added'}`,'success',3000);
   addAudit('🏢',`Customer <strong>${company}</strong> (${type}) ${editId?'updated':'added'}`);
   }catch(_err){
     console.error("saveCustomer error:",_err);
-    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+    showToast('❌ Save failed: '+_err.message,'error',6000);
+  }finally{
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnText;}
   }
 }
 
