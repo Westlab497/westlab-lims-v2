@@ -1958,13 +1958,17 @@ const SB={
     const ctrl=new AbortController();
     const timer=setTimeout(()=>ctrl.abort(),15000);
     try{
-      await fetch(`${SUPA_URL}/rest/v1/${table}`,{
+      const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{
         method:'POST',
         headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
           'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
         body:JSON.stringify({id,data,updated_at:new Date().toISOString()}),
         signal:ctrl.signal
       });
+      if(!r.ok){
+        const errText=await r.text();
+        throw new Error(`DB save failed (${r.status}): ${errText}`);
+      }
     }finally{clearTimeout(timer);}
   },
   async delete(table,id){
@@ -5203,38 +5207,38 @@ async function saveCustomer(){
   const saveBtnText=saveBtn?saveBtn.textContent:'';
   if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Saving…';}
   try{
-  const company=el('cust-company').value.trim();
-  if(!company){alert('Company name is required.');return;}
-  const type=el('cust-type').value;
-  const dealerId=type==='EndUser'?el('cust-dealer-id').value:'';
-  if(type==='EndUser'&&!dealerId){alert('Please select the dealer for this end user.');return;}
-  const dealer=_customers.find(c=>c.id===dealerId);
-  const editId=document.getElementById('cust-edit-id').value;
-  const custId=editId||('CUST-'+Date.now());
-  const record={
-    id:custId, type, company,
-    dealerId:dealerId||'',
-    dealerName:dealer?.company||'',
-    attention:el('cust-attention').value.trim(),
-    address:el('cust-address').value.trim(),
-    tel:el('cust-tel').value.trim(),
-    mobile:el('cust-mobile').value.trim(),
-    fax:el('cust-fax').value.trim(),
-    email:el('cust-email').value.trim(),
-    notes:el('cust-notes').value.trim(),
-    createdAt:editId?(_customers.find(x=>x.id===editId)?.createdAt||new Date().toISOString()):new Date().toISOString()
-  };
-  await SB.upsert(CUST_TABLE,custId,record);
-  if(editId){
-    const idx=_customers.findIndex(x=>x.id===editId);
-    if(idx>=0)_customers[idx]=record; else _customers.push(record);
-  } else {
-    _customers.unshift(record);
-  }
-  closeModal('modal-add-customer');
-  renderCustomerTable();
-  showToast(`✅ Customer "${company}" ${editId?'updated':'added'}`,'success',3000);
-  addAudit('🏢',`Customer <strong>${company}</strong> (${type}) ${editId?'updated':'added'}`);
+    const company=el('cust-company').value.trim();
+    if(!company){showToast('Company name is required','error',3000);return;}
+    const type=el('cust-type').value;
+    const dealerId=type==='EndUser'?el('cust-dealer-id').value:'';
+    if(type==='EndUser'&&!dealerId){showToast('Please select the dealer for this end user','error',3000);return;}
+    const dealer=_customers.find(c=>c.id===dealerId);
+    const editId=document.getElementById('cust-edit-id').value;
+    const custId=editId||('CUST-'+Date.now());
+    const record={
+      id:custId, type, company,
+      dealerId:dealerId||'',
+      dealerName:dealer?.company||'',
+      attention:el('cust-attention').value.trim(),
+      address:el('cust-address').value.trim(),
+      tel:el('cust-tel').value.trim(),
+      mobile:el('cust-mobile').value.trim(),
+      fax:el('cust-fax').value.trim(),
+      email:el('cust-email').value.trim(),
+      notes:el('cust-notes').value.trim(),
+      createdAt:editId?(_customers.find(x=>x.id===editId)?.createdAt||new Date().toISOString()):new Date().toISOString()
+    };
+    await SB.upsert(CUST_TABLE,custId,record);
+    if(editId){
+      const idx=_customers.findIndex(x=>x.id===editId);
+      if(idx>=0)_customers[idx]=record; else _customers.push(record);
+    } else {
+      _customers.unshift(record);
+    }
+    closeModal('modal-add-customer');
+    renderCustomerTable();
+    showToast(`✅ Customer "${company}" ${editId?'updated':'added'}`,'success',3000);
+    addAudit('🏢',`Customer <strong>${company}</strong> (${type}) ${editId?'updated':'added'}`);
   }catch(_err){
     console.error("saveCustomer error:",_err);
     showToast('❌ Save failed: '+_err.message,'error',6000);
