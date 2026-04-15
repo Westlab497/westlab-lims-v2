@@ -3777,10 +3777,24 @@ async function confirmAssign(){
 }
 
 // ── SHOW CERT FOR SPECIFIC ITEM ──
-function showCertForItem(jobNo, itemIdx){
-  const j=getJob(jobNo); if(!j)return;
-  const item=j.items&&j.items[itemIdx];
-  if(!item||!item.calData) return;
+async function showCertForItem(jobNo, itemIdx){
+  // Get full job from cache (has calData)
+  let j=_jobsCache[jobNo]||getJob(jobNo);
+  if(!j){showToast('Job not found','error');return;}
+  // If item calData not in lightweight list, fetch full record
+  let item=j.items&&j.items[itemIdx];
+  if(!item){showToast('Item not found','error');return;}
+  if(!item.calData){
+    // Try fetching full record from Supabase
+    const full=await getJobFull(jobNo);
+    if(full&&full.items&&full.items[itemIdx]){
+      j=full; item=full.items[itemIdx];
+    }
+  }
+  if(!item.calData){
+    showToast('No calibration data for this item yet','warn',3000);
+    return;
+  }
   _certPreviewJobNo=jobNo;
   _certPreviewItemIdx=itemIdx;
   const s=_settings;
@@ -3795,7 +3809,12 @@ function showCertForItem(jobNo, itemIdx){
     const calStaff=_staff&&_staff.find(x=>x.username===cd.calibratedByUsername);
     if(calStaff) cd.calibrated_by=calStaff.certName||calStaff.name||cd.calibrated_by;
   }
-  el('cert-preview-body').innerHTML=buildCertPage1HTML(cd,s);
+  try{
+    el('cert-preview-body').innerHTML=buildCertPage1HTML(cd,s);
+  }catch(err){
+    console.error('buildCertPage1HTML error:',err);
+    el('cert-preview-body').innerHTML=`<div style="padding:20px;color:red;">Error building certificate: ${err.message}</div>`;
+  }
   const hasDataPdf=item.excelFile&&item.excelFile.url;
   const btnCombined=el('btn-download-combined');
   const btnP1=el('btn-download-p1only');
@@ -4384,10 +4403,11 @@ function downloadPage1PDF(){
 // Download Combined PDF — merges Page 1 (html→canvas→pdf) with uploaded data PDF using pdf-lib
 async function downloadCombinedPDF(){
   if(!_certPreviewJobNo){showToast('No job selected','error');return;}
-  const j=getJob(_certPreviewJobNo);
-  const item=j&&j.items&&j.items[_certPreviewItemIdx||0];
+  const j=_jobsCache[_certPreviewJobNo]||getJob(_certPreviewJobNo);
+  const itemIdx=_certPreviewItemIdx||0;
+  const item=j&&j.items&&j.items[itemIdx];
   if(!item||!item.excelFile||!item.excelFile.url){
-    showToast('No calibration data PDF found for this job','error',3000);
+    showToast('No calibration data PDF found for this item','error',3000);
     return;
   }
   if(typeof PDFLib==='undefined'){
@@ -4954,12 +4974,12 @@ async function deleteRefEq(id){
 // ── VIEW COMPLETED CERTIFICATE ──
 
 // showCertFromJob — shows cert for first item (backward compat alias)
-function showCertFromJob(jobNo){
+async function showCertFromJob(jobNo){
   const j=getJob(jobNo); if(!j)return;
-  // Find first completed item with calData
   const items=j.items||[];
   const idx=items.findIndex(i=>i.calData);
-  if(idx>=0) showCertForItem(jobNo,idx);
+  if(idx>=0) await showCertForItem(jobNo,idx);
+  else showToast('No calibration data found for this job','warn',3000);
 }
 
 // ── CUSTOMER DATABASE ──
