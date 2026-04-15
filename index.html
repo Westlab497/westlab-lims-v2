@@ -2620,19 +2620,11 @@ function handleExcelDrop(e){
 
 async function uploadExcelToStorage(jobNo, certNo){
   if(!_excelFile) return currentExcel;
-  try{
-    const safeName=(_excelFile.name||'data.pdf').replace(/\s/g,'_');
-    const path=`jobs/${jobNo}/${certNo||jobNo}_${safeName}`;
-    const url=await SB.uploadFile('westlab-files',path,_excelFile);
-    return {name:_excelFile.name,size:_excelFile.size,url};
-  }catch(e){
-    console.error('PDF upload to storage failed, using dataUrl fallback:',e);
-    return new Promise(resolve=>{
-      const r=new FileReader();
-      r.onload=ev=>resolve({name:_excelFile.name,size:_excelFile.size,dataUrl:ev.target.result});
-      r.readAsDataURL(_excelFile);
-    });
-  }
+  const safeName=(_excelFile.name||'data.pdf').replace(/\s/g,'_');
+  const path=`jobs/${jobNo}/${certNo||jobNo}_${safeName}`;
+  // Upload to Supabase Storage — throws on failure (no base64 fallback to avoid bloating DB)
+  const url=await SB.uploadFile('westlab-files',path,_excelFile);
+  return {name:_excelFile.name, size:_excelFile.size, url};
 }
 function showExcelAttached(){
   el('excel-attached').style.display='block';
@@ -2696,7 +2688,11 @@ async function saveEquipment(printReceipt=false){
     if(!_extraEquipment[i].eqName){alert(`Item ${i+2}: Equipment name is required.`);return;}
   }
 
-  const assignTo=el('eq-assign-to').value||null;
+  // Disable save buttons to prevent double-click
+  const saveBtn=document.querySelector('#modal-add-equipment .btn-success');
+  const saveBtnText=saveBtn?saveBtn.textContent:'';
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Saving…';}
+  try{
   const assignNote=el('eq-assign-note').value.trim();
   const promisedDate=el('eq-promised-date').value||'';
   const receiveDate=el('eq-receive-date').value;
@@ -2803,6 +2799,12 @@ async function saveEquipment(printReceipt=false){
 
   // Print receipt if requested
   if(printReceipt) printJobReceipt([job]);
+  }catch(err){
+    console.error('saveEquipment error:',err);
+    showToast('❌ Save failed: '+err.message,'error',6000);
+  }finally{
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnText;}
+  }
 }
 
 // ── LOGO HANDLING ──
@@ -3465,70 +3467,90 @@ async function submitCalibration(){
   const approvedBy=el('cal-approved-by').value;
   if(!approvedBy){alert('Please select the Approved Signatory.');return;}
   if(!currentExcel){alert('Please upload the calibration data PDF before submitting.');return;}
-  const j=getJob(calJobNo);
-  const item=j&&j.items&&j.items[calItemIdx];
-  const certNo=item?.certNo||el('cal-cert-no').value.trim();
-  // Build ambient strings from split inputs
-  const buildAmbient=(valId,pmId)=>{
-    const v=el(valId)?.value.trim();
-    const pm=el(pmId)?.value.trim();
-    if(!v)return'';
-    return pm?`(${v} ± ${pm})`:`(${v})`;
-  };
-  const totalPages=el('cal-total-pages').value||'2';
-  const calData={
-    cert_no:certNo,
-    job_no:calJobNo,
-    page:`1 of ${totalPages}`,
-    total_pages:totalPages,
-    issue_date:el('cal-issue-date').value,
-    date:el('cal-date').value,
-    receipt_date:el('cal-receipt-date').value,
-    issued_to:el('cal-issued-to').value,
-    issued_by:el('cal-issued-by').value,
-    cust_addr:el('cal-cust-addr').value,
-    lab_addr:el('cal-lab-addr').value,
-    eq_name:el('cal-eq-name').value,
-    brand:el('cal-brand').value,
-    model:el('cal-model').value,
-    serial:el('cal-serial').value,
-    range:el('cal-range').value,
-    cal_points:el('cal-cal-points').value,
-    tag_no:el('cal-tag-no').value.trim(),
-    resolution:el('cal-resolution').value.trim(),
-    next_due:el('cal-next-due').value,
-    cond_before:el('cal-cond-before').value.trim(),
-    cond_after:el('cal-cond-after').value.trim(),
-    cond_remark:el('cal-cond-remark').value.trim(),
-    location:el('cal-location').value.trim(),
-    procedure:el('cal-procedure').value,
-    sticker_no:el('cal-sticker-no').value.trim(),
-    temp:buildAmbient('cal-temp-val','cal-temp-pm'),
-    humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
 
-    traceRows:getTraceRows(),
-    approved_by:approvedBy,
-    approvedByUsername:el('cal-approved-by').value||'',
-    calibrated_by:el('cal-calibrated-by').value.trim(),
-    calibratedByUsername:currentUser,
-    submittedBy:currentUser,
-    submittedAt:new Date().toISOString()
-  };
-  // Upload PDF to Supabase Storage — use item certNo as part of path
-  const uploadedFile=await uploadExcelToStorage(calJobNo, item?.certNo||calJobNo);
-  await updateJob(calJobNo,job=>{
-    const it=job.items&&job.items[calItemIdx];
-    if(!it){console.error('Item not found',calItemIdx);return;}
-    it.calData=calData;
-    it.excelFile=uploadedFile;
-    it.status='Pending Approval';
-    job.history.push({action:`Item ${it.itemNo} (${it.eqName}) submitted for approval`,by:currentUser,time:new Date().toISOString()});
-  });
-  closeModal('modal-perform-cal');
-  renderMyJobs(); renderDashboard(); refreshAllBadges();
-  showToast('📬 Submitted for approval','success');
-  addAudit('📬',`Job <strong>${calJobNo}</strong> Item ${calItemIdx+1} submitted for approval by <strong>${USERS[currentUser]?.name||currentUser}</strong>`);
-  currentExcel=null; _excelFile=null;
+  // Check file size — warn if over 5MB
+  if(_excelFile&&_excelFile.size>5*1024*1024){
+    if(!confirm(`Your file is ${((_excelFile.size/1024/1024).toFixed(1))}MB. Large files may take a while to upload. Continue?`))return;
+  }
+
+  // Disable submit button to prevent double-click
+  const submitBtn=document.querySelector('#modal-perform-cal .btn-success');
+  const origText=submitBtn?submitBtn.textContent:'';
+  if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='⏳ Uploading PDF…';}
+
+  try{
+    const j=getJob(calJobNo);
+    const item=j&&j.items&&j.items[calItemIdx];
+    const certNo=item?.certNo||el('cal-cert-no').value.trim();
+    const buildAmbient=(valId,pmId)=>{
+      const v=el(valId)?.value.trim();
+      const pm=el(pmId)?.value.trim();
+      if(!v)return'';
+      return pm?`(${v} ± ${pm})`:`(${v})`;
+    };
+    const totalPages=el('cal-total-pages').value||'2';
+    const calData={
+      cert_no:certNo, job_no:calJobNo,
+      page:`1 of ${totalPages}`, total_pages:totalPages,
+      issue_date:el('cal-issue-date').value,
+      date:el('cal-date').value,
+      receipt_date:el('cal-receipt-date').value,
+      issued_to:el('cal-issued-to').value,
+      issued_by:el('cal-issued-by').value,
+      cust_addr:el('cal-cust-addr').value,
+      lab_addr:el('cal-lab-addr').value,
+      eq_name:el('cal-eq-name').value,
+      brand:el('cal-brand').value,
+      model:el('cal-model').value,
+      serial:el('cal-serial').value,
+      range:el('cal-range').value,
+      cal_points:el('cal-cal-points').value,
+      tag_no:el('cal-tag-no').value.trim(),
+      resolution:el('cal-resolution').value.trim(),
+      next_due:el('cal-next-due').value,
+      cond_before:el('cal-cond-before').value.trim(),
+      cond_after:el('cal-cond-after').value.trim(),
+      cond_remark:el('cal-cond-remark').value.trim(),
+      location:el('cal-location').value.trim(),
+      procedure:el('cal-procedure').value,
+      sticker_no:el('cal-sticker-no').value.trim(),
+      temp:buildAmbient('cal-temp-val','cal-temp-pm'),
+      humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
+      traceRows:getTraceRows(),
+      approved_by:approvedBy,
+      approvedByUsername:el('cal-approved-by').value||'',
+      calibrated_by:el('cal-calibrated-by').value.trim(),
+      calibratedByUsername:currentUser,
+      submittedBy:currentUser,
+      submittedAt:new Date().toISOString()
+    };
+
+    if(submitBtn) submitBtn.textContent='⏳ Saving…';
+
+    // Upload PDF — NO base64 fallback (it bloats Supabase rows)
+    const uploadedFile=await uploadExcelToStorage(calJobNo, item?.certNo||calJobNo);
+
+    await updateJob(calJobNo,job=>{
+      const it=job.items&&job.items[calItemIdx];
+      if(!it){throw new Error('Item not found at index '+calItemIdx);}
+      it.calData=calData;
+      it.excelFile=uploadedFile;
+      it.status='Pending Approval';
+      job.history.push({action:`Item ${it.itemNo} (${it.eqName}) submitted for approval`,by:currentUser,time:new Date().toISOString()});
+    });
+
+    closeModal('modal-perform-cal');
+    renderMyJobs(); renderDashboard(); refreshAllBadges();
+    showToast('📬 Submitted for approval','success');
+    addAudit('📬',`Job <strong>${calJobNo}</strong> Item ${calItemIdx+1} submitted for approval by <strong>${USERS[currentUser]?.name||currentUser}</strong>`);
+    currentExcel=null; _excelFile=null;
+
+  }catch(err){
+    console.error('submitCalibration error:',err);
+    showToast('❌ Submit failed: '+err.message,'error',6000);
+  }finally{
+    if(submitBtn){submitBtn.disabled=false;submitBtn.textContent=origText;}
+  }
 }
 
 // ── APPROVAL (Jay) ──
@@ -3591,39 +3613,48 @@ async function openUploadedFile(){
 
 async function approveJob(){
   if(approvalJobNo===null||approvalItemIdx===null)return;
-  const comments=el('approve-comments').value.trim();
-  const staffRec=_staff&&_staff.find(x=>x.username===currentUser);
-  const certName=staffRec?.certName||staffRec?.name||USERS[currentUser]?.name||currentUser;
-  let allDone=false;
-  await updateJob(approvalJobNo,j=>{
-    const item=j.items[approvalItemIdx];
-    if(!item)return;
-    item.status='Completed';
-    item.approvalComments=comments;
-    item.approvedBy=currentUser;
-    item.approvedAt=new Date().toISOString();
-    if(item.calData){
-      item.calData.approvedByUsername=currentUser;
-      item.calData.approved_by=certName;
-    }
-    j.history.push({action:`✅ Item ${item.itemNo} (${item.eqName}) approved`,by:currentUser,time:new Date().toISOString(),note:comments});
-    // Check if all items completed
-    allDone=j.items.filter(i=>i.status!=='Deleted').every(i=>i.status==='Completed');
+  const approveBtn=document.querySelector('#modal-approve-job .btn-success');
+  const approveBtnText=approveBtn?approveBtn.textContent:'';
+  if(approveBtn){approveBtn.disabled=true;approveBtn.textContent='⏳ Approving…';}
+  try{
+    const comments=el('approve-comments').value.trim();
+    const staffRec=_staff&&_staff.find(x=>x.username===currentUser);
+    const certName=staffRec?.certName||staffRec?.name||USERS[currentUser]?.name||currentUser;
+    let allDone=false;
+    await updateJob(approvalJobNo,j=>{
+      const item=j.items[approvalItemIdx];
+      if(!item)return;
+      item.status='Completed';
+      item.approvalComments=comments;
+      item.approvedBy=currentUser;
+      item.approvedAt=new Date().toISOString();
+      if(item.calData){
+        item.calData.approvedByUsername=currentUser;
+        item.calData.approved_by=certName;
+      }
+      j.history.push({action:`✅ Item ${item.itemNo} (${item.eqName}) approved`,by:currentUser,time:new Date().toISOString(),note:comments});
+      allDone=j.items.filter(i=>i.status!=='Deleted').every(i=>i.status==='Completed');
+      if(allDone){
+        j.billed=false;
+        j.history.push({action:'✅ All items completed — job ready for billing',by:currentUser,time:new Date().toISOString()});
+      }
+    });
+    closeModal('modal-approve-job');
+    const freshJobs=await SB.getAll('wl_jobs')||[];
+    _jobs=freshJobs.filter(j=>j.items&&Array.isArray(j.items));
+    renderApprovalQueue(); renderEquipmentTable(); renderCompletedJobs(); renderDashboard(); refreshAllBadges();
     if(allDone){
-      j.billed=false;
-      j.history.push({action:'✅ All items completed — job ready for billing',by:currentUser,time:new Date().toISOString()});
+      showToast('✅ All items approved — job completed!','success',4000);
+      addAudit('✅',`Job <strong>${approvalJobNo}</strong> fully completed`);
+    } else {
+      showToast('✅ Item approved','success');
+      addAudit('✅',`Job <strong>${approvalJobNo}</strong> Item ${approvalItemIdx+1} approved by <strong>${certName}</strong>`);
     }
-  });
-  closeModal('modal-approve-job');
-  const freshJobs=await SB.getAll('wl_jobs')||[];
-  _jobs=freshJobs;
-  renderApprovalQueue(); renderEquipmentTable(); renderCompletedJobs(); renderDashboard(); refreshAllBadges();
-  if(allDone){
-    showToast('✅ All items approved — job completed!','success',4000);
-    addAudit('✅',`Job <strong>${approvalJobNo}</strong> fully completed`);
-  } else {
-    showToast('✅ Item approved','success');
-    addAudit('✅',`Job <strong>${approvalJobNo}</strong> Item ${approvalItemIdx+1} approved by <strong>${certName}</strong>`);
+  }catch(err){
+    console.error('approveJob error:',err);
+    showToast('❌ Approval failed: '+err.message,'error',6000);
+  }finally{
+    if(approveBtn){approveBtn.disabled=false;approveBtn.textContent=approveBtnText;}
   }
 }
 
