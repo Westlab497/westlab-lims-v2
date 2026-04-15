@@ -2384,7 +2384,13 @@ function showView(name){
   if(name==='reports') renderReports();
   if(name==='settings') loadCounterPreviews();
   if(name==='my-jobs') renderMyJobs();
-  if(name==='approval') renderApprovalQueue();
+  if(name==='approval'){
+    // Refresh jobs from Supabase to get latest status before rendering
+    SB.getAll('wl_jobs').then(jobs=>{
+      if(jobs&&jobs.length) _jobs=jobs.filter(j=>j.items&&Array.isArray(j.items));
+      renderApprovalQueue();
+    }).catch(()=>renderApprovalQueue());
+  }
   if(name==='dashboard') renderDashboard();
   if(name==='ref-eq') renderRefEqTable();
 }
@@ -3031,7 +3037,10 @@ function renderExtraEquipment(){
   container.innerHTML=_extraEquipment.map((eq,i)=>`
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <span style="font-size:12px;font-weight:700;color:var(--navy);">Item ${i+2}</span>
+        <div>
+          <span style="font-size:12px;font-weight:700;color:var(--navy);">Item ${i+2}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">Certificate No. will be auto-assigned on save</span>
+        </div>
         <button onclick="removeExtraEquipment(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;">✕</button>
       </div>
       <div class="form-row">
@@ -3881,38 +3890,55 @@ function renderMyJobs(){
 
 // ── RENDER APPROVAL QUEUE (item-level) ──
 function renderApprovalQueue(){
-  const pendingItems=[];
-  _jobs.forEach(j=>{
-    (j.items||[]).forEach((item,idx)=>{
-      if(item.status==='Pending Approval') pendingItems.push({job:j,item,idx});
+  try{
+    const pendingItems=[];
+    _jobs.forEach(j=>{
+      if(!j||!j.items) return;
+      j.items.forEach((item,idx)=>{
+        if(item&&item.status==='Pending Approval') pendingItems.push({job:j,item,idx});
+      });
     });
-  });
-  const container=el('approval-list'); if(!container)return;
-  el('approval-count').textContent=pendingItems.length;
-  if(!pendingItems.length){
-    container.innerHTML=`<div class="empty-state"><div class="empty-icon">✅</div><p>No items pending approval.</p></div>`;
-    return;
+    const container=el('approval-list'); if(!container)return;
+    const badge=el('approval-badge');
+    if(badge){badge.textContent=pendingItems.length;badge.style.display=pendingItems.length?'inline':'none';}
+    if(!pendingItems.length){
+      container.innerHTML=`<div class="empty-state"><div class="empty-icon">✅</div><p>No items pending approval. All clear!</p></div>`;
+      return;
+    }
+    container.innerHTML=pendingItems.map(({job:j,item,idx})=>{
+      const submittedBy=item.calData?.submittedBy||'';
+      const submitterName=USERS[submittedBy]?.name||submittedBy||'—';
+      const brandModel=[item.brand,item.model].filter(Boolean).join(' ')||'—';
+      const fileHtml=item.excelFile?.url
+        ?`<br/>📎 <a href="javascript:void(0)" onclick="openSignedUrl('${item.excelFile.url}')" style="color:var(--blue);">${item.excelFile.name||'View file'}</a>`:'';
+      return `<div class="approval-card urgent">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
+          <strong style="color:var(--navy);">${j.jobNo}</strong> &nbsp;·&nbsp; ${j.custName||'—'}
+          &nbsp;·&nbsp; Submitted by: <strong>${submitterName}</strong>
+        </div>
+        <div class="approval-card-header">
+          <span class="approval-card-title">Item ${item.itemNo||idx+1}: ${item.eqName||'—'}</span>
+          <span class="badge badge-purple">Pending Approval</span>
+        </div>
+        <div class="approval-card-meta">
+          Cert No.: <strong style="color:var(--blue);">${item.certNo||'—'}</strong>
+          &nbsp;·&nbsp; ${brandModel}
+          &nbsp;·&nbsp; S/N: ${item.serial||'N/A'}<br/>
+          Result: <strong style="color:${item.calData?.result==='Pass'?'var(--green)':'var(--red)'}">${item.calData?.result||'—'}</strong>
+          &nbsp;·&nbsp; Cal Date: ${item.calData?.date||'—'}
+          ${fileHtml}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="openApproveItemModal('${j.jobNo}',${idx})">📋 Review &amp; Approve</button>
+          <button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})">📄 Preview Cert</button>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(err){
+    console.error('renderApprovalQueue error:',err);
+    const container=el('approval-list');
+    if(container) container.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><p>Error loading approval queue: ${err.message}</p></div>`;
   }
-  container.innerHTML=pendingItems.map(({job:j,item,idx})=>`
-    <div class="approval-card">
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">
-        <strong style="color:var(--navy);">${j.jobNo}</strong> · ${j.custName} · Submitted by: <strong>${USERS[item.calData?.submittedBy]?.name||item.calData?.submittedBy||'—'}</strong>
-      </div>
-      <div class="approval-card-header">
-        <span class="approval-card-title">Item ${item.itemNo}: ${item.eqName}</span>
-        <span class="badge badge-blue">${item.certNo}</span>
-      </div>
-      <div class="approval-card-meta">
-        ${item.brand||''} ${item.model||''} &nbsp;·&nbsp; S/N: ${item.serial||'N/A'} &nbsp;·&nbsp;
-        Result: <strong style="color:${item.calData?.result==='Pass'?'var(--green)':'var(--red)'}">${item.calData?.result||'—'}</strong>
-        &nbsp;·&nbsp; Cal Date: ${item.calData?.date||'—'}
-        ${item.excelFile?`<br/>📎 <a href="javascript:void(0)" onclick="openSignedUrl('${item.excelFile.url}')" style="color:var(--blue);">${item.excelFile.name}</a>`:''}
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn-outline btn-sm" onclick="openApproveItemModal('${j.jobNo}',${idx})">📋 Review &amp; Approve</button>
-        <button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})">📄 Preview Cert</button>
-      </div>
-    </div>`).join('');
 }
 function toggleJobHistory(id){
   const d=el(id); if(!d)return;
