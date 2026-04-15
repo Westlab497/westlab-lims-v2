@@ -1443,19 +1443,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <span style="font-size:13px;">)</span>
           </div>
           <input type="hidden" id="cal-humidity"/>
-        </div>
-        <!-- Pressure: (value ± pm) -->
-        <div class="form-group">
-          <label class="form-label">Ambient Pressure (kPa)</label>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:13px;">(</span>
-            <input class="form-control" id="cal-pressure-val" placeholder="100.14" style="width:80px;text-align:center;"/>
-            <span style="font-size:13px;white-space:nowrap;">± </span>
-            <input class="form-control" id="cal-pressure-pm" placeholder="0.01" style="width:60px;text-align:center;"/>
-            <span style="font-size:13px;">)</span>
-          </div>
-          <input type="hidden" id="cal-pressure"/>
-        </div>
       </div>
 
       <!-- SECTION 8: Metrological Traceability -->
@@ -3350,7 +3337,7 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-location').value='Westlab Calibration Laboratory';
   ['cal-sticker-no','cal-temp-val','cal-temp-pm',
    'cal-humidity-val','cal-humidity-pm',
-   'cal-pressure-val','cal-pressure-pm'].forEach(id=>{const e=el(id);if(e)e.value='';});
+   ].forEach(id=>{const e=el(id);if(e)e.value='';});
   el('cal-procedure').value='';
   el('cal-total-pages').value='2';
   populateApprovedByDropdown();
@@ -3518,7 +3505,7 @@ async function submitCalibration(){
     sticker_no:el('cal-sticker-no').value.trim(),
     temp:buildAmbient('cal-temp-val','cal-temp-pm'),
     humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
-    pressure:buildAmbient('cal-pressure-val','cal-pressure-pm'),
+
     traceRows:getTraceRows(),
     approved_by:approvedBy,
     approvedByUsername:el('cal-approved-by').value||'',
@@ -4360,7 +4347,7 @@ function previewCertPage1(){
     sticker_no:el('cal-sticker-no').value||'—',
     temp:buildAmbient('cal-temp-val','cal-temp-pm'),
     humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
-    pressure:buildAmbient('cal-pressure-val','cal-pressure-pm'),
+
     traceRows:getTraceRows(),
     approved_by:el('cal-approved-by')?.value||'—',
     calibrated_by:el('cal-calibrated-by').value||'—'
@@ -4518,11 +4505,11 @@ function buildCertPage1HTML(cd,s){
 
   const traceHtml=cd.traceRows&&cd.traceRows.length
     ?cd.traceRows.map(r=>`<tr>
-        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;">${r.instrument||'—'}</td>
-        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;">${r.serial||'—'}</td>
-        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;">${r.certNo||'—'}</td>
-        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;">${r.source||'—'}</td>
-        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;">${fmtDate(r.dueDate)}</td>
+        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;text-align:center;">${r.instrument||'—'}</td>
+        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;text-align:center;">${r.serial||'—'}</td>
+        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;text-align:center;">${r.certNo||'—'}</td>
+        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;text-align:center;">${r.source||'—'}</td>
+        <td style="padding:1.5mm 2.5mm;border:0.3pt solid #555;font-size:8.5pt;text-align:center;white-space:nowrap;">${fmtDate(r.dueDate)}</td>
       </tr>`).join('')
     :`<tr><td colspan="5" style="padding:2mm;font-size:8pt;color:#888;text-align:center;border:0.3pt solid #555;">No reference instruments added</td></tr>`;
 
@@ -4622,7 +4609,7 @@ function buildCertPage1HTML(cd,s){
 
   <!-- EQUIPMENT -->
   <table style="width:100%;table-layout:fixed;margin-bottom:2mm;">
-    <colgroup><col style="width:56mm;"/><col style="width:7mm;"/><col style="width:auto;"/></colgroup>
+    <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
     ${R('Equipment Name',na(cd.eq_name))}
     ${R('Brand/Manufacturer',na(cd.brand))}
     ${R('Model/Type',na(cd.model))}
@@ -4634,7 +4621,7 @@ function buildCertPage1HTML(cd,s){
 
   <!-- DATES -->
   <table style="width:100%;table-layout:fixed;margin-bottom:0.5mm;">
-    <colgroup><col style="width:56mm;"/><col style="width:7mm;"/><col style="width:auto;"/></colgroup>
+    <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
     ${R('Date of Receipt',fmtDate(cd.receipt_date))}
     ${R('Date of Calibration',fmtDate(cd.date))}
     ${R('Requested Recalibration Date',fmtDate(cd.next_due))}
@@ -4644,7 +4631,7 @@ function buildCertPage1HTML(cd,s){
   <!-- CONDITION -->
   <div style="font-size:9.5pt;margin-bottom:0.5mm;">Condition of Instrument</div>
   <table style="width:100%;table-layout:fixed;margin-bottom:0.5mm;">
-    <colgroup><col style="width:56mm;"/><col style="width:7mm;"/><col style="width:auto;"/></colgroup>
+    <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
     ${R('Before Calibration',na(cd.cond_before))}
     ${R('After Calibration',na(cd.cond_after)+(cd.cond_remark?'&nbsp;&nbsp;'+cd.cond_remark:''))}
   </table>
@@ -4652,7 +4639,7 @@ function buildCertPage1HTML(cd,s){
 
   <!-- LOCATION / PROCEDURE / STICKER -->
   <table style="width:100%;table-layout:fixed;margin-bottom:2.5mm;">
-    <colgroup><col style="width:56mm;"/><col style="width:7mm;"/><col style="width:auto;"/></colgroup>
+    <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
     ${R('Location of Calibration',na(cd.location)||'Westlab Calibration Laboratory')}
     ${R('Calibration Procedure',na(cd.procedure))}
     ${R('Calibration Sticker No.',na(cd.sticker_no))}
@@ -4661,10 +4648,9 @@ function buildCertPage1HTML(cd,s){
   <!-- AMBIENT -->
   <div style="font-size:9.5pt;margin-bottom:0.5mm;">Ambient Condition during Calibration</div>
   <table style="width:100%;table-layout:fixed;margin-bottom:3mm;">
-    <colgroup><col style="width:56mm;"/><col style="width:7mm;"/><col style="width:auto;"/></colgroup>
-    ${R('Temperature',cd.temp?`( ${cd.temp} ) °C`:'N/A')}
-    ${R('Relative Humidity',cd.humidity?`( ${cd.humidity} ) %RH`:'N/A')}
-    ${R('Ambient Pressure',cd.pressure?`( ${cd.pressure} ) kPa`:'N/A')}
+    <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
+    ${R('Temperature',cd.temp?`${cd.temp} °C`:'N/A')}
+    ${R('Relative Humidity',cd.humidity?`${cd.humidity} %RH`:'N/A')}
   </table>
 
   <!-- TRACEABILITY -->
@@ -4672,11 +4658,11 @@ function buildCertPage1HTML(cd,s){
   <table style="width:100%;border-collapse:collapse;margin-bottom:1.5mm;">
     <thead>
       <tr style="background:#ebebeb;">
-        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:left;width:32%;">Reference Instrument</th>
-        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:left;width:14%;">Serial No.</th>
-        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:left;width:20%;">Certificate No.</th>
-        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:left;width:18%;">Source of Traceability</th>
-        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:left;width:16%;">Calibration Due Date</th>
+        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:center;width:32%;">Reference Instrument</th>
+        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:center;width:14%;">Serial No.</th>
+        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:center;width:20%;">Certificate No.</th>
+        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:center;width:18%;">Source of Traceability</th>
+        <th style="padding:1.5mm 2.5mm;border:0.4pt solid #555;font-size:8.5pt;text-align:center;width:16%;">Calibration Due Date</th>
       </tr>
     </thead>
     <tbody>${traceHtml}</tbody>
@@ -4697,12 +4683,9 @@ function buildCertPage1HTML(cd,s){
 
   <!-- FOOTER -->
   <div style="border-top:0.5pt solid #aaa;margin-top:4mm;padding-top:2.5mm;">
-    <div style="font-size:7.5pt;color:#444;text-align:center;margin-bottom:1.5mm;font-style:italic;">
-      The expanded measurement uncertainty is stated with a coverage factor k = 2, providing a level of confidence of approximately 95%.
-    </div>
-    <div style="font-size:7pt;color:#555;text-align:center;line-height:1.5;">
-      This certificate is issued in accordance with the terms of the accreditation granted by Skim Akreditasi Makmal Malaysia (SAMM) which is a signatory to the ILAC MRA. SAMM has assessed the laboratory's measurement capability and its traceability to recognized national standards, as well as to the units of measurement realized at the corresponding national standards laboratory.<br/>
-      Copyright for this certificate is owned by ${labName}. No part of it may be reproduced without the prior written approval of the Head of the issuing laboratory.
+    <div style="font-size:7pt;color:#555;text-align:center;line-height:1.6;">
+      <span style="font-style:italic;">The expanded measurement uncertainty is stated with a coverage factor k = 2, providing a level of confidence of approximately 95%.</span><br/>
+      This certificate is issued in accordance with the terms of the accreditation granted by Skim Akreditasi Makmal Malaysia (SAMM) which is a signatory to the ILAC MRA. SAMM has assessed the laboratory's measurement capability and its traceability to recognized national standards, as well as to the units of measurement realized at the corresponding national standards laboratory. Copyright for this certificate is owned by ${labName}. No part of it may be reproduced without the prior written approval of the Head of the issuing laboratory.
     </div>
   </div>
 
