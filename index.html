@@ -3566,7 +3566,15 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-cond-remark').value=item&&item.remarks?item.remarks:'Without Adjustment.';
   // Dates
   const today=new Date().toISOString().split('T')[0];
-  el('cal-issue-date').value=today;
+  // Date of Issue: limit to today ± 1 month
+  const minDate=new Date(); minDate.setMonth(minDate.getMonth()-1);
+  const maxDate=new Date(); maxDate.setMonth(maxDate.getMonth()+1);
+  const issueDateEl=el('cal-issue-date');
+  if(issueDateEl){
+    issueDateEl.value=today;
+    issueDateEl.min=minDate.toISOString().split('T')[0];
+    issueDateEl.max=maxDate.toISOString().split('T')[0];
+  }
   el('cal-date').value=today;
   el('cal-receipt-date').value=j?j.receiveDate||today:today;
   // Technician name
@@ -3942,7 +3950,8 @@ function renderEquipmentTable(){
   const filtered=list.filter(j=>{
     const items=j.items||[];
     const ms=!q||j.jobNo.toLowerCase().includes(q)||(j.custName||'').toLowerCase().includes(q)||
-      items.some(i=>(i.eqName||'').toLowerCase().includes(q)||(i.serial||'').toLowerCase().includes(q));
+      items.some(i=>(i.eqName||'').toLowerCase().includes(q)||(i.serial||'').toLowerCase().includes(q)||
+      (i.certNo||'').toLowerCase().includes(q)||(i.tagNo||'').toLowerCase().includes(q));
     const matchStatus=!sf||j.status===sf||items.some(i=>i.status===sf);
     return ms&&matchStatus;
   });
@@ -4254,7 +4263,7 @@ function renderMyJobs(){
   _jobs.forEach(j=>{
     if(j.status==='Deleted') return;
     (j.items||[]).forEach((item,idx)=>{
-      if(item.assignedTo===currentUser) myItems.push({job:j,item,idx});
+      if(item.assignedTo===currentUser && item.status!=='Completed') myItems.push({job:j,item,idx});
     });
   });
   const container=el('my-jobs-list'); if(!container)return;
