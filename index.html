@@ -2254,6 +2254,7 @@ let USERS={
 };
 
 function rebuildUsers(){
+  try{
   // Start fresh with admin
   const adminPw=_settings.password||'westlab123';
   const adminUser=_settings.username||'admin';
@@ -2270,6 +2271,10 @@ function rebuildUsers(){
       };
     }
   });
+  }catch(_e){
+    console.error("rebuildUsers error:",_e);
+    if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
+  }
 }
 
 
@@ -2310,6 +2315,7 @@ async function testSupabaseWrite(){
   }
 }
 function doLogin(){
+  try{
   const u=document.getElementById('login-username').value.trim().toLowerCase();
   const p=document.getElementById('login-password').value;
   const err=document.getElementById('login-error');
@@ -2325,9 +2331,14 @@ function doLogin(){
   err.textContent='Incorrect username or password. Please try again.';
   err.style.display='block';
   document.getElementById('login-password').value='';
+  }catch(_e){
+    console.error("doLogin error:",_e);
+    if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
+  }
 }
 
 function setCurrentUser(username){
+  try{
   currentUser=username;
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('login-error').style.display='none';
@@ -2364,6 +2375,10 @@ function setCurrentUser(username){
     // Run recal reminders (admin only)
     if(isAdmin(currentUser)) checkRecalReminders();
   },1500);
+  }catch(_e){
+    console.error("setCurrentUser error:",_e);
+    if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
+  }
 }
 
 function doLogout(){
@@ -2416,6 +2431,7 @@ function isSignatory(u){ return getUserRole(u||currentUser)==='Signatory'; }
 function isEngineer(u){ return getUserRole(u||currentUser)==='Engineer'; }
 
 function applyRoleUI(){
+  try{
   const role=getUserRole(currentUser);
   const admin=role==='Admin';
   const signatory=role==='Signatory';
@@ -2441,6 +2457,10 @@ function applyRoleUI(){
   // Sidebar edit hint
   const hint=document.getElementById('sidebar-edit-hint');
   if(hint) hint.style.display=admin?'block':'none';
+  }catch(_e){
+    console.error("applyRoleUI error:",_e);
+    if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
+  }
 }
 
 function el(id){return document.getElementById(id);}
@@ -2487,6 +2507,7 @@ document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click
 
 // ── SETTINGS ──
 function applySettings(s){
+  try{
   _settings=Object.assign({},DEF,s);
   const name=s.labName||'Westlab';
   ['sidebar-lab-name','sidebar-lab-label','login-lab-name'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=name;});
@@ -2525,6 +2546,10 @@ function applySettings(s){
   }
   const hint=document.getElementById('sidebar-edit-hint');
   if(hint) hint.style.display=isAdmin(currentUser)?'block':'none';
+  }catch(_e){
+    console.error("applySettings error:",_e);
+    if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
+  }
 }
 async function saveSettings(){
   try{
@@ -3868,6 +3893,7 @@ const PB={Urgent:'badge-red',Express:'badge-amber',Normal:'badge-blue',Routine:'
 const STATUS_BADGE={Unassigned:'badge-amber',Assigned:'badge-blue','In Progress':'badge-blue','Pending Approval':'badge-purple',Completed:'badge-green',Deleted:'badge-slate'};
 
 function renderEquipmentTable(){
+  try{
   const list=_jobs.filter(j=>j.status!=='Deleted');
   const q=(el('eq-search')?.value||'').toLowerCase();
   const sf=el('eq-filter-status')?.value||'';
@@ -3942,6 +3968,9 @@ function renderEquipmentTable(){
   el('kpi-pending-approval').textContent=allItems.filter(i=>i.status==='Pending Approval').length;
   el('kpi-completed').textContent=allItems.filter(i=>i.status==='Completed').length;
   el('eq-count-sub').textContent=`${t} job${t!==1?'s':''} · ${allItems.length} item${allItems.length!==1?'s':''}`;
+  }catch(_e){
+    console.error("renderEquipmentTable error:",_e);
+  }
 }
 
 // ── ASSIGN ITEM (item-level) ──
@@ -4050,6 +4079,7 @@ async function showCertForItem(jobNo, itemIdx){
 
 // ── RENDER MY JOBS (item-level) ──
 function renderMyJobs(){
+  try{
   // Show items assigned to current user across all jobs
   const myItems=[];
   _jobs.forEach(j=>{
@@ -4117,6 +4147,9 @@ function renderMyJobs(){
       </div>
     </div>`;
   }).join('');
+  }catch(_e){
+    console.error("renderMyJobs error:",_e);
+  }
 }
 
 // ── RENDER APPROVAL QUEUE (item-level) ──
@@ -4386,6 +4419,7 @@ function allItemsCompleted(job){
 }
 
 function renderDashboard(){
+  try{
   const list=_jobs.filter(j=>j.status!=='Deleted');
   const allItems=list.flatMap(j=>j.items||[]).filter(i=>i.status!=='Deleted');
   const today=new Date(); today.setHours(0,0,0,0);
@@ -4449,9 +4483,13 @@ function renderDashboard(){
   const adminUser=_settings.username||'admin';
   el('my-jobs-banner').style.display=myItems>0&&currentUser!==adminUser?'block':'none';
   el('my-jobs-count-text').textContent=`${myItems} item(s) assigned to you.`;
+  }catch(_e){
+    console.error("renderDashboard error:",_e);
+  }
 }
 // ── BADGES ──
 function refreshAllBadges(){
+  try{
   const list=_jobs.filter(j=>j.status!=='Deleted');
   const allItems=list.flatMap(j=>j.items||[]);
   const myCount=currentUser?allItems.filter(i=>i.assignedTo===currentUser&&i.status!=='Completed'&&i.status!=='Pending Approval').length:0;
@@ -4461,6 +4499,9 @@ function refreshAllBadges(){
   const ab=el('approval-badge');
   if(ab){ab.textContent=approvalCount;ab.style.display=approvalCount>0?'inline':'none';}
   renderDashboard();
+  }catch(_e){
+    console.error("refreshAllBadges error:",_e);
+  }
 }
 
 // ── AUDIT LOG ──
@@ -5019,6 +5060,7 @@ function getRefStatus(dueDate){
   return'Current';
 }
 function renderRefEqTable(){
+  try{
   const list=_refEq;
   const q=(el('ref-eq-search')?.value||'').toLowerCase();
   const sf=el('ref-eq-filter')?.value||'';
@@ -5068,6 +5110,9 @@ function renderRefEqTable(){
         ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditRefEqModal('${r.id}')">✏️</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteRefEq('${r.id}')">🗑</button>`:''}</td>
   </tr>`).join('');
+  }catch(_e){
+    console.error("renderRefEqTable error:",_e);
+  }
 }
 function viewRefEq(id){
   const r=_refEq.find(x=>x.id===id); if(!r)return;
@@ -5495,6 +5540,7 @@ document.addEventListener('click',e=>{
 
 // ── COMPLETED JOBS ──
 function renderCompletedJobs(){
+  try{
   // A job is completed when all its items are completed
   const list=_jobs.filter(j=>allItemsCompleted(j));
   const q=(el('comp-search')?.value||'').toLowerCase();
@@ -5577,6 +5623,9 @@ function renderCompletedJobs(){
     });
   });
   tbody.innerHTML=rows.join('');
+  }catch(_e){
+    console.error("renderCompletedJobs error:",_e);
+  }
 }
 async function sendCertEmail(jobNo){
   try{
@@ -5711,6 +5760,7 @@ For enquiries, kindly contact us at sales@westlab.com.my
 }
 // ── DELETED JOBS ──
 function renderDeletedJobs(){
+  try{
   const list=_jobs.filter(j=>j.status==='Deleted');
   const q=(el('deleted-search')?.value||'').toLowerCase();
   const tbody=el('deleted-tbody'); if(!tbody)return;
@@ -5749,6 +5799,9 @@ function renderDeletedJobs(){
     });
   });
   tbody.innerHTML=rows.join('');
+  }catch(_e){
+    console.error("renderDeletedJobs error:",_e);
+  }
 }
 
 async function permanentlyDeleteJob(jobNo){
@@ -5777,6 +5830,7 @@ const ROLE_DISPLAY={
 };
 
 function renderPersonnel(){
+  try{
   const tbody=el('personnel-tbody'); if(!tbody)return;
   // Build list: admin first, then staff
   const adminUser=_settings.username||'admin';
@@ -5802,6 +5856,9 @@ function renderPersonnel(){
       </td>
     </tr>`;
   }).join('');
+  }catch(_e){
+    console.error("renderPersonnel error:",_e);
+  }
 }
 
 // ── STAFF SIGNATURE HANDLING ──
@@ -6113,6 +6170,7 @@ document.addEventListener('click',e=>{
 // ── REPORTS ──
 let _charts={};
 function renderReports(){
+  try{
   const jobs=_jobs.filter(j=>j.status!=='Deleted');
   const today=new Date(); today.setHours(0,0,0,0);
   // KPIs
@@ -6185,6 +6243,9 @@ function renderReports(){
     <td><span class="badge badge-green">${v.done}</span></td>
     <td><span class="badge badge-amber">${v.pending}</span></td>
   </tr>`).join('');
+  }catch(_e){
+    console.error("renderReports error:",_e);
+  }
 }
 
 // ── JOB STATUS LOOKUP ──
