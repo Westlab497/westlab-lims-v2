@@ -115,6 +115,7 @@ tbody tr:hover{background:#f8fafc;}
 .badge-blue{background:var(--blue-pale);color:var(--blue);}
 .badge-purple{background:var(--purple-bg);color:var(--purple);}
 .badge-slate{background:#f1f5f9;color:var(--slate);}
+.badge-orange{background:#fff3e0;color:#c84b00;border:1px solid #ffb74d;}
 .badge-navy{background:#e0e7ef;color:var(--navy);}
 
 /* ── PROGRESS ── */
@@ -1099,7 +1100,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Certificate Number</label><input class="form-control" id="eq-cert-no-preview" readonly style="font-family:'DM Sans',sans-serif;font-weight:700;color:var(--blue);"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Receiving Date <span class="req">*</span></label><input class="form-control" id="eq-receive-date" type="date"/></div>
+        <div class="form-group"><label class="form-label">Receiving Date <span class="req">*</span></label><input class="form-control" id="eq-receive-date" type="date" onchange="el('eq-promised-date').value='';calcPromisedDate();"/></div>
       </div>
 
       <!-- Customer search autocomplete -->
@@ -1658,6 +1659,30 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-edit-job')">Cancel</button>
       <button class="btn btn-primary" onclick="saveEditJob()">💾 Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- KIV MODAL -->
+<div class="modal-overlay" id="modal-kiv" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">🔶 Keep In View (KIV)</span>
+      <button class="modal-close" onclick="closeModal('modal-kiv')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#fff3e0;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#c84b00;">
+        ⏸ TAT will pause while item is in KIV. Max <strong>7 working days</strong> — after that KIV expires automatically and TAT resumes.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reason for KIV <span class="req">*</span></label>
+        <textarea class="form-control" id="kiv-reason" rows="3" placeholder="e.g. Waiting for customer to provide reference standard, Equipment sent for repair…"></textarea>
+      </div>
+      <div id="kiv-info" style="display:none;background:var(--bg);border-radius:8px;padding:10px 14px;font-size:12px;margin-top:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-kiv')">Cancel</button>
+      <button class="btn btn-warning" id="kiv-confirm-btn" onclick="confirmKIV()" style="background:#e65100;color:#fff;border:none;">🔶 Confirm KIV</button>
     </div>
   </div>
 </div>
@@ -2375,6 +2400,8 @@ function setCurrentUser(username){
     }
     // Run recal reminders (admin only)
     if(isAdmin(currentUser)) checkRecalReminders();
+    // Check KIV expiry for all users
+    checkKIVExpiry();
   },1500);
   }catch(_e){
     console.error("setCurrentUser error:",_e);
@@ -2987,7 +3014,7 @@ async function saveEquipment(printReceipt=false){
     sendEmailJS(recip.email, recip.name,{
       subject:`Job Receipt — ${jobNo} | ${_settings.labName||'Westlab'}`,
       job_no:jobNo, cert_no:certList, equipment:items.map(i=>i.eqName).join(', '),
-      message:`Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.            : ${jobNo}\nReceive Date       : ${fmtDateShort(receiveDate)}\nPriority           : ${custInfo.priority}${endUserNote}${promisedDate?'\nExpected Ready     : '+fmtDateShort(promisedDate):''}\n\nEQUIPMENT RECEIVED\n────────────────────────────────────\n${itemLines}\n────────────────────────────────────\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\n\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab'}\n\n─────────────────────────────────────────\nThis is an automated notification. Please do not reply to this email.\nFor enquiries, kindly contact us at sales@westlab.com.my\n─────────────────────────────────────────`
+      message:`Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.            : ${jobNo}\nReceive Date       : ${fmtDateShort(receiveDate)}\nPriority           : ${custInfo.priority}${endUserNote}\n\nEQUIPMENT RECEIVED\n────────────────────────────────────\n${itemLines}\n────────────────────────────────────\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\n\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab'}\n\n─────────────────────────────────────────\nThis is an automated notification. Please do not reply to this email.\nFor enquiries, kindly contact us at sales@westlab.com.my\n─────────────────────────────────────────`
     }).then(ok=>{ if(ok) addAudit('📧',`Job received email sent to ${recip.email} for ${jobNo}`); });
   }
 
@@ -3901,7 +3928,7 @@ async function rejectJob(){
 
 // ── RENDER EQUIPMENT TABLE — group header per job, item row per equipment ──
 const PB={Urgent:'badge-red',Express:'badge-amber',Normal:'badge-blue',Routine:'badge-slate'};
-const STATUS_BADGE={Unassigned:'badge-amber',Assigned:'badge-blue','In Progress':'badge-blue','Pending Approval':'badge-purple',Completed:'badge-green',Deleted:'badge-slate'};
+const STATUS_BADGE={Unassigned:'badge-amber',Assigned:'badge-blue','In Progress':'badge-blue','Pending Approval':'badge-purple',Completed:'badge-green',Deleted:'badge-slate',KIV:'badge-orange'};
 
 function renderEquipmentTable(){
   try{
@@ -4088,6 +4115,137 @@ async function showCertForItem(jobNo, itemIdx){
   openModal('modal-cert-preview');
 }
 
+// ── KIV (Keep In View) ──
+let _kivJobNo=null, _kivItemIdx=null;
+
+function countWorkingDays(fromDate, toDate){
+  let count=0;
+  const d=new Date(fromDate+'T00:00:00');
+  const end=new Date(toDate+'T00:00:00');
+  while(d<end){
+    d.setDate(d.getDate()+1);
+    if(d.getDay()!==0&&d.getDay()!==6) count++;
+  }
+  return count;
+}
+
+function addWorkingDays(fromDate, days){
+  const d=new Date(fromDate+'T00:00:00');
+  let added=0;
+  while(added<days){
+    d.setDate(d.getDate()+1);
+    if(d.getDay()!==0&&d.getDay()!==6) added++;
+  }
+  return d.toISOString().split('T')[0];
+}
+
+function openKIVModal(jobNo, itemIdx){
+  _kivJobNo=jobNo; _kivItemIdx=itemIdx;
+  const j=getJob(jobNo); if(!j)return;
+  const item=j.items&&j.items[itemIdx]; if(!item)return;
+  el('kiv-reason').value='';
+  const info=el('kiv-info');
+  // If already KIV, show current KIV info and allow removal
+  if(item.status==='KIV'&&item.kivStartDate){
+    const today=new Date().toISOString().split('T')[0];
+    const daysUsed=countWorkingDays(item.kivStartDate,today);
+    const daysLeft=Math.max(0,7-daysUsed);
+    const expiry=addWorkingDays(item.kivStartDate,7);
+    info.style.display='block';
+    info.innerHTML=`<strong>Current KIV:</strong> "${item.kivReason}"<br/>
+      Started: ${item.kivStartDate} &nbsp;·&nbsp; Days used: ${daysUsed}/7 &nbsp;·&nbsp; Expires: ${expiry}<br/>
+      TAT remaining when KIV'd: <strong>${item.kivTATRemaining} working day${item.kivTATRemaining!==1?'s':''}</strong>`;
+    el('kiv-reason').placeholder='Update reason or leave blank to remove KIV…';
+    el('kiv-confirm-btn').textContent='✅ Remove KIV & Resume';
+    el('kiv-confirm-btn').onclick=removeKIV;
+  } else {
+    info.style.display='none';
+    el('kiv-confirm-btn').textContent='🔶 Confirm KIV';
+    el('kiv-confirm-btn').onclick=confirmKIV;
+  }
+  openModal('modal-kiv');
+}
+
+async function confirmKIV(){
+  const reason=el('kiv-reason').value.trim();
+  if(!reason){showToast('Please enter a reason for KIV','error',3000);return;}
+  const today=new Date().toISOString().split('T')[0];
+  const j=getJob(_kivJobNo); if(!j)return;
+  const item=j.items&&j.items[_kivItemIdx]; if(!item)return;
+  // Calculate remaining TAT working days
+  const slaTotal=getSLADays(j.priority);
+  const assignDate=j.history?.find(h=>h.action?.includes('assigned'))?.time?.split('T')[0]||j.receiveDate||today;
+  const daysUsedSoFar=countWorkingDays(assignDate,today);
+  const tatRemaining=Math.max(0,slaTotal-daysUsedSoFar);
+  await updateJob(_kivJobNo,job=>{
+    const it=job.items[_kivItemIdx];
+    it.status='KIV';
+    it.kivReason=reason;
+    it.kivStartDate=today;
+    it.kivTATRemaining=tatRemaining;
+    it.kivExpired=false;
+    job.history.push({action:`Item ${it.itemNo} (${it.eqName}) set to KIV — "${reason}"`,by:currentUser,time:new Date().toISOString()});
+  });
+  closeModal('modal-kiv');
+  renderMyJobs(); renderEquipmentTable(); refreshAllBadges();
+  showToast(`🔶 Item set to KIV — TAT paused. ${tatRemaining} working days remaining.`,'warn',4000);
+  addAudit('🔶',`Job <strong>${_kivJobNo}</strong> Item ${_kivItemIdx+1} set to KIV — "${reason}"`);
+}
+
+async function removeKIV(){
+  const today=new Date().toISOString().split('T')[0];
+  const j=getJob(_kivJobNo); if(!j)return;
+  const item=j.items&&j.items[_kivItemIdx]; if(!item)return;
+  // Recalculate new promised date based on remaining TAT
+  const newPromised=addWorkingDays(today, item.kivTATRemaining||1);
+  await updateJob(_kivJobNo,job=>{
+    const it=job.items[_kivItemIdx];
+    const prevReason=it.kivReason;
+    it.status='Assigned';
+    it.kivReason=null; it.kivStartDate=null;
+    it.kivTATRemaining=null; it.kivExpired=false;
+    job.promisedDate=newPromised; // update job promised date
+    job.history.push({action:`Item ${it.itemNo} (${it.eqName}) KIV removed — TAT resumed. New target: ${newPromised}`,by:currentUser,time:new Date().toISOString()});
+  });
+  closeModal('modal-kiv');
+  renderMyJobs(); renderEquipmentTable(); refreshAllBadges();
+  showToast(`✅ KIV removed — TAT resumed. New promised date: ${fmtDateShort(newPromised)}`,'success',4000);
+  addAudit('✅',`Job <strong>${_kivJobNo}</strong> Item ${_kivItemIdx+1} KIV removed — TAT resumed`);
+}
+
+// Check and expire KIV items on login
+async function checkKIVExpiry(){
+  const today=new Date().toISOString().split('T')[0];
+  let anyExpired=false;
+  for(const j of _jobs){
+    if(!j.items||j.status==='Deleted') continue;
+    for(let idx=0;idx<j.items.length;idx++){
+      const item=j.items[idx];
+      if(item.status!=='KIV'||!item.kivStartDate) continue;
+      const daysUsed=countWorkingDays(item.kivStartDate,today);
+      if(daysUsed>=7){
+        // KIV expired — resume TAT
+        const newPromised=addWorkingDays(today,item.kivTATRemaining||1);
+        await updateJob(j.jobNo,job=>{
+          const it=job.items[idx];
+          it.status='Assigned';
+          it.kivExpired=true;
+          const prevReason=it.kivReason;
+          it.kivReason=null; it.kivStartDate=null; it.kivTATRemaining=null;
+          job.promisedDate=newPromised;
+          job.history.push({action:`Item ${it.itemNo} KIV expired after 7 working days — TAT resumed. New target: ${newPromised}`,by:'system',time:new Date().toISOString()});
+        });
+        anyExpired=true;
+        addAudit('⏰',`Job <strong>${j.jobNo}</strong> Item ${idx+1} KIV expired — TAT resumed`);
+      }
+    }
+  }
+  if(anyExpired){
+    showToast('⚠️ Some KIV items have expired and TAT has resumed','warn',5000);
+    renderMyJobs(); renderEquipmentTable(); renderDashboard();
+  }
+}
+
 // ── RENDER MY JOBS (item-level) ──
 function renderMyJobs(){
   try{
@@ -4115,9 +4273,16 @@ function renderMyJobs(){
     return (a.job.promisedDate||'9')>(b.job.promisedDate||'9')?1:-1;
   });
   container.innerHTML=myItems.map(({job:j,item,idx})=>{
-    const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&item.status!=='Completed';
+    const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&item.status!=='Completed'&&item.status!=='KIV';
     let slaHtml='';
-    if(j.promisedDate&&item.status!=='Completed'&&item.status!=='Pending Approval'){
+    if(item.status==='KIV'&&item.kivStartDate){
+      // Show KIV countdown — max 7 working days
+      const todayStr=new Date().toISOString().split('T')[0];
+      const kivDaysUsed=countWorkingDays(item.kivStartDate,todayStr);
+      const kivDaysLeft=Math.max(0,7-kivDaysUsed);
+      const tatRemaining=item.kivTATRemaining||0;
+      slaHtml=`<span class="badge badge-orange" style="margin-left:6px;">⏸ KIV: ${kivDaysLeft}d left (TAT: ${tatRemaining}d frozen)</span>`;
+    } else if(j.promisedDate&&item.status!=='Completed'&&item.status!=='Pending Approval'){
       const diff=Math.round((new Date(j.promisedDate+'T00:00:00')-today)/(1000*60*60*24));
       if(diff<0) slaHtml=`<span class="badge badge-red" style="margin-left:6px;">🚨 ${Math.abs(diff)}d overdue</span>`;
       else if(diff===0) slaHtml=`<span class="badge badge-amber" style="margin-left:6px;">⚠️ Due today</span>`;
@@ -4143,8 +4308,12 @@ function renderMyJobs(){
         ${item.approvalComments&&item.status==='Assigned'?`<br/><span style="color:var(--red);">✗ Rejected: <em>"${item.approvalComments}"</em></span>`:''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        ${item.status!=='Pending Approval'&&item.status!=='Completed'?
-          `<button class="btn btn-primary btn-sm" onclick="openCalModal('${j.jobNo}',${idx})">🔬 Perform Calibration</button>`:''}
+        ${item.status==='KIV'?`
+          <span class="badge badge-orange" style="font-size:11px;padding:5px 8px;">🔶 KIV: "${(item.kivReason||'').substring(0,40)}${(item.kivReason||'').length>40?'…':''}"</span>
+          <button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">✅ Remove KIV</button>`:''}
+        ${item.status!=='Pending Approval'&&item.status!=='Completed'&&item.status!=='KIV'?`
+          <button class="btn btn-primary btn-sm" onclick="openCalModal('${j.jobNo}',${idx})">🔬 Perform Calibration</button>
+          <button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">🔶 KIV</button>`:''}
         ${item.status==='Pending Approval'?
           `<span style="font-size:12px;color:var(--purple);font-weight:600;padding:5px;">📬 Awaiting approval…</span>`:''}
         ${item.status==='Completed'&&item.calData?
