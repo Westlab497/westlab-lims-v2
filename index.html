@@ -188,7 +188,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 .file-attached-remove{background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;font-weight:700;}
 
 /* ── MODAL ── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999990;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--bg-card);border-radius:14px;box-shadow:var(--shadow-lg);width:680px;max-width:98vw;animation:modalIn .2s ease;margin:auto;}
 .modal-lg{width:840px;}
@@ -5229,6 +5229,7 @@ function openAddCustomerModal(){
     const e=el(id); if(e) e.value='';
   });
   openModal('modal-add-customer');
+  console.log('modal-add-customer opened, classes:', document.getElementById('modal-add-customer').className);
 }
 
 function openEditCustomerModal(custId){
