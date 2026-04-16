@@ -189,7 +189,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
 /* ── MODAL ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999990;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;}
-.modal-overlay.open{display:flex;}
+.modal-overlay.open{display:flex !important;}
 .modal{background:var(--bg-card);border-radius:14px;box-shadow:var(--shadow-lg);width:680px;max-width:98vw;animation:modalIn .2s ease;margin:auto;}
 .modal-lg{width:840px;}
 .modal-sm{width:460px;}
@@ -347,11 +347,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
   .card-header .filter-select,.card-header input{width:100% !important;}
 
   /* Modals — full screen on mobile */
-  .modal-overlay{padding:0;}
+  .modal-overlay{padding:0;align-items:flex-end;}
   .modal,.modal-lg,.modal-sm{
     width:100%;max-width:100%;
     border-radius:16px 16px 0 0;
-    margin:auto 0 0 0;
+    margin:0;
     max-height:92vh;
   }
   .modal-body{max-height:65vh;}
@@ -1086,7 +1086,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 <!-- ══════════════ MODALS ══════════════ -->
 
 <!-- NEW JOB -->
-<div class="modal-overlay" id="modal-add-equipment">
+<div class="modal-overlay" id="modal-add-equipment" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title">🔧 New Calibration Job</span>
@@ -1228,7 +1228,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- ASSIGN JOB (Admin / Signatory) -->
-<div class="modal-overlay" id="modal-assign-job">
+<div class="modal-overlay" id="modal-assign-job" style="display:none;">
   <div class="modal modal-sm">
     <div class="modal-header">
       <span class="modal-title">👤 Assign Job</span>
@@ -1263,7 +1263,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- RE-ASSIGN JOB (Technician) -->
-<div class="modal-overlay" id="modal-reassign-job">
+<div class="modal-overlay" id="modal-reassign-job" style="display:none;">
   <div class="modal modal-sm">
     <div class="modal-header">
       <span class="modal-title">🔄 Re-assign Job</span>
@@ -1293,7 +1293,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- PERFORM CALIBRATION (upload Excel + done) -->
-<div class="modal-overlay" id="modal-perform-cal">
+<div class="modal-overlay" id="modal-perform-cal" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title">🔬 Calibration — Certificate Page 1</span>
@@ -1510,7 +1510,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- VIEW JOB DETAIL -->
-<div class="modal-overlay" id="modal-view-job">
+<div class="modal-overlay" id="modal-view-job" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title" id="view-job-title">Job Detail</span>
@@ -1524,7 +1524,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- APPROVE JOB (Jay) -->
-<div class="modal-overlay" id="modal-approve-job">
+<div class="modal-overlay" id="modal-approve-job" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title">✅ Review &amp; Approve Calibration</span>
@@ -1587,7 +1587,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- EDIT JOB (Admin) -->
-<div class="modal-overlay" id="modal-edit-job">
+<div class="modal-overlay" id="modal-edit-job" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title">✏️ Edit Job — <span id="edit-job-no-label"></span></span>
@@ -1662,7 +1662,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- ADD / EDIT CUSTOMER -->
-<div class="modal-overlay" id="modal-add-customer">
+<div class="modal-overlay" id="modal-add-customer" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title" id="customer-modal-title">🏢 Add Customer</span>
@@ -1712,7 +1712,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- ADD / EDIT STAFF -->
-<div class="modal-overlay" id="modal-add-staff">
+<div class="modal-overlay" id="modal-add-staff" style="display:none;">
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title" id="staff-modal-title">👤 Add Staff Account</span>
@@ -1766,12 +1766,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- Simple modals -->
-<div class="modal-overlay" id="modal-add-test"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">New Test Request</span><button class="modal-close" onclick="closeModal('modal-add-test')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Client</label><input class="form-control"/></div><div class="form-group"><label class="form-label">Test Method</label><input class="form-control" placeholder="e.g. ASTM D1293"/></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-test')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-test')">Submit</button></div></div></div>
-<div class="modal-overlay" id="modal-add-doc"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">New Document</span><button class="modal-close" onclick="closeModal('modal-add-doc')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Document ID</label><input class="form-control" placeholder="e.g. SOP-LAB-016"/></div><div class="form-group"><label class="form-label">Title</label><input class="form-control"/></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-doc')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-doc')">Create</button></div></div></div>
-<div class="modal-overlay" id="modal-add-nc"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">Raise NC</span><button class="modal-close" onclick="closeModal('modal-add-nc')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Description</label><textarea class="form-control" placeholder="Describe the nonconformance…"></textarea></div><div class="form-row"><div class="form-group"><label class="form-label">Severity</label><select class="form-control"><option>Minor</option><option>Major</option><option>Critical</option></select></div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-nc')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-nc')">Submit</button></div></div></div>
+<div class="modal-overlay" id="modal-add-test" style="display:none;"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">New Test Request</span><button class="modal-close" onclick="closeModal('modal-add-test')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Client</label><input class="form-control"/></div><div class="form-group"><label class="form-label">Test Method</label><input class="form-control" placeholder="e.g. ASTM D1293"/></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-test')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-test')">Submit</button></div></div></div>
+<div class="modal-overlay" id="modal-add-doc" style="display:none;"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">New Document</span><button class="modal-close" onclick="closeModal('modal-add-doc')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Document ID</label><input class="form-control" placeholder="e.g. SOP-LAB-016"/></div><div class="form-group"><label class="form-label">Title</label><input class="form-control"/></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-doc')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-doc')">Create</button></div></div></div>
+<div class="modal-overlay" id="modal-add-nc" style="display:none;"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">Raise NC</span><button class="modal-close" onclick="closeModal('modal-add-nc')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Description</label><textarea class="form-control" placeholder="Describe the nonconformance…"></textarea></div><div class="form-row"><div class="form-group"><label class="form-label">Severity</label><select class="form-control"><option>Minor</option><option>Major</option><option>Critical</option></select></div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-nc')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-nc')">Submit</button></div></div></div>
 
 <!-- CERTIFICATE PAGE 1 PREVIEW -->
-<div class="modal-overlay" id="modal-cert-preview">
+<div class="modal-overlay" id="modal-cert-preview" style="display:none;">
   <div class="modal" style="width:min(820px,96vw);max-height:92vh;display:flex;flex-direction:column;">
     <div class="modal-header">
       <span class="modal-title">📄 Certificate Page 1 — Preview</span>
@@ -1795,7 +1795,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 <div id="receipt-print-frame" style="display:none;"></div>
 
 <!-- ADD REFERENCE EQUIPMENT -->
-<div class="modal-overlay" id="modal-add-ref-eq">
+<div class="modal-overlay" id="modal-add-ref-eq" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title">🏛️ Add Reference Equipment</span>
@@ -1864,7 +1864,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- VIEW REFERENCE EQUIPMENT DETAIL -->
-<div class="modal-overlay" id="modal-view-ref-eq">
+<div class="modal-overlay" id="modal-view-ref-eq" style="display:none;">
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title" id="view-ref-eq-title">Reference Equipment Detail</span>
@@ -2501,8 +2501,18 @@ function showView(name){
 }
 
 // ── MODALS ──
-function openModal(id){document.getElementById(id).classList.add('open');}
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function openModal(id){
+  const m=document.getElementById(id);
+  if(!m)return;
+  m.classList.add('open');
+  m.style.display='flex';
+}
+function closeModal(id){
+  const m=document.getElementById(id);
+  if(!m)return;
+  m.classList.remove('open');
+  m.style.display='none';
+}
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
 // ── SETTINGS ──
