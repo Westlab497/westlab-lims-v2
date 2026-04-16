@@ -1106,7 +1106,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group" style="position:relative;">
         <label class="form-label">Customer / Company Name <span class="req">*</span></label>
         <div style="display:flex;gap:8px;">
-          <input class="form-control" id="eq-company" placeholder="Type to search customer database…" autocomplete="off" oninput="customerSearchInput(this.value)" onkeydown="customerSearchKeydown(event)" style="flex:1;"/>
+          <input class="form-control" id="eq-company" placeholder="Type to search customer database…" autocomplete="off" oninput="this.value=this.value.toUpperCase();customerSearchInput(this.value)" onkeydown="customerSearchKeydown(event)" style="flex:1;"/>
           <button class="btn btn-outline btn-sm" onclick="openAddCustomerModal()" title="Add new customer" style="white-space:nowrap;flex-shrink:0;">+ New</button>
         </div>
         <!-- Dropdown suggestions -->
@@ -1125,7 +1125,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Attention / Contact Person</label><input class="form-control" id="eq-attention" placeholder="Attn: person name"/></div>
         <div class="form-group"><label class="form-label">PO Number</label><input class="form-control" id="eq-po" placeholder="Purchase order no."/></div>
       </div>
-      <div class="form-group"><label class="form-label">Company Address</label><textarea class="form-control" id="eq-address" placeholder="Full mailing address"></textarea></div>
+      <div class="form-group"><label class="form-label">Company Address</label><textarea class="form-control" id="eq-address" placeholder="Full mailing address" rows="4"></textarea></div>
       <div class="form-row-3">
         <div class="form-group"><label class="form-label">Tel No.</label><input class="form-control" id="eq-tel" placeholder="e.g. +603-6157 0706"/></div>
         <div class="form-group"><label class="form-label">Mobile No.</label><input class="form-control" id="eq-mobile" placeholder="e.g. +6016-123 4573 or +6011-1172 7492"/></div>
@@ -1692,9 +1692,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
 
-      <div class="form-group"><label class="form-label">Company / Customer Name <span class="req">*</span></label><input class="form-control" id="cust-company" placeholder="e.g. Acme Sdn Bhd"/></div>
+      <div class="form-group"><label class="form-label">Company / Customer Name <span class="req">*</span></label><input class="form-control" id="cust-company" placeholder="e.g. ACME SDN BHD" oninput="this.value=this.value.toUpperCase()"/></div>
       <div class="form-group"><label class="form-label">Attention / Contact Person</label><input class="form-control" id="cust-attention" placeholder="e.g. Mr. Ahmad"/></div>
-      <div class="form-group"><label class="form-label">Company Address</label><textarea class="form-control" id="cust-address" placeholder="Full mailing address"></textarea></div>
+      <div class="form-group"><label class="form-label">Company Address</label><textarea class="form-control" id="cust-address" placeholder="Full mailing address" rows="4"></textarea></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Tel No.</label><input class="form-control" id="cust-tel" placeholder="e.g. +603-6157 0706"/></div>
         <div class="form-group"><label class="form-label">Mobile No.</label><input class="form-control" id="cust-mobile" placeholder="e.g. +6016-123 4573 or +6011-1172 7492"/></div>
