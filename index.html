@@ -1839,7 +1839,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <!-- A4 preview container — scrollable, shows page shadow -->
     <div style="flex:1;overflow-y:auto;background:#e0e0e0;padding:24px;display:flex;justify-content:center;">
-      <div id="cert-preview-body" style="width:210mm;min-height:297mm;background:#fff;box-shadow:0 2px 16px rgba(0,0,0,.18);font-family:Arial,sans-serif;position:relative;"></div>
+      <div id="cert-preview-body" style="width:210mm;min-height:297mm;background:#fff;box-shadow:0 2px 16px rgba(0,0,0,.18);font-family:'Calibri',Arial,sans-serif;position:relative;"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-cert-preview')">Close</button>
@@ -3382,7 +3382,7 @@ function printJobReceipt(jobs){
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.serial||'—'}</td>
     </tr>`).join('');
 
-  const html=`<div style="width:210mm;min-height:148mm;padding:12mm 16mm;box-sizing:border-box;font-family:Arial,sans-serif;background:#fff;color:#111;">
+  const html=`<div style="width:210mm;min-height:148mm;padding:12mm 16mm;box-sizing:border-box;font-family:'Calibri',Arial,sans-serif;background:#fff;color:#111;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6mm;">
       <div>
         ${logoUrl?`<img src="${logoUrl}" style="height:14mm;object-fit:contain;margin-bottom:2mm;"/>`:`<div style="font-size:16pt;font-weight:900;letter-spacing:2px;">${labName}</div>`}
@@ -4957,49 +4957,39 @@ async function downloadCombinedPDF(){
   try{
     const {PDFDocument}=PDFLib;
 
-    // Step 1: Get Page 1 HTML content → print to hidden iframe → capture as PDF bytes
-    // We use html2canvas approach: render Page 1 as image, embed in pdf-lib PDF
-    // First check if html2canvas is available, otherwise use print fallback
-    const body=el('cert-preview-body');
-    if(!body){throw new Error('No cert preview body found');}
-
-    // Step 2: Fetch the uploaded data PDF using a signed URL (secure — expires in 60s)
+    // Step 1: Fetch uploaded data PDF from R2 (public URL, CORS allowed)
     showToast('Fetching calibration data PDF…','info',2000);
-    let dataUrl=item.excelFile.url;
-    try{
-      // Try to get a signed URL for secure access (works with private bucket)
-      dataUrl=await SB.getSignedUrl('westlab-files',j.excelFile.url,120);
-    }catch(e){
-      // If signed URL fails (e.g. bucket is public), use direct URL as fallback
-      console.warn('Signed URL failed, using direct URL:',e);
-    }
-    const dataRes=await fetch(dataUrl);
-    if(!dataRes.ok)throw new Error('Could not fetch calibration data PDF — check storage permissions');
+    const dataUrl=item.excelFile.url;
+    const dataRes=await fetch(dataUrl,{mode:'cors'});
+    if(!dataRes.ok) throw new Error(`Could not fetch PDF (${dataRes.status}) — check R2 public access`);
     const dataPdfBytes=await dataRes.arrayBuffer();
 
-    // Step 3: Load data PDF
-    const dataPdf=await PDFDocument.load(dataPdfBytes);
+    // Step 2: Load data PDF
+    const dataPdf=await PDFDocument.load(dataPdfBytes,{ignoreEncryption:true});
 
-    // Step 4: Create Page 1 PDF using html2canvas if available, else embed as image
+    // Step 3: Create merged PDF
     const mergedPdf=await PDFDocument.create();
 
-    // Try html2canvas for Page 1
-    if(typeof html2canvas!=='undefined'){
-      const canvas=await html2canvas(body,{scale:2,useCORS:true,backgroundColor:'#ffffff'});
+    // Step 4: Render Page 1 via html2canvas if available
+    const body=el('cert-preview-body');
+    if(typeof html2canvas!=='undefined'&&body&&body.offsetWidth>0){
+      showToast('Rendering certificate page 1…','info',2000);
+      const canvas=await html2canvas(body,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
       const imgData=canvas.toDataURL('image/jpeg',0.95);
       const imgBytes=await fetch(imgData).then(r=>r.arrayBuffer());
       const jpgImage=await mergedPdf.embedJpg(imgBytes);
-      const p1=mergedPdf.addPage([595,842]); // A4 in points
+      const p1=mergedPdf.addPage([595,842]);
       p1.drawImage(jpgImage,{x:0,y:0,width:595,height:842});
     } else {
-      // Fallback: copy a blank page with note
+      // Fallback: add blank page with note — user should print Page 1 separately
       const p1=mergedPdf.addPage([595,842]);
-      p1.drawText('Page 1 — See printed certificate',{x:50,y:400,size:14});
+      p1.drawText('Page 1: See Certificate Preview above',{x:50,y:420,size:12,color:PDFLib.rgb(0.3,0.3,0.3)});
+      p1.drawText('Print the certificate preview separately for Page 1.',{x:50,y:400,size:10,color:PDFLib.rgb(0.5,0.5,0.5)});
     }
 
-    // Step 5: Copy all pages from data PDF into merged PDF
-    const dataPageIndices=dataPdf.getPageIndices();
-    const copiedPages=await mergedPdf.copyPages(dataPdf,dataPageIndices);
+    // Step 5: Copy all pages from data PDF
+    showToast('Merging pages…','info',1500);
+    const copiedPages=await mergedPdf.copyPages(dataPdf,dataPdf.getPageIndices());
     copiedPages.forEach(p=>mergedPdf.addPage(p));
 
     // Step 6: Save and download
@@ -5013,12 +5003,12 @@ async function downloadCombinedPDF(){
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast(`✅ Combined PDF downloaded — ${j.certNo||j.jobNo}`,'success',4000);
+    showToast(`✅ Combined PDF downloaded — ${item.certNo||j.jobNo}`,'success',4000);
     addAudit('📥',`Combined certificate PDF downloaded for job <strong>${j.jobNo}</strong>`);
 
   }catch(e){
     console.error('PDF merge error:',e);
-    showToast('❌ PDF merge failed: '+e.message,'error',5000);
+    showToast('❌ PDF merge failed: '+e.message,'error',6000);
   }finally{
     if(btn){btn.textContent=origText;btn.disabled=false;}
   }
@@ -5070,11 +5060,11 @@ function buildCertPage1HTML(cd,s){
     :`<tr><td colspan="5" style="padding:2mm;font-size:8pt;color:#888;text-align:center;border:0.3pt solid #555;">No reference instruments added</td></tr>`;
 
   const sigCell=(sigImg,name)=>`
-    <td style="width:50%;padding-top:2mm;vertical-align:bottom;text-align:left;">
-      <div style="width:65mm;">
+    <td style="width:50%;padding-top:2mm;vertical-align:bottom;text-align:center;">
+      <div style="width:60mm;margin:0 auto;">
         ${sigImg
-          ?`<div style="height:18mm;display:flex;align-items:flex-end;justify-content:flex-start;margin-bottom:1mm;padding-left:2mm;">
-              <img src="${sigImg}" style="max-height:18mm;max-width:60mm;object-fit:contain;object-position:left bottom;"/>
+          ?`<div style="height:18mm;display:flex;align-items:flex-end;justify-content:center;margin-bottom:1mm;">
+              <img src="${sigImg}" style="max-height:18mm;max-width:58mm;object-fit:contain;object-position:center bottom;"/>
             </div>`
           :`<div style="height:18mm;"></div>`
         }
@@ -5085,12 +5075,12 @@ function buildCertPage1HTML(cd,s){
 
   return `<div style="
     width:210mm;min-height:297mm;padding:12mm 16mm 10mm 16mm;
-    box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;
+    box-sizing:border-box;font-family:'Calibri',Arial,sans-serif;
     background:#fff;color:#111;font-size:9.5pt;line-height:1.4;
     border:none;outline:none;">
   <style scoped>
     .wlcert table{border-collapse:collapse;border-spacing:0;border:none;}
-    .wlcert td,.wlcert th{border:none;padding:0;margin:0;font-size:9.5pt;font-family:Arial,Helvetica,sans-serif;color:#111;}
+    .wlcert td,.wlcert th{border:none;padding:0;margin:0;font-size:9.5pt;font-family:'Calibri',Arial,sans-serif;color:#111;}
     .wlcert tr{border:none;background:none !important;}
     .wlcert table tr:nth-child(even){background:none !important;}
   </style>
@@ -5100,7 +5090,7 @@ function buildCertPage1HTML(cd,s){
   <div style="text-align:center;margin-bottom:3mm;">
     ${logoUrl
       ?`<img src="${logoUrl}" style="height:18mm;max-width:80mm;object-fit:contain;display:block;margin:0 auto 1.5mm;"/>`
-      :`<div style="font-size:22pt;font-weight:900;letter-spacing:3px;font-family:Arial Black,Arial,sans-serif;margin-bottom:1mm;">WESTLAB</div>`
+      :`<div style="font-size:22pt;font-weight:900;letter-spacing:3px;font-family:'Calibri',Arial,sans-serif;font-weight:900;margin-bottom:1mm;">WESTLAB</div>`
     }
   </div>
 
@@ -5964,7 +5954,7 @@ function printBillingSummary(){
     <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${j.calData?.date||'—'}</td>
     <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;text-align:center;">${j.billed?'✅':'⏳'}</td>
   </tr>`).join('');
-  const html=`<div style="padding:16mm;font-family:Arial,sans-serif;font-size:10pt;color:#111;">
+  const html=`<div style="padding:16mm;font-family:'Calibri',Arial,sans-serif;font-size:10pt;color:#111;">
     <div style="text-align:center;margin-bottom:6mm;">
       <div style="font-size:16pt;font-weight:900;">${_settings.labName||'Westlab'}</div>
       <div style="font-size:13pt;font-weight:700;margin-top:2mm;">BILLING SUMMARY — ${monthLabel.toUpperCase()}</div>
