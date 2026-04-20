@@ -4621,9 +4621,49 @@ async function deleteJob(jobNo){
   const j=getJob(jobNo);
   const itemCount=j?.items?.length||1;
   const warn=j&&j.status==='Completed'
-    ?`⚠️ Job ${jobNo} is completed with ${itemCount} issued certificate(s).\n\nDeleting will move it to Deleted Jobs. Certificates will no longer be accessible.\n\nAre you sure?`
-    :`Delete job ${jobNo} (${itemCount} item${itemCount>1?'s':''}) for ${j?.custName}?\n\nThis will move it to Deleted Jobs.`;
+    ?`⚠️ Job ${jobNo} is completed with ${itemCount} issued certificate(s).\n\nDeleting will permanently remove all uploaded files from storage.\n\nAre you sure?`
+    :`Delete job ${jobNo} (${itemCount} item${itemCount>1?'s':''}) for ${j?.custName}?\n\nThis will permanently remove all uploaded PDFs from storage.`;
   if(!confirm(warn)) return;
+
+  // Collect all R2 file paths to delete
+  const pathsToDelete=[];
+  if(j&&j.items){
+    j.items.forEach(item=>{
+      // Cal data PDF
+      if(item.excelFile&&item.excelFile.url){
+        const path=extractR2Path(item.excelFile.url);
+        if(path) pathsToDelete.push(path);
+      }
+      // Photos
+      if(item.photos&&item.photos.length){
+        item.photos.forEach(p=>{
+          const path=extractR2Path(p.url||p);
+          if(path) pathsToDelete.push(path);
+        });
+      }
+    });
+    // Job-level file (legacy)
+    if(j.excelFile&&j.excelFile.url){
+      const path=extractR2Path(j.excelFile.url);
+      if(path) pathsToDelete.push(path);
+    }
+  }
+
+  // Delete from R2
+  if(pathsToDelete.length){
+    try{
+      await fetch('https://westlab-upload.sales-2fb.workers.dev',{
+        method:'DELETE',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(pathsToDelete)
+      });
+      console.log(`Deleted ${pathsToDelete.length} files from R2 for job ${jobNo}`);
+    }catch(e){
+      console.warn('R2 delete failed (continuing with job delete):',e);
+    }
+  }
+
+  // Mark job as deleted in Supabase
   await updateJob(jobNo,j=>{
     j.status='Deleted';
     j.deletedAt=new Date().toISOString();
@@ -4632,12 +4672,21 @@ async function deleteJob(jobNo){
     j.history.push({action:'🗑 Deleted by admin',by:currentUser,time:new Date().toISOString()});
   });
   renderEquipmentTable(); renderCompletedJobs(); renderDashboard(); refreshAllBadges();
-  showToast(`🗑 Job ${jobNo} moved to Deleted Jobs`,'success',3000);
-  addAudit('🗑',`Job <strong>${jobNo}</strong> deleted by admin`);
+  showToast(`🗑 Job ${jobNo} deleted — ${pathsToDelete.length} file(s) removed from storage`,'success',4000);
+  addAudit('🗑',`Job <strong>${jobNo}</strong> deleted — ${pathsToDelete.length} R2 file(s) removed`);
   }catch(_err){
     console.error("deleteJob error:",_err);
     if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
   }
+}
+
+// Extract R2 path from full public URL
+function extractR2Path(url){
+  if(!url) return null;
+  const marker='r2.dev/';
+  const idx=url.indexOf(marker);
+  if(idx===-1) return null;
+  return url.slice(idx+marker.length);
 }
 
 // ── UTILS ──
