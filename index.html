@@ -2689,7 +2689,7 @@ async function setCertCounter(){
   await apiFetch('/api/seq',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({id:'cert_seq_'+yk,val:val-1})
+    body:JSON.stringify({id:'cert_seq_'+yr,val:val-1})
   });
   el('set-cert-counter').value='';
   showToast(`✅ Cert counter set — next cert will be ${next}`,'success',4000);
