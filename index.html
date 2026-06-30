@@ -2397,6 +2397,8 @@ function setCurrentUser(username){
     }
     // Run recal reminders (admin only)
     if(isAdmin(currentUser)) checkRecalReminders();
+    // Check reference equipment calibration due dates
+    if(isAdmin(currentUser)) checkRefEqDueReminders();
     // Check KIV expiry for all users
     checkKIVExpiry();
   },1500);
@@ -5464,10 +5466,27 @@ function openEditRefEqModal(id){
 }
 async function deleteRefEq(id){
   try{
-  if(!confirm('Delete this reference equipment record?'))return;
+  const r=_refEq.find(x=>x.id===id);
+  if(!confirm(`Delete reference equipment "${id}"?\n\nThis will also permanently remove any uploaded certificate PDF from storage.`))return;
+
+  // Delete cert PDF from R2 if exists
+  if(r&&r.certFileUrl){
+    const path=extractR2Path(r.certFileUrl);
+    if(path){
+      try{
+        await fetch('https://westlab-upload.sales-2fb.workers.dev',{
+          method:'DELETE',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify([path])
+        });
+      }catch(e){console.warn('R2 file delete failed (continuing):',e);}
+    }
+  }
+
   await SB.delete('wl_ref_equipment',id);
-  _refEq=_refEq.filter(r=>r.id!==id);
+  _refEq=_refEq.filter(x=>x.id!==id);
   renderRefEqTable();
+  showToast(`🗑 Reference equipment "${id}" deleted${r?.certFileUrl?' — file removed from storage':''}`,'success',3000);
   addAudit('🗑',`Reference equipment <strong>${id}</strong> deleted`);
   }catch(_err){
     console.error("deleteRefEq error:",_err);
@@ -6452,6 +6471,78 @@ async function checkRecalReminders(){
     console.error("checkRecalReminders error:",_err);
     if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
   }
+}
+
+// ── REFERENCE EQUIPMENT DUE DATE REMINDER (internal lab standards) ──
+async function checkRefEqDueReminders(){
+  try{
+  const today=new Date(); today.setHours(0,0,0,0);
+  const reminderKey='wl_refeq_sent_'+today.toISOString().split('T')[0];
+  if(sessionStorage.getItem(reminderKey)) return;
+
+  const overdue=[];
+  const dueSoon=[]; // within 30 days
+  (_refEq||[]).forEach(r=>{
+    if(!r.dueDate) return;
+    const due=new Date(r.dueDate+'T00:00:00');
+    const daysUntil=Math.round((due-today)/(1000*60*60*24));
+    if(daysUntil<0) overdue.push({...r,daysUntil});
+    else if(daysUntil<=30) dueSoon.push({...r,daysUntil});
+  });
+
+  if(!overdue.length && !dueSoon.length){
+    sessionStorage.setItem(reminderKey,'1');
+    return;
+  }
+
+  // Show in-app banner
+  showRefEqAlertBanner(overdue, dueSoon);
+
+  // Send email to sales@westlab.com.my once per day
+  const lab=_settings.labName||'Westlab (M) Sdn. Bhd.';
+  let body=`Dear Team,\n\nThis is an automated reminder regarding your internal Reference Equipment (Lab Standards) calibration status.\n\n`;
+  if(overdue.length){
+    body+=`⚠️ OVERDUE (${overdue.length}):\n────────────────────────────────────\n`;
+    overdue.forEach(r=>{
+      body+=`${r.id} — ${r.name}${r.serial?' (S/N: '+r.serial+')':''}\n  Due: ${fmtDateShort(r.dueDate)} — ${Math.abs(r.daysUntil)} day(s) overdue\n\n`;
+    });
+  }
+  if(dueSoon.length){
+    body+=`⏰ DUE WITHIN 30 DAYS (${dueSoon.length}):\n────────────────────────────────────\n`;
+    dueSoon.forEach(r=>{
+      body+=`${r.id} — ${r.name}${r.serial?' (S/N: '+r.serial+')':''}\n  Due: ${fmtDateShort(r.dueDate)} — ${r.daysUntil} day(s) remaining\n\n`;
+    });
+  }
+  body+=`Please arrange for recalibration to maintain ISO/IEC 17025 traceability compliance.\n\nBest regards,\n${lab} LIMS — Automated Reminder`;
+
+  const ok=await sendEmail('sales@westlab.com.my','Westlab Team',
+    `🔧 Reference Equipment Calibration Reminder — ${overdue.length} overdue, ${dueSoon.length} due soon`,
+    body
+  );
+  if(ok) addAudit('🔧',`Reference equipment reminder sent — ${overdue.length} overdue, ${dueSoon.length} due soon`);
+  sessionStorage.setItem(reminderKey,'1');
+  }catch(_err){
+    console.error("checkRefEqDueReminders error:",_err);
+  }
+}
+
+function showRefEqAlertBanner(overdue, dueSoon){
+  if(!overdue.length && !dueSoon.length) return;
+  const existing=document.getElementById('refeq-alert-banner');
+  if(existing) existing.remove();
+  const banner=document.createElement('div');
+  banner.id='refeq-alert-banner';
+  banner.style.cssText='position:fixed;top:60px;left:240px;right:0;z-index:500;background:#fff3e0;border-bottom:2px solid #ff9800;padding:10px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;';
+  const parts=[];
+  if(overdue.length) parts.push(`<strong style="color:#c62828;">${overdue.length} reference equipment OVERDUE</strong>`);
+  if(dueSoon.length) parts.push(`<strong style="color:#e65100;">${dueSoon.length} due within 30 days</strong>`);
+  banner.innerHTML=`
+    <div style="font-size:13px;color:#5d4037;">🔧 ${parts.join(' · ')} for calibration — internal lab standards.</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-outline btn-sm" onclick="showView('ref-eq');document.getElementById('refeq-alert-banner').remove();">View Reference Equipment</button>
+      <button onclick="document.getElementById('refeq-alert-banner').remove();" style="background:none;border:none;cursor:pointer;font-size:16px;color:#5d4037;">✕</button>
+    </div>`;
+  document.body.appendChild(banner);
 }
 
 // ── IN-APP NOTIFICATIONS ──
