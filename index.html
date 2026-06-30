@@ -3666,7 +3666,7 @@ async function openCalModal(jobNo, itemIdx=0){
   // Pre-fill if re-submitting after rejection
   if(j&&j.calData){
     const cd=j.calData;
-    ['cert-no','issue-date','date','receipt-date','tag-no','resolution','next-due',
+    ['issue-date','date','receipt-date','tag-no','resolution','next-due',
      'cond-before','cond-after','cond-remark','sticker-no','calibrated-by'].forEach(k=>{
       const e=el('cal-'+k); if(e&&cd[k.replace(/-/g,'_')]!==undefined) e.value=cd[k.replace(/-/g,'_')]||'';
     });
@@ -3685,9 +3685,8 @@ async function openCalModal(jobNo, itemIdx=0){
       }));
       renderTraceCards();
     }
-  } else {
-    el('cal-cert-no').value=j&&j.certNo?j.certNo:'';
   }
+  // cal-cert-no already correctly set above from item.certNo — don't overwrite it here
   openModal('modal-perform-cal');
   }catch(_err){
     console.error("openCalModal error:",_err);
