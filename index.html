@@ -2635,17 +2635,25 @@ async function loadCounterPreviews(){
     if(jprev) jprev.textContent=`Current next: WL${yr}-${String(seq+1).padStart(5,'0')}`;
     const jinput=el('set-job-counter');
     if(jinput) jinput.placeholder=String(seq+1);
-  }catch(e){}
+  }catch(e){
+    console.error('loadCounterPreviews job seq error:',e);
+    const jprev=el('job-counter-preview');
+    if(jprev) jprev.textContent='Could not load — check API connection';
+  }
   // Load current cert seq
   try{
-    const id='cert_seq_'+yk;
+    const id='cert_seq_'+yr;
     const d=await apiFetch(`/api/seq/${encodeURIComponent(id)}`);
     const val=d&&d.val?d.val:0;
     const cprev=el('cert-counter-preview');
     if(cprev) cprev.textContent=`Current next: WLCS${yr}${mm}${String(val+1).padStart(4,'0')}`;
     const cinput=el('set-cert-counter');
     if(cinput) cinput.placeholder=String(val+1);
-  }catch(e){}
+  }catch(e){
+    console.error('loadCounterPreviews cert seq error:',e);
+    const cprev=el('cert-counter-preview');
+    if(cprev) cprev.textContent='Could not load — check API connection';
+  }
 }
 
 async function setJobCounter(){
