@@ -1887,7 +1887,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="modal-body">
       <div class="form-section-title">🔩 Equipment Details</div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Equipment ID <span class="req">*</span></label><input class="form-control" id="ref-eq-id" placeholder="e.g. REF-001"/></div>
+        <div class="form-group"><label class="form-label">Equipment ID <span class="req">*</span></label><input class="form-control" id="ref-eq-id" placeholder="e.g. REF-001"/>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">⚠️ Changing this ID won't update past certificates that reference the old ID.</div>
+        </div>
         <div class="form-group"><label class="form-label">Equipment Name <span class="req">*</span></label><input class="form-control" id="ref-eq-name" placeholder="e.g. pH 4.005 Buffer Standard"/></div>
       </div>
       <div class="form-row">
@@ -5268,6 +5270,7 @@ async function saveRefEquipment(){
   const modal=el('modal-add-ref-eq');
   const editId=modal.dataset.editId||'';
   const isEdit=!!editId;
+  const idChanged=isEdit && editId!==el('ref-eq-id').value.trim();
   const id=el('ref-eq-id').value.trim();
   const name=el('ref-eq-name').value.trim();
   const serial=el('ref-eq-serial').value.trim();
@@ -5276,8 +5279,9 @@ async function saveRefEquipment(){
   if(!name){alert('Equipment name is required.');return;}
   if(!serial){alert('Serial number is required.');return;}
   if(!dueDate){alert('Calibration due date is required.');return;}
-  if(!isEdit && _refEq.find(r=>r.id===id)){alert('Equipment ID already exists. Please use a unique ID.');return;}
-  const existing=_refEq.find(r=>r.id===id);
+  // Check for duplicate ID — only block if it's a NEW id (not the one being edited) and already exists
+  if((!isEdit || idChanged) && _refEq.find(r=>r.id===id)){alert('Equipment ID already exists. Please use a unique ID.');return;}
+  const existing=isEdit?_refEq.find(r=>r.id===editId):null;
   // Upload external cert PDF to storage if provided
   let certFileUrl=existing?.certFileUrl||'';
   let certFileName=existing?.certFileName||'';
@@ -5310,10 +5314,19 @@ async function saveRefEquipment(){
     remarks:el('ref-eq-remarks').value.trim(),
     addedAt:existing?.addedAt||new Date().toISOString()
   };
+  // If ID changed, delete the old DB row first (primary key change)
+  if(idChanged){
+    try{ await SB.delete('wl_ref_equipment',editId); }catch(e){console.warn('Could not delete old ref eq record:',e);}
+  }
   await SB.upsert('wl_ref_equipment',id,record);
   if(isEdit){
-    const idx=_refEq.findIndex(r=>r.id===id);
-    if(idx>=0)_refEq[idx]=record; else _refEq.push(record);
+    const idx=_refEq.findIndex(r=>r.id===editId);
+    if(idx>=0){
+      if(idChanged) _refEq.splice(idx,1,record);
+      else _refEq[idx]=record;
+    } else {
+      _refEq.push(record);
+    }
   } else {
     _refEq.push(record);
   }
@@ -5420,7 +5433,7 @@ function openEditRefEqModal(id){
   const r=_refEq.find(x=>x.id===id); if(!r)return;
   el('modal-add-ref-eq').querySelector('.modal-title').textContent='✏️ Edit Reference Equipment';
   el('modal-add-ref-eq').dataset.editId=id;
-  el('ref-eq-id').value=r.id; el('ref-eq-id').readOnly=true;
+  el('ref-eq-id').value=r.id; el('ref-eq-id').readOnly=false;
   el('ref-eq-name').value=r.name||'';
   el('ref-eq-brand').value=r.brand||'';
   el('ref-eq-model').value=r.model||'';
