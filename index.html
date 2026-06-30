@@ -1495,6 +1495,18 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </div>
           <input type="hidden" id="cal-humidity"/>
         </div>
+        <!-- Pressure: (value ± pm) -->
+        <div class="form-group">
+          <label class="form-label">Ambient Pressure (hPa)</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;">(</span>
+            <input class="form-control" id="cal-pressure-val" placeholder="1013.0" style="width:70px;text-align:center;"/>
+            <span style="font-size:13px;white-space:nowrap;">± </span>
+            <input class="form-control" id="cal-pressure-pm" placeholder="5.0" style="width:60px;text-align:center;"/>
+            <span style="font-size:13px;">)</span>
+          </div>
+          <input type="hidden" id="cal-pressure"/>
+        </div>
       </div>
 
       <!-- SECTION 8: Metrological Traceability -->
@@ -3398,11 +3410,13 @@ function printJobReceipt(jobs){
   frame.style.display='block';
   setTimeout(()=>{window.print();setTimeout(()=>{frame.style.display='none';},500);},200);
 }
-function openEditJobModal(jobNo){
+let _editingItemIdx=0;
+function openEditJobModal(jobNo, itemIdx=0){
   const j=getJob(jobNo); if(!j)return;
   _editingJobNo=jobNo;
-  const item=(j.items&&j.items[0])||{}; // Use first item for equipment-level fields
-  el('edit-job-no-label').textContent=jobNo;
+  _editingItemIdx=itemIdx;
+  const item=(j.items&&j.items[itemIdx])||{};
+  el('edit-job-no-label').textContent=`${jobNo} — Item ${item.itemNo||itemIdx+1} (${item.eqName||'Equipment'})`;
   el('edit-eq-company').value=j.company||j.custName||'';
   el('edit-eq-attention').value=j.attention||'';
   el('edit-eq-po').value=j.po||'';
@@ -3413,21 +3427,21 @@ function openEditJobModal(jobNo){
   el('edit-eq-email').value=j.email||'';
   el('edit-eq-receive-date').value=j.receiveDate||'';
   el('edit-eq-priority').value=j.priority||'Normal';
-  el('edit-eq-name').value=item.eqName||j.eqName||'';
-  el('edit-eq-brand').value=item.brand||j.brand||'';
-  el('edit-eq-model').value=item.model||j.model||'';
-  el('edit-eq-serial').value=item.serial||j.serial||'';
-  el('edit-eq-tag-no').value=item.tagNo||j.tagNo||'';
-  el('edit-eq-spec').value=item.spec||j.spec||'';
-  el('edit-eq-range').value=item.range||j.range||'';
-  el('edit-eq-cal-points').value=item.calPoints||j.calPoints||'';
-  el('edit-eq-resolution').value=item.resolution||j.resolution||'';
+  el('edit-eq-name').value=item.eqName||'';
+  el('edit-eq-brand').value=item.brand||'';
+  el('edit-eq-model').value=item.model||'';
+  el('edit-eq-serial').value=item.serial||'';
+  el('edit-eq-tag-no').value=item.tagNo||'';
+  el('edit-eq-spec').value=item.spec||'';
+  el('edit-eq-range').value=item.range||'';
+  el('edit-eq-cal-points').value=item.calPoints||'';
+  el('edit-eq-resolution').value=item.resolution||'';
   const editIntervalEl=el('edit-eq-cal-interval');
-  if(editIntervalEl) editIntervalEl.value=item.calInterval||j.calInterval||'';
+  if(editIntervalEl) editIntervalEl.value=item.calInterval||'';
   el('edit-eq-promised-date').value=j.promisedDate||'';
-  el('edit-eq-condition').value=item.condition||j.condition||'Good';
-  el('edit-eq-accessories').value=item.accessories||j.accessories||'';
-  el('edit-eq-remarks').value=item.remarks||j.remarks||'';
+  el('edit-eq-condition').value=item.condition||'Good';
+  el('edit-eq-accessories').value=item.accessories||'';
+  el('edit-eq-remarks').value=item.remarks||'';
   openModal('modal-edit-job');
 }
 async function saveEditJob(){
@@ -3448,9 +3462,9 @@ async function saveEditJob(){
     j.receiveDate=el('edit-eq-receive-date').value;
     j.priority=el('edit-eq-priority').value;
     j.promisedDate=el('edit-eq-promised-date').value;
-    // Save equipment-level fields into items[0] (multi-item model)
-    if(j.items&&j.items[0]){
-      const it=j.items[0];
+    // Save equipment-level fields into the specific item being edited
+    if(j.items&&j.items[_editingItemIdx]){
+      const it=j.items[_editingItemIdx];
       it.eqName=eqName;
       it.brand=el('edit-eq-brand').value.trim();
       it.model=el('edit-eq-model').value.trim();
@@ -3635,7 +3649,7 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-calibrated-by').value=calStaffRec?.certName||calStaffRec?.name||USERS[currentUser]?.name||currentUser;
   el('cal-location').value='Westlab Calibration Laboratory';
   ['cal-sticker-no','cal-temp-val','cal-temp-pm',
-   'cal-humidity-val','cal-humidity-pm',
+   'cal-humidity-val','cal-humidity-pm','cal-pressure-val','cal-pressure-pm',
    ].forEach(id=>{const e=el(id);if(e)e.value='';});
   el('cal-procedure').value='';
   el('cal-total-pages').value='2';
@@ -3657,6 +3671,7 @@ async function openCalModal(jobNo, itemIdx=0){
     // Restore ambient split fields
     if(cd.temp){const m=cd.temp.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-temp-val').value=m[1].trim();el('cal-temp-pm').value=m[2].trim();}}
     if(cd.humidity){const m=cd.humidity.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-humidity-val').value=m[1].trim();el('cal-humidity-pm').value=m[2].trim();}}
+    if(cd.pressure){const m=cd.pressure.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-pressure-val').value=m[1].trim();el('cal-pressure-pm').value=m[2].trim();}}
     // Restore traceability rows
     if(cd.traceRows&&cd.traceRows.length){
       _traceSelected=cd.traceRows.map(r=>({
@@ -3817,6 +3832,7 @@ async function submitCalibration(){
       sticker_no:el('cal-sticker-no').value.trim(),
       temp:buildAmbient('cal-temp-val','cal-temp-pm'),
       humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
+      pressure:buildAmbient('cal-pressure-val','cal-pressure-pm'),
       traceRows:getTraceRows(),
       approved_by:approvedBy,
       approvedByUsername:el('cal-approved-by').value||'',
@@ -4033,8 +4049,7 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;font-size:12px;color:#fff;">${j.receiveDate||'—'}</td>
         <td style="padding:6px 10px;font-size:12px;">${j.promisedDate?`<span style="color:${overdue?'#fca5a5':'#86efac'};font-size:11px;">${j.promisedDate}</span>`:'<span style="opacity:.5;font-size:11px;">—</span>'}</td>
         <td style="padding:6px 10px;white-space:nowrap;">
-          ${role==='Admin'?`<button class="btn btn-outline btn-sm" onclick="openEditJobModal('${j.jobNo}')" style="font-size:11px;">✏️ Edit</button> `:''}
-          ${role==='Admin'?`<button class="btn btn-danger btn-sm" onclick="deleteJob('${j.jobNo}')" style="font-size:11px;">🗑</button>`:''}
+          ${role==='Admin'?`<button class="btn btn-danger btn-sm" onclick="deleteJob('${j.jobNo}')" style="font-size:11px;">🗑 Delete Job</button>`:''}
         </td>
       </tr>`);
       // ── ITEM ROWS ──
@@ -4047,6 +4062,8 @@ function renderEquipmentTable(){
           actions+=`<button class="btn btn-outline btn-sm" onclick="openAssignItemModal('${j.jobNo}',${idx})" style="font-size:11px;">Re-assign</button> `;
         if(item.status==='Completed'&&item.calData)
           actions+=`<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})" style="font-size:11px;">📄</button> `;
+        if(role==='Admin')
+          actions+=`<button class="btn btn-outline btn-sm" onclick="openEditJobModal('${j.jobNo}',${idx})" style="font-size:11px;">✏️</button> `;
         rows.push(`<tr style="border-left:3px solid var(--border);">
           <td style="padding:5px 10px 5px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
           <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${item.certNo||'—'}</td>
@@ -5220,6 +5237,7 @@ function buildCertPage1HTML(cd,s){
     <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
     ${R('Temperature',cd.temp?`${cd.temp} °C`:'N/A')}
     ${R('Relative Humidity',cd.humidity?`${cd.humidity} %RH`:'N/A')}
+    ${R('Ambient Pressure',cd.pressure?`${cd.pressure} hPa`:'N/A')}
   </table>
 
   <!-- TRACEABILITY -->
