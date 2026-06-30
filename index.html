@@ -3604,7 +3604,12 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-attention').textContent=j&&j.attention?j.attention:'—';
   el('cal-priority').textContent=j?j.priority:'—';
   el('wf-assigned-to').textContent=item&&item.assignedTo?USERS[item.assignedTo]?.name||item.assignedTo:'—';
-  // Use item certNo
+  // Use item certNo — generate one on the fly if missing (legacy jobs)
+  if(item && !item.certNo){
+    const newCertNo=await commitCertNo();
+    item.certNo=newCertNo;
+    await updateJob(jobNo,j2=>{ if(j2.items&&j2.items[itemIdx]) j2.items[itemIdx].certNo=newCertNo; });
+  }
   el('cal-cert-no').value=item?item.certNo:'';
   // Auto-fill from job + item
   el('cal-issued-to').value=j?j.custName:'';
