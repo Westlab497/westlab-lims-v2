@@ -435,7 +435,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <button class="btn btn-primary" id="login-btn" style="width:100%;padding:11px;font-size:14px;margin-top:6px;" onclick="doLogin()">Sign In →</button>
     <div class="login-footer">
-      <a href="#" onclick="showForgotPassword()" style="color:var(--blue);text-decoration:none;font-size:12px;">Forgot password? Contact your administrator</a>
+      <a href="#" onclick="showForgotPassword()" style="color:var(--blue);text-decoration:none;font-size:12px;">Forgot password?</a>
       <div style="margin-top:10px;">
         <a href="#" onclick="openStatusLookup()" style="color:rgba(255,255,255,.5);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">🔍 Check job status</a>
       </div>
@@ -445,14 +445,39 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
 <!-- ══ FORGOT PASSWORD PROMPT ══ -->
 <div id="forgot-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(15,31,61,.7);align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:16px;padding:36px 32px;width:380px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.2);text-align:center;">
-    <div style="font-size:36px;margin-bottom:12px;">🔐</div>
-    <div style="font-weight:800;font-size:18px;color:var(--navy);margin-bottom:8px;">Forgot Password?</div>
-    <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.6;">Please contact your <strong>Administrator</strong> to reset your password.<br/>The admin can reset staff passwords from the <strong>Personnel</strong> page.</div>
-    <div style="background:var(--blue-pale);border-radius:8px;padding:12px;margin-bottom:20px;font-size:12px;color:var(--navy);">
-      💡 Admin can log in and go to:<br/><strong>Personnel → Reset Password</strong>
+  <div style="background:#fff;border-radius:16px;padding:36px 32px;width:400px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div style="text-align:center;font-size:36px;margin-bottom:12px;">🔐</div>
+    <div style="font-weight:800;font-size:18px;color:var(--navy);margin-bottom:8px;text-align:center;">Forgot Password?</div>
+
+    <!-- Step 1: Request reset -->
+    <div id="forgot-step1">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;text-align:center;">Enter your username and a reset token will be sent to <strong>sales@westlab.com.my</strong></div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px;">Username</label>
+        <input id="forgot-username" class="form-control" placeholder="Enter your username"/>
+      </div>
+      <button onclick="requestPasswordReset()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">📧 Send Reset Token</button>
+      <button onclick="hideForgotPassword()" style="width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:13px;cursor:pointer;">Cancel</button>
     </div>
-    <button onclick="hideForgotPassword()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer;width:100%;">OK, Got It</button>
+
+    <!-- Step 2: Enter token + new password -->
+    <div id="forgot-step2" style="display:none;">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;text-align:center;">Check <strong>sales@westlab.com.my</strong> for the reset token and enter it below.</div>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px;">Reset Token</label>
+        <input id="forgot-token" class="form-control" placeholder="Paste token from email"/>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px;">New Password</label>
+        <input id="forgot-newpw" class="form-control" type="password" placeholder="Enter new password"/>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px;">Confirm Password</label>
+        <input id="forgot-confirmpw" class="form-control" type="password" placeholder="Confirm new password"/>
+      </div>
+      <button onclick="submitPasswordReset()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">✅ Reset Password</button>
+      <button onclick="hideForgotPassword()" style="width:100%;background:none;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:13px;cursor:pointer;">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -1024,15 +1049,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
         <!-- EMAIL CONFIG -->
         <div class="card">
-          <div class="card-header"><span class="card-title">📧 Email Configuration (EmailJS)</span></div>
+          <div class="card-header"><span class="card-title">📧 Email Configuration (Resend)</span></div>
           <div class="card-body">
             <div style="background:var(--blue-pale);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--navy);">
-              💡 Free email service — no server needed. Sign up at <strong>emailjs.com</strong>, create a template, then paste your keys here.
+              💡 Emails are sent via <strong>Resend</strong> from <strong>noreply@westlab.com.my</strong>. No configuration needed — already set up securely in the API Worker.
               The template should include variables: <code>{{to_email}}</code>, <code>{{to_name}}</code>, <code>{{job_no}}</code>, <code>{{cert_no}}</code>, <code>{{equipment}}</code>, <code>{{message}}</code>.
             </div>
-            <div class="form-group"><label class="form-label">EmailJS Service ID</label><input id="set-emailjs-service" class="form-control" placeholder="e.g. service_xxxxxxx"/></div>
-            <div class="form-group"><label class="form-label">EmailJS Template ID</label><input id="set-emailjs-template" class="form-control" placeholder="e.g. template_xxxxxxx"/></div>
-            <div class="form-group"><label class="form-label">EmailJS Public Key</label><input id="set-emailjs-pubkey" class="form-control" placeholder="e.g. xxxxxxxxxxxxxxx"/></div>
+            <div class="form-group"><label class="form-label">Notification Email (for test)</label><input id="set-test-email" class="form-control" placeholder="e.g. sales@westlab.com.my"/></div>
             <button class="btn btn-outline btn-sm" onclick="testEmail()" style="margin-top:4px;">📧 Send Test Email</button>
           </div>
         </div>
@@ -1953,30 +1976,36 @@ window.addEventListener('error', e => {
   console.error('Global JS error:', e.message, 'at', e.filename, e.lineno);
 });
 
-const SUPA_URL='https://zwlmrrosranszveoesij.supabase.co';
-const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3bG1ycm9zcmFuc3p2ZW9lc2lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3Njk0NDcsImV4cCI6MjA5MDM0NTQ0N30.xsGtsepAB5SjIoq7l0ZhC-oDnZRHVQ3ttv3Vi8vKsgw';
+// ── SECURE API — all DB calls go through Cloudflare Worker (no keys in HTML) ──
+const API='https://westlab-api.sales-2fb.workers.dev';
 
-// Lightweight Supabase REST client (no npm needed)
+async function apiFetch(path, opts={}){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),15000);
+  try{
+    const r=await fetch(API+path,{...opts,signal:ctrl.signal});
+    clearTimeout(timer);
+    if(!r.ok){
+      const e=await r.text();
+      throw new Error(`API error (${r.status}): ${e}`);
+    }
+    return await r.json();
+  }finally{clearTimeout(timer);}
+}
+
 const SB={
   async get(table,id){
-    const r=await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&select=data`,
-      {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
-    if(!r.ok)return null;
-    const d=await r.json();
-    return d&&d[0]?d[0].data:null;
+    try{
+      const d=await apiFetch(`/api/row/${table}/${encodeURIComponent(id)}`);
+      return d||null;
+    }catch(e){console.warn('SB.get error:',e);return null;}
   },
   async getAll(table){
     try{
-      const ctrl=new AbortController();
-      const timer=setTimeout(()=>ctrl.abort(),15000); // 15s timeout
-      const r=await fetch(`${SUPA_URL}/rest/v1/${table}?select=data&order=updated_at.desc`,
-        {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY},signal:ctrl.signal});
-      clearTimeout(timer);
-      if(!r.ok)return[];
-      const d=await r.json();
+      const d=await apiFetch(`/api/table/${table}`);
+      const rows=Array.isArray(d)?d:[];
       if(table==='wl_jobs'){
-        return d?d.map(x=>{
-          const job=x.data;
+        return rows.map(job=>{
           if(!job) return job;
           if(typeof _jobsCache!=='undefined') _jobsCache[job.jobNo]=JSON.parse(JSON.stringify(job));
           if(job.photos&&job.photos.length){
@@ -1986,7 +2015,6 @@ const SB={
           if(job.excelFile&&job.excelFile.dataUrl){
             job.excelFile={name:job.excelFile.name,size:job.excelFile.size,url:job.excelFile.url};
           }
-          // Strip large base64 from items excelFile/photos
           if(job.items){
             job.items=job.items.map(item=>{
               if(item.excelFile&&item.excelFile.dataUrl){
@@ -1999,72 +2027,66 @@ const SB={
             });
           }
           return job;
-        }):[];
+        });
       }
       if(table==='wl_staff'){
-        // Strip large base64 signatures — only keep URL signatures
-        return d?d.map(x=>{
-          const s=x.data;
+        return rows.map(s=>{
           if(!s) return s;
           if(s.signature&&s.signature.startsWith('data:')&&s.signature.length>5000){
-            return {...s, signature:''};
+            return {...s,signature:''};
           }
           return s;
-        }):[];
+        });
       }
-      return d?d.map(x=>{
-        // Handle both formats: {id, data:{...}} and old direct {id, company, ...}
-        if(x.data) return x.data;
-        // Old format — data stored directly in row
-        const {id, updated_at, ...rest} = x;
-        return Object.keys(rest).length ? {...rest, id} : null;
-      }).filter(Boolean):[];
-    }catch(e){console.warn('getAll failed for',table,e);return[];}
+      return rows;
+    }catch(e){console.warn('SB.getAll failed for',table,e);return[];}
   },
   async upsert(table,id,data){
-    const ctrl=new AbortController();
-    const timer=setTimeout(()=>ctrl.abort(),15000);
-    try{
-      const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{
-        method:'POST',
-        headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
-          'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-        body:JSON.stringify({id,data,updated_at:new Date().toISOString()}),
-        signal:ctrl.signal
-      });
-      if(!r.ok){
-        const errText=await r.text();
-        throw new Error(`DB save failed (${r.status}): ${errText}`);
-      }
-    }finally{clearTimeout(timer);}
+    await apiFetch('/api/upsert',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({table,id,data})
+    });
   },
   async delete(table,id){
-    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`,{
+    await apiFetch('/api/delete',{
       method:'DELETE',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({table,id})
     });
   },
   async getSeq(){
-    const r=await fetch(`${SUPA_URL}/rest/v1/wl_sequences?id=eq.job_seq&select=val`,
-      {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
-    const d=await r.json();
-    return d&&d[0]?d[0].val:0;
+    const d=await apiFetch('/api/seq/job_seq');
+    return d&&d.val?d.val:0;
   },
   async incSeq(){
     const cur=await this.getSeq();
     const next=cur+1;
-    // Use POST with merge-duplicates (upsert) — creates the row if it doesn't exist
-    await fetch(`${SUPA_URL}/rest/v1/wl_sequences`,{
+    await apiFetch('/api/seq',{
       method:'POST',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
-        'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({id:'job_seq',val:next})
     });
     return next;
   },
-  // ── SUPABASE STORAGE (kept for signed URLs only) ──
+  async getCertSeq(yearKey){
+    const id='cert_seq_'+yearKey;
+    const d=await apiFetch(`/api/seq/${encodeURIComponent(id)}`);
+    return d&&d.val?d.val:0;
+  },
+  async incCertSeq(yearKey){
+    const id='cert_seq_'+yearKey;
+    const cur=await this.getCertSeq(yearKey);
+    const next=cur+1;
+    await apiFetch('/api/seq',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id,val:next})
+    });
+    return next;
+  },
+  // ── File uploads still go directly to R2 via upload Worker ──
   async uploadFile(bucket, path, file, onProgress){
-    // Now uploads to Cloudflare R2 via Worker
     const WORKER_URL = 'https://westlab-upload.sales-2fb.workers.dev';
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -2094,48 +2116,8 @@ const SB={
       xhr.send(file);
     });
   },
-  async getSignedUrl(bucket, path, expiresIn=60){
-    // Generate a temporary signed URL (expires in 60 seconds by default)
-    // Extract path from full URL if needed
-    const storagePath=path.includes('/storage/v1/object/public/')
-      ?path.split(`/storage/v1/object/public/${bucket}/`)[1]
-      :path;
-    const r=await fetch(`${SUPA_URL}/storage/v1/object/sign/${bucket}/${storagePath}`,{
-      method:'POST',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':'application/json'},
-      body:JSON.stringify({expiresIn})
-    });
-    if(!r.ok) throw new Error('Could not generate signed URL');
-    const d=await r.json();
-    return `${SUPA_URL}/storage/v1${d.signedURL}`;
-  },
-  async deleteFile(bucket, path){
-    await fetch(`${SUPA_URL}/storage/v1/object/${bucket}/${path}`,{
-      method:'DELETE',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
-    });
-  },
-  async getCertSeq(yearKey){
-    // yearKey format: "26" (2-digit year)
-    const id='cert_seq_'+yearKey;
-    const r=await fetch(`${SUPA_URL}/rest/v1/wl_sequences?id=eq.${id}&select=val`,
-      {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
-    const d=await r.json();
-    return d&&d[0]?d[0].val:0;
-  },
-  async incCertSeq(yearKey){
-    const id='cert_seq_'+yearKey;
-    const cur=await this.getCertSeq(yearKey);
-    const next=cur+1;
-    await fetch(`${SUPA_URL}/rest/v1/wl_sequences`,{
-      method:'POST',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
-        'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id,val:next})
-    });
-    return next;
-  }
 };
+
 
 // ── LOCAL SESSION ONLY (not shared — just for login state) ──
 const LS={
@@ -2146,7 +2128,7 @@ const SESS='wl_session';
 const DEF={labName:'Westlab',accredNum:'SAMM 1234',accredBody:'SAMM / ILAC MRA',accredScope:'',
   techManager:'Lab Manager',address:'123 Lab Street, Kuala Lumpur, Malaysia',
   email:'lab@westlab.com',username:'admin',password:'westlab123',
-  logoUrl:'',emailjsService:'',emailjsTemplate:'',emailjsPubkey:'',
+  logoUrl:'',
   slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10};
 
 // In-memory cache
@@ -2342,36 +2324,15 @@ function rebuildUsers(){
 
 // ── DIAGNOSTIC TEST ──
 async function testSupabaseWrite(){
-  showToast('🔍 Testing Supabase connection…','info',3000);
+  showToast('🔍 Testing API connection…','info',3000);
   try{
-    // Test read
-    const r1=await fetch(`${SUPA_URL}/rest/v1/wl_customers?select=id&limit=1`,
-      {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
-    const readStatus=r1.status;
-    const readBody=await r1.text();
-
-    // Test write
+    const ping=await apiFetch('/api/ping');
     const testId='DIAG-'+Date.now();
-    const r2=await fetch(`${SUPA_URL}/rest/v1/wl_customers`,{
-      method:'POST',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
-        'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id:testId,data:{company:'DIAGNOSTIC TEST'},updated_at:new Date().toISOString()})
-    });
-    const writeStatus=r2.status;
-    const writeBody=await r2.text();
-
-    // Delete test record
-    await fetch(`${SUPA_URL}/rest/v1/wl_customers?id=eq.${testId}`,{
-      method:'DELETE',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
-    });
-
-    const msg=`READ: ${readStatus}\nWRITE: ${writeStatus}\n${writeStatus>=300?'ERROR: '+writeBody:'✅ Supabase working!'}`;
-    alert(msg);
-    console.log('Diagnostic result:',{readStatus,readBody,writeStatus,writeBody});
+    await SB.upsert('wl_customers',testId,{company:'DIAGNOSTIC TEST'});
+    await SB.delete('wl_customers',testId);
+    alert(`✅ API Worker is working!\nTimestamp: ${ping.ts}`);
   }catch(e){
-    alert('Connection error: '+e.message);
+    alert('❌ Connection error: '+e.message);
   }
 }
 function doLogin(){
@@ -2595,8 +2556,7 @@ function applySettings(s){
     accredScope:'set-accred-scope',
     techManager:'set-tech-manager', qualityManager:'set-quality-manager',
     username:'set-username',
-    emailjsService:'set-emailjs-service', emailjsTemplate:'set-emailjs-template',
-    emailjsPubkey:'set-emailjs-pubkey',
+    
     slaUrgent:'set-sla-urgent', slaExpress:'set-sla-express',
     slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine'
   };
@@ -2641,9 +2601,7 @@ async function saveSettings(){
   s.qualityManager=el('set-quality-manager').value.trim();
   s.username=el('set-username').value.trim()||'admin';
   const pw=el('set-password').value;if(pw)s.password=pw;
-  s.emailjsService=el('set-emailjs-service').value.trim();
-  s.emailjsTemplate=el('set-emailjs-template').value.trim();
-  s.emailjsPubkey=el('set-emailjs-pubkey').value.trim();
+
   s.slaUrgent=parseInt(el('set-sla-urgent').value)||1;
   s.slaExpress=parseInt(el('set-sla-express').value)||2;
   s.slaNormal=parseInt(el('set-sla-normal').value)||5;
@@ -2680,12 +2638,9 @@ async function loadCounterPreviews(){
   }catch(e){}
   // Load current cert seq
   try{
-    const yk=yr;
     const id='cert_seq_'+yk;
-    const r=await fetch(`${SUPA_URL}/rest/v1/wl_sequences?id=eq.${id}&select=val`,
-      {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
-    const data=await r.json();
-    const val=data&&data[0]?data[0].val:0;
+    const d=await apiFetch(`/api/seq/${encodeURIComponent(id)}`);
+    const val=d&&d.val?d.val:0;
     const cprev=el('cert-counter-preview');
     if(cprev) cprev.textContent=`Current next: WLCS${yr}${mm}${String(val+1).padStart(4,'0')}`;
     const cinput=el('set-cert-counter');
@@ -2700,10 +2655,9 @@ async function setJobCounter(){
   const yr=new Date().getFullYear().toString().slice(-2);
   const next=`WL${yr}-${String(val).padStart(5,'0')}`;
   if(!confirm(`Set next job number to ${next}?\n\nMake sure this number is not already in use.`))return;
-  await fetch(`${SUPA_URL}/rest/v1/wl_sequences`,{
+  await apiFetch('/api/seq',{
     method:'POST',
-    headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
-      'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    headers:{'Content-Type':'application/json'},
     body:JSON.stringify({id:'job_seq',val:val-1})
   });
   el('set-job-counter').value='';
@@ -2724,11 +2678,9 @@ async function setCertCounter(){
   const mm=String(new Date().getMonth()+1).padStart(2,'0');
   const next=`WLCS${yr}${mm}${String(val).padStart(4,'0')}`;
   if(!confirm(`Set next certificate number to ${next}?\n\nMake sure this number is not already in use.`))return;
-  const yk=yr;
-  await fetch(`${SUPA_URL}/rest/v1/wl_sequences`,{
+  await apiFetch('/api/seq',{
     method:'POST',
-    headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
-      'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    headers:{'Content-Type':'application/json'},
     body:JSON.stringify({id:'cert_seq_'+yk,val:val-1})
   });
   el('set-cert-counter').value='';
@@ -3037,19 +2989,18 @@ async function saveEquipment(printReceipt=false){
   addAudit('🔧',`Job <strong>${jobNo}</strong> created — ${items.length} item(s) for ${company}`);
   currentPhotos=[]; _extraEquipment=[];
 
-  // ── EMAIL: Job Received (one email for entire job) ──
+  // ── EMAIL: Job Received ──
   const recip=resolveEmailRecipient(job);
-  if(recip.email&&_settings.emailjsService){
+  if(recip.email){
     const dearName=recip.attention||recip.name;
     const endUserNote=recip.isDealer?`\nEnd User / Client  : ${recip.endUserName}`:'';
     const itemLines=items.map((it,i)=>
       `Item ${i+1}: ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''}\n         Cert No.: ${it.certNo}  |  S/N: ${it.serial||'N/A'}`
     ).join('\n');
-    sendEmailJS(recip.email, recip.name,{
-      subject:`Job Receipt — ${jobNo} | ${_settings.labName||'Westlab'}`,
-      job_no:jobNo, cert_no:certList, equipment:items.map(i=>i.eqName).join(', '),
-      message:`Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.            : ${jobNo}\nReceive Date       : ${fmtDateShort(receiveDate)}\nPriority           : ${custInfo.priority}${endUserNote}\n\nEQUIPMENT RECEIVED\n────────────────────────────────────\n${itemLines}\n────────────────────────────────────\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\n\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab'}\n\n─────────────────────────────────────────\nThis is an automated notification. Please do not reply to this email.\nFor enquiries, kindly contact us at sales@westlab.com.my\n─────────────────────────────────────────`
-    }).then(ok=>{ if(ok) addAudit('📧',`Job received email sent to ${recip.email} for ${jobNo}`); });
+    sendEmail(recip.email, recip.name,
+      `Job Receipt — ${jobNo} | ${_settings.labName||'Westlab'}`,
+      `Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.            : ${jobNo}\nReceive Date       : ${fmtDateShort(receiveDate)}\nPriority           : ${custInfo.priority}${endUserNote}\n\nEQUIPMENT RECEIVED\n────────────────────────────────────\n${itemLines}\n────────────────────────────────────\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\n\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab'}`
+    ).then(ok=>{ if(ok) addAudit('📧',`Job received email sent to ${recip.email} for ${jobNo}`); });
   }
 
   // Auto-save customer
@@ -3121,15 +3072,38 @@ function removeLogo(){
   const sbl=document.querySelector('.sidebar-logo-img');if(sbl)sbl.remove();
 }
 
-// ── EMAILJS ──
-function getEmailJSConfig(){
-  return {
-    service:_settings.emailjsService||'',
-    template:_settings.emailjsTemplate||'',
-    pubkey:_settings.emailjsPubkey||''
-  };
+// ── EMAIL via Resend (through secure API Worker) ──
+async function sendEmail(toEmail, toName, subject, textBody){
+  if(!toEmail){console.warn('sendEmail: no recipient');return false;}
+  try{
+    await apiFetch('/api/email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({to:toEmail,subject,text:textBody})
+    });
+    console.log(`✉️ Email sent to ${toEmail}: ${subject}`);
+    return true;
+  }catch(e){
+    console.error('sendEmail error:',e);
+    return false;
+  }
 }
-// ── EMAIL RECIPIENT RESOLVER ──
+async function testEmail(){
+  try{
+    const testTo=_settings.email||prompt('Send test email to:');
+    if(!testTo)return;
+    showToast('Sending test email…','info',2000);
+    const ok=await sendEmail(testTo,'Westlab Team',
+      'Test Email — Westlab LIMS',
+      'This is a test email from Westlab LIMS.\n\nIf you received this, Resend email is configured correctly.\n\nSent from: noreply@westlab.com.my'
+    );
+    if(ok) showToast('✅ Test email sent to '+testTo,'success',4000);
+    else showToast('❌ Email failed — check Worker logs','error',4000);
+  }catch(_err){
+    console.error("testEmail error:",_err);
+    showToast("❌ Error: "+_err.message,"error",5000);
+  }
+}
 // If the job's customer is an End User linked to a dealer,
 // send to the dealer instead. Dealer handles passing info to their client.
 function resolveEmailRecipient(job){
@@ -3160,48 +3134,7 @@ function resolveEmailRecipient(job){
   };
 }
 
-async function sendEmailJS(toEmail, toName, params){
-  const cfg=getEmailJSConfig();
-  if(!cfg.service||!cfg.template||!cfg.pubkey){
-    console.warn('EmailJS not configured');return false;
-  }
-  try{
-    const res=await fetch('https://api.emailjs.com/api/v1.0/email/send',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        service_id:cfg.service,
-        template_id:cfg.template,
-        user_id:cfg.pubkey,
-        template_params:{to_email:toEmail,to_name:toName,...params}
-      })
-    });
-    return res.ok;
-  }catch(e){console.error('EmailJS error:',e);return false;}
-}
-async function testEmail(){
-  try{
-  const cfg=getEmailJSConfig();
-  if(!cfg.service||!cfg.template||!cfg.pubkey){
-    alert('Please fill in all EmailJS fields first (Service ID, Template ID, Public Key).');return;
-  }
-  const testTo=_settings.email||prompt('Send test email to:');
-  if(!testTo)return;
-  showToast('Sending test email…','info',2000);
-  const ok=await sendEmailJS(testTo,'Westlab Team',{
-    job_no:'WL26-00001',cert_no:'WLCS26040001',
-    equipment:'Test Equipment',
-    message:'This is a test email from Westlab LIMS. If you received this, email is configured correctly.'
-  });
-  if(ok) showToast('✅ Test email sent to '+testTo,'success',4000);
-  else showToast('❌ Failed — check your EmailJS keys','error',4000);
-  }catch(_err){
-    console.error("testEmail error:",_err);
-    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
-  }
-}
-
-// ── PROMISED DATE CALCULATOR (uses settings SLA) ──
+// ── EMAIL RECIPIENT RESOLVER ──
 function getSLADays(priority){
   const s=_settings||{};
   return {Urgent:s.slaUrgent||1,Express:s.slaExpress||2,Normal:s.slaNormal||5,Routine:s.slaRoutine||10}[priority]||5;
@@ -4706,10 +4639,7 @@ async function getJobFull(jobNo){
   if(_jobsCache[jobNo]) return _jobsCache[jobNo];
   // Otherwise fetch from Supabase
   try{
-    const r=await fetch(`${SUPA_URL}/rest/v1/wl_jobs?id=eq.${encodeURIComponent(jobNo)}&select=data`,
-      {headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}});
-    const d=await r.json();
-    const job=d&&d[0]?d[0].data:null;
+    const job=await SB.get('wl_jobs',jobNo);
     if(job) cacheFullJob(job);
     return job||getJob(jobNo);
   }catch(e){return getJob(jobNo);}
@@ -5972,17 +5902,15 @@ async function sendCertEmail(jobNo){
   try{
   const j=getJob(jobNo); if(!j)return;
   if(!j.email){alert('No email address on record for this customer.');return;}
-  if(!_settings.emailjsService){alert('EmailJS not configured. Go to Settings → Email Configuration.');return;}
-  const ok=await sendEmailJS(j.email, j.custName,{
-    job_no:j.jobNo, cert_no:j.certNo||'',
-    equipment:j.eqName||'',
-    message:`Dear ${j.custName},\n\nYour calibration certificate for ${j.eqName} (Job No. ${j.jobNo}, Certificate No. ${j.certNo||''}) is ready.\n\nPlease contact us to collect your instrument and certificate.\n\nThank you,\n${_settings.labName||'Westlab'}`
-  });
+  const ok=await sendEmail(j.email, j.custName,
+    `Certificate Ready — ${j.jobNo} | ${_settings.labName||'Westlab'}`,
+    `Dear ${j.custName},\n\nYour calibration certificate is ready for collection.\n\nJob No.      : ${j.jobNo}\nEquipment    : ${j.eqName||''}\n\nPlease contact us to collect your instrument and certificate.\n\nShould you have any enquiries:\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nThank you,\n${_settings.labName||'Westlab'}`
+  );
   if(ok) showToast(`📧 Email sent to ${j.email}`,'success');
-  else showToast('❌ Email failed — check EmailJS settings','error');
+  else showToast('❌ Email failed — check Worker logs','error');
   }catch(_err){
     console.error("sendCertEmail error:",_err);
-    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+    showToast("❌ Error: "+_err.message,"error",5000);
   }
 }
 
@@ -6047,7 +5975,7 @@ async function markBilled(jobNo){
   // ── EMAIL: All instruments ready for collection ──
   const jFull=getJob(jobNo);
   const recip=resolveEmailRecipient(jFull||{custName:'',email:''});
-  if(jFull&&recip.email&&_settings.emailjsService){
+  if(jFull&&recip.email){
     const lab=_settings.labName||'Westlab (M) Sdn. Bhd.';
     const dearName=recip.attention||recip.name;
     const endUserNote=recip.isDealer
@@ -6082,16 +6010,15 @@ ${lab}
 This is an automated notification. Please do not reply to this email.
 For enquiries, kindly contact us at sales@westlab.com.my
 ─────────────────────────────────────────`;
-    const ok=await sendEmailJS(recip.email, recip.name,{
-      subject:`Calibration Certificates Ready for Collection — Job No. ${jFull.jobNo} | ${lab}`,
-      job_no:jFull.jobNo, cert_no:(jFull.items||[]).map(i=>i.certNo).join(', '),
-      equipment:(jFull.items||[]).map(i=>i.eqName).join(', '), message:msg
-    });
+    const ok=await sendEmail(recip.email, recip.name,
+      `Calibration Certificates Ready for Collection — Job No. ${jFull.jobNo} | ${lab}`,
+      msg
+    );
     if(ok){
       showToast(`📧 Collection notification sent to ${recip.email}`,'success',4000);
       addAudit('📧',`Collection email sent to ${recip.email} for job ${jobNo}`);
     } else {
-      showToast('⚠️ Email not sent — check EmailJS settings','warn',4000);
+      showToast('⚠️ Email not sent — check Worker logs','warn',4000);
     }
   }
   }catch(_err){
@@ -6372,9 +6299,59 @@ async function deleteStaff(username){
 // ── FORGOT PASSWORD ──
 function showForgotPassword(){
   el('forgot-overlay').style.display='flex';
+  el('forgot-step1').style.display='block';
+  el('forgot-step2').style.display='none';
+  el('forgot-username').value='';
+  el('forgot-token').value='';
+  el('forgot-newpw').value='';
+  el('forgot-confirmpw').value='';
 }
 function hideForgotPassword(){
   el('forgot-overlay').style.display='none';
+}
+async function requestPasswordReset(){
+  const username=el('forgot-username').value.trim();
+  if(!username){showToast('Please enter your username','error',3000);return;}
+  const btn=el('forgot-step1').querySelector('button');
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  try{
+    await apiFetch('/api/password-reset',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username})
+    });
+    el('forgot-step1').style.display='none';
+    el('forgot-step2').style.display='block';
+    showToast('✅ Reset token sent to sales@westlab.com.my','success',5000);
+  }catch(e){
+    showToast('❌ Failed: '+e.message,'error',5000);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='📧 Send Reset Token';}
+  }
+}
+async function submitPasswordReset(){
+  const token=el('forgot-token').value.trim();
+  const newPw=el('forgot-newpw').value;
+  const confirmPw=el('forgot-confirmpw').value;
+  const username=el('forgot-username').value.trim();
+  if(!token){showToast('Please enter the reset token','error',3000);return;}
+  if(!newPw||newPw.length<4){showToast('Password must be at least 4 characters','error',3000);return;}
+  if(newPw!==confirmPw){showToast('Passwords do not match','error',3000);return;}
+  const btn=el('forgot-step2').querySelector('button');
+  if(btn){btn.disabled=true;btn.textContent='Resetting…';}
+  try{
+    await apiFetch('/api/verify-reset-token',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token,username,newPassword:newPw})
+    });
+    hideForgotPassword();
+    showToast('✅ Password reset successfully — please login with your new password','success',5000);
+  }catch(e){
+    showToast('❌ '+e.message,'error',5000);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='✅ Reset Password';}
+  }
 }
 
 // ── SECURE FILE OPEN — uses signed URL ──
@@ -6393,7 +6370,7 @@ async function openSignedUrl(storedUrl){
 // Runs on app load — checks completed jobs whose next cal date is ~30 days away
 async function checkRecalReminders(){
   try{
-  if(!_settings.emailjsService) return;
+  
   const today=new Date(); today.setHours(0,0,0,0);
   const reminderKey='wl_recal_sent_'+today.toISOString().split('T')[0];
   const alreadySent=sessionStorage.getItem(reminderKey);
@@ -6424,7 +6401,7 @@ async function checkRecalReminders(){
     } else {
       body=`Dear ${dearName},\n\nThis is a friendly reminder that the following equipment calibration is due in ${daysUntil} day${daysUntil!==1?'s':''}.\n\nEquipment     : ${eqLine}\nSerial No.    : ${item.serial||'N/A'}\nLast Cert No. : ${item.certNo||'—'}\nDue Date      : ${fmtDateShort(item.calData.next_due)}\n\nPlease ignore this email if you have already contacted us regarding your recalibration.${contactBlock}\n\nBest regards,\n${lab}${footer}`;
     }
-    const ok=await sendEmailJS(recip.email,recip.name,{subject:`Calibration Due in ${daysUntil} Day${daysUntil!==1?'s':''} — ${item.eqName} | ${lab}`,job_no:j.jobNo,cert_no:item.certNo||'',equipment:item.eqName||'',message:body});
+    const ok=await sendEmail(recip.email,recip.name,`Calibration Due in ${daysUntil} Day${daysUntil!==1?'s':''} — ${item.eqName} | ${lab}`,body);
     if(ok) addAudit('📧',`Recal reminder (${daysUntil}d) sent to ${recip.email} for ${item.eqName}`);
   }
   // ── 2. ANNUAL REMINDER for items WITHOUT next_due (1 year after last cal) ──
@@ -6445,7 +6422,7 @@ async function checkRecalReminders(){
     } else {
       body=`Dear ${dearName},\n\nWe hope this message finds you well.\n\nIt has been approximately one year since your equipment was last calibrated by us. Regular calibration ensures your instrument continues to meet measurement accuracy requirements.\n\nEquipment     : ${eqLine}\nSerial No.    : ${item.serial||'N/A'}\nLast Cert No. : ${item.certNo||'—'}\nLast Cal Date : ${fmtDateShort(item.calData.date)}\n\nIf you require recalibration services, please do not hesitate to contact us.${contactBlock}\n\nBest regards,\n${lab}${footer}`;
     }
-    const ok=await sendEmailJS(recip.email,recip.name,{subject:`Annual Calibration Service Reminder — ${item.eqName} | ${lab}`,job_no:j.jobNo,cert_no:item.certNo||'',equipment:item.eqName||'',message:body});
+    const ok=await sendEmail(recip.email,recip.name,`Annual Calibration Service Reminder — ${item.eqName} | ${lab}`,body);
     if(ok) addAudit('📧',`Annual recal reminder sent to ${recip.email} for ${item.eqName}`);
   }
 
