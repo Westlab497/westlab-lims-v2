@@ -1199,6 +1199,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <option value="12">1 Year</option>
             <option value="24">2 Years</option>
             <option value="36">3 Years</option>
+            <option value="open">Open Date (No Due Date)</option>
           </select>
         </div>
       </div>
@@ -1429,6 +1430,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <option value="12">1 Year</option>
             <option value="24">2 Years</option>
             <option value="36">3 Years</option>
+            <option value="open">Open Date (No Due Date)</option>
           </select>
           <div id="cal-next-due-display" style="margin-top:6px;font-size:12px;color:var(--blue);font-weight:600;display:none;">
             📅 Next calibration due: <span id="cal-next-due-text">—</span>
@@ -1694,6 +1696,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <option value="12">1 Year</option>
             <option value="24">2 Years</option>
             <option value="36">3 Years</option>
+            <option value="open">Open Date (No Due Date)</option>
           </select>
         </div>
       </div>
@@ -2944,7 +2947,7 @@ async function saveEquipment(printReceipt=false){
     serial:el('eq-serial').value.trim(), tagNo:el('eq-tag-no').value.trim()||'N/A',
     range:el('eq-range').value.trim(), calPoints:el('eq-cal-points').value.trim(),
     spec:el('eq-spec').value.trim(), resolution:el('eq-resolution').value.trim(),
-    nextDue:'',calInterval:parseInt(el('eq-cal-interval')?.value)||0,
+    nextDue:'',calInterval:(el('eq-cal-interval')?.value==='open'?'open':parseInt(el('eq-cal-interval')?.value)||0),
     condition:cond==='Others'?condOther:cond,
     accessories:el('eq-accessories').value.trim(),
     remarks:el('eq-remarks').value.trim(),
@@ -3152,11 +3155,18 @@ function getSLADays(priority){
   return {Urgent:s.slaUrgent||1,Express:s.slaExpress||2,Normal:s.slaNormal||5,Routine:s.slaRoutine||10}[priority]||5;
 }
 function calcNextDueFromInterval(){
-  const months=parseInt(el('cal-interval')?.value||'0');
+  const intervalVal=el('cal-interval')?.value||'';
   const calDate=el('cal-date')?.value||new Date().toISOString().split('T')[0];
   const display=el('cal-next-due-display');
   const text=el('cal-next-due-text');
   const hidden=el('cal-next-due');
+  if(intervalVal==='open'){
+    if(hidden) hidden.value='';
+    if(text) text.textContent='— (Open Date — No Due Date)';
+    if(display) display.style.display='block';
+    return;
+  }
+  const months=parseInt(intervalVal||'0');
   if(!months||!calDate){
     if(display) display.style.display='none';
     if(hidden) hidden.value='';
@@ -3171,6 +3181,7 @@ function calcNextDueFromInterval(){
 }
 
 function getIntervalLabel(months){
+  if(months==='open') return 'Open Date (No Due Date)';
   if(!months) return '—';
   if(months==3) return '3 Months';
   if(months==6) return '6 Months';
@@ -3390,6 +3401,7 @@ function printJobReceipt(jobs){
 function openEditJobModal(jobNo){
   const j=getJob(jobNo); if(!j)return;
   _editingJobNo=jobNo;
+  const item=(j.items&&j.items[0])||{}; // Use first item for equipment-level fields
   el('edit-job-no-label').textContent=jobNo;
   el('edit-eq-company').value=j.company||j.custName||'';
   el('edit-eq-attention').value=j.attention||'';
@@ -3401,21 +3413,21 @@ function openEditJobModal(jobNo){
   el('edit-eq-email').value=j.email||'';
   el('edit-eq-receive-date').value=j.receiveDate||'';
   el('edit-eq-priority').value=j.priority||'Normal';
-  el('edit-eq-name').value=j.eqName||'';
-  el('edit-eq-brand').value=j.brand||'';
-  el('edit-eq-model').value=j.model||'';
-  el('edit-eq-serial').value=j.serial||'';
-  el('edit-eq-tag-no').value=j.tagNo||'';
-  el('edit-eq-spec').value=j.spec||'';
-  el('edit-eq-range').value=j.range||'';
-  el('edit-eq-cal-points').value=j.calPoints||'';
-  el('edit-eq-resolution').value=j.resolution||'';
+  el('edit-eq-name').value=item.eqName||j.eqName||'';
+  el('edit-eq-brand').value=item.brand||j.brand||'';
+  el('edit-eq-model').value=item.model||j.model||'';
+  el('edit-eq-serial').value=item.serial||j.serial||'';
+  el('edit-eq-tag-no').value=item.tagNo||j.tagNo||'';
+  el('edit-eq-spec').value=item.spec||j.spec||'';
+  el('edit-eq-range').value=item.range||j.range||'';
+  el('edit-eq-cal-points').value=item.calPoints||j.calPoints||'';
+  el('edit-eq-resolution').value=item.resolution||j.resolution||'';
   const editIntervalEl=el('edit-eq-cal-interval');
-  if(editIntervalEl) editIntervalEl.value=j.calInterval||j.items?.[0]?.calInterval||'';
+  if(editIntervalEl) editIntervalEl.value=item.calInterval||j.calInterval||'';
   el('edit-eq-promised-date').value=j.promisedDate||'';
-  el('edit-eq-condition').value=j.condition||'Good';
-  el('edit-eq-accessories').value=j.accessories||'';
-  el('edit-eq-remarks').value=j.remarks||'';
+  el('edit-eq-condition').value=item.condition||j.condition||'Good';
+  el('edit-eq-accessories').value=item.accessories||j.accessories||'';
+  el('edit-eq-remarks').value=item.remarks||j.remarks||'';
   openModal('modal-edit-job');
 }
 async function saveEditJob(){
@@ -3435,20 +3447,39 @@ async function saveEditJob(){
     j.email=el('edit-eq-email').value.trim();
     j.receiveDate=el('edit-eq-receive-date').value;
     j.priority=el('edit-eq-priority').value;
-    j.eqName=eqName;
-    j.brand=el('edit-eq-brand').value.trim();
-    j.model=el('edit-eq-model').value.trim();
-    j.serial=el('edit-eq-serial').value.trim();
-    j.tagNo=el('edit-eq-tag-no').value.trim();
-    j.spec=el('edit-eq-spec').value.trim();
-    j.range=el('edit-eq-range').value.trim();
-    j.calPoints=el('edit-eq-cal-points').value.trim();
-    j.resolution=el('edit-eq-resolution').value.trim();
-    j.calInterval=parseInt(el('edit-eq-cal-interval')?.value)||0;
     j.promisedDate=el('edit-eq-promised-date').value;
-    j.condition=el('edit-eq-condition').value;
-    j.accessories=el('edit-eq-accessories').value.trim();
-    j.remarks=el('edit-eq-remarks').value.trim();
+    // Save equipment-level fields into items[0] (multi-item model)
+    if(j.items&&j.items[0]){
+      const it=j.items[0];
+      it.eqName=eqName;
+      it.brand=el('edit-eq-brand').value.trim();
+      it.model=el('edit-eq-model').value.trim();
+      it.serial=el('edit-eq-serial').value.trim();
+      it.tagNo=el('edit-eq-tag-no').value.trim();
+      it.spec=el('edit-eq-spec').value.trim();
+      it.range=el('edit-eq-range').value.trim();
+      it.calPoints=el('edit-eq-cal-points').value.trim();
+      it.resolution=el('edit-eq-resolution').value.trim();
+      it.calInterval=(el('edit-eq-cal-interval')?.value==='open'?'open':parseInt(el('edit-eq-cal-interval')?.value)||0);
+      it.condition=el('edit-eq-condition').value;
+      it.accessories=el('edit-eq-accessories').value.trim();
+      it.remarks=el('edit-eq-remarks').value.trim();
+    } else {
+      // Legacy job-level fallback
+      j.eqName=eqName;
+      j.brand=el('edit-eq-brand').value.trim();
+      j.model=el('edit-eq-model').value.trim();
+      j.serial=el('edit-eq-serial').value.trim();
+      j.tagNo=el('edit-eq-tag-no').value.trim();
+      j.spec=el('edit-eq-spec').value.trim();
+      j.range=el('edit-eq-range').value.trim();
+      j.calPoints=el('edit-eq-cal-points').value.trim();
+      j.resolution=el('edit-eq-resolution').value.trim();
+      j.calInterval=(el('edit-eq-cal-interval')?.value==='open'?'open':parseInt(el('edit-eq-cal-interval')?.value)||0);
+      j.condition=el('edit-eq-condition').value;
+      j.accessories=el('edit-eq-accessories').value.trim();
+      j.remarks=el('edit-eq-remarks').value.trim();
+    }
     j.history.push({action:'Job details edited',by:currentUser,time:new Date().toISOString()});
   });
   closeModal('modal-edit-job');
@@ -3777,7 +3808,7 @@ async function submitCalibration(){
       tag_no:el('cal-tag-no').value.trim(),
       resolution:el('cal-resolution').value.trim(),
       next_due:el('cal-next-due').value,
-      calInterval:parseInt(el('cal-interval')?.value)||0,
+      calInterval:(el('cal-interval')?.value==='open'?'open':parseInt(el('cal-interval')?.value)||0),
       cond_before:el('cal-cond-before').value.trim(),
       cond_after:el('cal-cond-after').value.trim(),
       cond_remark:el('cal-cond-remark').value.trim(),
@@ -5162,7 +5193,7 @@ function buildCertPage1HTML(cd,s){
     ${R('Date of Receipt',fmtDate(cd.receipt_date))}
     ${R('Date of Calibration',fmtDate(cd.date))}
     ${R('Calibration Interval',cd.calInterval?getIntervalLabel(cd.calInterval):'—')}
-    ${R('Next Calibration Due',fmtDate(cd.next_due))}
+    ${R('Next Calibration Due',cd.calInterval==='open'?'— (Open Date)':fmtDate(cd.next_due))}
   </table>
   <div style="font-size:8pt;color:#444;font-style:italic;margin-bottom:2.5mm;">(Remark: Recalibration date specified by customer)</div>
 
