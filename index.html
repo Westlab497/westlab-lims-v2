@@ -1800,6 +1800,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Fax No.</label><input class="form-control" id="cust-fax" placeholder="e.g. +603-6157 0706"/></div>
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="cust-email" type="email" placeholder="info@company.com"/></div>
       </div>
+      <div class="form-group">
+        <label class="form-label">Payment Terms</label>
+        <select class="form-control" id="cust-payment-terms">
+          <option value="credit">Credit Terms (no payment reminder)</option>
+          <option value="cod">Payment Required Before Collection</option>
+        </select>
+      </div>
       <div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="cust-notes" placeholder="Any additional notes about this customer…"></textarea></div>
     </div>
     <div class="modal-footer">
@@ -2142,8 +2149,8 @@ const LS={
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 };
 const SESS='wl_session';
-const DEF={labName:'Westlab',accredNum:'SAMM 1234',accredBody:'SAMM / ILAC MRA',accredScope:'',
-  techManager:'Lab Manager',address:'123 Lab Street, Kuala Lumpur, Malaysia',
+const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAMM / ILAC MRA',accredScope:'',
+  techManager:'Lab Manager',address:'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor Darul Ehsan, Malaysia',
   email:'lab@westlab.com',username:'admin',password:'westlab123',
   logoUrl:'',
   slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10};
@@ -2452,7 +2459,7 @@ function doLogout(){
   }
   // Update login page lab name
   const ln=el('login-lab-name');
-  if(ln) ln.textContent=_settings.labName||'Westlab';
+  if(ln) ln.textContent=_settings.labName||'Westlab (M) Sdn. Bhd.';
   // Try restore session
   try{
     const sess=JSON.parse(localStorage.getItem('wl_sess')||'null');
@@ -2561,7 +2568,7 @@ document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click
 function applySettings(s){
   try{
   _settings=Object.assign({},DEF,s);
-  const name=s.labName||'Westlab';
+  const name=s.labName||'Westlab (M) Sdn. Bhd.';
   ['sidebar-lab-name','sidebar-lab-label','login-lab-name'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=name;});
   const an=document.getElementById('sidebar-accred-num');if(an)an.textContent=s.accredNum||'';
   document.title=name+' — ISO 17025 Lab Management System';
@@ -3020,13 +3027,28 @@ async function saveEquipment(printReceipt=false){
   const recip=resolveEmailRecipient(job);
   if(recip.email){
     const dearName=recip.attention||recip.name;
-    const endUserNote=recip.isDealer?`\nEnd User / Client  : ${recip.endUserName}`:'';
-    const itemLines=items.map((it,i)=>
+    const textItemLines=items.map((it,i)=>
       `Item ${i+1}: ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''}\n         Cert No.: ${it.certNo}  |  S/N: ${it.serial||'N/A'}`
     ).join('\n');
+    const textBody=`Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.: ${jobNo}\nReceive Date: ${fmtDateShort(receiveDate)}\nPriority: ${custInfo.priority}${recip.isDealer?'\nEnd User / Client: '+recip.endUserName:''}\n\nEQUIPMENT RECEIVED\n${textItemLines}\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\nEmail: sales@westlab.com.my\nContact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
+    const htmlBody=`<p>Dear ${dearName},</p>
+      <p>Thank you for sending your equipment to us. We confirm receipt of the following:</p>
+      ${buildEmailInfoTable([
+        ['Job No.', jobNo],
+        ['Receive Date', fmtDateShort(receiveDate)],
+        ['Priority', custInfo.priority],
+        ...(recip.isDealer?[['End User / Client', recip.endUserName]]:[])
+      ])}
+      <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Equipment Received</p>
+      ${buildEmailItemsTable(items)}
+      <p>We will notify you once all instruments are ready for collection.</p>
+      <p>Should you have any enquiries, please contact us at:<br/>
+      Email: <a href="mailto:sales@westlab.com.my" style="color:#378ADD;">sales@westlab.com.my</a><br/>
+      Contact No.: +6011-3508 9986</p>
+      <p>Best regards,<br/>${_settings.labName||'Westlab (M) Sdn. Bhd.'}</p>`;
     sendEmail(recip.email, recip.name,
-      `Job Receipt — ${jobNo} | ${_settings.labName||'Westlab'}`,
-      `Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.            : ${jobNo}\nReceive Date       : ${fmtDateShort(receiveDate)}\nPriority           : ${custInfo.priority}${endUserNote}\n\nEQUIPMENT RECEIVED\n────────────────────────────────────\n${itemLines}\n────────────────────────────────────\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\n\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab'}`
+      `Job Receipt — ${jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,
+      textBody, htmlBody
     ).then(ok=>{ if(ok) addAudit('📧',`Job received email sent to ${recip.email} for ${jobNo}`); });
   }
 
@@ -3100,13 +3122,15 @@ function removeLogo(){
 }
 
 // ── EMAIL via Resend (through secure API Worker) ──
-async function sendEmail(toEmail, toName, subject, textBody){
+async function sendEmail(toEmail, toName, subject, textBody, htmlBody){
   if(!toEmail){console.warn('sendEmail: no recipient');return false;}
   try{
+    const payload={to:toEmail,subject,text:textBody};
+    if(htmlBody) payload.html=htmlBody;
     await apiFetch('/api/email',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({to:toEmail,subject,text:textBody})
+      body:JSON.stringify(payload)
     });
     console.log(`✉️ Email sent to ${toEmail}: ${subject}`);
     return true;
@@ -3114,6 +3138,32 @@ async function sendEmail(toEmail, toName, subject, textBody){
     console.error('sendEmail error:',e);
     return false;
   }
+}
+// Build a clean HTML key-value table for email bodies (replaces manual colon-alignment)
+function buildEmailInfoTable(rows){
+  return `<table style="width:100%;border-collapse:collapse;margin:12px 0;font-family:'Aptos','Calibri',Arial,sans-serif;font-size:13px;">
+    ${rows.map(([label,val])=>`<tr>
+      <td style="padding:4px 12px 4px 0;color:#64748b;white-space:nowrap;vertical-align:top;">${label}</td>
+      <td style="padding:4px 0;color:#1e293b;font-weight:600;">${val}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+// Build a clean HTML items table for equipment lists
+function buildEmailItemsTable(items){
+  return `<table style="width:100%;border-collapse:collapse;margin:12px 0;font-family:'Aptos','Calibri',Arial,sans-serif;font-size:12.5px;border:1px solid #e2e8f0;">
+    <tr style="background:#f8fafc;">
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">#</td>
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Equipment</td>
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">S/N</td>
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Tag No.</td>
+    </tr>
+    ${items.map((it,i)=>`<tr>
+      <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${i+1}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.eqName||''}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')':''}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.serial||'N/A'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.tagNo||'N/A'}</td>
+    </tr>`).join('')}
+  </table>`;
 }
 async function testEmail(){
   try{
@@ -3138,6 +3188,7 @@ function resolveEmailRecipient(job){
   const cust=_customers.find(c=>
     c.company.toLowerCase()===(job.custName||'').toLowerCase()
   );
+  const paymentTerms=cust?.paymentTerms||'credit';
   // If end user with a dealer linked — send to dealer
   if(cust&&cust.type==='EndUser'&&cust.dealerId){
     const dealer=_customers.find(c=>c.id===cust.dealerId);
@@ -3147,7 +3198,8 @@ function resolveEmailRecipient(job){
         name:dealer.company,
         attention:dealer.attention||dealer.company,
         isDealer:true,
-        endUserName:job.custName
+        endUserName:job.custName,
+        paymentTerms
       };
     }
   }
@@ -3157,7 +3209,8 @@ function resolveEmailRecipient(job){
     name:job.custName,
     attention:job.attention||job.custName,
     isDealer:false,
-    endUserName:null
+    endUserName:null,
+    paymentTerms
   };
 }
 
@@ -3613,7 +3666,7 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-cert-no').value=item?item.certNo:'';
   // Auto-fill from job + item
   el('cal-issued-to').value=j?j.custName:'';
-  el('cal-issued-by').value=s.labName||'Westlab';
+  el('cal-issued-by').value=s.labName||'Westlab (M) Sdn. Bhd.';
   const custAddr=j&&j.address?j.address:(_customers.find(c=>c.company===j?.company)?.address||'');
   el('cal-cust-addr').value=custAddr;
   el('cal-lab-addr').value=s.address||'';
@@ -5586,6 +5639,7 @@ function openAddCustomerModal(){
   if(titleEl) titleEl.textContent='🏢 Add Customer';
   document.getElementById('cust-edit-id').value='';
   el('cust-type').value='Direct';
+  el('cust-payment-terms').value='credit';
   toggleDealerField();
   populateDealerDropdown('');
   ['cust-company','cust-attention','cust-address','cust-tel','cust-mobile','cust-fax','cust-email','cust-notes'].forEach(id=>{
@@ -5609,6 +5663,7 @@ function openEditCustomerModal(custId){
   el('cust-mobile').value=c.mobile||'';
   el('cust-fax').value=c.fax||'';
   el('cust-email').value=c.email||'';
+  el('cust-payment-terms').value=c.paymentTerms||'credit';
   el('cust-notes').value=c.notes||'';
   openModal('modal-add-customer');
 }
@@ -5636,6 +5691,7 @@ async function saveCustomer(){
       mobile:el('cust-mobile').value.trim(),
       fax:el('cust-fax').value.trim(),
       email:el('cust-email').value.trim(),
+      paymentTerms:el('cust-payment-terms').value,
       notes:el('cust-notes').value.trim(),
       createdAt:editId?(_customers.find(x=>x.id===editId)?.createdAt||new Date().toISOString()):new Date().toISOString()
     };
@@ -5996,8 +6052,8 @@ async function sendCertEmail(jobNo){
   const j=getJob(jobNo); if(!j)return;
   if(!j.email){alert('No email address on record for this customer.');return;}
   const ok=await sendEmail(j.email, j.custName,
-    `Certificate Ready — ${j.jobNo} | ${_settings.labName||'Westlab'}`,
-    `Dear ${j.custName},\n\nYour calibration certificate is ready for collection.\n\nJob No.      : ${j.jobNo}\nEquipment    : ${j.eqName||''}\n\nPlease contact us to collect your instrument and certificate.\n\nShould you have any enquiries:\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nThank you,\n${_settings.labName||'Westlab'}`
+    `Certificate Ready — ${j.jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,
+    `Dear ${j.custName},\n\nYour calibration certificate is ready for collection.\n\nJob No.      : ${j.jobNo}\nEquipment    : ${j.eqName||''}\n\nPlease contact us to collect your instrument and certificate.\n\nShould you have any enquiries:\n  Email      : sales@westlab.com.my\n  Contact No.: +6011-3508 9986\n\nThank you,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`
   );
   if(ok) showToast(`📧 Email sent to ${j.email}`,'success');
   else showToast('❌ Email failed — check Worker logs','error');
@@ -6026,7 +6082,7 @@ function printBillingSummary(){
   </tr>`).join('');
   const html=`<div style="padding:16mm;font-family:'Calibri',Arial,sans-serif;font-size:10pt;color:#111;">
     <div style="text-align:center;margin-bottom:6mm;">
-      <div style="font-size:16pt;font-weight:900;">${_settings.labName||'Westlab'}</div>
+      <div style="font-size:16pt;font-weight:900;">${_settings.labName||'Westlab (M) Sdn. Bhd.'}</div>
       <div style="font-size:13pt;font-weight:700;margin-top:2mm;">BILLING SUMMARY — ${monthLabel.toUpperCase()}</div>
       <div style="font-size:9pt;color:#555;">Generated: ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
     </div>
@@ -6073,39 +6129,64 @@ async function markBilled(jobNo){
     const dearName=recip.attention||recip.name;
     const endUserNote=recip.isDealer
       ?`\n\nKindly remind your client (${recip.endUserName}) to collect the instruments and certificates from our laboratory.`:'';
-    const itemLines=(jFull.items||[]).map((it,i)=>{
+    const textItemLines=(jFull.items||[]).map((it,i)=>{
       const calDate=it.calData?.date?fmtDateShort(it.calData.date):'';
       return `Item ${it.itemNo}: ${it.eqName}\n         Cert No.: ${it.certNo}  |  S/N: ${it.serial||'N/A'}${calDate?'  |  Cal Date: '+calDate:''}`;
     }).join('\n');
+    const paymentNote=recip.paymentTerms==='cod'
+      ?'\n\nPlease note: payment is required prior to collection of your instruments and certificates.':'';
     const msg=
 `Dear ${dearName},
 
 We are pleased to inform you that the calibration of your instrument(s) has been completed and all Calibration Certificates are now ready for collection.
 
-JOB DETAILS
-────────────────────────────────────
-Job Number  : ${jFull.jobNo}
-────────────────────────────────────
-${itemLines}
-────────────────────────────────────${endUserNote}
+Job Number: ${jFull.jobNo}
+
+${textItemLines}
+${endUserNote}${paymentNote}
 
 Kindly visit our laboratory at your earliest convenience to collect your instruments and certificates.
 
 Please quote Job Number ${jFull.jobNo} when contacting us.
 
-  Email      : sales@westlab.com.my
-  Contact No.: +6011-3508 9986${_settings.address?'\n  Address    : '+_settings.address:''}
+Email: sales@westlab.com.my
+Contact No.: +6011-3508 9986${_settings.address?'\nAddress: '+_settings.address:''}
 
 Best regards,
-${lab}
-
-─────────────────────────────────────────
-This is an automated notification. Please do not reply to this email.
-For enquiries, kindly contact us at sales@westlab.com.my
-─────────────────────────────────────────`;
+${lab}`;
+    const htmlBody=`<p>Dear ${dearName},</p>
+      <p>We are pleased to inform you that the calibration of your instrument(s) has been completed and all Calibration Certificates are now ready for collection.</p>
+      ${buildEmailInfoTable([['Job Number', jFull.jobNo]])}
+      <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Items Ready for Collection</p>
+      <table style="width:100%;border-collapse:collapse;margin:12px 0;font-family:'Aptos','Calibri',Arial,sans-serif;font-size:12.5px;border:1px solid #e2e8f0;">
+        <tr style="background:#f8fafc;">
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">#</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Equipment</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Cert No.</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">S/N</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Cal Date</td>
+        </tr>
+        ${(jFull.items||[]).map(it=>{
+          const calDate=it.calData?.date?fmtDateShort(it.calData.date):'—';
+          return `<tr>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${it.itemNo}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.eqName||''}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.certNo||'—'}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.serial||'N/A'}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${calDate}</td>
+          </tr>`;
+        }).join('')}
+      </table>
+      ${recip.isDealer?`<p style="color:#c84b00;">Kindly remind your client (<strong>${recip.endUserName}</strong>) to collect the instruments and certificates from our laboratory.</p>`:''}
+      ${recip.paymentTerms==='cod'?`<p style="background:#fff3e0;border-radius:8px;padding:12px 16px;color:#c84b00;font-weight:600;">💳 Please note: payment is required prior to collection of your instruments and certificates.</p>`:''}
+      <p>Kindly visit our laboratory at your earliest convenience to collect your instruments and certificates.</p>
+      <p>Please quote Job Number <strong>${jFull.jobNo}</strong> when contacting us.</p>
+      <p>Email: <a href="mailto:sales@westlab.com.my" style="color:#378ADD;">sales@westlab.com.my</a><br/>
+      Contact No.: +6011-3508 9986${_settings.address?'<br/>Address: '+_settings.address:''}</p>
+      <p>Best regards,<br/>${lab}</p>`;
     const ok=await sendEmail(recip.email, recip.name,
       `Calibration Certificates Ready for Collection — Job No. ${jFull.jobNo} | ${lab}`,
-      msg
+      msg, htmlBody
     );
     if(ok){
       showToast(`📧 Collection notification sent to ${recip.email}`,'success',4000);
@@ -6459,11 +6540,33 @@ async function openSignedUrl(storedUrl){
   }
 }
 
+function buildEmailReminderTable(items, showLastCalDate=false){
+  const dateCol=showLastCalDate?'Last Cal Date':'Due Date';
+  return `<table style="width:100%;border-collapse:collapse;margin:12px 0;font-family:'Aptos','Calibri',Arial,sans-serif;font-size:12.5px;border:1px solid #e2e8f0;">
+    <tr style="background:#f8fafc;">
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">#</td>
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Equipment</td>
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">S/N</td>
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Last Cert No.</td>
+      <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">${dateCol}</td>
+    </tr>
+    ${items.map((it,i)=>{
+      const dateVal=showLastCalDate?fmtDateShort(it.calData.date):fmtDateShort(it.calData.next_due);
+      return `<tr>
+        <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${i+1}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.eqName||''}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')':''}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.serial||'N/A'}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.certNo||'N/A'}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${dateVal}</td>
+      </tr>`;
+    }).join('')}
+  </table>`;
+}
 // ── RECALIBRATION REMINDER EMAIL ──
 // Runs on app load — checks completed jobs whose next cal date is ~30 days away
+// Groups multiple items for the SAME customer + SAME reminder type into ONE email
 async function checkRecalReminders(){
   try{
-  
   const today=new Date(); today.setHours(0,0,0,0);
   const reminderKey='wl_recal_sent_'+today.toISOString().split('T')[0];
   const alreadySent=sessionStorage.getItem(reminderKey);
@@ -6472,51 +6575,80 @@ async function checkRecalReminders(){
   const lab=_settings.labName||'Westlab (M) Sdn. Bhd.';
   const salesEmail='sales@westlab.com.my';
   const contactNo='+6011-3508 9986';
-  const footer=`\n─────────────────────────────────────────\nThis is an automated reminder. Please do not reply to this email.\nFor enquiries, kindly contact us at ${salesEmail}\n─────────────────────────────────────────`;
-  const contactBlock=`\nTo arrange your next calibration, please contact us at:\n\n  Email      : ${salesEmail}\n  Contact No.: ${contactNo}`;
-
 
   // ── 1. REMINDER for items WITH next_due date (30 & 7 days only) ──
   const withDue=_jobs.filter(j=>j.status!=='Deleted').flatMap(j=>
     (j.items||[]).filter(i=>i.status==='Completed'&&i.calData?.next_due).map(i=>({job:j,item:i}))
   );
+  // Group by [recipient email + daysUntil] so one customer's multiple items merge into one email
+  const dueGroups={};
   for(const {job:j,item} of withDue){
     const due=new Date(item.calData.next_due+'T00:00:00');
     const daysUntil=Math.round((due-today)/(1000*60*60*24));
     if(daysUntil!==30&&daysUntil!==7) continue;
     const recip=resolveEmailRecipient(j);
     if(!recip.email) continue;
-    const dearName=recip.attention||recip.name;
-    const eqLine=`${item.eqName}${item.brand||item.model?' ('+[item.brand,item.model].filter(Boolean).join(' ')+')'  :''}`;
-    let body;
-    if(recip.isDealer){
-      body=`Dear ${dearName},\n\nThis is a friendly reminder that the following equipment calibration is due in ${daysUntil} day${daysUntil!==1?'s':''}.\n\nEquipment     : ${eqLine}\nSerial No.    : ${item.serial||'N/A'}\nLast Cert No. : ${item.certNo||'—'}\nDue Date      : ${fmtDateShort(item.calData.next_due)}\nClient        : ${recip.endUserName}\n\nKindly remind your client to arrange for the instrument to be sent in for calibration before the due date.\n\nPlease ignore this email if you have already updated your client regarding the recalibration.${contactBlock}\n\nBest regards,\n${lab}${footer}`;
-    } else {
-      body=`Dear ${dearName},\n\nThis is a friendly reminder that the following equipment calibration is due in ${daysUntil} day${daysUntil!==1?'s':''}.\n\nEquipment     : ${eqLine}\nSerial No.    : ${item.serial||'N/A'}\nLast Cert No. : ${item.certNo||'—'}\nDue Date      : ${fmtDateShort(item.calData.next_due)}\n\nPlease ignore this email if you have already contacted us regarding your recalibration.${contactBlock}\n\nBest regards,\n${lab}${footer}`;
-    }
-    const ok=await sendEmail(recip.email,recip.name,`Calibration Due in ${daysUntil} Day${daysUntil!==1?'s':''} — ${item.eqName} | ${lab}`,body);
-    if(ok) addAudit('📧',`Recal reminder (${daysUntil}d) sent to ${recip.email} for ${item.eqName}`);
+    const key=recip.email+'|'+daysUntil;
+    if(!dueGroups[key]) dueGroups[key]={recip,daysUntil,items:[]};
+    dueGroups[key].items.push(item);
   }
+  for(const key in dueGroups){
+    const {recip,daysUntil,items}=dueGroups[key];
+    const dearName=recip.attention||recip.name;
+    const plural=items.length>1;
+    const subject=`Calibration Due in ${daysUntil} Day${daysUntil!==1?'s':''} — ${items.length} Item${plural?'s':''} | ${lab}`;
+    const introLine=plural
+      ?`This is a friendly reminder that the following <strong>${items.length} items</strong> calibration is due in <strong>${daysUntil} day${daysUntil!==1?'s':''}</strong>.`
+      :`This is a friendly reminder that the following equipment calibration is due in <strong>${daysUntil} day${daysUntil!==1?'s':''}</strong>.`;
+    const introLineText=plural
+      ?`This is a friendly reminder that the following ${items.length} items calibration is due in ${daysUntil} day${daysUntil!==1?'s':''}.`
+      :`This is a friendly reminder that the following equipment calibration is due in ${daysUntil} day${daysUntil!==1?'s':''}.`;
+    const itemsTable=buildEmailReminderTable(items);
+    const textItems=items.map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')':''} | S/N: ${it.serial||'N/A'} | Last Cert: ${it.certNo||'N/A'} | Due: ${fmtDateShort(it.calData.next_due)}`).join('\n');
+    let body, htmlBody;
+    if(recip.isDealer){
+      body=`Dear ${dearName},\n\n${introLineText}\n\n${textItems}\n\nClient: ${recip.endUserName}\n\nKindly remind your client to arrange for the instrument(s) to be sent in for calibration before the due date.\n\nPlease ignore this email if you have already updated your client regarding the recalibration.\n\nTo arrange your next calibration, please contact us at:\nEmail: ${salesEmail}\nContact No.: ${contactNo}\n\nBest regards,\n${lab}`;
+      htmlBody=`<p>Dear ${dearName},</p><p>${introLine}</p>${itemsTable}<p style="background:#fff3e0;border-radius:8px;padding:12px 16px;color:#c84b00;">📌 Kindly remind your client (<strong>${recip.endUserName}</strong>) to arrange for the instrument(s) to be sent in for calibration before the due date.</p><p>Please ignore this email if you have already updated your client regarding the recalibration.</p><p>To arrange your next calibration, please contact us at:<br/>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}</p><p>Best regards,<br/>${lab}</p>`;
+    } else {
+      body=`Dear ${dearName},\n\n${introLineText}\n\n${textItems}\n\nPlease ignore this email if you have already contacted us regarding your recalibration.\n\nTo arrange your next calibration, please contact us at:\nEmail: ${salesEmail}\nContact No.: ${contactNo}\n\nBest regards,\n${lab}`;
+      htmlBody=`<p>Dear ${dearName},</p><p>${introLine}</p>${itemsTable}<p>Please ignore this email if you have already contacted us regarding your recalibration.</p><p>To arrange your next calibration, please contact us at:<br/>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}</p><p>Best regards,<br/>${lab}</p>`;
+    }
+    const ok=await sendEmail(recip.email,recip.name,subject,body,htmlBody);
+    if(ok) addAudit('📧',`Recal reminder (${daysUntil}d, ${items.length} item${plural?'s':''}) sent to ${recip.email}`);
+  }
+
   // ── 2. ANNUAL REMINDER for items WITHOUT next_due (1 year after last cal) ──
   const noDue=_jobs.filter(j=>j.status!=='Deleted').flatMap(j=>
     (j.items||[]).filter(i=>i.status==='Completed'&&!i.calData?.next_due&&i.calData?.date).map(i=>({job:j,item:i}))
   );
+  const annualGroups={};
   for(const {job:j,item} of noDue){
     const calDate=new Date(item.calData.date+'T00:00:00');
     const daysSince=Math.round((today-calDate)/(1000*60*60*24));
     if(daysSince<364||daysSince>366) continue;
     const recip=resolveEmailRecipient(j);
     if(!recip.email) continue;
+    const key=recip.email;
+    if(!annualGroups[key]) annualGroups[key]={recip,items:[]};
+    annualGroups[key].items.push(item);
+  }
+  for(const key in annualGroups){
+    const {recip,items}=annualGroups[key];
     const dearName=recip.attention||recip.name;
-    const eqLine=`${item.eqName}${item.brand||item.model?' ('+[item.brand,item.model].filter(Boolean).join(' ')+')'  :''}`;
-    let body;
+    const plural=items.length>1;
+    const subject=`Annual Calibration Service Reminder — ${items.length} Item${plural?'s':''} | ${lab}`;
+    const itemsTable=buildEmailReminderTable(items,true);
+    const textItems=items.map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')':''} | S/N: ${it.serial||'N/A'} | Last Cert: ${it.certNo||'N/A'} | Last Cal: ${fmtDateShort(it.calData.date)}`).join('\n');
+    let body, htmlBody;
     if(recip.isDealer){
-      body=`Dear ${dearName},\n\nThis is a friendly reminder that the following equipment was calibrated approximately one year ago. Kindly remind your client to arrange for recalibration.\n\nEquipment     : ${eqLine}\nSerial No.    : ${item.serial||'N/A'}\nLast Cert No. : ${item.certNo||'—'}\nLast Cal Date : ${fmtDateShort(item.calData.date)}\nClient        : ${recip.endUserName}\n\nPlease ignore this email if you have already updated your client.${contactBlock}\n\nBest regards,\n${lab}${footer}`;
+      body=`Dear ${dearName},\n\nThis is a friendly reminder that the following equipment was calibrated approximately one year ago. Kindly remind your client to arrange for recalibration.\n\n${textItems}\n\nClient: ${recip.endUserName}\n\nPlease ignore this email if you have already updated your client.\n\nTo arrange your next calibration, please contact us at:\nEmail: ${salesEmail}\nContact No.: ${contactNo}\n\nBest regards,\n${lab}`;
+      htmlBody=`<p>Dear ${dearName},</p><p>This is a friendly reminder that the following equipment was calibrated approximately one year ago. Kindly remind your client to arrange for recalibration.</p>${itemsTable}<p style="background:#fff3e0;border-radius:8px;padding:12px 16px;color:#c84b00;">📌 Client: <strong>${recip.endUserName}</strong></p><p>Please ignore this email if you have already updated your client.</p><p>To arrange your next calibration, please contact us at:<br/>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}</p><p>Best regards,<br/>${lab}</p>`;
     } else {
-      body=`Dear ${dearName},\n\nWe hope this message finds you well.\n\nIt has been approximately one year since your equipment was last calibrated by us. Regular calibration ensures your instrument continues to meet measurement accuracy requirements.\n\nEquipment     : ${eqLine}\nSerial No.    : ${item.serial||'N/A'}\nLast Cert No. : ${item.certNo||'—'}\nLast Cal Date : ${fmtDateShort(item.calData.date)}\n\nIf you require recalibration services, please do not hesitate to contact us.${contactBlock}\n\nBest regards,\n${lab}${footer}`;
+      body=`Dear ${dearName},\n\nWe hope this message finds you well.\n\nIt has been approximately one year since your equipment was last calibrated by us. Regular calibration ensures your instruments continue to meet measurement accuracy requirements.\n\n${textItems}\n\nIf you require recalibration services, please do not hesitate to contact us.\n\nTo arrange your next calibration, please contact us at:\nEmail: ${salesEmail}\nContact No.: ${contactNo}\n\nBest regards,\n${lab}`;
+      htmlBody=`<p>Dear ${dearName},</p><p>We hope this message finds you well.</p><p>It has been approximately one year since your equipment was last calibrated by us. Regular calibration ensures your instruments continue to meet measurement accuracy requirements.</p>${itemsTable}<p>If you require recalibration services, please do not hesitate to contact us.</p><p>To arrange your next calibration, please contact us at:<br/>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}</p><p>Best regards,<br/>${lab}</p>`;
     }
-    const ok=await sendEmail(recip.email,recip.name,`Annual Calibration Service Reminder — ${item.eqName} | ${lab}`,body);
-    if(ok) addAudit('📧',`Annual recal reminder sent to ${recip.email} for ${item.eqName}`);
+    const ok=await sendEmail(recip.email,recip.name,subject,body,htmlBody);
+    if(ok) addAudit('📧',`Annual recal reminder (${items.length} item${plural?'s':''}) sent to ${recip.email}`);
   }
 
   sessionStorage.setItem(reminderKey,'1');
@@ -6737,7 +6869,7 @@ function openStatusLookup(){
   el('lookup-job-input').value='';
   el('lookup-result').style.display='none';
   const lln=el('lookup-lab-name');
-  if(lln) lln.textContent=_settings.labName||'Westlab';
+  if(lln) lln.textContent=_settings.labName||'Westlab (M) Sdn. Bhd.';
 }
 function closeStatusLookup(){
   el('status-lookup-screen').style.display='none';
