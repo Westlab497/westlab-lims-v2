@@ -3073,6 +3073,16 @@ async function saveEquipment(printReceipt=false){
 
   // Print receipt if requested
   if(printReceipt) printJobReceipt([job]);
+
+  // Show WhatsApp option if customer has mobile number
+  const custMobile=custInfo.mobile||custInfo.tel||'';
+  if(custMobile){
+    setTimeout(()=>{
+      if(confirm(`💬 Send WhatsApp job receipt to ${custMobile}?\n\nThis will open WhatsApp Web with a pre-filled message for ${company}.`)){
+        sendWhatsAppJobReceived(jobNo);
+      }
+    },500);
+  }
   }catch(err){
     console.error('saveEquipment error:',err);
     showToast('❌ Save failed: '+err.message,'error',6000);
@@ -6119,6 +6129,7 @@ function renderCompletedJobs(){
         ${j.billed?`<span class="badge badge-green">✅ Billed ${j.billedAt?.split('T')[0]||''}</span>`:`<span class="badge badge-amber">⏳ Pending Billing</span>`}
         &nbsp;
         ${isAdmin(currentUser)&&!j.billed?`<button class="btn btn-primary btn-sm" onclick="markBilled('${j.jobNo}')">💰 Mark Billed</button>`:''}
+        ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#25D366;color:#fff;border-color:#25D366;" onclick="sendWhatsAppCollection('${j.jobNo}')">💬 WhatsApp</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteJob('${j.jobNo}')">🗑</button>`:''}
       </td>
     </tr>`);
@@ -6203,6 +6214,79 @@ function printBillingSummary(){
   const frame=el('receipt-print-frame');
   frame.innerHTML=html; frame.style.display='block';
   setTimeout(()=>{window.print();setTimeout(()=>{frame.style.display='none';},500);},200);
+}
+
+// ── WHATSAPP NOTIFICATION ──
+function buildWhatsAppUrl(mobile, message){
+  // Clean mobile number — remove spaces, dashes, brackets
+  // Convert Malaysian numbers: 0123456789 → 60123456789
+  let num = mobile.replace(/[\s\-\(\)\+]/g,'');
+  if(num.startsWith('0')) num = '60' + num.slice(1);
+  if(!num.startsWith('60')) num = '60' + num;
+  const encoded = encodeURIComponent(message);
+  return `https://wa.me/${num}?text=${encoded}`;
+}
+
+function sendWhatsAppCollection(jobNo){
+  const j = getJob(jobNo);
+  if(!j){ showToast('Job not found','error'); return; }
+  const mobile = j.mobile || j.tel || '';
+  if(!mobile){
+    showToast('⚠️ No mobile number on record for this customer. Please update the customer record first.','warn',5000);
+    return;
+  }
+  const lab = _settings.labName||'Westlab (M) Sdn. Bhd.';
+  const itemLines = (j.items||[]).map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''}\n    S/N: ${it.serial||'N/A'} | Cert: ${it.certNo||'—'}`).join('\n');
+  const msg =
+`Dear ${j.attention||j.custName},
+
+Your calibration certificate(s) are ready for collection.
+
+Job No.: ${jobNo}
+
+${itemLines}
+
+Please contact us to arrange collection:
+📞 +6011-3508 9986
+📧 sales@westlab.com.my
+
+Thank you,
+${lab}`;
+  const url = buildWhatsAppUrl(mobile, msg);
+  window.open(url, '_blank');
+  addAudit('💬', `WhatsApp collection notification opened for job <strong>${jobNo}</strong> to ${mobile}`);
+}
+
+function sendWhatsAppJobReceived(jobNo){
+  const j = getJob(jobNo);
+  if(!j){ showToast('Job not found','error'); return; }
+  const mobile = j.mobile || j.tel || '';
+  if(!mobile){
+    showToast('⚠️ No mobile number on record for this customer.','warn',5000);
+    return;
+  }
+  const lab = _settings.labName||'Westlab (M) Sdn. Bhd.';
+  const itemLines = (j.items||[]).map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''} | S/N: ${it.serial||'N/A'}`).join('\n');
+  const msg =
+`Dear ${j.attention||j.custName},
+
+We confirm receipt of your equipment:
+
+Job No.: ${jobNo}
+Received: ${fmtDateShort(j.receiveDate)}
+Priority: ${j.priority}
+
+Items:
+${itemLines}
+
+We will notify you when ready for collection.
+
+Thank you,
+${lab}
+📞 +6011-3508 9986`;
+  const url = buildWhatsAppUrl(mobile, msg);
+  window.open(url, '_blank');
+  addAudit('💬', `WhatsApp job receipt sent for job <strong>${jobNo}</strong> to ${mobile}`);
 }
 
 async function markBilled(jobNo){
