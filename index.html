@@ -6218,11 +6218,10 @@ function printBillingSummary(){
 
 // ── WHATSAPP NOTIFICATION ──
 function buildWhatsAppUrl(mobile, message){
-  // Clean mobile number — remove spaces, dashes, brackets
-  // Convert Malaysian numbers: 0123456789 → 60123456789
   let num = mobile.replace(/[\s\-\(\)\+]/g,'');
   if(num.startsWith('0')) num = '60' + num.slice(1);
   if(!num.startsWith('60')) num = '60' + num;
+  // Use encodeURIComponent which handles Unicode/emoji correctly
   const encoded = encodeURIComponent(message);
   return `https://wa.me/${num}?text=${encoded}`;
 }
@@ -6237,6 +6236,8 @@ function sendWhatsAppCollection(jobNo){
   }
   const lab = _settings.labName||'Westlab (M) Sdn. Bhd.';
   const itemLines = (j.items||[]).map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''}\n    S/N: ${it.serial||'N/A'} | Cert: ${it.certNo||'—'}`).join('\n');
+  const tel = '\u260E';
+  const email = '\u{1F4E7}';
   const msg =
 `Dear ${j.attention||j.custName},
 
@@ -6247,8 +6248,8 @@ Job No.: ${jobNo}
 ${itemLines}
 
 Please contact us to arrange collection:
-📞 +6011-3508 9986
-📧 sales@westlab.com.my
+${tel} +6011-3508 9986
+${email} sales@westlab.com.my
 
 Thank you,
 ${lab}`;
@@ -6267,6 +6268,7 @@ function sendWhatsAppJobReceived(jobNo){
   }
   const lab = _settings.labName||'Westlab (M) Sdn. Bhd.';
   const itemLines = (j.items||[]).map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''} | S/N: ${it.serial||'N/A'}`).join('\n');
+  const tel = '\u260E';
   const msg =
 `Dear ${j.attention||j.custName},
 
@@ -6283,7 +6285,7 @@ We will notify you when ready for collection.
 
 Thank you,
 ${lab}
-📞 +6011-3508 9986`;
+${tel} +6011-3508 9986`;
   const url = buildWhatsAppUrl(mobile, msg);
   window.open(url, '_blank');
   addAudit('💬', `WhatsApp job receipt sent for job <strong>${jobNo}</strong> to ${mobile}`);
