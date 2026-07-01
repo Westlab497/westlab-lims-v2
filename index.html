@@ -6236,8 +6236,6 @@ function sendWhatsAppCollection(jobNo){
   }
   const lab = _settings.labName||'Westlab (M) Sdn. Bhd.';
   const itemLines = (j.items||[]).map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''}\n    S/N: ${it.serial||'N/A'} | Cert: ${it.certNo||'—'}`).join('\n');
-  const tel = '\u260E';
-  const email = '\u{1F4E7}';
   const msg =
 `Dear ${j.attention||j.custName},
 
@@ -6248,8 +6246,8 @@ Job No.: ${jobNo}
 ${itemLines}
 
 Please contact us to arrange collection:
-${tel} +6011-3508 9986
-${email} sales@westlab.com.my
+Tel: +6011-3508 9986
+Email: sales@westlab.com.my
 
 Thank you,
 ${lab}`;
@@ -6268,7 +6266,6 @@ function sendWhatsAppJobReceived(jobNo){
   }
   const lab = _settings.labName||'Westlab (M) Sdn. Bhd.';
   const itemLines = (j.items||[]).map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''} | S/N: ${it.serial||'N/A'}`).join('\n');
-  const tel = '\u260E';
   const msg =
 `Dear ${j.attention||j.custName},
 
@@ -6285,7 +6282,7 @@ We will notify you when ready for collection.
 
 Thank you,
 ${lab}
-${tel} +6011-3508 9986`;
+Tel: +6011-3508 9986`;
   const url = buildWhatsAppUrl(mobile, msg);
   window.open(url, '_blank');
   addAudit('💬', `WhatsApp job receipt sent for job <strong>${jobNo}</strong> to ${mobile}`);
