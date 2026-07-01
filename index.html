@@ -1053,10 +1053,16 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="card-body">
             <div style="background:var(--blue-pale);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--navy);">
               💡 Emails are sent via <strong>Resend</strong> from <strong>noreply@westlab.com.my</strong>. No configuration needed — already set up securely in the API Worker.
-              The template should include variables: <code>{{to_email}}</code>, <code>{{to_name}}</code>, <code>{{job_no}}</code>, <code>{{cert_no}}</code>, <code>{{equipment}}</code>, <code>{{message}}</code>.
             </div>
-            <div class="form-group"><label class="form-label">Notification Email (for test)</label><input id="set-test-email" class="form-control" placeholder="e.g. sales@westlab.com.my"/></div>
-            <button class="btn btn-outline btn-sm" onclick="testEmail()" style="margin-top:4px;">📧 Send Test Email</button>
+            <div class="form-group"><label class="form-label">Send Test Emails To</label><input id="set-test-email" class="form-control" placeholder="e.g. sales@westlab.com.my"/><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">All test emails below will be sent to this address — no real customers will be contacted.</div></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+              <button class="btn btn-outline btn-sm" onclick="testEmail()">📧 Connection Test</button>
+              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('job-received')">📥 Job Received</button>
+              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('collection-ready')">✅ Collection Ready</button>
+              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-7')">⏰ 7-Day Reminder</button>
+              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-30')">📅 30-Day Reminder</button>
+              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('annual')">🔁 Annual Reminder</button>
+            </div>
           </div>
         </div>
 
@@ -3167,18 +3173,108 @@ function buildEmailItemsTable(items){
 }
 async function testEmail(){
   try{
-    const testTo=_settings.email||prompt('Send test email to:');
-    if(!testTo)return;
-    showToast('Sending test email…','info',2000);
+    const testTo=el('set-test-email')?.value.trim()||'sales@westlab.com.my';
+    showToast('Sending connection test…','info',2000);
     const ok=await sendEmail(testTo,'Westlab Team',
-      'Test Email — Westlab LIMS',
-      'This is a test email from Westlab LIMS.\n\nIf you received this, Resend email is configured correctly.\n\nSent from: noreply@westlab.com.my'
+      'Connection Test — Westlab LIMS',
+      'This is a connection test email from Westlab LIMS.\n\nIf you received this, Resend email is configured correctly.\n\nSent from: noreply@westlab.com.my'
     );
-    if(ok) showToast('✅ Test email sent to '+testTo,'success',4000);
+    if(ok) showToast('✅ Connection test sent to '+testTo,'success',4000);
     else showToast('❌ Email failed — check Worker logs','error',4000);
   }catch(_err){
     console.error("testEmail error:",_err);
     showToast("❌ Error: "+_err.message,"error",5000);
+  }
+}
+
+async function testEmailTemplate(type){
+  const testTo=el('set-test-email')?.value.trim()||'sales@westlab.com.my';
+  const lab=_settings.labName||'Westlab (M) Sdn. Bhd.';
+  const salesEmail='sales@westlab.com.my';
+  const contactNo='+6011-3508 9986';
+  const addr=_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor';
+
+  // Sample data
+  const sampleItems=[
+    {itemNo:1,eqName:'Digital Pressure Gauge',brand:'Fluke',model:'717',serial:'SN-88213',tagNo:'TAG-0021',certNo:'WLCS26040012',calData:{date:'15 Apr 2026',next_due:'15 Apr 2027'}},
+    {itemNo:2,eqName:'Analytical Balance',brand:'',model:'ESJ220-4AC',serial:'SN-44021',tagNo:'N/A',certNo:'WLCS26040013',calData:{date:'15 Apr 2026',next_due:'15 Apr 2027'}},
+  ];
+  const sampleJobNo='WL26-00042';
+  const dearName='Mr. Ahmad (SAMPLE — TEST EMAIL)';
+
+  showToast(`Sending ${type} template test…`,'info',2000);
+  let subject, body, htmlBody;
+
+  if(type==='job-received'){
+    subject=`[TEST] Job Receipt — ${sampleJobNo} | ${lab}`;
+    body=`Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.: ${sampleJobNo}\nReceive Date: 15 Apr 2026\nPriority: Normal\n\nEquipment Received:\n1. Digital Pressure Gauge (Fluke 717) | S/N: SN-88213 | Tag No.: TAG-0021\n2. Analytical Balance (ESJ220-4AC) | S/N: SN-44021 | Tag No.: N/A\n\nWe will notify you once all instruments are ready for collection.\n\nBest regards,\n${lab}`;
+    htmlBody=`<p>Dear ${dearName},</p>
+      <p>Thank you for sending your equipment to us. We confirm receipt of the following:</p>
+      ${buildEmailInfoTable([['Job No.',sampleJobNo],['Receive Date','15 Apr 2026'],['Priority','Normal']])}
+      <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Equipment Received</p>
+      ${buildEmailItemsTable(sampleItems)}
+      <p>We will notify you once all instruments are ready for collection.</p>
+      <p>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}</p>
+      <p>Best regards,<br/>${lab}</p>`;
+  }
+  else if(type==='collection-ready'){
+    subject=`[TEST] Calibration Certificates Ready for Collection — ${sampleJobNo} | ${lab}`;
+    body=`Dear ${dearName},\n\nYour calibration certificates are ready for collection.\n\nJob Number: ${sampleJobNo}\n\n1. Digital Pressure Gauge — Cert: WLCS26040012 | S/N: SN-88213 | Cal Date: 15 Apr 2026\n2. Analytical Balance — Cert: WLCS26040013 | S/N: SN-44021 | Cal Date: 15 Apr 2026\n\nPayment is required prior to collection.\n\nBest regards,\n${lab}`;
+    htmlBody=`<p>Dear ${dearName},</p>
+      <p>We are pleased to inform you that the calibration of your instrument(s) has been completed and all Calibration Certificates are now ready for collection.</p>
+      ${buildEmailInfoTable([['Job Number',sampleJobNo]])}
+      <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Items Ready for Collection</p>
+      <table style="width:100%;border-collapse:collapse;margin:12px 0;font-family:'Aptos','Calibri',Arial,sans-serif;font-size:12.5px;border:1px solid #e2e8f0;">
+        <tr style="background:#f8fafc;">
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">#</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Equipment</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Cert No.</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">S/N</td>
+          <td style="padding:8px 10px;font-weight:700;color:#0f1f3d;border-bottom:1px solid #e2e8f0;">Cal Date</td>
+        </tr>
+        ${sampleItems.map(it=>`<tr>
+          <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${it.itemNo}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.eqName}${it.brand||it.model?' ('+[it.brand,it.model].filter(Boolean).join(' ')+')'  :''}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.certNo}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.serial}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.calData.date}</td>
+        </tr>`).join('')}
+      </table>
+      <p style="background:#fff3e0;border-radius:8px;padding:12px 16px;color:#c84b00;font-weight:600;">💳 Please note: payment is required prior to collection of your instruments and certificates.</p>
+      <p>Kindly visit our laboratory at your earliest convenience to collect your instruments and certificates.</p>
+      <p>Please quote Job Number <strong>${sampleJobNo}</strong> when contacting us.</p>
+      <p>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}<br/>Address: ${addr}</p>
+      <p>Best regards,<br/>${lab}</p>`;
+  }
+  else if(type==='reminder-7'||type==='reminder-30'){
+    const days=type==='reminder-7'?7:30;
+    subject=`[TEST] Calibration Due in ${days} Days — 2 Items | ${lab}`;
+    body=`Dear ${dearName},\n\nThis is a friendly reminder that the following 2 items calibration is due in ${days} days.\n\n1. Digital Pressure Gauge (Fluke 717) | S/N: SN-88213 | Due: 22 Apr 2027\n2. Analytical Balance (ESJ220-4AC) | S/N: SN-44021 | Due: 22 Apr 2027\n\nBest regards,\n${lab}`;
+    htmlBody=`<p>Dear ${dearName},</p>
+      <p>This is a friendly reminder that the following <strong>2 items</strong> calibration is due in <strong>${days} days</strong>.</p>
+      ${buildEmailReminderTable(sampleItems)}
+      <p>Please ignore this email if you have already contacted us regarding your recalibration.</p>
+      <p>To arrange your next calibration, please contact us at:<br/>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}</p>
+      <p>Best regards,<br/>${lab}</p>`;
+  }
+  else if(type==='annual'){
+    subject=`[TEST] Annual Calibration Service Reminder — 2 Items | ${lab}`;
+    body=`Dear ${dearName},\n\nIt has been approximately one year since your equipment was last calibrated. Please arrange for recalibration.\n\n1. Digital Pressure Gauge (Fluke 717) | S/N: SN-88213 | Last Cal: 15 Apr 2025\n2. Analytical Balance (ESJ220-4AC) | S/N: SN-44021 | Last Cal: 15 Apr 2025\n\nBest regards,\n${lab}`;
+    htmlBody=`<p>Dear ${dearName},</p>
+      <p>We hope this message finds you well.</p>
+      <p>It has been approximately one year since your equipment was last calibrated by us. Regular calibration ensures your instruments continue to meet measurement accuracy requirements.</p>
+      ${buildEmailReminderTable(sampleItems,true)}
+      <p>If you require recalibration services, please do not hesitate to contact us.</p>
+      <p>To arrange your next calibration, please contact us at:<br/>Email: <a href="mailto:${salesEmail}" style="color:#378ADD;">${salesEmail}</a><br/>Contact No.: ${contactNo}</p>
+      <p>Best regards,<br/>${lab}</p>`;
+  }
+
+  try{
+    const ok=await sendEmail(testTo,'Test Recipient',subject,body,htmlBody);
+    if(ok) showToast(`✅ ${type} template sent to ${testTo}`,'success',4000);
+    else showToast('❌ Email failed — check Worker logs','error',4000);
+  }catch(e){
+    showToast('❌ '+e.message,'error',5000);
   }
 }
 // If the job's customer is an End User linked to a dealer,
