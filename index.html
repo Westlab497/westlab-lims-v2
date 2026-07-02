@@ -558,9 +558,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="btn btn-primary" id="login-btn" style="width:100%;padding:11px;font-size:14px;margin-top:6px;" onclick="doLogin()">Sign In →</button>
     <div class="login-footer">
       <a href="#" onclick="showForgotPassword()" style="color:var(--blue);text-decoration:none;font-size:12px;">Forgot password?</a>
-      <div style="margin-top:10px;">
-        <a href="#" onclick="openStatusLookup()" style="color:rgba(255,255,255,.5);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">🔍 Check job status</a>
-      </div>
     </div>
   </div>
 </div>
@@ -614,7 +611,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
   <button class="mob-nav-btn" id="mob-nav-dashboard" onclick="showView('dashboard')">
     <span class="mob-icon">🏠</span><span>Home</span>
   </button>
-  <button class="mob-nav-btn" id="mob-nav-jobs" onclick="showView('jobs')">
+  <button class="mob-nav-btn" id="mob-nav-jobs" onclick="showView('equipment')">
     <span class="mob-icon">📋</span><span>Jobs</span>
   </button>
   <button class="mob-nav-btn" id="mob-nav-myjobs" onclick="showView('my-jobs')">
@@ -1449,7 +1446,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="page-header"><div class="page-title">⚙️ System Settings</div><button class="btn btn-primary" onclick="saveSettings()">💾 Save Changes</button></div>
       <div id="settings-saved-banner" class="success-banner">✅ Settings saved successfully.</div>
 
-      <div class="grid-2">
+      <!-- Row 1: Company Info + Logo (side by side) -->
+      <div class="grid-2" style="margin-bottom:16px;">
         <!-- COMPANY INFO -->
         <div class="card">
           <div class="card-header"><span class="card-title">🏢 Company Information</span></div>
@@ -1473,7 +1471,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="card">
           <div class="card-header"><span class="card-title">🖼️ Company Logo</span></div>
           <div class="card-body">
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Logo appears on calibration certificates. Recommended: PNG with transparent background, min 300px wide.</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Logo appears on calibration certificates and emails. Recommended: PNG with transparent background, min 300px wide.</div>
             <div id="logo-preview-wrap" style="margin-bottom:14px;display:none;">
               <img id="logo-preview-img" src="" style="max-height:80px;max-width:100%;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"/>
               <button onclick="removeLogo()" style="display:block;margin-top:6px;background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;">✕ Remove logo</button>
@@ -1485,7 +1483,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <input type="file" id="logo-file-input" accept="image/*" style="display:none;" onchange="handleLogoSelect(event)"/>
           </div>
         </div>
+      </div>
 
+      <!-- Row 2: Accreditation + SLA (side by side) -->
+      <div class="grid-2" style="margin-bottom:16px;">
         <!-- ACCREDITATION INFO -->
         <div class="card">
           <div class="card-header"><span class="card-title">📋 Accreditation & Lab Details</span></div>
@@ -1500,7 +1501,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
         <!-- SLA CONFIG -->
         <div class="card">
-          <div class="card-header"><span class="card-title">📅 Turnaround Time (Working Days)</span></div>
+          <div class="card-header"><span class="card-title">📅 Turnaround Time (SLA)</span></div>
           <div class="card-body">
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Set how many working days each priority level takes. Used to auto-calculate promised ready dates.</div>
             <div class="form-row">
@@ -1513,26 +1514,29 @@ textarea.form-control{resize:vertical;min-height:70px;}
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- EMAIL CONFIG -->
-        <div class="card">
-          <div class="card-header"><span class="card-title">📧 Email Configuration (Resend)</span></div>
-          <div class="card-body">
-            <div style="background:var(--blue-pale);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--navy);">
-              💡 Emails are sent via <strong>Resend</strong> from <strong>noreply@westlab.com.my</strong>. No configuration needed — already set up securely in the API Worker.
-            </div>
-            <div class="form-group"><label class="form-label">Send Test Emails To</label><input id="set-test-email" class="form-control" placeholder="e.g. sales@westlab.com.my"/><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">All test emails below will be sent to this address — no real customers will be contacted.</div></div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
-              <button class="btn btn-outline btn-sm" onclick="testEmail()">📧 Connection Test</button>
-              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('job-received')">📥 Job Received</button>
-              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('collection-ready')">✅ Collection Ready</button>
-              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-7')">⏰ 7-Day Reminder</button>
-              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-30')">📅 30-Day Reminder</button>
-              <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('annual')">🔁 Annual Reminder</button>
-            </div>
+      <!-- Row 3: Email Config (full width) -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">📧 Email Configuration (Resend)</span></div>
+        <div class="card-body">
+          <div style="background:var(--blue-pale);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--navy);">
+            💡 Emails are sent via <strong>Resend</strong> from <strong>noreply@westlab.com.my</strong>. No configuration needed — already set up securely in the API Worker.
+          </div>
+          <div class="form-group"><label class="form-label">Send Test Emails To</label><input id="set-test-email" class="form-control" placeholder="e.g. sales@westlab.com.my" style="max-width:320px;"/><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">All test emails below will be sent to this address — no real customers will be contacted.</div></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+            <button class="btn btn-outline btn-sm" onclick="testEmail()">📧 Connection Test</button>
+            <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('job-received')">📥 Job Received</button>
+            <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('collection-ready')">✅ Collection Ready</button>
+            <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-7')">⏰ 7-Day Reminder</button>
+            <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-30')">📅 30-Day Reminder</button>
+            <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('annual')">🔁 Annual Reminder</button>
           </div>
         </div>
+      </div>
 
+      <!-- Row 4: Admin Login + Job Counters (side by side) -->
+      <div class="grid-2" style="margin-bottom:16px;">
         <!-- ADMIN LOGIN -->
         <div class="card">
           <div class="card-header"><span class="card-title">🔐 Admin Login</span></div>
@@ -1542,35 +1546,33 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </div>
         </div>
 
-        <!-- SYSTEM -->
+        <!-- SYSTEM COUNTERS -->
         <div class="card">
           <div class="card-header"><span class="card-title">🔧 Job & Certificate Counters</span></div>
           <div class="card-body">
             <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">
-              Set the <strong>next</strong> number to be issued. For example, if you type <strong>2</strong>, the next job created will be <strong>WL26-00002</strong>.
+              Set the <strong>next</strong> number to be issued. For example, type <strong>2</strong> to make the next job <strong>WL26-00002</strong>.
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Next Job Number</label>
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="job-counter-prefix">WL26-</span>
-                  <input class="form-control" id="set-job-counter" type="number" min="1" max="99999" placeholder="e.g. 2" style="width:100px;"/>
-                  <button class="btn btn-primary btn-sm" onclick="setJobCounter()">Set</button>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;" id="job-counter-preview">Current next: loading…</div>
+            <div class="form-group">
+              <label class="form-label">Next Job Number</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="job-counter-prefix">WL26-</span>
+                <input class="form-control" id="set-job-counter" type="number" min="1" max="99999" placeholder="e.g. 2" style="width:100px;"/>
+                <button class="btn btn-primary btn-sm" onclick="setJobCounter()">Set</button>
               </div>
-              <div class="form-group">
-                <label class="form-label">Next Certificate Number</label>
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="cert-counter-prefix">WLCS2604-</span>
-                  <input class="form-control" id="set-cert-counter" type="number" min="1" max="9999" placeholder="e.g. 2" style="width:100px;"/>
-                  <button class="btn btn-primary btn-sm" onclick="setCertCounter()">Set</button>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;" id="cert-counter-preview">Current next: loading…</div>
-              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:6px;" id="job-counter-preview">Current next: loading…</div>
             </div>
-            <div style="background:var(--blue-pale);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--navy);margin-top:4px;">
-              💡 Use this after deleting a job to reuse the same number. Type the number you want the <em>next</em> job to start from.
+            <div class="form-group" style="margin-top:12px;">
+              <label class="form-label">Next Certificate Number</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="cert-counter-prefix">WLCS2604-</span>
+                <input class="form-control" id="set-cert-counter" type="number" min="1" max="9999" placeholder="e.g. 2" style="width:100px;"/>
+                <button class="btn btn-primary btn-sm" onclick="setCertCounter()">Set</button>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:6px;" id="cert-counter-preview">Current next: loading…</div>
+            </div>
+            <div style="background:var(--blue-pale);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--navy);margin-top:8px;">
+              💡 Only adjust if you need to reset or skip a number sequence.
             </div>
           </div>
         </div>
@@ -2743,9 +2745,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group"><label class="form-label">Role <span class="req">*</span></label>
         <select class="form-control" id="staff-role">
           <option value="Engineer">Engineer / Technician</option>
-          <option value="Signatory">Approved Signatory</option>
+          <option value="Manager">Manager (Approve certs, view reports, assign jobs)</option>
+          <option value="Sales">Sales / Front Desk (Create jobs, customer database)</option>
+          <option value="HR">HR / Accounts (Leave, claims, attendance only)</option>
+          <option value="Admin">Admin (Full access)</option>
         </select>
+        <div id="staff-role-desc" style="font-size:11px;color:var(--text-muted);margin-top:4px;"></div>
       </div>
+      <div class="form-group"><label class="form-label">Join Date</label><input class="form-control" id="staff-join-date" type="date" placeholder="Date joined company"/><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Used to calculate leave entitlement (years of service).</div></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label" id="staff-pw-label">Password <span class="req">*</span></label>
           <input class="form-control" id="staff-password" type="password" placeholder="Set password" autocomplete="new-password"/>
@@ -3317,7 +3324,7 @@ function setCurrentUser(username){
     const myJobs=_jobs.filter(j=>j.assignedTo===currentUser&&j.status==='Assigned');
     myJobs.forEach(j=>addNotification('🔧',`Job ${j.jobNo} assigned — ${j.eqName}`,j.jobNo));
     // Notify signatory of pending approval
-    if(getUserRole(currentUser)==='Signatory'){
+    if(canApprove(currentUser)){
       const pending=_jobs.filter(j=>j.status==='Pending Approval');
       pending.forEach(j=>addNotification('📬',`Job ${j.jobNo} awaiting your approval`,j.jobNo));
     }
@@ -3384,47 +3391,62 @@ function doLogout(){
 })();
 
 // ── ROLE-BASED UI ──
+// Roles: Admin, Manager, Engineer, Sales, HR
 function getUserRole(username){
   return USERS[username]?.role||'Engineer';
 }
 function isAdmin(u){ return getUserRole(u||currentUser)==='Admin'; }
-function isSignatory(u){ return getUserRole(u||currentUser)==='Signatory'; }
+function isManager(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'; }
+function isSignatory(u){ return isManager(u); } // managers can approve
 function isEngineer(u){ return getUserRole(u||currentUser)==='Engineer'; }
+function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Sales'; }
+function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='HR'; }
+function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Sales'].includes(r); }
+function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Engineer'].includes(r); }
+function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
+function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Sales'].includes(r); }
+function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
+function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
+function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','HR'].includes(r); }
 
 function applyRoleUI(){
   try{
   const role=getUserRole(currentUser);
   const admin=role==='Admin';
-  const signatory=role==='Signatory';
+  const manager=role==='Manager';
   const engineer=role==='Engineer';
+  const sales=role==='Sales';
+  const hr=role==='HR';
 
-  // Sidebar nav
-  el('nav-equipment').classList.toggle('hidden-nav',false); // all can see jobs
-  el('nav-completed').classList.toggle('hidden-nav',engineer); // admin + signatory
-  el('nav-customers').classList.toggle('hidden-nav',false);
-  el('nav-ref-eq').classList.toggle('hidden-nav',false);
-  el('nav-calendar').classList.toggle('hidden-nav',false);
-  el('nav-claims').classList.toggle('hidden-nav',false);
-  el('nav-leave').classList.toggle('hidden-nav',false);
-  el('nav-attendance').classList.toggle('hidden-nav',false);
-  el('nav-my-jobs').classList.toggle('hidden-nav',admin); // techs + signatories see My Jobs
-  el('nav-approval').classList.toggle('hidden-nav',!signatory); // only signatory
-  el('nav-admin-section').style.display=admin?'':'none';
-  el('nav-personnel').classList.toggle('hidden-nav',!admin);
-  el('nav-deleted').classList.toggle('hidden-nav',!admin);
-  el('nav-reports').classList.toggle('hidden-nav',!admin);
-  el('nav-settings').classList.toggle('hidden-nav',!admin);
+  // Sidebar nav visibility per role
+  // Equipment & Jobs — Admin, Manager, Sales see all; Engineer sees My Jobs only; HR sees nothing
+  el('nav-equipment').classList.toggle('hidden-nav', hr); // hidden for HR
+  el('nav-completed').classList.toggle('hidden-nav', engineer||hr);
+  el('nav-my-jobs').classList.toggle('hidden-nav', admin||manager||sales||hr); // only for engineers
+  el('nav-approval').classList.toggle('hidden-nav', !(admin||manager));
+  el('nav-customers').classList.toggle('hidden-nav', hr);
+  el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
+  el('nav-calendar').classList.toggle('hidden-nav', hr);
+  el('nav-claims').classList.toggle('hidden-nav', false); // all can see own claims
+  el('nav-leave').classList.toggle('hidden-nav', false);  // all can see own leave
+  el('nav-attendance').classList.toggle('hidden-nav', false); // all can clock in
+  el('nav-admin-section').style.display=(admin||manager)?'':'none';
+  el('nav-personnel').classList.toggle('hidden-nav', !admin);
+  el('nav-deleted').classList.toggle('hidden-nav', !admin);
+  el('nav-reports').classList.toggle('hidden-nav', !(admin||manager));
+  el('nav-settings').classList.toggle('hidden-nav', !admin);
 
   // Dashboard buttons
-  el('btn-new-job').style.display=admin?'':'none';
-  el('dash-admin-btns').style.display=admin?'flex':'none';
+  const canCreateJob=canCreateJobs(currentUser);
+  const btnNew=el('btn-new-job'); if(btnNew) btnNew.style.display=canCreateJob?'':'none';
+  const dashAdmin=el('dash-admin-btns'); if(dashAdmin) dashAdmin.style.display=(admin||manager)?'flex':'none';
 
-  // Sidebar edit hint
+  // Sidebar edit hint (admin only)
   const hint=document.getElementById('sidebar-edit-hint');
   if(hint) hint.style.display=admin?'block':'none';
 
   // Mobile role UI
-  applyMobileRoleUI(admin);
+  applyMobileRoleUI(admin||manager);
   updateMobileUserDisplay();
   }catch(_e){
     console.error("applyRoleUI error:",_e);
@@ -3842,7 +3864,7 @@ async function openNewJobModal(){
     const jtEl=el('eq-job-type'); if(jtEl) jtEl.value='Lab';
     const itEl=el('eq-item-type'); if(itEl) itEl.value='Lab';
     toggleOnsiteFields();
-    populateUserDropdown('eq-assign-to',false);
+    populateUserDropdown('eq-assign-to',false,true);
     calcPromisedDate();
     _extraEquipment=[];
     renderExtraEquipment();
@@ -4548,7 +4570,7 @@ function openEditJobModal(jobNo, itemIdx=0){
   const priceGroup=el('edit-price-group');
   const priceInput=el('edit-eq-price');
   const priceHistory=el('edit-price-history');
-  if(priceGroup) priceGroup.style.display=isAdmin(currentUser)?'block':'none';
+  if(priceGroup) priceGroup.style.display=canViewPrice(currentUser)?'block':'none';
   if(priceInput) priceInput.value=item.price||'';
   // Load price history for same equipment model from past jobs
   if(priceHistory&&item.model){
@@ -4593,7 +4615,7 @@ async function saveEditJob(){
       it.condition=el('edit-eq-condition').value;
       it.accessories=el('edit-eq-accessories').value.trim();
       it.remarks=el('edit-eq-remarks').value.trim();
-      if(isAdmin(currentUser)){
+      if(canViewPrice(currentUser)){
         const price=parseFloat(el('edit-eq-price')?.value)||0;
         if(price>0) it.price=price; else delete it.price;
       }
@@ -4612,7 +4634,7 @@ async function saveEditJob(){
       j.condition=el('edit-eq-condition').value;
       j.accessories=el('edit-eq-accessories').value.trim();
       j.remarks=el('edit-eq-remarks').value.trim();
-      if(isAdmin(currentUser)){
+      if(canViewPrice(currentUser)){
         const price=parseFloat(el('edit-eq-price')?.value)||0;
         if(price>0) j.price=price; else delete j.price;
       }
@@ -4633,36 +4655,39 @@ function populateApprovedByDropdown(){
   const sel=el('cal-approved-by'); if(!sel)return;
   const current=sel.value;
   sel.innerHTML='<option value="">— Select Approved Signatory —</option>';
-  (_staff||[]).filter(s=>s.role==='Signatory'&&s.active!==false).forEach(s=>{
+  (_staff||[]).filter(s=>['Admin','Manager','Signatory'].includes(s.role)&&s.active!==false).forEach(s=>{
     sel.innerHTML+=`<option value="${s.name}">${s.name}</option>`;
   });
   if(current) sel.value=current;
 }
 
-function populateUserDropdown(selectId, includeAdmin=false){
+function populateUserDropdown(selectId, includeAdmin=false, engineersOnly=false){
   const sel=el(selectId); if(!sel)return;
   const current=sel.value;
   sel.innerHTML='<option value="">— Select user —</option>';
-  if(includeAdmin){
+  if(includeAdmin&&!engineersOnly){
     const adminUser=_settings.username||'admin';
     sel.innerHTML+=`<option value="${adminUser}">Administrator</option>`;
   }
-  (_staff||[]).filter(s=>s.active!==false).forEach(s=>{
-    sel.innerHTML+=`<option value="${s.username}">${s.name} (${s.role==='Signatory'?'Approved Signatory':'Engineer / Technician'})</option>`;
+  (_staff||[]).filter(s=>{
+    if(s.active===false) return false;
+    if(engineersOnly) return s.role==='Engineer'||s.role==='Admin';
+    return true;
+  }).forEach(s=>{
+    sel.innerHTML+=`<option value="${s.username}">${s.name} (${s.role})</option>`;
   });
   if(current) sel.value=current;
 }
 
 function openAssignModal(jobNo){
-  const role=getUserRole(currentUser);
-  if(role!=='Admin'&&role!=='Signatory'){alert('You do not have permission to assign jobs.');return;}
+  if(!canApprove(currentUser)){alert('You do not have permission to assign jobs.');return;}
   assigningJobNo=jobNo;
   const j=getJob(jobNo);
   el('assign-job-no-label').textContent=jobNo;
   el('assign-job-eq-label').textContent=j?`${j.eqName}${j.brand?' — '+j.brand:''}${j.model?' '+j.model:''}`:'' ;
   const custLabel=el('assign-job-cust-label');
   if(custLabel) custLabel.textContent=j?`Customer: ${j.custName}${j.priority?' · Priority: '+j.priority:''}${j.promisedDate?' · Ready by: '+j.promisedDate:''}`:'' ;
-  populateUserDropdown('assign-to-select',false);
+  populateUserDropdown('assign-to-select',false,true);
   el('assign-to-select').value=j&&j.assignedTo?j.assignedTo:'';
   el('assign-note').value='';
   const hint=el('assign-workload-hint');
@@ -4687,7 +4712,7 @@ function openReassignModal(jobNo){
   const j=getJob(jobNo);
   el('reassign-job-no-label').textContent=jobNo;
   el('reassign-job-eq-label').textContent=j?j.eqName:'';
-  populateUserDropdown('reassign-to-select',true);
+  populateUserDropdown('reassign-to-select',false,true);
   el('reassign-to-select').value='';
   el('reassign-note').value='';
   openModal('modal-reassign-job');
@@ -5237,7 +5262,7 @@ function openAssignItemModal(jobNo, itemIdx){
   el('assign-job-eq-label').textContent=`${item.eqName}${item.brand?' — '+item.brand:''}${item.model?' '+item.model:''}`;
   const custLabel=el('assign-job-cust-label');
   if(custLabel) custLabel.textContent=`Customer: ${j.custName} · Priority: ${j.priority}${j.promisedDate?' · Ready by: '+j.promisedDate:''}`;
-  populateUserDropdown('assign-to-select',false);
+  populateUserDropdown('assign-to-select',false,true);
   el('assign-to-select').value=item.assignedTo||'';
   el('assign-note').value='';
   const hint=el('assign-workload-hint'); if(hint) hint.style.display='none';
@@ -7488,7 +7513,7 @@ async function viewJobDetail(jobNo){
     footerBtns+=`<button class="btn btn-primary" onclick="closeModal('modal-view-job');openAssignModal('${j.jobNo}')">Assign Job</button>`;
   if((currentUser===j.assignedTo)&&j.status!=='Pending Approval'&&j.status!=='Completed')
     footerBtns+=`<button class="btn btn-primary" onclick="closeModal('modal-view-job');openCalModal('${j.jobNo}')">🔬 Perform Calibration</button>`;
-  if(getUserRole(currentUser)==='Signatory'&&j.status==='Pending Approval')
+  if(canApprove(currentUser)&&j.status==='Pending Approval')
     footerBtns+=`<button class="btn btn-success" onclick="closeModal('modal-view-job');openApproveModal('${j.jobNo}')">✅ Review &amp; Approve</button>`;
   if(j.status==='Completed'&&j.calData)
     footerBtns+=`<button class="btn btn-outline" onclick="showCertFromJob('${j.jobNo}')">📄 View Certificate</button>`;
@@ -7736,7 +7761,7 @@ function renderDashboard(){
     if(overdueBanner) overdueBanner.style.display='none';
   }
   // Banners
-  if(getUserRole(currentUser)==='Signatory'){
+  if(canApprove(currentUser)){
     el('jay-approval-banner').style.display=pendApproval>0?'block':'none';
     el('jay-approval-count-text').textContent=`${pendApproval} item(s) awaiting your approval.`;
   } else { el('jay-approval-banner').style.display='none'; }
@@ -9465,6 +9490,7 @@ function openAddStaffModal(){
   el('staff-username').value='';
   el('staff-username').readOnly=false;
   el('staff-role').value='Engineer';
+  const jd=el('staff-join-date'); if(jd) jd.value='';
   el('staff-password').value='';
   el('staff-password2').value='';
   el('staff-pw-label').innerHTML='Password <span class="req">*</span>';
@@ -9482,6 +9508,7 @@ function openEditStaffModal(username){
   el('staff-username').value=username;
   el('staff-username').readOnly=true;
   el('staff-role').value=s.role||'Engineer';
+  const jd=el('staff-join-date'); if(jd) jd.value=s.joinDate||'';
   el('staff-password').value='';
   el('staff-password2').value='';
   el('staff-pw-label').innerHTML='New Password <span style="font-size:11px;color:var(--text-muted);">(leave blank to keep current)</span>';
@@ -9553,8 +9580,9 @@ async function saveStaff(){
   const record={
     username, name,
     certName: el('staff-cert-name').value.trim()||name,
-    display:role==='Signatory'?'Approved Signatory':'Engineer / Technician',
+    display:role,
     role,
+    joinDate:el('staff-join-date')?.value||existing?.joinDate||'',
     password:pw||(existing?.password||''),
     signature:sigUrl,
     active:existing?.active!==false,
@@ -10202,7 +10230,7 @@ function updateMobileNav(viewName){
 
   // Update bottom nav active state
   document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.remove('active'));
-  const map={dashboard:'mob-nav-dashboard',jobs:'mob-nav-jobs','my-jobs':'mob-nav-myjobs',calendar:'mob-nav-calendar'};
+  const map={dashboard:'mob-nav-dashboard',equipment:'mob-nav-jobs','my-jobs':'mob-nav-myjobs',calendar:'mob-nav-calendar'};
   if(map[viewName]){
     const btn=el(map[viewName]);
     if(btn) btn.classList.add('active');
