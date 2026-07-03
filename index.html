@@ -1451,117 +1451,75 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="page-header"><div class="page-title">⚙️ System Settings</div><button class="btn btn-primary" onclick="saveSettings()">💾 Save Changes</button></div>
       <div id="settings-saved-banner" class="success-banner">✅ Settings saved successfully.</div>
 
-      <!-- Row 1: Company Info + Logo (side by side) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;align-items:start;">
-        <!-- COMPANY INFO -->
-        <div class="card">
-          <div class="card-header"><span class="card-title">🏢 Company Information</span></div>
-          <div class="card-body">
+      <!-- Company Information -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">🏢 Company Information</span></div>
+        <div class="card-body">
+          <div class="form-row">
             <div class="form-group"><label class="form-label">Laboratory / Company Name</label><input id="set-lab-name" class="form-control" placeholder="e.g. Westlab (M) Sdn. Bhd."/></div>
             <div class="form-group"><label class="form-label">Company Registration No.</label><input id="set-reg-no" class="form-control" placeholder="e.g. 1234567-A"/></div>
+          </div>
+          <div class="form-row">
             <div class="form-group"><label class="form-label">Branch / Location</label><input id="set-branch" class="form-control" placeholder="e.g. Shah Alam Branch"/></div>
-            <div class="form-group"><label class="form-label">Company Address</label><textarea id="set-address" class="form-control" rows="3" placeholder="Full company address"></textarea></div>
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">Tel No.</label><input id="set-tel" class="form-control" placeholder="e.g. +603-6157 0706"/></div>
-              <div class="form-group"><label class="form-label">Fax No.</label><input id="set-fax" class="form-control" placeholder="e.g. +603-6157 0706"/></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">Email</label><input id="set-email" class="form-control" type="email" placeholder="info@westlab.com"/></div>
-              <div class="form-group"><label class="form-label">Website</label><input id="set-website" class="form-control" placeholder="www.westlab.com"/></div>
-            </div>
+            <div class="form-group"><label class="form-label">Website</label><input id="set-website" class="form-control" placeholder="www.westlab.com"/></div>
           </div>
-        </div>
-
-        <!-- RIGHT COLUMN: Logo + Admin Login stacked -->
-        <div style="display:flex;flex-direction:column;gap:16px;">
-          <!-- LOGO -->
-          <div class="card">
-            <div class="card-header"><span class="card-title">🖼️ Company Logo</span></div>
-            <div class="card-body">
-              <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Logo appears on calibration certificates and emails. Recommended: PNG with transparent background, min 300px wide.</div>
-              <div id="logo-preview-wrap" style="margin-bottom:14px;display:none;">
-                <img id="logo-preview-img" src="" style="max-height:80px;max-width:100%;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"/>
-                <button onclick="removeLogo()" style="display:block;margin-top:6px;background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;">✕ Remove logo</button>
-              </div>
-              <div id="logo-upload-area" class="file-upload-area" onclick="document.getElementById('logo-file-input').click()" style="padding:20px;cursor:pointer;">
-                <div style="font-size:24px;margin-bottom:6px;">🖼️</div>
-                <div class="photo-upload-text"><strong>Click to upload</strong> logo<br/><span style="font-size:12px;">PNG, JPG, SVG · Max 2MB</span></div>
-              </div>
-              <input type="file" id="logo-file-input" accept="image/*" style="display:none;" onchange="handleLogoSelect(event)"/>
-            </div>
-          </div>
-          <!-- ADMIN LOGIN -->
-          <div class="card">
-            <div class="card-header"><span class="card-title">🔐 Admin Login</span></div>
-            <div class="card-body">
-              <div class="form-group"><label class="form-label">Admin Username</label><input id="set-username" class="form-control" placeholder="admin"/></div>
-              <div class="form-group"><label class="form-label">New Admin Password</label><input id="set-password" class="form-control" type="password" placeholder="Leave blank to keep current"/></div>
-            </div>
+          <div class="form-group"><label class="form-label">Company Address</label><textarea id="set-address" class="form-control" rows="2" placeholder="Full company address"></textarea></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Tel No.</label><input id="set-tel" class="form-control" placeholder="e.g. +603-6157 0706"/></div>
+            <div class="form-group"><label class="form-label">Fax No.</label><input id="set-fax" class="form-control" placeholder="e.g. +603-6157 0706"/></div>
+            <div class="form-group"><label class="form-label">Email</label><input id="set-email" class="form-control" type="email" placeholder="info@westlab.com"/></div>
           </div>
         </div>
       </div>
 
-      <!-- Row 2: Accreditation + SLA (side by side) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;align-items:start;">
-        <!-- ACCREDITATION INFO -->
-        <div class="card">
-          <div class="card-header"><span class="card-title">📋 Accreditation & Lab Details</span></div>
-          <div class="card-body">
+      <!-- Logo -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">🖼️ Company Logo</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Logo appears on calibration certificates and emails. Recommended: PNG with transparent background, min 300px wide.</div>
+          <div id="logo-preview-wrap" style="margin-bottom:14px;display:none;">
+            <img id="logo-preview-img" src="" style="max-height:80px;max-width:300px;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"/>
+            <button onclick="removeLogo()" style="display:block;margin-top:6px;background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;">✕ Remove logo</button>
+          </div>
+          <div id="logo-upload-area" class="file-upload-area" onclick="document.getElementById('logo-file-input').click()" style="padding:16px;cursor:pointer;max-width:400px;">
+            <div style="font-size:24px;margin-bottom:6px;">🖼️</div>
+            <div class="photo-upload-text"><strong>Click to upload</strong> logo<br/><span style="font-size:12px;">PNG, JPG, SVG · Max 2MB</span></div>
+          </div>
+          <input type="file" id="logo-file-input" accept="image/*" style="display:none;" onchange="handleLogoSelect(event)"/>
+        </div>
+      </div>
+
+      <!-- Accreditation -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">📋 Accreditation & Lab Details</span></div>
+        <div class="card-body">
+          <div class="form-row">
             <div class="form-group"><label class="form-label">SAMM / Accreditation Number</label><input id="set-accred-num" class="form-control" placeholder="e.g. SAMM 1234"/></div>
             <div class="form-group"><label class="form-label">Accreditation Body</label><input id="set-accred-body" class="form-control" placeholder="e.g. SAMM / ILAC MRA"/></div>
-            <div class="form-group"><label class="form-label">Accreditation Scope</label><textarea id="set-accred-scope" class="form-control" rows="3" placeholder="e.g. pH measurement (pH 0–14), Temperature (−20°C to 1200°C)…"></textarea></div>
+          </div>
+          <div class="form-row">
             <div class="form-group"><label class="form-label">Technical Manager</label><input id="set-tech-manager" class="form-control" placeholder="Name of technical manager"/></div>
             <div class="form-group"><label class="form-label">Quality Manager</label><input id="set-quality-manager" class="form-control" placeholder="Name of quality manager"/></div>
           </div>
+          <div class="form-group"><label class="form-label">Accreditation Scope</label><textarea id="set-accred-scope" class="form-control" rows="3" placeholder="e.g. pH measurement (pH 0–14), Temperature (−20°C to 1200°C)…"></textarea></div>
         </div>
+      </div>
 
-        <!-- RIGHT COLUMN: SLA + Counters stacked -->
-        <div style="display:flex;flex-direction:column;gap:16px;">
-          <!-- SLA CONFIG -->
-          <div class="card">
-            <div class="card-header"><span class="card-title">📅 Turnaround Time (SLA)</span></div>
-            <div class="card-body">
-              <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Working days per priority. Used to auto-calculate promised ready dates.</div>
-              <div class="form-row">
-                <div class="form-group"><label class="form-label">🔴 Urgent</label><input id="set-sla-urgent" class="form-control" type="number" min="1" max="30" placeholder="1"/></div>
-                <div class="form-group"><label class="form-label">🟠 Express</label><input id="set-sla-express" class="form-control" type="number" min="1" max="30" placeholder="2"/></div>
-              </div>
-              <div class="form-row">
-                <div class="form-group"><label class="form-label">🔵 Normal</label><input id="set-sla-normal" class="form-control" type="number" min="1" max="30" placeholder="5"/></div>
-                <div class="form-group"><label class="form-label">⚪ Routine</label><input id="set-sla-routine" class="form-control" type="number" min="1" max="30" placeholder="10"/></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- SYSTEM COUNTERS -->
-          <div class="card">
-            <div class="card-header"><span class="card-title">🔧 Job & Certificate Counters</span></div>
-            <div class="card-body">
-              <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Set the <strong>next</strong> number to be issued.</div>
-              <div class="form-group">
-                <label class="form-label">Next Job Number</label>
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="job-counter-prefix">WL26-</span>
-                  <input class="form-control" id="set-job-counter" type="number" min="1" max="99999" placeholder="e.g. 2" style="width:100px;"/>
-                  <button class="btn btn-primary btn-sm" onclick="setJobCounter()">Set</button>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="job-counter-preview">Current next: loading…</div>
-              </div>
-              <div class="form-group" style="margin-top:10px;">
-                <label class="form-label">Next Certificate Number</label>
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="cert-counter-prefix">WLCS2606-</span>
-                  <input class="form-control" id="set-cert-counter" type="number" min="1" max="9999" placeholder="e.g. 2" style="width:100px;"/>
-                  <button class="btn btn-primary btn-sm" onclick="setCertCounter()">Set</button>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="cert-counter-preview">Current next: loading…</div>
-              </div>
-            </div>
+      <!-- SLA -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">📅 Turnaround Time (SLA)</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Working days per priority. Used to auto-calculate promised ready dates.</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">🔴 Urgent</label><input id="set-sla-urgent" class="form-control" type="number" min="1" max="30" placeholder="1"/></div>
+            <div class="form-group"><label class="form-label">🟠 Express</label><input id="set-sla-express" class="form-control" type="number" min="1" max="30" placeholder="2"/></div>
+            <div class="form-group"><label class="form-label">🔵 Normal</label><input id="set-sla-normal" class="form-control" type="number" min="1" max="30" placeholder="5"/></div>
+            <div class="form-group"><label class="form-label">⚪ Routine</label><input id="set-sla-routine" class="form-control" type="number" min="1" max="30" placeholder="10"/></div>
           </div>
         </div>
       </div>
 
-      <!-- Row 3: Email Config (full width) -->
+      <!-- Email Config -->
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header"><span class="card-title">📧 Email Configuration (Resend)</span></div>
         <div class="card-body">
@@ -1576,6 +1534,45 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-7')">⏰ 7-Day Reminder</button>
             <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('reminder-30')">📅 30-Day Reminder</button>
             <button class="btn btn-outline btn-sm" onclick="testEmailTemplate('annual')">🔁 Annual Reminder</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Login -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">🔐 Admin Login</span></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Admin Username</label><input id="set-username" class="form-control" placeholder="admin"/></div>
+            <div class="form-group"><label class="form-label">New Admin Password</label><input id="set-password" class="form-control" type="password" placeholder="Leave blank to keep current"/></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Counters -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">🔧 Job & Certificate Counters</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Set the <strong>next</strong> number to be issued.</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Next Job Number</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="job-counter-prefix">WL26-</span>
+                <input class="form-control" id="set-job-counter" type="number" min="1" max="99999" placeholder="e.g. 2" style="width:120px;"/>
+                <button class="btn btn-primary btn-sm" onclick="setJobCounter()">Set</button>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="job-counter-preview">Current next: loading…</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Next Certificate Number</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <span style="font-size:13px;color:var(--text-muted);white-space:nowrap;" id="cert-counter-prefix">WLCS2606-</span>
+                <input class="form-control" id="set-cert-counter" type="number" min="1" max="9999" placeholder="e.g. 2" style="width:120px;"/>
+                <button class="btn btn-primary btn-sm" onclick="setCertCounter()">Set</button>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="cert-counter-preview">Current next: loading…</div>
+            </div>
           </div>
         </div>
       </div>
