@@ -58,9 +58,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 #sidebar.collapsed .nav-item:hover::after{content:attr(data-label);position:absolute;left:60px;background:#1e3a8a;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;white-space:nowrap;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.4);pointer-events:none;}
 #sidebar.collapsed .nav-item .nav-badge{display:none;}
 #sidebar.collapsed .sidebar-footer{display:none;}
-#sidebar-toggle-btn{position:fixed;top:14px;left:226px;z-index:300;width:28px;height:28px;background:rgba(255,255,255,.1);border:none;border-radius:50%;cursor:pointer;color:rgba(255,255,255,.8);font-size:14px;display:flex;align-items:center;justify-content:center;transition:left .22s ease;}
-#sidebar-toggle-btn:hover{background:rgba(255,255,255,.2);color:#fff;}
-#sidebar.collapsed+*+#sidebar-toggle-btn,body.sb-collapsed #sidebar-toggle-btn{left:42px;}
 
 /* ── MAIN ── */
 #main{margin-left:240px;display:flex;flex-direction:column;min-height:100vh;min-width:0;overflow:hidden;transition:margin-left .22s ease;}
@@ -434,12 +431,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <strong id="sidebar-lab-label">Westlab</strong>
     Acc #: <span id="sidebar-accred-num">WL-2024-0001</span>
   </div>
-  <button id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">◀</button>
 </nav>
 
 <!-- ══ MAIN ══ -->
 <div id="main">
   <div id="topbar">
+    <button onclick="toggleSidebar()" title="Toggle sidebar" style="background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:8px;font-size:18px;color:var(--navy);display:flex;align-items:center;flex-shrink:0;" id="sidebar-toggle-btn">☰</button>
     <h2 id="topbar-title">Dashboard</h2>
     <div class="topbar-right">
       <!-- Notification Bell -->
@@ -7547,7 +7544,7 @@ function toggleSidebar(){
   const btn=document.getElementById('sidebar-toggle-btn');
   const collapsed=sb.classList.toggle('collapsed');
   main.classList.toggle('collapsed',collapsed);
-  if(btn) btn.textContent=collapsed?'▶':'◀';
+  // button stays as ☰ always
   // Show/hide logo
   const logoText=document.getElementById('sidebar-logo-area')?.querySelector('.sidebar-logo-text');
   const logoCollapsed=document.getElementById('sidebar-logo-collapsed');
@@ -7564,7 +7561,7 @@ function initSidebarCollapse(){
       const btn=document.getElementById('sidebar-toggle-btn');
       if(sb) sb.classList.add('collapsed');
       if(main) main.classList.add('collapsed');
-      if(btn) btn.textContent='▶';
+      // button stays as ☰ always
       const logoText=document.getElementById('sidebar-logo-area')?.querySelector('.sidebar-logo-text');
       const logoCollapsed=document.getElementById('sidebar-logo-collapsed');
       if(logoText) logoText.style.display='none';
