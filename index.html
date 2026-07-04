@@ -51,7 +51,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .sidebar-footer strong{color:rgba(255,255,255,.7);display:block;margin-bottom:2px;}
 
 /* ── MAIN ── */
-#main{margin-left:240px;display:flex;flex-direction:column;min-height:100vh;overflow:hidden;}
+#main{margin-left:240px;display:flex;flex-direction:column;min-height:100vh;min-width:0;overflow:hidden;}
 #topbar{background:var(--bg-card);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50;width:100%;box-sizing:border-box;}
 #topbar h2{font-size:17px;font-weight:700;color:var(--navy);}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
@@ -72,9 +72,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .btn-amber{background:var(--amber);color:#fff;}
 .btn-amber:hover{background:#b45309;}
 .btn-sm{padding:5px 10px;font-size:12px;}
-#content{padding:28px;flex:1;width:100%;box-sizing:border-box;overflow:hidden;}
+#content{padding:28px;flex:1;min-width:0;box-sizing:border-box;overflow:hidden;}
 .view{display:none;}
-.view.active{display:block;animation:fadeIn .2s ease;width:100%;box-sizing:border-box;overflow:hidden;}
+.view.active{display:block;animation:fadeIn .2s ease;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── STAT CARDS ── */
