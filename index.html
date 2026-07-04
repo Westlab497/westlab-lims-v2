@@ -72,9 +72,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .btn-amber{background:var(--amber);color:#fff;}
 .btn-amber:hover{background:#b45309;}
 .btn-sm{padding:5px 10px;font-size:12px;}
-#content{padding:28px;flex:1;min-width:0;box-sizing:border-box;overflow:hidden;}
+#content{padding:28px;flex:1;min-width:0;box-sizing:border-box;overflow-x:hidden;}
 .view{display:none;}
-.view.active{display:block;animation:fadeIn .2s ease;}
+.view.active{display:block;animation:fadeIn .2s ease;max-width:100%;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── STAT CARDS ── */
@@ -220,7 +220,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 .modal-footer{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
 
 /* ── MISC ── */
-.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:12px;}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:12px;width:100%;box-sizing:border-box;}
 .page-title{font-size:20px;font-weight:800;color:var(--navy);}
 .page-sub{font-size:13px;color:var(--text-muted);margin-top:2px;}
 .kpi-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
