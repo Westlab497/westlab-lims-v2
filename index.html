@@ -8,6 +8,7 @@
 <style>
 :root{
   --navy:#0f1f3d;--blue:#2563eb;--blue-light:#3b82f6;--blue-pale:#dbeafe;
+  --sidebar-bg:#18181b;--sidebar-text:#71717a;--sidebar-text-active:#fafafa;
   --slate:#64748b;--slate-light:#94a3b8;--border:#e2e8f0;--bg:#f8fafc;
   --bg-card:#fff;--text:#0f172a;--text-muted:#64748b;
   --green:#16a34a;--green-bg:#dcfce7;--amber:#d97706;--amber-bg:#fef3c7;
@@ -34,28 +35,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .login-footer{text-align:center;margin-top:20px;font-size:12px;color:var(--text-muted);}
 
 /* ── SIDEBAR ── */
-#sidebar{width:240px;min-width:240px;background:var(--navy);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:width .22s ease;}
+#sidebar{width:240px;min-width:240px;background:var(--sidebar-bg);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:width .22s ease;}
 #sidebar.collapsed{width:56px;min-width:56px;}
-.sidebar-logo{padding:24px 20px 16px;border-bottom:1px solid rgba(255,255,255,.07);overflow:hidden;white-space:nowrap;transition:padding .25s;}
-.sidebar-logo .logo-badge{display:inline-block;background:var(--blue);color:#fff;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:3px 8px;border-radius:4px;margin-bottom:8px;}
-.sidebar-logo h1{color:#fff;font-size:16px;font-weight:700;line-height:1.3;}
-.sidebar-logo p{color:var(--slate-light);font-size:11px;margin-top:2px;}
+.sidebar-logo{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.06);overflow:hidden;white-space:nowrap;transition:padding .25s;}
+.sidebar-logo .logo-badge{display:none;}
+.sidebar-logo h1{color:var(--sidebar-text-active);font-size:14px;font-weight:500;line-height:1.3;letter-spacing:-.01em;}
+.sidebar-logo p{color:#52525b;font-size:10px;margin-top:2px;}
 .sidebar-nav{flex:1;padding:16px 12px;overflow-y:auto;overflow-x:hidden;}
-.nav-section-label{color:rgba(255,255,255,.3);font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:12px 8px 6px;white-space:nowrap;overflow:hidden;}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.6);cursor:pointer;transition:all .15s;margin-bottom:2px;font-size:13.5px;font-weight:500;border:none;background:none;width:100%;text-align:left;white-space:nowrap;overflow:hidden;}
-.nav-item:hover{background:rgba(255,255,255,.07);color:#fff;}
-.nav-item.active{background:rgba(37,99,235,.3);color:#fff;}
+.nav-section-label{color:#3f3f46;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;padding:14px 10px 6px;white-space:nowrap;overflow:hidden;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:var(--sidebar-text);cursor:pointer;transition:all .15s;margin-bottom:1px;font-size:13px;font-weight:400;border:none;background:none;width:100%;text-align:left;white-space:nowrap;overflow:hidden;}
+.nav-item:hover{background:rgba(255,255,255,.05);color:var(--sidebar-text-active);}
+.nav-item.active{background:var(--blue);color:#fff;font-weight:500;}
 .nav-item .nav-icon{font-size:16px;width:20px;min-width:20px;text-align:center;}
 .nav-item .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;}
 .nav-item.hidden-nav{display:none;}
-.sidebar-footer{padding:14px 20px;border-top:1px solid rgba(255,255,255,.07);color:rgba(255,255,255,.4);font-size:11px;overflow:hidden;white-space:nowrap;}
-.sidebar-footer strong{color:rgba(255,255,255,.7);display:block;margin-bottom:2px;}
+.sidebar-footer{padding:12px 14px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:8px;overflow:hidden;white-space:nowrap;}
+.sidebar-footer .footer-avatar{width:28px;height:28px;background:var(--blue);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;}
+.sidebar-footer .footer-info{overflow:hidden;}
+.sidebar-footer .footer-name{font-size:11px;color:var(--sidebar-text-active);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sidebar-footer .footer-role{font-size:10px;color:#52525b;white-space:nowrap;}
 #sidebar.collapsed .sidebar-logo-text{display:none;}
 #sidebar.collapsed .sidebar-nav{padding:12px 6px;}
 #sidebar.collapsed .nav-section-label{display:none;}
 #sidebar.collapsed .nav-item{padding:9px;justify-content:center;position:relative;}
 #sidebar.collapsed .nav-item .nav-label{display:none;}
-#sidebar.collapsed .nav-item:hover::after{content:attr(data-label);position:absolute;left:60px;background:#1e3a8a;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;white-space:nowrap;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.4);pointer-events:none;}
+#sidebar.collapsed .nav-item:hover::after{content:attr(data-label);position:absolute;left:60px;background:var(--sidebar-bg);color:var(--sidebar-text-active);padding:6px 12px;border-radius:6px;font-size:12px;white-space:nowrap;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;border:1px solid rgba(255,255,255,.08);}
 #sidebar.collapsed .nav-item .nav-badge{display:none;}
 #sidebar.collapsed .sidebar-footer{display:none;}
 
@@ -403,33 +407,36 @@ textarea.form-control{resize:vertical;min-height:70px;}
   </div>
   <div class="sidebar-nav">
     <div class="nav-section-label">Overview</div>
-    <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</button></span></button>
+    <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></button>
 
     <div class="nav-section-label">Modules</div>
-    <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon">🔧</span><span class="nav-label">Equipment &amp; Calibration</button></span></button>
-    <button class="nav-item" id="nav-completed" onclick="showView('completed')" data-label="Completed Jobs"><span class="nav-icon">✅</span><span class="nav-label">Completed Jobs</button></span></button>
-    <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon">🏢</span><span class="nav-label">Customer Database</button></span></button>
-    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon">🏛️</span><span class="nav-label">Lab Reference Equipment</button></span></button>
-    <button class="nav-item" id="nav-calendar" onclick="showView('calendar')" data-label="Schedule Calendar"><span class="nav-icon">📅</span><span class="nav-label">Schedule Calendar</button></span></button>
-    <button class="nav-item" id="nav-claims" onclick="showView('claims')" data-label="Claims"><span class="nav-icon">🧾</span><span class="nav-label">Claims</button></span></button>
-    <button class="nav-item" id="nav-leave" onclick="showView('leave')" data-label="Leave"><span class="nav-icon">🌴</span><span class="nav-label">Leave</button></span></button>
-    <button class="nav-item" id="nav-attendance" onclick="showView('attendance')" data-label="Attendance"><span class="nav-icon">⏰</span><span class="nav-label">Attendance</button></span></button>
+    <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon">🔧</span><span class="nav-label">Equipment &amp; Calibration</span></button>
+    <button class="nav-item" id="nav-completed" onclick="showView('completed')" data-label="Completed Jobs"><span class="nav-icon">✅</span><span class="nav-label">Completed Jobs</span></button>
+    <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon">🏢</span><span class="nav-label">Customer Database</span></button>
+    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon">🏛️</span><span class="nav-label">Lab Reference Equipment</span></button>
+    <button class="nav-item" id="nav-calendar" onclick="showView('calendar')" data-label="Schedule Calendar"><span class="nav-icon">📅</span><span class="nav-label">Schedule Calendar</span></button>
+    <button class="nav-item" id="nav-claims" onclick="showView('claims')" data-label="Claims"><span class="nav-icon">🧾</span><span class="nav-label">Claims</span></button>
+    <button class="nav-item" id="nav-leave" onclick="showView('leave')" data-label="Leave"><span class="nav-icon">🌴</span><span class="nav-label">Leave</span></button>
+    <button class="nav-item" id="nav-attendance" onclick="showView('attendance')" data-label="Attendance"><span class="nav-icon">⏰</span><span class="nav-label">Attendance</span></button>
     <button class="nav-item hidden-nav" id="nav-my-jobs" onclick="showView('my-jobs')"><span class="nav-icon">📋</span><span class="nav-text">My Jobs <span class="nav-badge" id="my-jobs-badge" style="display:none;">0</span></span></button>
     <button class="nav-item hidden-nav" id="nav-approval" onclick="showView('approval')"><span class="nav-icon">✅</span><span class="nav-text">Approval Queue <span class="nav-badge" id="approval-badge" style="display:none;">0</span></span></button>
-    <button class="nav-item" id="nav-tests" onclick="showView('tests')" data-label="Test Requests &amp; Results"><span class="nav-icon">🧪</span><span class="nav-label">Test Requests &amp; Results</button></span></button>
-    <button class="nav-item" id="nav-documents" onclick="showView('documents')" data-label="Document Control"><span class="nav-icon">📁</span><span class="nav-label">Document Control</button></span></button>
-    <button class="nav-item" id="nav-capa" onclick="showView('capa')" data-label="Nonconformance &amp; CAPA"><span class="nav-icon">⚠️</span><span class="nav-label">Nonconformance &amp; CAPA</button></span></button>
+    <button class="nav-item" id="nav-tests" onclick="showView('tests')" data-label="Test Requests &amp; Results"><span class="nav-icon">🧪</span><span class="nav-label">Test Requests &amp; Results</span></button>
+    <button class="nav-item" id="nav-documents" onclick="showView('documents')" data-label="Document Control"><span class="nav-icon">📁</span><span class="nav-label">Document Control</span></button>
+    <button class="nav-item" id="nav-capa" onclick="showView('capa')" data-label="Nonconformance &amp; CAPA"><span class="nav-icon">⚠️</span><span class="nav-label">Nonconformance &amp; CAPA</span></button>
 
     <div class="nav-section-label" id="nav-admin-section">Administration</div>
-    <button class="nav-item" id="nav-personnel" onclick="showView('personnel')" data-label="Personnel"><span class="nav-icon">👥</span><span class="nav-label">Personnel</button></span></button>
-    <button class="nav-item" id="nav-deleted" onclick="showView('deleted')" data-label="Deleted Jobs"><span class="nav-icon">🗑️</span><span class="nav-label">Deleted Jobs</button></span></button>
-    <button class="nav-item" id="nav-reports" onclick="showView('reports')" data-label="Reports &amp; Audit Logs"><span class="nav-icon">📈</span><span class="nav-label">Reports &amp; Audit Logs</button></span></button>
-    <button class="nav-item" id="nav-settings" onclick="showView('settings')" data-label="Settings"><span class="nav-icon">⚙️</span><span class="nav-label">Settings</button></span></button>
-    <button class="nav-item" onclick="doLogout()" style="margin-top:8px;color:rgba(255,100,100,.8);" data-label="Logout"><span class="nav-icon">🚪</span><span class="nav-label">Logout</button></span></button>
+    <button class="nav-item" id="nav-personnel" onclick="showView('personnel')" data-label="Personnel"><span class="nav-icon">👥</span><span class="nav-label">Personnel</span></button>
+    <button class="nav-item" id="nav-deleted" onclick="showView('deleted')" data-label="Deleted Jobs"><span class="nav-icon">🗑️</span><span class="nav-label">Deleted Jobs</span></button>
+    <button class="nav-item" id="nav-reports" onclick="showView('reports')" data-label="Reports &amp; Audit Logs"><span class="nav-icon">📈</span><span class="nav-label">Reports &amp; Audit Logs</span></button>
+    <button class="nav-item" id="nav-settings" onclick="showView('settings')" data-label="Settings"><span class="nav-icon">⚙️</span><span class="nav-label">Settings</span></button>
+    <button class="nav-item" onclick="doLogout()" style="margin-top:8px;color:rgba(255,100,100,.8);" data-label="Logout"><span class="nav-icon">🚪</span><span class="nav-label">Logout</span></button>
   </div>
   <div class="sidebar-footer">
-    <strong id="sidebar-lab-label">Westlab</strong>
-    Acc #: <span id="sidebar-accred-num">WL-2024-0001</span>
+    <div class="footer-avatar" id="sidebar-footer-avatar">JW</div>
+    <div class="footer-info">
+      <div class="footer-name" id="sidebar-footer-name">Jay</div>
+      <div class="footer-role" id="sidebar-footer-role">Admin</div>
+    </div>
   </div>
 </nav>
 
@@ -3034,6 +3041,10 @@ function setCurrentUser(username){
   if(av){av.textContent=u.name.slice(0,2).toUpperCase();av.className='avatar '+(u.avatarClass||'');}
   const tu=el('topbar-username');if(tu)tu.textContent=u.name;
   const tr=el('topbar-role');if(tr)tr.textContent=u.display;
+  // Sidebar footer user block
+  const sfa=el('sidebar-footer-avatar');if(sfa)sfa.textContent=u.name.slice(0,2).toUpperCase();
+  const sfn=el('sidebar-footer-name');if(sfn)sfn.textContent=u.name;
+  const sfr=el('sidebar-footer-role');if(sfr)sfr.textContent=u.display;
   try{localStorage.setItem('wl_sess',JSON.stringify({user:username,time:Date.now()}));}catch(e){}
   applyRoleUI();
   applySettings(_settings);
