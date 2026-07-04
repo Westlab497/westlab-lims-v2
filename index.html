@@ -51,7 +51,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .sidebar-footer strong{color:rgba(255,255,255,.7);display:block;margin-bottom:2px;}
 
 /* ── MAIN ── */
-#main{margin-left:240px;display:flex;flex-direction:column;min-height:100vh;}
+#main{margin-left:240px;display:flex;flex-direction:column;min-height:100vh;overflow:hidden;}
 #topbar{background:var(--bg-card);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50;width:100%;box-sizing:border-box;}
 #topbar h2{font-size:17px;font-weight:700;color:var(--navy);}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
@@ -72,11 +72,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .btn-amber{background:var(--amber);color:#fff;}
 .btn-amber:hover{background:#b45309;}
 .btn-sm{padding:5px 10px;font-size:12px;}
-#content{padding:28px;flex:1;width:100%;box-sizing:border-box;}
-
-/* ── VIEWS ── */
+#content{padding:28px;flex:1;width:100%;box-sizing:border-box;overflow:hidden;}
 .view{display:none;}
-.view.active{display:block;animation:fadeIn .2s ease;min-width:0;max-width:100%;}
+.view.active{display:block;animation:fadeIn .2s ease;width:100%;box-sizing:border-box;overflow:hidden;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── STAT CARDS ── */
@@ -96,7 +94,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 /* ── LAYOUT ── */
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
 .grid-3{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:20px;}
-.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;width:100%;min-width:0;box-sizing:border-box;}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;width:100%;box-sizing:border-box;}
 .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .card-title{font-size:14px;font-weight:700;color:var(--navy);}
 .card-body{padding:16px 20px;}
