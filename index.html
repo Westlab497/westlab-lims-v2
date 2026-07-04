@@ -17,7 +17,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 *,*::before,*::after{box-sizing:border-box;}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:block;min-height:100vh;font-size:14px;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:block;min-height:100vh;font-size:14px;width:100%;}
 
 /* ── LOGIN ── */
 #login-screen{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0f1f3d,#1a3260,#0f1f3d);display:flex;align-items:center;justify-content:center;}
@@ -49,7 +49,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);dis
 .sidebar-footer strong{color:rgba(255,255,255,.7);display:block;margin-bottom:2px;}
 
 /* ── MAIN ── */
-#main{margin-left:240px;flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0;width:calc(100% - 240px);}
+#main{margin-left:240px;flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0;}
 #topbar{background:var(--bg-card);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50;width:100%;box-sizing:border-box;}
 #topbar h2{font-size:17px;font-weight:700;color:var(--navy);}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
@@ -421,7 +421,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </nav>
 
 <!-- ══ MAIN ══ -->
-<div id="main" style="margin-left:240px;width:calc(100% - 240px);">
+<div id="main" style="margin-left:240px;flex:1;">
   <div id="topbar">
     <h2 id="topbar-title">Dashboard</h2>
     <div class="topbar-right">
@@ -3023,7 +3023,7 @@ function setCurrentUser(username){
   document.getElementById('login-error').style.display='none';
   // Force correct sidebar offset
   const mainEl=document.getElementById('main');
-  if(mainEl){mainEl.style.marginLeft='240px';mainEl.style.width='calc(100% - 240px)';}
+  if(mainEl){mainEl.style.marginLeft='240px';}
   const u=USERS[username]||{name:username,display:'User',avatarClass:''};
   const av=el('topbar-avatar');
   if(av){av.textContent=u.name.slice(0,2).toUpperCase();av.className='avatar '+(u.avatarClass||'');}
@@ -3185,7 +3185,7 @@ const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',complete
 function showView(name){
   // Force sidebar offset - belt and braces
   const mainEl=document.getElementById('main');
-  if(mainEl){mainEl.style.marginLeft='240px';mainEl.style.width='calc(100% - 240px)';}
+  if(mainEl){mainEl.style.marginLeft='240px';}
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const v=document.getElementById('view-'+name);
