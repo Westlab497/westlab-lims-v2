@@ -34,7 +34,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .login-footer{text-align:center;margin-top:20px;font-size:12px;color:var(--text-muted);}
 
 /* ── SIDEBAR ── */
-#sidebar{width:240px;min-width:240px;background:var(--navy);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;}
+#sidebar{width:240px;min-width:240px;background:var(--navy);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:width .22s ease;}
+#sidebar.collapsed{width:56px;min-width:56px;}
 .sidebar-logo{padding:24px 20px 16px;border-bottom:1px solid rgba(255,255,255,.07);overflow:hidden;white-space:nowrap;transition:padding .25s;}
 .sidebar-logo .logo-badge{display:inline-block;background:var(--blue);color:#fff;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:3px 8px;border-radius:4px;margin-bottom:8px;}
 .sidebar-logo h1{color:#fff;font-size:16px;font-weight:700;line-height:1.3;}
@@ -49,9 +50,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .nav-item.hidden-nav{display:none;}
 .sidebar-footer{padding:14px 20px;border-top:1px solid rgba(255,255,255,.07);color:rgba(255,255,255,.4);font-size:11px;overflow:hidden;white-space:nowrap;}
 .sidebar-footer strong{color:rgba(255,255,255,.7);display:block;margin-bottom:2px;}
+#sidebar.collapsed .sidebar-logo-text{display:none;}
+#sidebar.collapsed .sidebar-nav{padding:12px 6px;}
+#sidebar.collapsed .nav-section-label{display:none;}
+#sidebar.collapsed .nav-item{padding:9px;justify-content:center;position:relative;}
+#sidebar.collapsed .nav-item .nav-label{display:none;}
+#sidebar.collapsed .nav-item:hover::after{content:attr(data-label);position:absolute;left:60px;background:#1e3a8a;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;white-space:nowrap;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.4);pointer-events:none;}
+#sidebar.collapsed .nav-item .nav-badge{display:none;}
+#sidebar.collapsed .sidebar-footer{display:none;}
+#sidebar-toggle-btn{position:fixed;top:14px;left:226px;z-index:300;width:28px;height:28px;background:rgba(255,255,255,.1);border:none;border-radius:50%;cursor:pointer;color:rgba(255,255,255,.8);font-size:14px;display:flex;align-items:center;justify-content:center;transition:left .22s ease;}
+#sidebar-toggle-btn:hover{background:rgba(255,255,255,.2);color:#fff;}
+#sidebar.collapsed+*+#sidebar-toggle-btn,body.sb-collapsed #sidebar-toggle-btn{left:42px;}
 
 /* ── MAIN ── */
-#main{margin-left:240px;display:flex;flex-direction:column;min-height:100vh;min-width:0;overflow:hidden;}
+#main{margin-left:240px;display:flex;flex-direction:column;min-height:100vh;min-width:0;overflow:hidden;transition:margin-left .22s ease;}
+#main.collapsed{margin-left:56px;}
 #topbar{background:var(--bg-card);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50;width:100%;box-sizing:border-box;}
 #topbar h2{font-size:17px;font-weight:700;color:var(--navy);}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
@@ -383,41 +396,45 @@ textarea.form-control{resize:vertical;min-height:70px;}
 <!-- ══ SIDEBAR ══ -->
 <nav id="sidebar">
   <div class="sidebar-logo" id="sidebar-logo-area" onclick="if(isAdmin())showView('settings')" style="cursor:pointer;" title="Click to edit company settings">
-    <div class="logo-badge">ISO 17025</div>
-    <h1 id="sidebar-lab-name">Westlab</h1>
-    <p>Calibration &amp; Testing System</p>
-    <div id="sidebar-edit-hint" style="display:none;font-size:10px;color:rgba(255,255,255,.4);margin-top:4px;">✏️ Click to edit</div>
+    <div class="sidebar-logo-text">
+      <div class="logo-badge">ISO 17025</div>
+      <h1 id="sidebar-lab-name">Westlab</h1>
+      <p>Calibration &amp; Testing System</p>
+      <div id="sidebar-edit-hint" style="display:none;font-size:10px;color:rgba(255,255,255,.4);margin-top:4px;">✏️ Click to edit</div>
+    </div>
+    <div style="font-size:24px;display:none;" id="sidebar-logo-collapsed">🔬</div>
   </div>
   <div class="sidebar-nav">
     <div class="nav-section-label">Overview</div>
-    <button class="nav-item active" onclick="showView('dashboard')"><span class="nav-icon">📊</span>Dashboard</button>
+    <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</button></span></button>
 
     <div class="nav-section-label">Modules</div>
-    <button class="nav-item" id="nav-equipment" onclick="showView('equipment')"><span class="nav-icon">🔧</span>Equipment &amp; Calibration</button>
-    <button class="nav-item" id="nav-completed" onclick="showView('completed')"><span class="nav-icon">✅</span>Completed Jobs</button>
-    <button class="nav-item" id="nav-customers" onclick="showView('customers')"><span class="nav-icon">🏢</span>Customer Database</button>
-    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')"><span class="nav-icon">🏛️</span>Lab Reference Equipment</button>
-    <button class="nav-item" id="nav-calendar" onclick="showView('calendar')"><span class="nav-icon">📅</span>Schedule Calendar</button>
-    <button class="nav-item" id="nav-claims" onclick="showView('claims')"><span class="nav-icon">🧾</span>Claims</button>
-    <button class="nav-item" id="nav-leave" onclick="showView('leave')"><span class="nav-icon">🌴</span>Leave</button>
-    <button class="nav-item" id="nav-attendance" onclick="showView('attendance')"><span class="nav-icon">⏰</span>Attendance</button>
+    <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon">🔧</span><span class="nav-label">Equipment &amp; Calibration</button></span></button>
+    <button class="nav-item" id="nav-completed" onclick="showView('completed')" data-label="Completed Jobs"><span class="nav-icon">✅</span><span class="nav-label">Completed Jobs</button></span></button>
+    <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon">🏢</span><span class="nav-label">Customer Database</button></span></button>
+    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon">🏛️</span><span class="nav-label">Lab Reference Equipment</button></span></button>
+    <button class="nav-item" id="nav-calendar" onclick="showView('calendar')" data-label="Schedule Calendar"><span class="nav-icon">📅</span><span class="nav-label">Schedule Calendar</button></span></button>
+    <button class="nav-item" id="nav-claims" onclick="showView('claims')" data-label="Claims"><span class="nav-icon">🧾</span><span class="nav-label">Claims</button></span></button>
+    <button class="nav-item" id="nav-leave" onclick="showView('leave')" data-label="Leave"><span class="nav-icon">🌴</span><span class="nav-label">Leave</button></span></button>
+    <button class="nav-item" id="nav-attendance" onclick="showView('attendance')" data-label="Attendance"><span class="nav-icon">⏰</span><span class="nav-label">Attendance</button></span></button>
     <button class="nav-item hidden-nav" id="nav-my-jobs" onclick="showView('my-jobs')"><span class="nav-icon">📋</span><span class="nav-text">My Jobs <span class="nav-badge" id="my-jobs-badge" style="display:none;">0</span></span></button>
     <button class="nav-item hidden-nav" id="nav-approval" onclick="showView('approval')"><span class="nav-icon">✅</span><span class="nav-text">Approval Queue <span class="nav-badge" id="approval-badge" style="display:none;">0</span></span></button>
-    <button class="nav-item" id="nav-tests" onclick="showView('tests')"><span class="nav-icon">🧪</span>Test Requests &amp; Results</button>
-    <button class="nav-item" id="nav-documents" onclick="showView('documents')"><span class="nav-icon">📁</span>Document Control</button>
-    <button class="nav-item" id="nav-capa" onclick="showView('capa')"><span class="nav-icon">⚠️</span>Nonconformance &amp; CAPA</button>
+    <button class="nav-item" id="nav-tests" onclick="showView('tests')" data-label="Test Requests &amp; Results"><span class="nav-icon">🧪</span><span class="nav-label">Test Requests &amp; Results</button></span></button>
+    <button class="nav-item" id="nav-documents" onclick="showView('documents')" data-label="Document Control"><span class="nav-icon">📁</span><span class="nav-label">Document Control</button></span></button>
+    <button class="nav-item" id="nav-capa" onclick="showView('capa')" data-label="Nonconformance &amp; CAPA"><span class="nav-icon">⚠️</span><span class="nav-label">Nonconformance &amp; CAPA</button></span></button>
 
     <div class="nav-section-label" id="nav-admin-section">Administration</div>
-    <button class="nav-item" id="nav-personnel" onclick="showView('personnel')"><span class="nav-icon">👥</span>Personnel</button>
-    <button class="nav-item" id="nav-deleted" onclick="showView('deleted')"><span class="nav-icon">🗑️</span>Deleted Jobs</button>
-    <button class="nav-item" id="nav-reports" onclick="showView('reports')"><span class="nav-icon">📈</span>Reports &amp; Audit Logs</button>
-    <button class="nav-item" id="nav-settings" onclick="showView('settings')"><span class="nav-icon">⚙️</span>Settings</button>
-    <button class="nav-item" onclick="doLogout()" style="margin-top:8px;color:rgba(255,100,100,.8);"><span class="nav-icon">🚪</span>Logout</button>
+    <button class="nav-item" id="nav-personnel" onclick="showView('personnel')" data-label="Personnel"><span class="nav-icon">👥</span><span class="nav-label">Personnel</button></span></button>
+    <button class="nav-item" id="nav-deleted" onclick="showView('deleted')" data-label="Deleted Jobs"><span class="nav-icon">🗑️</span><span class="nav-label">Deleted Jobs</button></span></button>
+    <button class="nav-item" id="nav-reports" onclick="showView('reports')" data-label="Reports &amp; Audit Logs"><span class="nav-icon">📈</span><span class="nav-label">Reports &amp; Audit Logs</button></span></button>
+    <button class="nav-item" id="nav-settings" onclick="showView('settings')" data-label="Settings"><span class="nav-icon">⚙️</span><span class="nav-label">Settings</button></span></button>
+    <button class="nav-item" onclick="doLogout()" style="margin-top:8px;color:rgba(255,100,100,.8);" data-label="Logout"><span class="nav-icon">🚪</span><span class="nav-label">Logout</button></span></button>
   </div>
   <div class="sidebar-footer">
     <strong id="sidebar-lab-label">Westlab</strong>
     Acc #: <span id="sidebar-accred-num">WL-2024-0001</span>
   </div>
+  <button id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">◀</button>
 </nav>
 
 <!-- ══ MAIN ══ -->
@@ -3076,6 +3093,7 @@ function doLogout(){
 
 // ── STARTUP ──
 (async function(){
+  initSidebarCollapse();
   // Restore sidebar state immediately before anything renders
   // Show loading overlay
   showLoadingOverlay(true);
@@ -7522,8 +7540,41 @@ function toggleSidebar(){
   ov.classList.toggle('show');
   hb.classList.toggle('open');
 }
+// ── SIDEBAR COLLAPSE ──
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const main=document.getElementById('main');
+  const btn=document.getElementById('sidebar-toggle-btn');
+  const collapsed=sb.classList.toggle('collapsed');
+  main.classList.toggle('collapsed',collapsed);
+  if(btn) btn.textContent=collapsed?'▶':'◀';
+  // Show/hide logo
+  const logoText=document.getElementById('sidebar-logo-area')?.querySelector('.sidebar-logo-text');
+  const logoCollapsed=document.getElementById('sidebar-logo-collapsed');
+  if(logoText) logoText.style.display=collapsed?'none':'';
+  if(logoCollapsed) logoCollapsed.style.display=collapsed?'block':'none';
+  try{localStorage.setItem('sb_collapsed',collapsed?'1':'0');}catch(e){}
+}
+
+function initSidebarCollapse(){
+  try{
+    if(localStorage.getItem('sb_collapsed')==='1'){
+      const sb=document.getElementById('sidebar');
+      const main=document.getElementById('main');
+      const btn=document.getElementById('sidebar-toggle-btn');
+      if(sb) sb.classList.add('collapsed');
+      if(main) main.classList.add('collapsed');
+      if(btn) btn.textContent='▶';
+      const logoText=document.getElementById('sidebar-logo-area')?.querySelector('.sidebar-logo-text');
+      const logoCollapsed=document.getElementById('sidebar-logo-collapsed');
+      if(logoText) logoText.style.display='none';
+      if(logoCollapsed) logoCollapsed.style.display='block';
+    }
+  }catch(e){}
+}
+
 function closeSidebar(){
-  // Mobile sidebar close - elements removed, kept for compatibility
+  // Mobile sidebar close - kept for compatibility
 }
 
 // ── BOTTOM NAV SYNC ──
@@ -9124,9 +9175,12 @@ async function permanentlyDeleteJob(jobNo){
 
 // ── PERSONNEL MANAGEMENT ──
 const ROLE_DISPLAY={
-  Admin:{label:'Administrator',access:'Full access — create jobs, assign, manage all, delete, settings',badge:'badge-green'},
-  Signatory:{label:'Approved Signatory',access:'Assign jobs, view all jobs (no amend), perform calibration, approve/reject',badge:'badge-purple'},
-  Engineer:{label:'Engineer / Technician',access:'View all jobs (no amend), perform calibration only',badge:'badge-blue'}
+  Admin:{label:'Admin',access:'Full access — all modules including Settings and Personnel',badge:'badge-green'},
+  Manager:{label:'Manager',access:'Approve certs, assign jobs, view reports, approve leave/claims/OT, view pricing',badge:'badge-purple'},
+  Engineer:{label:'Engineer',access:'My Jobs, perform calibration, clock in/out, own leave and claims',badge:'badge-blue'},
+  Sales:{label:'Sales',access:'Create jobs, view all jobs, customer database, calendar',badge:'badge-teal'},
+  HR:{label:'HR',access:'Leave, claims, and attendance only — no access to jobs or calibration',badge:'badge-amber'},
+  Signatory:{label:'Manager',access:'Approve certs, assign jobs, view reports',badge:'badge-purple'} // legacy
 };
 
 function renderPersonnel(){
