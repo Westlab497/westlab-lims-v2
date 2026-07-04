@@ -313,96 +313,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
 }
 
 /* ── MOBILE (768px) ── */
-@media(max-width:768px){
-  /* Sidebar becomes a slide-in drawer */
-  #sidebar{
-    transform:translateX(-100%);
-    transition:transform .25s ease;
-    z-index:200;
-    width:280px;
-  }
-  #sidebar.mobile-open{transform:translateX(0);}
-
-  /* Main takes full width */
-  #main{margin-left:0;}
-
-  /* Topbar */
-  #topbar{padding:0 14px;gap:10px;}
-  #topbar h2{font-size:15px;}
-  #hamburger{display:flex;}
-  .topbar-search{display:none;}
-  .topbar-user-info{display:none;}
-
-  /* Content padding */
-  #content{padding:14px;}
-
-  /* Stats — 2 columns on mobile */
-  .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
-  .stat-card{padding:14px;}
-  .stat-value{font-size:24px;}
-
-  /* All grids stack */
-  .grid-2,.grid-3{grid-template-columns:1fr;gap:12px;}
-
-  /* All form rows stack */
-  .form-row,.form-row-3{grid-template-columns:1fr;gap:0;}
-
-  /* KPI row wraps tighter */
-  .kpi-row{gap:8px;}
-  .kpi-mini{padding:10px 12px;min-width:80px;}
-  .kpi-mini .kpi-val{font-size:18px;}
-
-  /* Page header stacks */
-  .page-header{flex-direction:column;align-items:flex-start;gap:10px;}
-  .page-header > div:last-child{width:100%;}
-  .page-header .btn{width:100%;justify-content:center;}
-
-  /* Tables — horizontal scroll with sticky first col */
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  table{min-width:560px;}
-  th,td{padding:9px 10px;font-size:12px;}
-
-  /* Cards */
-  .card-header{flex-direction:column;align-items:flex-start;gap:8px;}
-  .card-header > div{width:100%;}
-  .card-header .filter-select,.card-header input{width:100% !important;}
-
-  /* Modals — full screen on mobile */
-  .modal-overlay{padding:0;align-items:flex-end;}
-  .modal,.modal-lg,.modal-sm{
-    width:100%;max-width:100%;
-    border-radius:16px 16px 0 0;
-    margin:0;
-    max-height:92vh;
-  }
-  .modal-body{max-height:65vh;}
-  .modal-footer{flex-direction:column-reverse;}
-  .modal-footer .btn{width:100%;justify-content:center;}
-
-  /* Workflow steps shrink */
-  .workflow-steps{padding:12px;gap:0;overflow-x:auto;}
-  .wf-label{font-size:9px;}
-  .wf-dot{width:24px;height:24px;font-size:11px;}
-
-  /* Approval cards */
-  .approval-card-header{flex-direction:column;align-items:flex-start;gap:6px;}
-  .approval-card-actions{flex-direction:column;}
-  .approval-card-actions .btn{width:100%;justify-content:center;}
-
-  /* Photo grid */
-  .photo-preview-grid{grid-template-columns:repeat(3,1fr);}
-
-  /* Bottom nav bar for mobile */
-  #bottom-nav{
-    display:flex;
-    position:fixed;bottom:0;left:0;right:0;
-    background:var(--bg-card);
-    border-top:1px solid var(--border);
-    z-index:150;
-    box-shadow:0 -2px 10px rgba(0,0,0,.07);
-  }
-  #main{padding-bottom:64px;}
-}
 
 /* ── BOTTOM NAV (mobile only) ── */
 #bottom-nav{display:none;}
@@ -424,113 +334,45 @@ textarea.form-control{resize:vertical;min-height:70px;}
 /* ═══════════════════════════════════════
    MOBILE RESPONSIVE — screens < 768px
 ═══════════════════════════════════════ */
-@media (max-width: 768px) {
-  /* Hide desktop sidebar */
-  #sidebar { display:none !important; }
-
-  /* Main takes full width */
-  #main { margin-left:0 !important; padding-bottom:70px; }
-
-  /* Mobile top bar */
-  #mobile-topbar {
-    display:flex !important;
-    position:fixed;top:0;left:0;right:0;z-index:200;
-    background:var(--navy);color:#fff;
-    padding:10px 16px;align-items:center;gap:10px;
-    height:52px;box-shadow:0 2px 8px rgba(0,0,0,.2);
-  }
-  #mobile-topbar-title { flex:1;font-size:15px;font-weight:700;color:#fff; }
-  #mobile-topbar-user { font-size:11px;color:rgba(255,255,255,.6); }
-
-  /* Offset content below topbar */
-  .view { padding-top:62px !important; }
-
-  /* Mobile bottom nav */
-  #mobile-bottom-nav {
-    display:flex !important;
-    position:fixed;bottom:0;left:0;right:0;z-index:200;
-    background:var(--navy);border-top:1px solid rgba(255,255,255,.1);
-    height:60px;align-items:stretch;justify-content:space-around;
-  }
-  .mob-nav-btn {
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    flex:1;gap:2px;border:none;background:none;color:rgba(255,255,255,.5);
-    font-size:10px;cursor:pointer;padding:6px 2px;transition:color .15s;
-  }
-  .mob-nav-btn .mob-icon { font-size:20px;line-height:1; }
-  .mob-nav-btn.active,.mob-nav-btn:hover { color:#fff; }
-  .mob-nav-btn.active { border-top:2px solid var(--blue); }
-
-  /* Mobile more drawer */
-  #mobile-more-drawer {
-    display:none;position:fixed;bottom:60px;left:0;right:0;z-index:199;
-    background:var(--navy);border-top:1px solid rgba(255,255,255,.1);
-    padding:8px 0;
-  }
-  #mobile-more-drawer.open { display:block; }
-  .mob-drawer-item {
-    display:flex;align-items:center;gap:12px;padding:12px 20px;
-    color:rgba(255,255,255,.7);font-size:14px;cursor:pointer;
-    border:none;background:none;width:100%;text-align:left;
-  }
-  .mob-drawer-item:hover,.mob-drawer-item.active { color:#fff;background:rgba(255,255,255,.07); }
-  .mob-drawer-item .mob-d-icon { font-size:18px;width:24px;text-align:center; }
-
-  /* Page header stacks on mobile */
-  .page-header { flex-direction:column;align-items:flex-start;gap:10px; }
-  .page-header > div:last-child { width:100%; }
-  .page-header > div:last-child .btn { width:100%; }
-
-  /* Tables become scrollable */
-  .table-wrap, table { display:block;overflow-x:auto;-webkit-overflow-scrolling:touch; }
-
-  /* Cards full width */
-  .grid-2 { grid-template-columns:1fr !important; }
-
-  /* Modal full screen on mobile */
-  .modal-overlay { align-items:flex-end !important; padding:0 !important; }
-  .modal {
-    width:100vw !important;max-width:100vw !important;
-    border-radius:16px 16px 0 0 !important;
-    max-height:90vh;overflow-y:auto;
-  }
-
-  /* Form rows stack */
-  .form-row, .form-row-3 { flex-direction:column !important; }
-
-  /* Bigger touch targets */
-  .btn { min-height:40px;font-size:14px; }
-  .btn-sm { min-height:34px; }
-  .form-control { font-size:16px !important; } /* prevents iOS zoom */
-
-  /* Stat cards stack */
-  .kpi-row { grid-template-columns:repeat(2,1fr) !important; }
-
-  /* Dashboard welcome */
-  .dashboard-welcome { font-size:18px !important; }
-
-  /* Banners adjust */
-  [id$="-alert-banner"], [id$="checkin-alert"] {
-    left:0 !important;top:52px !important;
-  }
-
-  /* Approval cards */
-  .approval-card { margin:8px !important; }
-
-  /* Leave/claims tables - hide less important columns */
-  .hide-mobile { display:none !important; }
-
-  /* Job cards in equipment table */
-  #equipment-table-body tr td:nth-child(5),
-  #equipment-table-body tr td:nth-child(6) { display:none; }
-}
 
 /* Show mobile elements only on mobile */
 #mobile-topbar { display:none; }
 #mobile-bottom-nav { display:none; }
 #mobile-more-drawer { display:none; }
 
-<!-- Instant loading screen — shows before any JS runs -->
+/* ── MOBILE (max-width: 768px) ── */
+@media(max-width:768px){
+  #sidebar{display:none !important;}
+  #main{margin-left:0 !important;padding-bottom:70px;}
+  #mobile-topbar{display:flex !important;position:fixed;top:0;left:0;right:0;z-index:200;background:var(--navy);color:#fff;padding:10px 16px;align-items:center;gap:10px;height:52px;box-shadow:0 2px 8px rgba(0,0,0,.2);}
+  #mobile-topbar-title{flex:1;font-size:15px;font-weight:700;color:#fff;}
+  #mobile-topbar-user{font-size:11px;color:rgba(255,255,255,.6);}
+  #mobile-bottom-nav{display:flex !important;position:fixed;bottom:0;left:0;right:0;z-index:200;background:var(--navy);border-top:1px solid rgba(255,255,255,.1);height:60px;align-items:stretch;justify-content:space-around;}
+  .view{padding-top:62px !important;}
+  #content{padding:14px;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
+  .stat-card{padding:14px;}
+  .stat-value{font-size:24px;}
+  .grid-2,.grid-3{grid-template-columns:1fr !important;gap:12px;}
+  .form-row,.form-row-3{grid-template-columns:1fr !important;gap:0;}
+  .page-header{flex-direction:column;align-items:flex-start;gap:10px;}
+  .page-header > div:last-child{width:100%;}
+  .page-header .btn{width:100%;justify-content:center;}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  table{min-width:560px;}
+  th,td{padding:9px 10px;font-size:12px;}
+  .modal-overlay{padding:0;align-items:flex-end;}
+  .modal,.modal-lg,.modal-sm{width:100%;max-width:100%;border-radius:16px 16px 0 0;margin:0;max-height:92vh;}
+  .modal-body{max-height:65vh;}
+  .modal-footer{flex-direction:column-reverse;}
+  .modal-footer .btn{width:100%;justify-content:center;}
+  .btn{min-height:40px;}
+  .btn-sm{min-height:34px;}
+  .form-control{font-size:16px !important;}
+}
+</style>
+</head>
+<body>
 <div id="wl-loading" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:linear-gradient(135deg,#0f1f3d,#1a3260);display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:100vh;min-width:100vw;">
   <div style="text-align:center;padding:20px;">
     <div style="font-size:13px;font-weight:800;letter-spacing:2px;color:rgba(255,255,255,.4);text-transform:uppercase;margin-bottom:6px;">ISO 17025</div>
@@ -3829,7 +3671,7 @@ function removeExcel(){
 // ── OPEN NEW JOB MODAL ──
 async function openNewJobModal(){
   try{
-    if(getUserRole(currentUser)!=='Admin'){alert('Only admin can create new jobs.');return;}
+    if(!canCreateJobs(currentUser)){alert('You do not have permission to create new jobs.');return;}
     currentPhotos=[];
     const ppg=el('photo-preview-grid'); if(ppg) ppg.innerHTML='';
     const jnEl=el('eq-job-no'); if(jnEl) jnEl.value='Generating…';
@@ -5203,13 +5045,13 @@ function renderEquipmentTable(){
       items.forEach((item,idx)=>{
         const assignedName=item.assignedTo?USERS[item.assignedTo]?.name||item.assignedTo:'—';
         let actions='';
-        if((role==='Admin'||role==='Signatory')&&item.status==='Unassigned')
+        if(canApprove(currentUser)&&item.status==='Unassigned')
           actions+=`<button class="btn btn-primary btn-sm" onclick="openAssignItemModal('${j.jobNo}',${idx})" style="font-size:11px;">Assign</button> `;
-        if((role==='Admin'||role==='Signatory')&&item.status!=='Unassigned'&&item.status!=='Completed')
+        if(canApprove(currentUser)&&item.status!=='Unassigned'&&item.status!=='Completed')
           actions+=`<button class="btn btn-outline btn-sm" onclick="openAssignItemModal('${j.jobNo}',${idx})" style="font-size:11px;">Re-assign</button> `;
         if(item.status==='Completed'&&item.calData)
           actions+=`<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})" style="font-size:11px;">📄</button> `;
-        if(role==='Admin')
+        if(canCreateJobs(currentUser))
           actions+=`<button class="btn btn-outline btn-sm" onclick="openEditJobModal('${j.jobNo}',${idx})" style="font-size:11px;">✏️</button> `;
         rows.push(`<tr style="border-left:3px solid var(--border);">
           <td style="padding:5px 10px 5px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
@@ -5242,6 +5084,7 @@ function renderEquipmentTable(){
 
 // ── ASSIGN ITEM (item-level) ──
 function openAssignItemModal(jobNo, itemIdx){
+  if(!canApprove(currentUser)){showToast('You do not have permission to assign jobs','error',3000);return;}
   const j=getJob(jobNo); if(!j)return;
   const item=j.items&&j.items[itemIdx];
   if(!item)return;
