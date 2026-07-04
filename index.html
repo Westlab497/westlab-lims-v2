@@ -260,7 +260,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 .trace-card-info{font-size:12px;}
 .trace-card-name{font-weight:700;color:var(--navy);font-size:13px;margin-bottom:4px;}
 .trace-card-row{display:flex;gap:16px;flex-wrap:wrap;}
-.trace-card-field{color:var(--text-muted);}<br>
+.trace-card-field{color:var(--text-muted);}
 .trace-card-field span{color:var(--text);font-weight:500;}
 .trace-card-status-overdue{color:var(--red);font-weight:700;}
 .trace-card-status-soon{color:var(--amber);font-weight:700;}
@@ -3083,6 +3083,12 @@ function doLogout(){
 
 // ── STARTUP ──
 (async function(){
+  // Fix body width immediately - must equal viewport
+  document.body.style.cssText = 'width:'+window.innerWidth+'px;min-width:'+window.innerWidth+'px;';
+  window.addEventListener('resize', function(){
+    document.body.style.width = window.innerWidth+'px';
+    document.body.style.minWidth = window.innerWidth+'px';
+  });
   // Restore sidebar state immediately before anything renders
   // Show loading overlay
   showLoadingOverlay(true);
