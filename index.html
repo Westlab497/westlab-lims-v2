@@ -421,7 +421,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </nav>
 
 <!-- ══ MAIN ══ -->
-<div id="main">
+<div id="main" style="margin-left:240px;width:calc(100% - 240px);">
   <div id="topbar">
     <h2 id="topbar-title">Dashboard</h2>
     <div class="topbar-right">
@@ -3021,6 +3021,9 @@ function setCurrentUser(username){
   currentUser=username;
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('login-error').style.display='none';
+  // Force correct sidebar offset
+  const mainEl=document.getElementById('main');
+  if(mainEl){mainEl.style.marginLeft='240px';mainEl.style.width='calc(100% - 240px)';}
   const u=USERS[username]||{name:username,display:'User',avatarClass:''};
   const av=el('topbar-avatar');
   if(av){av.textContent=u.name.slice(0,2).toUpperCase();av.className='avatar '+(u.avatarClass||'');}
@@ -3180,6 +3183,9 @@ const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',complete
   personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings'};
 
 function showView(name){
+  // Force sidebar offset - belt and braces
+  const mainEl=document.getElementById('main');
+  if(mainEl){mainEl.style.marginLeft='240px';mainEl.style.width='calc(100% - 240px)';}
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const v=document.getElementById('view-'+name);
