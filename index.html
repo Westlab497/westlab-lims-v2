@@ -65,7 +65,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 #sidebar.collapsed .sidebar-logo{justify-content:center;}
 #sidebar.collapsed .sidebar-logo-text{display:none;}
 #sidebar.collapsed .sidebar-logo>div:first-child{display:none;}
-#sidebar.collapsed #sidebar-logo-collapsed{display:flex !important;align-items:center;justify-content:center;width:26px;height:26px;background:var(--blue);border-radius:6px;}
+#sidebar.collapsed #sidebar-logo-collapsed{display:none;align-items:center;justify-content:center;width:26px;height:26px;background:var(--blue);border-radius:6px;}
+#sidebar.collapsed .sidebar-logo-img{width:26px;height:26px;}
 #sidebar.collapsed .sidebar-nav{padding:12px 6px;}
 #sidebar.collapsed .nav-section-label{display:none;}
 #sidebar.collapsed .nav-item{padding:9px;justify-content:center;position:relative;}
@@ -2488,6 +2489,16 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div style="font-size:11px;color:var(--text-muted);">A company can be both — e.g. a dealer who also buys directly for their own equipment. Check at least one.</div>
       </div>
 
+      <div class="form-group" id="cust-always-direct-group" style="display:none;background:#fef3c7;border-radius:8px;padding:12px 14px;">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="cust-always-direct" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;"/>
+          <span>
+            <strong style="font-size:13px;color:var(--text);">🏠 Always Direct — House Account</strong>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">This customer can NEVER be selected as an End User by any dealer, even by accident. Use this for your own permanent direct clients that must never be linked to a dealer.</div>
+          </span>
+        </label>
+      </div>
+
       <div class="form-group"><label class="form-label">Company / Customer Name <span class="req">*</span></label><input class="form-control" id="cust-company" placeholder="e.g. ACME SDN BHD" oninput="this.value=this.value.toUpperCase()"/></div>
       <div class="form-group"><label class="form-label">Attention / Contact Person</label><input class="form-control" id="cust-attention" placeholder="e.g. Mr. Ahmad"/></div>
       <div class="form-group"><label class="form-label">Company Address</label><textarea class="form-control" id="cust-address" placeholder="Full mailing address" rows="4"></textarea></div>
@@ -3343,6 +3354,9 @@ function applySettings(s){
     }
     sbl.src=s.logoUrl;
     sbl.style.display='block';
+    // Sync collapsed-state logo visibility now that a custom logo exists
+    const sbEl=document.getElementById('sidebar');
+    if(typeof updateSidebarLogoForCollapse==='function') updateSidebarLogoForCollapse(sbEl?.classList.contains('collapsed'));
     // Update login screen logo
     const loginImg=el('login-logo-img');
     if(loginImg){loginImg.src=s.logoUrl;loginImg.style.display='block';}
@@ -3904,6 +3918,9 @@ function removeLogo(){
   // Restore the default icon tile
   const iconTile=document.querySelector('#sidebar-logo-area > div:first-child');
   if(iconTile) iconTile.style.display='flex';
+  // Re-sync collapsed-state logo now that custom logo is gone
+  const sbEl=document.getElementById('sidebar');
+  if(typeof updateSidebarLogoForCollapse==='function') updateSidebarLogoForCollapse(sbEl?.classList.contains('collapsed'));
   // Hide login screen logo, restore badge
   const loginImg=el('login-logo-img');if(loginImg){loginImg.src='';loginImg.style.display='none';}
   const loginBadge=el('login-logo-badge');if(loginBadge) loginBadge.style.display='inline-block';
@@ -7601,6 +7618,20 @@ function addAudit(icon,msg){
 }
 
 // ── SIDEBAR COLLAPSE ──
+function updateSidebarLogoForCollapse(collapsed){
+  const logoText=document.getElementById('sidebar-logo-area')?.querySelector('.sidebar-logo-text');
+  const logoCollapsed=document.getElementById('sidebar-logo-collapsed');
+  const customLogo=document.querySelector('.sidebar-logo-img');
+  if(logoText) logoText.style.display=collapsed?'none':'';
+  if(customLogo&&customLogo.src){
+    // A real company logo is uploaded — keep showing it when collapsed, hide the generic flask icon
+    customLogo.style.display='block';
+    if(logoCollapsed) logoCollapsed.style.display='none';
+  } else {
+    // No custom logo — show the generic flask icon only when collapsed
+    if(logoCollapsed) logoCollapsed.style.display=collapsed?'flex':'none';
+  }
+}
 function toggleSidebar(){
   const sb=document.getElementById('sidebar');
   const main=document.getElementById('main');
@@ -7608,11 +7639,7 @@ function toggleSidebar(){
   const collapsed=sb.classList.toggle('collapsed');
   main.classList.toggle('collapsed',collapsed);
   if(icon) icon.className=collapsed?'ti ti-layout-sidebar-left-expand':'ti ti-layout-sidebar-left-collapse';
-  // Show/hide logo
-  const logoText=document.getElementById('sidebar-logo-area')?.querySelector('.sidebar-logo-text');
-  const logoCollapsed=document.getElementById('sidebar-logo-collapsed');
-  if(logoText) logoText.style.display=collapsed?'none':'';
-  if(logoCollapsed) logoCollapsed.style.display=collapsed?'block':'none';
+  updateSidebarLogoForCollapse(collapsed);
   try{localStorage.setItem('sb_collapsed',collapsed?'1':'0');}catch(e){}
 }
 
@@ -7625,10 +7652,7 @@ function initSidebarCollapse(){
       if(sb) sb.classList.add('collapsed');
       if(main) main.classList.add('collapsed');
       if(icon) icon.className='ti ti-layout-sidebar-left-expand';
-      const logoText=document.getElementById('sidebar-logo-area')?.querySelector('.sidebar-logo-text');
-      const logoCollapsed=document.getElementById('sidebar-logo-collapsed');
-      if(logoText) logoText.style.display='none';
-      if(logoCollapsed) logoCollapsed.style.display='block';
+      updateSidebarLogoForCollapse(true);
     }
   }catch(e){}
 }
@@ -8338,6 +8362,9 @@ function openAddCustomerModal(){
   el('cust-type-dealer').checked=false;
   el('cust-type-direct').checked=true;
   el('cust-payment-terms').value='credit';
+  const adGroup=el('cust-always-direct-group');
+  if(adGroup) adGroup.style.display=isAdmin(currentUser)?'block':'none';
+  const ad=el('cust-always-direct'); if(ad) ad.checked=false;
   ['cust-company','cust-attention','cust-address','cust-tel','cust-mobile','cust-fax','cust-email','cust-notes'].forEach(id=>{
     const e=el(id); if(e) e.value='';
   });
@@ -8351,6 +8378,9 @@ function openEditCustomerModal(custId){
   const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
   el('cust-type-dealer').checked=types.includes('Dealer');
   el('cust-type-direct').checked=types.includes('Direct');
+  const adGroup=el('cust-always-direct-group');
+  if(adGroup) adGroup.style.display=isAdmin(currentUser)?'block':'none';
+  const ad=el('cust-always-direct'); if(ad) ad.checked=!!c.alwaysDirect;
   el('cust-company').value=c.company||'';
   el('cust-attention').value=c.attention||'';
   el('cust-address').value=c.address||'';
@@ -8388,6 +8418,7 @@ async function saveCustomer(){
       id:custId, custTypes, company,
       type:custTypes.includes('Dealer')?'Dealer':'Direct', // legacy field for old code paths
       approvedDealers,
+      alwaysDirect: isAdmin(currentUser)?!!el('cust-always-direct')?.checked:!!existingRec?.alwaysDirect,
       attention:el('cust-attention').value.trim(),
       address:el('cust-address').value.trim(),
       tel:el('cust-tel').value.trim(),
@@ -8469,12 +8500,17 @@ function renderCustomerTable(){
     return;
   }
   const typeBadgeHtml=types=>types.map(t=>t==='Dealer'?'<span class="badge badge-purple">Dealer</span>':'<span class="badge badge-blue">Direct</span>').join(' ');
+  const statusBadgeHtml=c=>{
+    if(c.alwaysDirect) return '<span class="badge badge-amber" title="Protected — never linkable to a dealer">🏠 House</span>';
+    if((c.approvedDealers||[]).length>0) return `<span class="badge badge-purple" title="Tied to: ${(c.approvedDealers||[]).join(', ')}">🔒 Tied</span>`;
+    return '<span class="badge badge-slate" title="Not yet claimed by any dealer">🔓 Open</span>';
+  };
   tbody.innerHTML=filtered.map(c=>{
     const jobCount=_jobs.filter(j=>j.company===c.company&&j.status!=='Deleted').length;
     const types=getTypes(c);
     return `<tr>
       <td><strong>${c.company}</strong>${c.attention?`<br/><span style="font-size:11px;color:var(--text-muted);">${c.attention}</span>`:''}</td>
-      <td>${typeBadgeHtml(types)}</td>
+      <td>${typeBadgeHtml(types)}<br/><span style="margin-top:3px;display:inline-block;">${statusBadgeHtml(c)}</span></td>
       <td>${c.tel||'—'}</td>
       <td>${c.email||'—'}</td>
       <td><span class="badge badge-blue">${jobCount} job${jobCount!==1?'s':''}</span></td>
@@ -8514,20 +8550,39 @@ function viewCustomerDetail(custId){
   const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
   const typeBadgeHtml=types.map(t=>t==='Dealer'?'<span class="badge badge-purple">Dealer</span>':'<span class="badge badge-blue">Direct Customer</span>').join(' ');
   const approvedDealers=c.approvedDealers||[];
+  const isDealerType=types.includes('Dealer');
+  // Reverse lookup — which end-users are tied to THIS dealer
+  const linkedEndUsers=isDealerType?_customers.filter(x=>x&&x.company&&(x.approvedDealers||[]).includes(c.company)):[];
   let html=`
     <div style="padding:16px;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
         <div>
           <div style="font-size:18px;font-weight:800;color:var(--navy);">${c.company}</div>
-          <div style="margin-top:4px;">${typeBadgeHtml}</div>
+          <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${typeBadgeHtml}${c.alwaysDirect?'<span class="badge badge-amber">🏠 House Account</span>':''}</div>
         </div>
       </div>
-      ${approvedDealers.length?`
+      ${c.alwaysDirect?`
+      <div style="background:#fef3c7;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;">
+        🏠 <strong>Always Direct</strong> — this customer is protected and can never be claimed as an end-user by any dealer.
+      </div>`:approvedDealers.length?`
       <div style="background:var(--purple-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;">
         <div style="font-weight:700;color:var(--purple);margin-bottom:4px;">🔒 Approved Dealers (exclusive)</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;">
           ${approvedDealers.map(d=>`<span class="badge badge-purple" style="display:inline-flex;align-items:center;gap:6px;">${d}${isAdmin(currentUser)?`<span onclick="removeApprovedDealer('${c.id}','${d.replace(/'/g,"\\'")}')" style="cursor:pointer;font-weight:700;" title="Remove">✕</span>`:''}</span>`).join('')}
         </div>
+      </div>`:!isDealerType?`
+      <div style="background:var(--bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted);">
+        🔓 <strong>Open</strong> — not yet tied to any dealer. Will automatically lock to the first dealer that uses them as an end-user.
+      </div>`:''}
+      ${isDealerType?`
+      <div style="background:var(--blue-pale);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;">
+        <div style="font-weight:700;color:var(--navy);margin-bottom:4px;">🏭 End Users Linked to This Dealer (${linkedEndUsers.length})</div>
+        ${linkedEndUsers.length?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">
+          ${linkedEndUsers.map(u=>`<div style="background:#fff;border-radius:6px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;">
+            <span>${u.company}${(u.approvedDealers||[]).length>1?` <span style="color:var(--text-muted);font-size:10px;">(shared with ${u.approvedDealers.length-1} other dealer${u.approvedDealers.length-1>1?'s':''})</span>`:''}</span>
+            <button class="btn btn-outline btn-sm" onclick="viewCustomerDetail('${u.id}')" style="font-size:10px;padding:2px 8px;">View</button>
+          </div>`).join('')}
+        </div>`:`<div style="color:var(--text-muted);margin-top:4px;">No end-users linked yet.</div>`}
       </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;margin-bottom:16px;">
         ${c.attention?`<div><span style="color:var(--text-muted);">Attention:</span> ${c.attention}</div>`:''}
@@ -8583,6 +8638,12 @@ function viewCustomerDetail(custId){
 let _dealerLockPending=null; // {customer, dealerName, onApproved, onBlocked}
 
 async function checkDealerLock(customer, requestingDealerName, onApproved, onBlocked){
+  // Hard rule — House Accounts can never be claimed by any dealer, no override
+  if(customer.alwaysDirect&&requestingDealerName){
+    alert(`"${customer.company}" is marked as an Always Direct (House Account) customer and cannot be used as an end-user under any dealer.\n\nIf this is incorrect, an Admin can uncheck "Always Direct" on this customer's record.`);
+    if(onBlocked) onBlocked();
+    return;
+  }
   const approved=customer.approvedDealers||[];
   // No lock yet — first time this end-user is used, auto-lock to this dealer
   if(approved.length===0){
@@ -8780,6 +8841,9 @@ function prefillNewCustomerModal(name, context='main'){
   el('cust-company').value=name;
   document.getElementById('customer-modal-title').textContent='🏢 Add Customer';
   document.getElementById('cust-edit-id').value='';
+  const adGroup=el('cust-always-direct-group');
+  if(adGroup) adGroup.style.display=isAdmin(currentUser)?'block':'none';
+  const ad=el('cust-always-direct'); if(ad) ad.checked=false;
   ['cust-attention','cust-address','cust-tel','cust-mobile','cust-fax','cust-email','cust-notes'].forEach(id=>{
     const e=el(id); if(e) e.value='';
   });
