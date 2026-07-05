@@ -1401,7 +1401,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <label class="form-label">🏭 End User <span style="font-size:11px;font-weight:normal;color:var(--text-muted);">(whose equipment is this — appears on certificate instead of dealer)</span></label>
         <div style="display:flex;gap:8px;">
           <input class="form-control" id="eq-end-user" placeholder="Type to search customer database…" autocomplete="off" oninput="endUserSearchInput(this.value)" style="flex:1;"/>
-          <button class="btn btn-outline btn-sm" onclick="openAddCustomerModal()" title="Add new customer" style="white-space:nowrap;flex-shrink:0;">+ New</button>
+          <button class="btn btn-outline btn-sm" onclick="prefillNewCustomerModal(el('eq-end-user').value.trim(),'endUser')" title="Add new customer" style="white-space:nowrap;flex-shrink:0;">+ New</button>
         </div>
         <div id="end-user-suggestions" style="display:none;position:absolute;top:100%;left:14px;right:52px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
         <input type="hidden" id="eq-end-user-address"/>
@@ -1538,6 +1538,23 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- ASSIGN JOB (Admin / Signatory) -->
+<!-- DEALER LOCK WARNING -->
+<div class="modal-overlay" id="modal-dealer-lock" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">🔒 End User Linked to Another Dealer</span>
+      <button class="modal-close" onclick="cancelDealerLock()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="dealer-lock-message" style="font-size:13px;line-height:1.6;color:var(--text);"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cancelDealerLock()">Cancel</button>
+      <button class="btn btn-primary" id="dealer-lock-approve-btn" onclick="approveDealerLock()" style="display:none;">✓ Approve &amp; Add This Dealer</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-assign-job" style="display:none;">
   <div class="modal modal-sm">
     <div class="modal-header">
@@ -2854,6 +2871,7 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
 // In-memory cache
 let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[];
 let _custSelected=false;
+let _custModalContext='main'; // 'main' or 'endUser' — tracks which field triggered "+ Add new customer"
 const CUST_TABLE='wl_customers';
 let _extraEquipment=[];
 let _jobsCache={};
@@ -8313,6 +8331,7 @@ async function showCertFromJob(jobNo){
 // ── CUSTOMER DATABASE ──
 
 function openAddCustomerModal(){
+  _custModalContext='main';
   const titleEl=document.getElementById('customer-modal-title');
   if(titleEl) titleEl.textContent='🏢 Add Customer';
   document.getElementById('cust-edit-id').value='';
@@ -8357,9 +8376,18 @@ async function saveCustomer(){
     if(custTypes.length===0){showToast('Please check at least one customer type','error',3000);return;}
     const editId=document.getElementById('cust-edit-id').value;
     const custId=editId||('CUST-'+Date.now());
+    const existingRec=editId?_customers.find(x=>x.id===editId):null;
+    // If this new customer is being added via the End User field, auto-lock to the current dealer
+    let approvedDealers=existingRec?.approvedDealers||[];
+    const isNewEndUser=!editId&&_custModalContext==='endUser';
+    if(isNewEndUser){
+      const dealerName=el('eq-company')?.value.trim()||'';
+      if(dealerName) approvedDealers=[dealerName];
+    }
     const record={
       id:custId, custTypes, company,
       type:custTypes.includes('Dealer')?'Dealer':'Direct', // legacy field for old code paths
+      approvedDealers,
       attention:el('cust-attention').value.trim(),
       address:el('cust-address').value.trim(),
       tel:el('cust-tel').value.trim(),
@@ -8368,7 +8396,7 @@ async function saveCustomer(){
       email:el('cust-email').value.trim(),
       paymentTerms:el('cust-payment-terms').value,
       notes:el('cust-notes').value.trim(),
-      createdAt:editId?(_customers.find(x=>x.id===editId)?.createdAt||new Date().toISOString()):new Date().toISOString()
+      createdAt:editId?(existingRec?.createdAt||new Date().toISOString()):new Date().toISOString()
     };
     await SB.upsert(CUST_TABLE,custId,record);
     if(editId){
@@ -8381,6 +8409,16 @@ async function saveCustomer(){
     renderCustomerTable();
     showToast(`✅ Customer "${company}" ${editId?'updated':'added'}`,'success',3000);
     addAudit('🏢',`Customer <strong>${company}</strong> (${custTypes.join(' + ')}) ${editId?'updated':'added'}`);
+    // If added via the End User field, auto-select them back into the job form
+    if(isNewEndUser){
+      const euField=el('eq-end-user');
+      if(euField){
+        euField.value=record.company;
+        const euAddr=el('eq-end-user-address'); if(euAddr) euAddr.value=record.address;
+        const badge=el('end-user-selected-badge'); if(badge) badge.style.display='flex';
+      }
+    }
+    _custModalContext='main';
   }catch(_err){
     console.error("saveCustomer error:",_err);
     showToast('❌ Save failed: '+_err.message,'error',6000);
@@ -8454,11 +8492,28 @@ function renderCustomerTable(){
   }
 }
 
+async function removeApprovedDealer(custId, dealerName){
+  if(!isAdmin(currentUser))return;
+  const c=_customers.find(x=>x.id===custId); if(!c)return;
+  if(!confirm(`Remove "${dealerName}" from ${c.company}'s approved dealer list?`))return;
+  c.approvedDealers=(c.approvedDealers||[]).filter(d=>d!==dealerName);
+  try{
+    await SB.upsert(CUST_TABLE,custId,c);
+    showToast(`✅ ${dealerName} removed from approved dealers`,'success',3000);
+    addAudit('🔓',`Removed <strong>${dealerName}</strong> as approved dealer for <strong>${c.company}</strong>`);
+    viewCustomerDetail(custId); // refresh the detail view
+  }catch(e){
+    console.error('removeApprovedDealer error:',e);
+    showToast('❌ Failed to remove dealer link','error',4000);
+  }
+}
+
 function viewCustomerDetail(custId){
   const c=_customers.find(x=>x.id===custId); if(!c)return;
   const jobs=_jobs.filter(j=>j.company===c.company&&j.status!=='Deleted');
   const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
   const typeBadgeHtml=types.map(t=>t==='Dealer'?'<span class="badge badge-purple">Dealer</span>':'<span class="badge badge-blue">Direct Customer</span>').join(' ');
+  const approvedDealers=c.approvedDealers||[];
   let html=`
     <div style="padding:16px;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
@@ -8467,6 +8522,13 @@ function viewCustomerDetail(custId){
           <div style="margin-top:4px;">${typeBadgeHtml}</div>
         </div>
       </div>
+      ${approvedDealers.length?`
+      <div style="background:var(--purple-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;">
+        <div style="font-weight:700;color:var(--purple);margin-bottom:4px;">🔒 Approved Dealers (exclusive)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${approvedDealers.map(d=>`<span class="badge badge-purple" style="display:inline-flex;align-items:center;gap:6px;">${d}${isAdmin(currentUser)?`<span onclick="removeApprovedDealer('${c.id}','${d.replace(/'/g,"\\'")}')" style="cursor:pointer;font-weight:700;" title="Remove">✕</span>`:''}</span>`).join('')}
+        </div>
+      </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;margin-bottom:16px;">
         ${c.attention?`<div><span style="color:var(--text-muted);">Attention:</span> ${c.attention}</div>`:''}
         ${c.tel?`<div><span style="color:var(--text-muted);">Tel:</span> ${c.tel}</div>`:''}
@@ -8516,6 +8578,65 @@ function viewCustomerDetail(custId){
 
 // ── CUSTOMER AUTOCOMPLETE (in New Job modal) ──
 
+// ── DEALER LOCK SYSTEM ──
+// Protects end-users from being poached by a different dealer or bypassed as a direct customer.
+let _dealerLockPending=null; // {customer, dealerName, onApproved, onBlocked}
+
+async function checkDealerLock(customer, requestingDealerName, onApproved, onBlocked){
+  const approved=customer.approvedDealers||[];
+  // No lock yet — first time this end-user is used, auto-lock to this dealer
+  if(approved.length===0){
+    if(requestingDealerName){
+      customer.approvedDealers=[requestingDealerName];
+      try{ await SB.upsert(CUST_TABLE,customer.id,customer); }catch(e){console.warn('Dealer lock save failed:',e);}
+    }
+    onApproved();
+    return;
+  }
+  // Already approved for this dealer
+  if(requestingDealerName&&approved.includes(requestingDealerName)){
+    onApproved();
+    return;
+  }
+  // Locked to different dealer(s) — show warning
+  _dealerLockPending={customer, dealerName:requestingDealerName, onApproved, onBlocked};
+  const msg=el('dealer-lock-message');
+  const approveBtn=el('dealer-lock-approve-btn');
+  if(requestingDealerName){
+    msg.innerHTML=`<strong>${customer.company}</strong> is currently linked to: <strong>${approved.join(', ')}</strong>.<br/><br/>You are trying to use them as an end-user under a different dealer (<strong>${requestingDealerName}</strong>).`;
+  } else {
+    msg.innerHTML=`<strong>${customer.company}</strong> is normally serviced through their approved dealer(s): <strong>${approved.join(', ')}</strong>.<br/><br/>You are trying to add them as a direct customer, bypassing the dealer.`;
+  }
+  if(isAdmin(currentUser)){
+    approveBtn.style.display='inline-flex';
+    approveBtn.textContent=requestingDealerName?`✓ Approve & Add ${requestingDealerName}`:'✓ Approve as Direct Customer';
+  } else {
+    approveBtn.style.display='none';
+    msg.innerHTML+='<br/><br/><span style="color:var(--text-muted);font-size:12px;">Please check with Admin before proceeding.</span>';
+  }
+  openModal('modal-dealer-lock');
+}
+
+async function approveDealerLock(){
+  if(!_dealerLockPending)return;
+  const {customer, dealerName, onApproved}=_dealerLockPending;
+  if(dealerName){
+    customer.approvedDealers=[...(customer.approvedDealers||[]),dealerName];
+  } else {
+    // Approving as direct — don't remove existing dealer links, just allow this one-off
+  }
+  try{ await SB.upsert(CUST_TABLE,customer.id,customer); }catch(e){console.warn('Dealer lock update failed:',e);}
+  closeModal('modal-dealer-lock');
+  const cb=onApproved; _dealerLockPending=null;
+  if(cb) cb();
+}
+
+function cancelDealerLock(){
+  if(_dealerLockPending&&_dealerLockPending.onBlocked) _dealerLockPending.onBlocked();
+  _dealerLockPending=null;
+  closeModal('modal-dealer-lock');
+}
+
 function customerSearchInput(val){
   _custSelected=false;
   hideCustBadge();
@@ -8563,26 +8684,37 @@ function customerSearchKeydown(e){
 }
 
 function selectCustomer(c){
-  // Fill all fields from customer record
-  el('eq-company').value=c.company||'';
-  el('eq-attention').value=c.attention||'';
-  el('eq-address').value=c.address||'';
-  el('eq-tel').value=c.tel||'';
-  el('eq-mobile').value=c.mobile||'';
-  el('eq-fax').value=c.fax||'';
-  el('eq-email').value=c.email||'';
-  el('customer-suggestions').style.display='none';
-  // Show success badge
-  const badge=el('customer-selected-badge');
-  const name=el('customer-selected-name');
-  if(badge&&name){badge.style.display='flex';name.textContent=c.company;}
-  _custSelected=true;
-  // Toggle End User field — only relevant when customer is tagged Dealer
-  const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
-  const isDealer=types.includes('Dealer');
-  const endUserGroup=el('end-user-group');
-  if(endUserGroup) endUserGroup.style.display=isDealer?'block':'none';
-  if(!isDealer) clearEndUserSelection();
+  const proceed=()=>{
+    // Fill all fields from customer record
+    el('eq-company').value=c.company||'';
+    el('eq-attention').value=c.attention||'';
+    el('eq-address').value=c.address||'';
+    el('eq-tel').value=c.tel||'';
+    el('eq-mobile').value=c.mobile||'';
+    el('eq-fax').value=c.fax||'';
+    el('eq-email').value=c.email||'';
+    el('customer-suggestions').style.display='none';
+    // Show success badge
+    const badge=el('customer-selected-badge');
+    const name=el('customer-selected-name');
+    if(badge&&name){badge.style.display='flex';name.textContent=c.company;}
+    _custSelected=true;
+    // Toggle End User field — only relevant when customer is tagged Dealer
+    const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
+    const isDealer=types.includes('Dealer');
+    const endUserGroup=el('end-user-group');
+    if(endUserGroup) endUserGroup.style.display=isDealer?'block':'none';
+    if(!isDealer) clearEndUserSelection();
+  };
+  // If this company is already an approved end-user of some dealer(s),
+  // selecting them directly as the main Customer would bypass those dealers.
+  if((c.approvedDealers||[]).length>0){
+    checkDealerLock(c, null, proceed, ()=>{
+      el('customer-suggestions').style.display='none';
+    });
+  } else {
+    proceed();
+  }
 }
 
 function endUserSearchInput(val){
@@ -8591,22 +8723,31 @@ function endUserSearchInput(val){
   if(!q){box.style.display='none';return;}
   const matches=_customers.filter(c=>c&&c.company&&c.company.toLowerCase().includes(q)).slice(0,8);
   if(!matches.length){
-    box.innerHTML=`<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">No match. <a href="#" onclick="event.preventDefault();prefillNewCustomerModal('${val.replace(/'/g,"\\'")}')" style="color:var(--blue);">+ Add "${val}" as new customer</a></div>`;
+    box.innerHTML=`<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">No match. <a href="#" onclick="event.preventDefault();prefillNewCustomerModal('${val.replace(/'/g,"\\'")}','endUser')" style="color:var(--blue);">+ Add "${val}" as new customer</a></div>`;
     box.style.display='block';
     return;
   }
-  box.innerHTML=matches.map(c=>`<div onclick='selectEndUser(${JSON.stringify(c).replace(/'/g,"&apos;")})' style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='#fff'">
-    <strong>${c.company}</strong>${c.attention?` <span style="color:var(--text-muted);font-size:11px;">— ${c.attention}</span>`:''}
+  box.innerHTML=matches.map((c,i)=>`<div class="end-user-suggestion" data-idx="${i}" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='#fff'">
+    <strong>${c.company}</strong>${c.attention?` <span style="color:var(--text-muted);font-size:11px;">— ${c.attention}</span>`:''}${(c.approvedDealers||[]).length?` <span style="color:var(--purple);font-size:10px;">🔒 ${c.approvedDealers.join(', ')}</span>`:''}
   </div>`).join('');
+  matches.forEach((c,i)=>{
+    box.querySelectorAll('.end-user-suggestion')[i].onclick=()=>selectEndUser(c);
+  });
   box.style.display='block';
 }
 
 function selectEndUser(c){
-  el('eq-end-user').value=c.company||'';
-  el('eq-end-user-address').value=c.address||'';
-  el('end-user-suggestions').style.display='none';
-  const badge=el('end-user-selected-badge');
-  if(badge) badge.style.display='flex';
+  const dealerName=el('eq-company')?.value.trim()||'';
+  const proceed=()=>{
+    el('eq-end-user').value=c.company||'';
+    el('eq-end-user-address').value=c.address||'';
+    el('end-user-suggestions').style.display='none';
+    const badge=el('end-user-selected-badge');
+    if(badge) badge.style.display='flex';
+  };
+  checkDealerLock(c, dealerName, proceed, ()=>{
+    el('end-user-suggestions').style.display='none';
+  });
 }
 
 function clearEndUserSelection(){
@@ -8632,14 +8773,21 @@ function hideCustBadge(){
   if(badge) badge.style.display='none';
 }
 
-function prefillNewCustomerModal(name){
+function prefillNewCustomerModal(name, context='main'){
   el('customer-suggestions').style.display='none';
+  el('end-user-suggestions')?.style.setProperty('display','none');
+  _custModalContext=context;
   el('cust-company').value=name;
   document.getElementById('customer-modal-title').textContent='🏢 Add Customer';
   document.getElementById('cust-edit-id').value='';
   ['cust-attention','cust-address','cust-tel','cust-mobile','cust-fax','cust-email','cust-notes'].forEach(id=>{
     const e=el(id); if(e) e.value='';
   });
+  // If adding as an end-user, sensible default: not a dealer, direct-type record
+  if(context==='endUser'){
+    el('cust-type-dealer').checked=false;
+    el('cust-type-direct').checked=true;
+  }
   openModal('modal-add-customer');
 }
 
