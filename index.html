@@ -343,7 +343,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 <div id="login-screen" class="hidden">
   <div class="login-box">
     <div class="login-logo">
-      <img id="login-logo-img" src="" style="display:none;max-height:56px;max-width:220px;object-fit:contain;margin-bottom:10px;"/>
+      <img id="login-logo-img" src="" style="display:none;max-height:64px;max-width:240px;object-fit:contain;margin:0 auto 12px;"/>
       <div class="logo-badge" id="login-logo-badge">ISO 17025</div>
       <h1 id="login-lab-name">Westlab</h1>
       <p>Calibration &amp; Testing Management System</p>
@@ -408,12 +408,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
 <!-- ══ SIDEBAR ══ -->
 <nav id="sidebar">
-  <div class="sidebar-logo" id="sidebar-logo-area" onclick="if(isAdmin())showView('settings')" style="cursor:pointer;display:flex;align-items:center;gap:10px;" title="Click to edit company settings">
+  <div class="sidebar-logo" id="sidebar-logo-area" style="display:flex;align-items:center;gap:10px;">
     <div style="width:26px;height:26px;background:var(--blue);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-flask" style="font-size:15px;color:#fff;"></i></div>
     <div class="sidebar-logo-text">
       <h1 id="sidebar-lab-name">Westlab</h1>
       <p>Calibration &amp; Testing System</p>
-      <div id="sidebar-edit-hint" style="display:none;font-size:10px;color:rgba(255,255,255,.4);margin-top:2px;">Click to edit</div>
     </div>
     <div style="display:none;" id="sidebar-logo-collapsed"><i class="ti ti-flask" style="font-size:18px;color:#fff;"></i></div>
   </div>
@@ -746,7 +745,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="kpi-row">
         <div class="kpi-mini"><div class="kpi-val" id="cust-kpi-total">0</div><div class="kpi-lbl">Total Customers</div></div>
         <div class="kpi-mini"><div class="kpi-val" style="color:var(--purple)" id="cust-kpi-dealers">0</div><div class="kpi-lbl">Dealers</div></div>
-        <div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)" id="cust-kpi-endusers">0</div><div class="kpi-lbl">End Users</div></div>
+        <div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)" id="cust-kpi-endusers">0</div><div class="kpi-lbl">Direct Customers</div></div>
         <div class="kpi-mini"><div class="kpi-val" id="cust-kpi-jobs">0</div><div class="kpi-lbl">Total Jobs</div></div>
       </div>
       <div class="card">
@@ -755,9 +754,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div style="display:flex;gap:8px;">
             <select class="filter-select" id="cust-filter-type" onchange="renderCustomerTable()">
               <option value="">All Types</option>
-              <option value="Direct">Direct Customer</option>
               <option value="Dealer">Dealer</option>
-              <option value="EndUser">End User (via Dealer)</option>
+              <option value="Direct">Direct Customer</option>
             </select>
             <input id="cust-search" class="filter-select" placeholder="Search customer…" style="width:200px;" oninput="renderCustomerTable()"/>
           </div>
@@ -765,11 +763,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Company Name</th><th>Type</th><th>Dealer (if End User)</th>
+              <th>Company Name</th><th>Type</th>
               <th>Tel</th><th>Email</th><th>Jobs</th><th>Actions</th>
             </tr></thead>
             <tbody id="customer-tbody">
-              <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏢</div><p>No customers yet.</p></div></td></tr>
+              <tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🏢</div><p>No customers yet.</p></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1398,6 +1396,22 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
 
+      <!-- End User (only shown when Customer is tagged as Dealer) -->
+      <div class="form-group" id="end-user-group" style="display:none;position:relative;background:var(--purple-bg);border-radius:8px;padding:12px 14px;">
+        <label class="form-label">🏭 End User <span style="font-size:11px;font-weight:normal;color:var(--text-muted);">(whose equipment is this — appears on certificate instead of dealer)</span></label>
+        <div style="display:flex;gap:8px;">
+          <input class="form-control" id="eq-end-user" placeholder="Type to search customer database…" autocomplete="off" oninput="endUserSearchInput(this.value)" style="flex:1;"/>
+          <button class="btn btn-outline btn-sm" onclick="openAddCustomerModal()" title="Add new customer" style="white-space:nowrap;flex-shrink:0;">+ New</button>
+        </div>
+        <div id="end-user-suggestions" style="display:none;position:absolute;top:100%;left:14px;right:52px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
+        <input type="hidden" id="eq-end-user-address"/>
+        <div id="end-user-selected-badge" style="display:none;margin-top:8px;align-items:center;justify-content:space-between;">
+          <span style="font-size:12px;color:var(--purple);font-weight:700;">✅ End user loaded</span>
+          <button onclick="clearEndUserSelection()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;">✕</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Leave blank if the dealer is buying calibration for their own equipment (certificate will show the dealer's name).</div>
+      </div>
+
       <div class="form-row">
         <div class="form-group"><label class="form-label">Attention / Contact Person</label><input class="form-control" id="eq-attention" placeholder="Attn: person name"/></div>
         <div class="form-group"><label class="form-label">PO Number</label><input class="form-control" id="eq-po" placeholder="Purchase order no."/></div>
@@ -1555,7 +1569,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <button class="btn btn-primary" onclick="confirmAssign()">Assign Job</button>
     </div>
   </div>
-</div>
 </div>
 
 <!-- RE-ASSIGN JOB (Technician) -->
@@ -1925,6 +1938,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">PO Number</label><input class="form-control" id="edit-eq-po" placeholder="Purchase order no."/></div>
       </div>
       <div class="form-group"><label class="form-label">Company Address</label><textarea class="form-control" id="edit-eq-address" placeholder="Full mailing address"></textarea></div>
+      <div class="form-group" style="background:var(--purple-bg);border-radius:8px;padding:12px 14px;">
+        <label class="form-label">🏭 End User <span style="font-size:11px;font-weight:normal;color:var(--text-muted);">(shown on certificate instead of the customer above — leave blank if none)</span></label>
+        <input class="form-control" id="edit-eq-end-user" placeholder="e.g. XYZ Factory Sdn Bhd"/>
+        <textarea class="form-control" id="edit-eq-end-user-address" placeholder="End user address (optional)" style="margin-top:8px;" rows="2"></textarea>
+      </div>
       <div class="form-row-3">
         <div class="form-group"><label class="form-label">Tel No.</label><input class="form-control" id="edit-eq-tel" placeholder="e.g. +603-6157 0706"/></div>
         <div class="form-group"><label class="form-label">Mobile No.</label><input class="form-control" id="edit-eq-mobile" placeholder="e.g. +6016-123 4573"/></div>
@@ -2440,23 +2458,17 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <input type="hidden" id="cust-edit-id"/>
 
       <!-- Customer Type -->
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Customer Type <span class="req">*</span></label>
-          <select class="form-control" id="cust-type" onchange="toggleDealerField()">
-            <option value="Direct">Direct Customer</option>
-            <option value="Dealer">Dealer</option>
-            <option value="EndUser">End User (sent via Dealer)</option>
-          </select>
+      <div class="form-group">
+        <label class="form-label">Customer Type <span class="req">*</span></label>
+        <div style="display:flex;gap:20px;padding:10px 0;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" id="cust-type-dealer" style="width:16px;height:16px;"/> Dealer
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" id="cust-type-direct" style="width:16px;height:16px;"/> Direct Customer
+          </label>
         </div>
-        <!-- Dealer selector — only shown for End User -->
-        <div class="form-group" id="cust-dealer-group" style="display:none;">
-          <label class="form-label">Linked Dealer <span class="req">*</span></label>
-          <select class="form-control" id="cust-dealer-id">
-            <option value="">— Select Dealer —</option>
-          </select>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Which dealer sent this end user to us?</div>
-        </div>
+        <div style="font-size:11px;color:var(--text-muted);">A company can be both — e.g. a dealer who also buys directly for their own equipment. Check at least one.</div>
       </div>
 
       <div class="form-group"><label class="form-label">Company / Customer Name <span class="req">*</span></label><input class="form-control" id="cust-company" placeholder="e.g. ACME SDN BHD" oninput="this.value=this.value.toUpperCase()"/></div>
@@ -2512,6 +2524,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <option value="Admin">Admin (Full access)</option>
         </select>
         <div id="staff-role-desc" style="font-size:11px;color:var(--text-muted);margin-top:4px;"></div>
+      </div>
+      <div class="form-group" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="staff-approved-signatory" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;"/>
+          <span>
+            <strong style="font-size:13px;color:var(--text);">Approved Signatory</strong>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Authorised by DSM to approve and sign calibration certificates. This is independent of role — a Manager is not automatically a signatory unless checked here.</div>
+          </span>
+        </label>
       </div>
       <div class="form-group"><label class="form-label">Join Date</label><input class="form-control" id="staff-join-date" type="date" placeholder="Date joined company"/><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Used to calculate leave entitlement (years of service).</div></div>
       <div class="form-row">
@@ -3149,7 +3170,11 @@ function getUserRole(username){
 }
 function isAdmin(u){ return getUserRole(u||currentUser)==='Admin'; }
 function isManager(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'; }
-function isSignatory(u){ return isManager(u); } // managers can approve
+function isSignatory(u){
+  const uname=u||currentUser;
+  const s=_staff.find(x=>x.username===uname);
+  return !!(s&&s.approvedSignatory);
+}
 function isEngineer(u){ return getUserRole(u||currentUser)==='Engineer'; }
 function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Sales'; }
 function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='HR'; }
@@ -3192,10 +3217,6 @@ function applyRoleUI(){
   const canCreateJob=canCreateJobs(currentUser);
   const btnNew=el('btn-new-job'); if(btnNew) btnNew.style.display=canCreateJob?'':'none';
   const dashAdmin=el('dash-admin-btns'); if(dashAdmin) dashAdmin.style.display=(admin||manager)?'flex':'none';
-
-  // Sidebar edit hint (admin only)
-  const hint=document.getElementById('sidebar-edit-hint');
-  if(hint) hint.style.display=admin?'block':'none';
 
   // Mobile role UI
   }catch(_e){
@@ -3310,8 +3331,6 @@ function applySettings(s){
     const loginBadge=el('login-logo-badge');
     if(loginBadge) loginBadge.style.display='none';
   }
-  const hint=document.getElementById('sidebar-edit-hint');
-  if(hint) hint.style.display=isAdmin(currentUser)?'block':'none';
   }catch(_e){
     console.error("applySettings error:",_e);
     if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
@@ -3615,6 +3634,8 @@ async function openNewJobModal(){
     if(typeof hideCustBadge==='function') hideCustBadge();
     _custSelected=false;
     const suggBox=el('customer-suggestions'); if(suggBox) suggBox.style.display='none';
+    if(typeof clearEndUserSelection==='function') clearEndUserSelection();
+    const endUserGroup=el('end-user-group'); if(endUserGroup) endUserGroup.style.display='none';
     ['eq-attention','eq-company','eq-address','eq-tel','eq-mobile','eq-fax',
      'eq-email','eq-po','eq-name','eq-brand','eq-model','eq-serial','eq-tag-no','eq-range',
      'eq-cal-points','eq-spec','eq-accessories','eq-remarks','eq-condition-other',
@@ -3688,6 +3709,8 @@ async function saveEquipment(printReceipt=false){
     fax:el('eq-fax').value.trim(), email:el('eq-email').value.trim(),
     po:el('eq-po').value.trim(), priority:el('eq-priority').value,
     jobType, siteAddress, siteContact, siteMobile,
+    endUserName:el('eq-end-user')?.value.trim()||'',
+    endUserAddress:el('eq-end-user-address')?.value.trim()||'',
   };
 
   // Build items array — primary + extra
@@ -4026,27 +4049,14 @@ function resolveEmailRecipient(job){
     c.company.toLowerCase()===(job.custName||'').toLowerCase()
   );
   const paymentTerms=cust?.paymentTerms||'credit';
-  // If end user with a dealer linked — send to dealer
-  if(cust&&cust.type==='EndUser'&&cust.dealerId){
-    const dealer=_customers.find(c=>c.id===cust.dealerId);
-    if(dealer&&dealer.email){
-      return{
-        email:dealer.email,
-        name:dealer.company,
-        attention:dealer.attention||dealer.company,
-        isDealer:true,
-        endUserName:job.custName,
-        paymentTerms
-      };
-    }
-  }
-  // Otherwise send directly to customer on the job
+  // Always send to the job's Customer (dealer or direct) — never the End User.
+  // End User (if set on the job) is for certificate display and onsite coordination only.
   return{
     email:job.email||cust?.email||'',
     name:job.custName,
     attention:job.attention||job.custName,
-    isDealer:false,
-    endUserName:null,
+    isDealer:cust&&(cust.custTypes||[]).includes('Dealer'),
+    endUserName:job.endUserName||null,
     paymentTerms
   };
 }
@@ -4311,6 +4321,8 @@ function openEditJobModal(jobNo, itemIdx=0){
   el('edit-eq-attention').value=j.attention||'';
   el('edit-eq-po').value=j.po||'';
   el('edit-eq-address').value=j.address||'';
+  el('edit-eq-end-user').value=j.endUserName||'';
+  el('edit-eq-end-user-address').value=j.endUserAddress||'';
   el('edit-eq-tel').value=j.tel||'';
   el('edit-eq-mobile').value=j.mobile||'';
   el('edit-eq-fax').value=j.fax||'';
@@ -4358,6 +4370,8 @@ async function saveEditJob(){
     j.attention=el('edit-eq-attention').value.trim();
     j.po=el('edit-eq-po').value.trim();
     j.address=el('edit-eq-address').value.trim();
+    j.endUserName=el('edit-eq-end-user')?.value.trim()||'';
+    j.endUserAddress=el('edit-eq-end-user-address')?.value.trim()||'';
     j.tel=el('edit-eq-tel').value.trim();
     j.mobile=el('edit-eq-mobile').value.trim();
     j.fax=el('edit-eq-fax').value.trim();
@@ -4421,7 +4435,7 @@ function populateApprovedByDropdown(){
   const sel=el('cal-approved-by'); if(!sel)return;
   const current=sel.value;
   sel.innerHTML='<option value="">— Select Approved Signatory —</option>';
-  (_staff||[]).filter(s=>['Admin','Manager','Signatory'].includes(s.role)&&s.active!==false).forEach(s=>{
+  (_staff||[]).filter(s=>s.approvedSignatory===true&&s.active!==false).forEach(s=>{
     sel.innerHTML+=`<option value="${s.name}">${s.name}</option>`;
   });
   if(current) sel.value=current;
@@ -4525,10 +4539,11 @@ async function openCalModal(jobNo, itemIdx=0){
     await updateJob(jobNo,j2=>{ if(j2.items&&j2.items[itemIdx]) j2.items[itemIdx].certNo=newCertNo; });
   }
   el('cal-cert-no').value=item?item.certNo:'';
-  // Auto-fill from job + item
-  el('cal-issued-to').value=j?j.custName:'';
+  // Auto-fill from job + item — certificate shows End User if set, else the Customer
+  const hasEndUser=!!(j&&j.endUserName);
+  el('cal-issued-to').value=hasEndUser?j.endUserName:(j?j.custName:'');
   el('cal-issued-by').value=s.labName||'Westlab (M) Sdn. Bhd.';
-  const custAddr=j&&j.address?j.address:(_customers.find(c=>c.company===j?.company)?.address||'');
+  const custAddr=hasEndUser?(j.endUserAddress||''):(j&&j.address?j.address:(_customers.find(c=>c.company===j?.company)?.address||''));
   el('cal-cust-addr').value=custAddr;
   el('cal-lab-addr').value=s.address||'';
   // Equipment from item
@@ -8297,44 +8312,26 @@ async function showCertFromJob(jobNo){
 
 // ── CUSTOMER DATABASE ──
 
-function toggleDealerField(){
-  const type=el('cust-type').value;
-  const grp=el('cust-dealer-group');
-  if(grp) grp.style.display=type==='EndUser'?'block':'none';
-}
-
-function populateDealerDropdown(selectedId){
-  const sel=el('cust-dealer-id'); if(!sel)return;
-  sel.innerHTML='<option value="">— Select Dealer —</option>';
-  _customers.filter(c=>c.type==='Dealer').forEach(c=>{
-    sel.innerHTML+=`<option value="${c.id}"${c.id===selectedId?' selected':''}>${c.company}</option>`;
-  });
-}
-
 function openAddCustomerModal(){
-  console.log('openAddCustomerModal called');
   const titleEl=document.getElementById('customer-modal-title');
-  console.log('title el:', titleEl);
   if(titleEl) titleEl.textContent='🏢 Add Customer';
   document.getElementById('cust-edit-id').value='';
-  el('cust-type').value='Direct';
+  el('cust-type-dealer').checked=false;
+  el('cust-type-direct').checked=true;
   el('cust-payment-terms').value='credit';
-  toggleDealerField();
-  populateDealerDropdown('');
   ['cust-company','cust-attention','cust-address','cust-tel','cust-mobile','cust-fax','cust-email','cust-notes'].forEach(id=>{
     const e=el(id); if(e) e.value='';
   });
   openModal('modal-add-customer');
-  console.log('modal-add-customer opened, classes:', document.getElementById('modal-add-customer').className);
 }
 
 function openEditCustomerModal(custId){
   const c=_customers.find(x=>x.id===custId); if(!c)return;
   document.getElementById('customer-modal-title').textContent='✏️ Edit Customer';
   document.getElementById('cust-edit-id').value=custId;
-  el('cust-type').value=c.type||'Direct';
-  toggleDealerField();
-  populateDealerDropdown(c.dealerId||'');
+  const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
+  el('cust-type-dealer').checked=types.includes('Dealer');
+  el('cust-type-direct').checked=types.includes('Direct');
   el('cust-company').value=c.company||'';
   el('cust-attention').value=c.attention||'';
   el('cust-address').value=c.address||'';
@@ -8354,16 +8351,15 @@ async function saveCustomer(){
   try{
     const company=el('cust-company').value.trim();
     if(!company){showToast('Company name is required','error',3000);return;}
-    const type=el('cust-type').value;
-    const dealerId=type==='EndUser'?el('cust-dealer-id').value:'';
-    if(type==='EndUser'&&!dealerId){showToast('Please select the dealer for this end user','error',3000);return;}
-    const dealer=_customers.find(c=>c.id===dealerId);
+    const custTypes=[];
+    if(el('cust-type-dealer').checked) custTypes.push('Dealer');
+    if(el('cust-type-direct').checked) custTypes.push('Direct');
+    if(custTypes.length===0){showToast('Please check at least one customer type','error',3000);return;}
     const editId=document.getElementById('cust-edit-id').value;
     const custId=editId||('CUST-'+Date.now());
     const record={
-      id:custId, type, company,
-      dealerId:dealerId||'',
-      dealerName:dealer?.company||'',
+      id:custId, custTypes, company,
+      type:custTypes.includes('Dealer')?'Dealer':'Direct', // legacy field for old code paths
       attention:el('cust-attention').value.trim(),
       address:el('cust-address').value.trim(),
       tel:el('cust-tel').value.trim(),
@@ -8384,7 +8380,7 @@ async function saveCustomer(){
     closeModal('modal-add-customer');
     renderCustomerTable();
     showToast(`✅ Customer "${company}" ${editId?'updated':'added'}`,'success',3000);
-    addAudit('🏢',`Customer <strong>${company}</strong> (${type}) ${editId?'updated':'added'}`);
+    addAudit('🏢',`Customer <strong>${company}</strong> (${custTypes.join(' + ')}) ${editId?'updated':'added'}`);
   }catch(_err){
     console.error("saveCustomer error:",_err);
     showToast('❌ Save failed: '+_err.message,'error',6000);
@@ -8396,13 +8392,7 @@ async function saveCustomer(){
 async function deleteCustomer(custId){
   try{
   const c=_customers.find(x=>x.id===custId);
-  // Check if dealer has end users linked
-  const linked=_customers.filter(x=>x.dealerId===custId);
-  if(linked.length>0){
-    if(!confirm(`"${c?.company}" is a dealer linked to ${linked.length} end user(s). Delete anyway? End users will lose their dealer link.`))return;
-  } else {
-    if(!confirm(`Delete customer "${c?.company}"? This cannot be undone.`))return;
-  }
+  if(!confirm(`Delete customer "${c?.company}"? This cannot be undone.`))return;
   await SB.delete(CUST_TABLE,custId);
   _customers=_customers.filter(x=>x.id!==custId);
   renderCustomerTable();
@@ -8420,40 +8410,33 @@ function renderCustomerTable(){
   const tbody=el('customer-tbody'); if(!tbody)return;
   // Safety filter - remove any null/invalid entries
   const validCustomers=_customers.filter(c=>c&&c.company);
+  const getTypes=c=>c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
   const filtered=validCustomers.filter(c=>{
     const ms=!q||(c.company||'').toLowerCase().includes(q)||
       (c.attention||'').toLowerCase().includes(q)||
-      (c.email||'').toLowerCase().includes(q)||
-      (c.dealerName||'').toLowerCase().includes(q);
-    const ts=!tf||c.type===tf;
+      (c.email||'').toLowerCase().includes(q);
+    const ts=!tf||getTypes(c).includes(tf);
     return ms&&ts;
   });
-  const dealers=validCustomers.filter(c=>c.type==='Dealer').length;
-  const endUsers=validCustomers.filter(c=>c.type==='EndUser').length;
+  const dealers=validCustomers.filter(c=>getTypes(c).includes('Dealer')).length;
+  const directs=validCustomers.filter(c=>getTypes(c).includes('Direct')).length;
   const totalJobs=_jobs.filter(j=>j.status!=='Deleted').length;
   const kpi1=el('cust-kpi-total');if(kpi1)kpi1.textContent=validCustomers.length;
   const kpi2=el('cust-kpi-dealers');if(kpi2)kpi2.textContent=dealers;
-  const kpi3=el('cust-kpi-endusers');if(kpi3)kpi3.textContent=endUsers;
+  const kpi3=el('cust-kpi-endusers');if(kpi3)kpi3.textContent=directs;
   const kpi4=el('cust-kpi-jobs');if(kpi4)kpi4.textContent=totalJobs;
-  const sub=el('cust-sub');if(sub)sub.textContent=`${validCustomers.length} customers · ${dealers} dealers · ${endUsers} end users`;
+  const sub=el('cust-sub');if(sub)sub.textContent=`${validCustomers.length} customers · ${dealers} dealers · ${directs} direct`;
   if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏢</div><p>${validCustomers.length?'No matching customers.':'No customers yet. Click "+ New Customer" to add.'}</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🏢</div><p>${validCustomers.length?'No matching customers.':'No customers yet. Click "+ New Customer" to add.'}</p></div></td></tr>`;
     return;
   }
-  const typeBadge={
-    Direct:'<span class="badge badge-blue">Direct</span>',
-    Dealer:'<span class="badge badge-purple">Dealer</span>',
-    EndUser:'<span class="badge badge-amber">End User</span>'
-  };
+  const typeBadgeHtml=types=>types.map(t=>t==='Dealer'?'<span class="badge badge-purple">Dealer</span>':'<span class="badge badge-blue">Direct</span>').join(' ');
   tbody.innerHTML=filtered.map(c=>{
     const jobCount=_jobs.filter(j=>j.company===c.company&&j.status!=='Deleted').length;
-    const dealerInfo=c.type==='EndUser'&&c.dealerName
-      ?`<span style="color:var(--purple);font-weight:600;">🤝 ${c.dealerName}</span>`
-      :'—';
+    const types=getTypes(c);
     return `<tr>
       <td><strong>${c.company}</strong>${c.attention?`<br/><span style="font-size:11px;color:var(--text-muted);">${c.attention}</span>`:''}</td>
-      <td>${typeBadge[c.type]||typeBadge.Direct}</td>
-      <td>${dealerInfo}</td>
+      <td>${typeBadgeHtml(types)}</td>
       <td>${c.tel||'—'}</td>
       <td>${c.email||'—'}</td>
       <td><span class="badge badge-blue">${jobCount} job${jobCount!==1?'s':''}</span></td>
@@ -8467,27 +8450,23 @@ function renderCustomerTable(){
   }catch(err){
     console.error('renderCustomerTable error:',err);
     const tbody=el('customer-tbody');
-    if(tbody) tbody.innerHTML=`<tr><td colspan="7" style="color:red;padding:20px;">Error loading customers: ${err.message}</td></tr>`;
+    if(tbody) tbody.innerHTML=`<tr><td colspan="6" style="color:red;padding:20px;">Error loading customers: ${err.message}</td></tr>`;
   }
 }
 
 function viewCustomerDetail(custId){
   const c=_customers.find(x=>x.id===custId); if(!c)return;
   const jobs=_jobs.filter(j=>j.company===c.company&&j.status!=='Deleted');
-  const endUsers=c.type==='Dealer'?_customers.filter(x=>x.dealerId===custId):[];
-  const typeBadge={Direct:'badge-blue',Dealer:'badge-purple',EndUser:'badge-amber'};
+  const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
+  const typeBadgeHtml=types.map(t=>t==='Dealer'?'<span class="badge badge-purple">Dealer</span>':'<span class="badge badge-blue">Direct Customer</span>').join(' ');
   let html=`
     <div style="padding:16px;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
         <div>
           <div style="font-size:18px;font-weight:800;color:var(--navy);">${c.company}</div>
-          <span class="badge ${typeBadge[c.type]||'badge-blue'}" style="margin-top:4px;">${c.type==='EndUser'?'End User':c.type==='Dealer'?'Dealer':'Direct Customer'}</span>
+          <div style="margin-top:4px;">${typeBadgeHtml}</div>
         </div>
       </div>
-      ${c.type==='EndUser'&&c.dealerName?`
-        <div style="background:var(--purple-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">
-          🤝 This end user was referred by dealer: <strong>${c.dealerName}</strong>
-        </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;margin-bottom:16px;">
         ${c.attention?`<div><span style="color:var(--text-muted);">Attention:</span> ${c.attention}</div>`:''}
         ${c.tel?`<div><span style="color:var(--text-muted);">Tel:</span> ${c.tel}</div>`:''}
@@ -8497,15 +8476,6 @@ function viewCustomerDetail(custId){
         ${c.address?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Address:</span> ${c.address}</div>`:''}
         ${c.notes?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Notes:</span> ${c.notes}</div>`:''}
       </div>`;
-  // End users linked (if dealer)
-  if(endUsers.length>0){
-    html+=`<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy);">👥 End Users via this Dealer (${endUsers.length})</div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">
-        ${endUsers.map(u=>`<div style="background:var(--bg);border-radius:6px;padding:8px 12px;font-size:12px;">
-          <strong>${u.company}</strong>${u.attention?' · '+u.attention:''}${u.tel?' · '+u.tel:''}
-        </div>`).join('')}
-      </div>`;
-  }
   // Job history
   if(jobs.length>0){
     html+=`<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy);">🔧 Job History (${jobs.length})</div>
@@ -8607,6 +8577,43 @@ function selectCustomer(c){
   const name=el('customer-selected-name');
   if(badge&&name){badge.style.display='flex';name.textContent=c.company;}
   _custSelected=true;
+  // Toggle End User field — only relevant when customer is tagged Dealer
+  const types=c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
+  const isDealer=types.includes('Dealer');
+  const endUserGroup=el('end-user-group');
+  if(endUserGroup) endUserGroup.style.display=isDealer?'block':'none';
+  if(!isDealer) clearEndUserSelection();
+}
+
+function endUserSearchInput(val){
+  const box=el('end-user-suggestions'); if(!box)return;
+  const q=(val||'').trim().toLowerCase();
+  if(!q){box.style.display='none';return;}
+  const matches=_customers.filter(c=>c&&c.company&&c.company.toLowerCase().includes(q)).slice(0,8);
+  if(!matches.length){
+    box.innerHTML=`<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">No match. <a href="#" onclick="event.preventDefault();prefillNewCustomerModal('${val.replace(/'/g,"\\'")}')" style="color:var(--blue);">+ Add "${val}" as new customer</a></div>`;
+    box.style.display='block';
+    return;
+  }
+  box.innerHTML=matches.map(c=>`<div onclick='selectEndUser(${JSON.stringify(c).replace(/'/g,"&apos;")})' style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='#fff'">
+    <strong>${c.company}</strong>${c.attention?` <span style="color:var(--text-muted);font-size:11px;">— ${c.attention}</span>`:''}
+  </div>`).join('');
+  box.style.display='block';
+}
+
+function selectEndUser(c){
+  el('eq-end-user').value=c.company||'';
+  el('eq-end-user-address').value=c.address||'';
+  el('end-user-suggestions').style.display='none';
+  const badge=el('end-user-selected-badge');
+  if(badge) badge.style.display='flex';
+}
+
+function clearEndUserSelection(){
+  const eu=el('eq-end-user'); if(eu) eu.value='';
+  const eua=el('eq-end-user-address'); if(eua) eua.value='';
+  const badge=el('end-user-selected-badge'); if(badge) badge.style.display='none';
+  const box=el('end-user-suggestions'); if(box) box.style.display='none';
 }
 
 function clearCustomerSelection(){
@@ -8615,6 +8622,8 @@ function clearCustomerSelection(){
     const e=el(id); if(e)e.value='';
   });
   hideCustBadge();
+  const endUserGroup=el('end-user-group'); if(endUserGroup) endUserGroup.style.display='none';
+  clearEndUserSelection();
   el('eq-company').focus();
 }
 
@@ -8639,6 +8648,10 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#eq-company')&&!e.target.closest('#customer-suggestions')){
     const box=el('customer-suggestions');
     if(box) box.style.display='none';
+  }
+  if(!e.target.closest('#eq-end-user')&&!e.target.closest('#end-user-suggestions')){
+    const box2=el('end-user-suggestions');
+    if(box2) box2.style.display='none';
   }
 });
 
@@ -9225,7 +9238,7 @@ function renderPersonnel(){
     return `<tr>
       <td><strong>${u.name}</strong></td>
       <td><span style="font-family:'DM Mono';font-size:12px;">${u.username}</span></td>
-      <td>${rd.label}</td>
+      <td>${rd.label}${u.approvedSignatory?' <span class="badge badge-purple" style="font-size:10px;">✓ Signatory</span>':''}</td>
       <td style="font-size:12px;color:var(--text-muted);">${rd.access}</td>
       <td><span class="badge ${u.active!==false?rd.badge:'badge-slate'}">${u.active!==false?'Active':'Inactive'}</span></td>
       <td style="white-space:nowrap;">
@@ -9283,6 +9296,7 @@ function openAddStaffModal(){
   el('staff-username').readOnly=false;
   el('staff-role').value='Engineer';
   const jd=el('staff-join-date'); if(jd) jd.value='';
+  const sig=el('staff-approved-signatory'); if(sig) sig.checked=false;
   el('staff-password').value='';
   el('staff-password2').value='';
   el('staff-pw-label').innerHTML='Password <span class="req">*</span>';
@@ -9301,6 +9315,7 @@ function openEditStaffModal(username){
   el('staff-username').readOnly=true;
   el('staff-role').value=s.role||'Engineer';
   const jd=el('staff-join-date'); if(jd) jd.value=s.joinDate||'';
+  const sig=el('staff-approved-signatory'); if(sig) sig.checked=!!s.approvedSignatory;
   el('staff-password').value='';
   el('staff-password2').value='';
   el('staff-pw-label').innerHTML='New Password <span style="font-size:11px;color:var(--text-muted);">(leave blank to keep current)</span>';
@@ -9318,6 +9333,8 @@ function openResetPwModal(username){
   el('staff-username').value=username;
   el('staff-username').readOnly=true;
   el('staff-role').value=s.role||'Engineer';
+  const jd2=el('staff-join-date'); if(jd2) jd2.value=s.joinDate||'';
+  const sig2=el('staff-approved-signatory'); if(sig2) sig2.checked=!!s.approvedSignatory;
   el('staff-password').value='';
   el('staff-password2').value='';
   el('staff-pw-label').innerHTML='New Password <span class="req">*</span>';
@@ -9375,6 +9392,7 @@ async function saveStaff(){
     display:role,
     role,
     joinDate:el('staff-join-date')?.value||existing?.joinDate||'',
+    approvedSignatory: !!el('staff-approved-signatory')?.checked,
     password:pw||(existing?.password||''),
     signature:sigUrl,
     active:existing?.active!==false,
