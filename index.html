@@ -4357,6 +4357,31 @@ function renderExtraEquipment(){
 }
 
 // ── JOB RECEIPT PRINT ──
+// Generate a QR code entirely client-side (no external network call, no CORS/timing issues)
+function generateQRDataUrl(text, size){
+  size=size||110;
+  try{
+    if(typeof QRCode==='undefined'){
+      console.warn('QRCode library not loaded yet');
+      return '';
+    }
+    const tempDiv=document.createElement('div');
+    tempDiv.style.display='none';
+    document.body.appendChild(tempDiv);
+    new QRCode(tempDiv,{text:text,width:size,height:size,correctLevel:QRCode.CorrectLevel.M});
+    let dataUrl='';
+    const canvas=tempDiv.querySelector('canvas');
+    const img=tempDiv.querySelector('img');
+    if(canvas) dataUrl=canvas.toDataURL('image/png');
+    else if(img&&img.src) dataUrl=img.src;
+    document.body.removeChild(tempDiv);
+    return dataUrl;
+  }catch(e){
+    console.error('generateQRDataUrl error:',e);
+    return '';
+  }
+}
+
 function buildReceiptHtml(jobs){
   const s=_settings;
   const labName=s.labName||'Westlab (M) Sdn. Bhd.';
@@ -4372,7 +4397,7 @@ function buildReceiptHtml(jobs){
   const allItems=jobs.flatMap(j=>(j.items||[]).map(it=>({...it,jobNo:j.jobNo})));
   // QR code — links directly to the public status lookup page for this job, no login needed
   const qrTarget=`${window.location.origin}${window.location.pathname}?job=${encodeURIComponent(j0.jobNo)}`;
-  const qrImg=`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(qrTarget)}`;
+  const qrImg=generateQRDataUrl(qrTarget,220); // higher res since it's shown small (20mm)
 
   const itemRows=allItems.map((it,i)=>`
     <tr>
@@ -4396,8 +4421,8 @@ function buildReceiptHtml(jobs){
       </div>
       <div style="text-align:right;">
         <div style="font-size:13pt;font-weight:700;border:1.5pt solid #111;padding:3mm 6mm;">JOB RECEIPT</div>
-        <img src="${qrImg}" style="width:20mm;height:20mm;margin:2mm 0 1mm auto;display:block;"/>
-        <div style="font-size:6.5pt;color:#888;">Scan to check status</div>
+        ${qrImg?`<img src="${qrImg}" style="width:20mm;height:20mm;margin:2mm 0 1mm auto;display:block;"/>
+        <div style="font-size:6.5pt;color:#888;">Scan to check status</div>`:''}
         <div style="font-size:8pt;color:#555;margin-top:1.5mm;">Date: ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
       </div>
     </div>
@@ -10586,6 +10611,7 @@ function lookupJob(){
 // ── INIT ──
 el('dash-date').textContent='Week of '+new Date().toLocaleDateString('en-MY',{day:'numeric',month:'long',year:'numeric'});
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
