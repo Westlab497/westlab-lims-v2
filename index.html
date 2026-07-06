@@ -1494,11 +1494,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-section-title" style="margin-top:6px;">👤 Assignment & Timeline</div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Assign To (optional)</label>
+          <label class="form-label">Assign Item 1 To (optional)</label>
           <select class="form-control" id="eq-assign-to">
             <option value="">— Assign later —</option>
           </select>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Assign now to skip the separate assign step</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Each additional item below can be assigned to a different person.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Promised Ready Date</label>
@@ -1978,13 +1978,23 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="edit-eq-email" type="email" placeholder="customer@company.com"/></div>
-        <div class="form-group"><label class="form-label">Receiving Date</label><input class="form-control" id="edit-eq-receive-date" type="date"/></div>
+        <div class="form-group"><label class="form-label" id="edit-eq-receive-date-label">Receiving Date</label><input class="form-control" id="edit-eq-receive-date" type="date"/></div>
       </div>
       <div class="form-group"><label class="form-label">Priority</label>
         <select class="form-control" id="edit-eq-priority">
           <option value="Normal">Normal</option><option value="Urgent">Urgent</option>
           <option value="Express">Express</option><option value="Routine">Routine</option>
         </select>
+      </div>
+
+      <div class="form-group" id="edit-onsite-fields" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
+        <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:8px;">📍 Onsite Visit Details</div>
+        <div class="form-group"><label class="form-label">Site Address</label><textarea class="form-control" id="edit-eq-site-address" rows="2"></textarea></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="edit-eq-site-contact"/></div>
+          <div class="form-group"><label class="form-label">Site Contact Mobile</label><input class="form-control" id="edit-eq-site-mobile"/></div>
+        </div>
+        <div style="font-size:11px;color:#92610c;">To reschedule the visit, change the Appointment Date above and save.</div>
       </div>
 
       <div class="form-section-title" style="margin-top:6px;">🔩 Equipment Details</div>
@@ -3195,6 +3205,15 @@ function doLogout(){
   // Update login page lab name
   const ln=el('login-lab-name');
   if(ln) ln.textContent=_settings.labName||'Westlab (M) Sdn. Bhd.';
+  // QR code direct link — ?job=WL26-00142 opens status lookup immediately, no login needed
+  const urlParams=new URLSearchParams(window.location.search);
+  const qrJob=urlParams.get('job');
+  if(qrJob){
+    openStatusLookup();
+    const input=el('lookup-job-input');
+    if(input){ input.value=qrJob; lookupJob(); }
+    return; // skip login/session restore entirely
+  }
   // Try restore session
   try{
     const sess=JSON.parse(localStorage.getItem('wl_sess')||'null');
@@ -3719,8 +3738,12 @@ function updateSiteFieldsVisibility(){
   // Site Address section shows if ANY item in this job (primary or extra) is Onsite
   const primaryIsOnsite=el('eq-item-type')?.value==='Onsite';
   const anyExtraOnsite=_extraEquipment.some(eq=>eq.calType==='Onsite');
+  const anyOnsite=primaryIsOnsite||anyExtraOnsite;
   const onsiteDiv=el('onsite-fields');
-  if(onsiteDiv) onsiteDiv.style.display=(primaryIsOnsite||anyExtraOnsite)?'block':'none';
+  if(onsiteDiv) onsiteDiv.style.display=anyOnsite?'block':'none';
+  // Relabel the date field so it's obvious this is the appointment date for onsite visits
+  const dateLabel=el('eq-receive-date-label');
+  if(dateLabel) dateLabel.innerHTML=anyOnsite?'📍 Appointment Date <span class="req">*</span>':'Receiving Date <span class="req">*</span>';
   // Show "Use End User Address" quick-fill only when an end-user is actually selected
   const euBtn=el('quick-fill-enduser-btn');
   if(euBtn) euBtn.style.display=el('eq-end-user')?.value.trim()?'inline-flex':'none';
@@ -3787,6 +3810,7 @@ async function saveEquipment(printReceipt=false){
     accessories:el('eq-accessories')?.value.trim()||'',
     remarks:el('eq-remarks')?.value.trim()||'',
     calType:itemType, // Lab or Onsite
+    assignTo:el('eq-assign-to').value||null,
   };
   const rawItems=[primaryItem,..._extraEquipment];
 
@@ -3799,13 +3823,14 @@ async function saveEquipment(printReceipt=false){
   const items=[];
   for(let i=0;i<rawItems.length;i++){
     const certNo=await commitCertNo();
+    const itemAssignTo=rawItems[i].assignTo||null;
     items.push({
       itemNo:i+1,
       certNo,
       ...rawItems[i],
-      status:assignTo?'Assigned':'Unassigned',
-      assignedTo:assignTo||null,
-      assignNote:assignTo?assignNote:'',
+      status:itemAssignTo?'Assigned':'Unassigned',
+      assignedTo:itemAssignTo,
+      assignNote:itemAssignTo?assignNote:'',
       calData:null,
       excelFile:null,
       approvalComments:'',
@@ -3815,18 +3840,20 @@ async function saveEquipment(printReceipt=false){
     });
   }
 
+  const anyAssigned=items.some(it=>it.assignedTo);
+  const assignedNames=[...new Set(items.filter(it=>it.assignedTo).map(it=>USERS[it.assignedTo]?.name||it.assignedTo))];
   const certList=items.map(i=>i.certNo).join(', ');
   const job={
     jobNo, receiveDate,
     ...custInfo,
     promisedDate,
     items,
-    status:assignTo?'In Progress':'Unassigned',
+    status:anyAssigned?'In Progress':'Unassigned',
     billed:false, billedAt:null,
     deletedAt:null, deletedBy:null,
     history:[
       {action:`Job Created — ${items.length} item${items.length>1?'s':''} — Cert(s): ${certList}`,by:currentUser,time:new Date().toISOString()},
-      ...(assignTo?[{action:`All items assigned to ${USERS[assignTo]?.name||assignTo}`,by:currentUser,time:new Date().toISOString(),note:assignNote}]:[])
+      ...(anyAssigned?[{action:`Item(s) assigned — ${items.filter(it=>it.assignedTo).map(it=>`Item ${it.itemNo}: ${USERS[it.assignedTo]?.name||it.assignedTo}`).join(', ')}`,by:currentUser,time:new Date().toISOString(),note:assignNote}]:[])
     ]
   };
 
@@ -3836,7 +3863,7 @@ async function saveEquipment(printReceipt=false){
 
   closeModal('modal-add-equipment');
   renderEquipmentTable(); renderDashboard(); refreshAllBadges();
-  showToast(`✅ Job ${jobNo} created — ${items.length} item${items.length>1?'s':''}, ${items.length} cert${items.length>1?'s':''}${assignTo?' · Assigned to '+USERS[assignTo]?.name:''}`,'success',4000);
+  showToast(`✅ Job ${jobNo} created — ${items.length} item${items.length>1?'s':''}, ${items.length} cert${items.length>1?'s':''}${anyAssigned?' · Assigned to '+assignedNames.join(', '):''}`,'success',4000);
   addAudit('🔧',`Job <strong>${jobNo}</strong> created — ${items.length} item(s) for ${company}`);
   currentPhotos=[]; _extraEquipment=[];
 
@@ -3863,10 +3890,14 @@ async function saveEquipment(printReceipt=false){
       Email: <a href="mailto:sales@westlab.com.my" style="color:#378ADD;">sales@westlab.com.my</a><br/>
       Contact No.: +6011-3508 9986</p>
       <p>Best regards,<br/>${_settings.labName||'Westlab (M) Sdn. Bhd.'}</p>`;
-    sendEmail(recip.email, recip.name,
-      `Job Receipt — ${jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,
-      textBody, htmlBody
-    ).then(ok=>{ if(ok) addAudit('📧',`Job received email sent to ${recip.email} for ${jobNo}`); });
+    // Generate PDF receipt first (best-effort — email still sends even if PDF generation fails)
+    generateReceiptPdfBase64([job]).then(pdfBase64=>{
+      const attachments=pdfBase64?[{filename:`${jobNo}_Receipt.pdf`,content:pdfBase64}]:undefined;
+      sendEmail(recip.email, recip.name,
+        `Job Receipt — ${jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,
+        textBody, htmlBody, attachments
+      ).then(ok=>{ if(ok) addAudit('📧',`Job received email${attachments?' (with PDF receipt)':''} sent to ${recip.email} for ${jobNo}`); });
+    });
   }
 
   // Auto-save customer
@@ -3958,11 +3989,12 @@ function removeLogo(){
 }
 
 // ── EMAIL via Resend (through secure API Worker) ──
-async function sendEmail(toEmail, toName, subject, textBody, htmlBody){
+async function sendEmail(toEmail, toName, subject, textBody, htmlBody, attachments){
   if(!toEmail){console.warn('sendEmail: no recipient');return false;}
   try{
     const payload={to:toEmail,subject,text:textBody};
     if(htmlBody) payload.html=htmlBody;
+    if(attachments&&attachments.length) payload.attachments=attachments;
     await apiFetch('/api/email',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -4258,7 +4290,7 @@ document.addEventListener('click',e=>{
 function addExtraEquipment(){
   const idx=_extraEquipment.length;
   const defaultType=el('eq-item-type')?.value||'Lab';
-  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:defaultType});
+  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:defaultType,assignTo:''});
   renderExtraEquipment();
   updateSiteFieldsVisibility();
   // Focus first field of new item
@@ -4309,43 +4341,64 @@ function renderExtraEquipment(){
       <div class="form-row">
         <div class="form-group"><label class="form-label">Tag No.</label>
           <input class="form-control" value="${eq.tagNo}" placeholder="N/A" oninput="updateExtraField(${i},'tagNo',this.value)"/></div>
-        <div class="form-group"></div>
+        <div class="form-group"><label class="form-label">Assign To (optional)</label>
+          <select class="form-control" id="extra-eq-assign-${i}" onchange="updateExtraField(${i},'assignTo',this.value)">
+            <option value="">— Assign later —</option>
+          </select>
+        </div>
       </div>
       ${eq.calType==='Onsite'?`<div style="font-size:11px;background:#e0f7fa;color:#006064;border-radius:6px;padding:6px 10px;">📍 This item will use the Site Address / Contact set above for the whole visit.</div>`:''}
     </div>`).join('');
+  _extraEquipment.forEach((eq,i)=>{
+    populateUserDropdown(`extra-eq-assign-${i}`,false,true);
+    const sel=el(`extra-eq-assign-${i}`);
+    if(sel) sel.value=eq.assignTo||'';
+  });
 }
 
 // ── JOB RECEIPT PRINT ──
-function printJobReceipt(jobs){
+function buildReceiptHtml(jobs){
   const s=_settings;
   const labName=s.labName||'Westlab (M) Sdn. Bhd.';
   const labAddr=s.address||'';
   const logoUrl=s.logoUrl||'';
+  const regNo=s.regNo||'';
   const now=new Date();
   const fmtDt=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});};
+  const intervalLabel=m=>m==='open'||!m?'Open':(m%12===0?`${m/12} yr`:`${m} mo`);
   // jobs is now an array of job objects each with items[]
   const j0=jobs[0];
   // Flatten all items across all jobs for the table
   const allItems=jobs.flatMap(j=>(j.items||[]).map(it=>({...it,jobNo:j.jobNo})));
+  // QR code — links directly to the public status lookup page for this job, no login needed
+  const qrTarget=`${window.location.origin}${window.location.pathname}?job=${encodeURIComponent(j0.jobNo)}`;
+  const qrImg=`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(qrTarget)}`;
 
   const itemRows=allItems.map((it,i)=>`
     <tr>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${i+1}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;font-weight:700;color:#1a56db;">${it.certNo||'—'}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.eqName}</td>
-      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.brand||'—'} ${it.model||''}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.serial||'—'}</td>
+      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;${it.calType==='Onsite'?'color:#c84b00;font-weight:700;':''}">${it.calType==='Onsite'?'Onsite':'Lab'}</td>
+      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${intervalLabel(it.calInterval)}</td>
+      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.condition||'—'}</td>
     </tr>`).join('');
 
-  const html=`<div style="width:210mm;min-height:148mm;padding:12mm 16mm;box-sizing:border-box;font-family:'Calibri',Arial,sans-serif;background:#fff;color:#111;">
+  const hasOnsite=allItems.some(it=>it.calType==='Onsite');
+
+  return `<div style="width:210mm;min-height:148mm;padding:12mm 16mm;box-sizing:border-box;font-family:'Calibri',Arial,sans-serif;background:#fff;color:#111;position:relative;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6mm;">
       <div>
-        ${logoUrl?`<img src="${logoUrl}" style="height:14mm;object-fit:contain;margin-bottom:2mm;"/>`:`<div style="font-size:16pt;font-weight:900;letter-spacing:2px;">${labName}</div>`}
-        <div style="font-size:8pt;color:#555;white-space:pre-line;">${labAddr}</div>
+        ${logoUrl?`<img src="${logoUrl}" style="height:14mm;object-fit:contain;margin-bottom:2mm;"/>`:`<div style="font-size:16pt;font-weight:900;letter-spacing:2px;">WESTLAB</div>`}
+        <div style="font-size:9pt;font-weight:700;margin-top:1mm;">${labName}${regNo?` <span style="font-size:7pt;font-weight:400;color:#666;">(Reg. No: ${regNo})</span>`:''}</div>
+        <div style="font-size:8pt;color:#555;white-space:pre-line;margin-top:0.5mm;">${labAddr}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:13pt;font-weight:700;border:1.5pt solid #111;padding:3mm 6mm;">JOB RECEIPT</div>
-        <div style="font-size:8pt;color:#555;margin-top:2mm;">Date: ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
+        <img src="${qrImg}" style="width:20mm;height:20mm;margin:2mm 0 1mm auto;display:block;"/>
+        <div style="font-size:6.5pt;color:#888;">Scan to check status</div>
+        <div style="font-size:8pt;color:#555;margin-top:1.5mm;">Date: ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
       </div>
     </div>
     <div style="border-top:1.2pt solid #111;margin-bottom:4mm;"></div>
@@ -4375,36 +4428,87 @@ function printJobReceipt(jobs){
         <div style="font-size:8.5pt;margin-top:2mm;">Total Items: <strong>${allItems.length}</strong></div>
       </div>
     </div>
+    ${hasOnsite?`<div style="background:#fff3e0;border:1px solid #ffb74d;border-radius:2mm;padding:2.5mm 3.5mm;margin-bottom:4mm;font-size:8pt;">
+      <strong style="color:#c84b00;">Onsite Visit Details</strong> — Site: ${j0.siteAddress||'—'}${j0.siteContact?` &nbsp;·&nbsp; Contact: ${j0.siteContact}`:''}${j0.siteMobile?` &nbsp;·&nbsp; Mobile: ${j0.siteMobile}`:''}
+    </div>`:''}
     <table style="width:100%;border-collapse:collapse;margin-bottom:4mm;">
       <thead>
         <tr style="background:#f0f0f0;">
           <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">#</th>
           <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">Cert No.</th>
           <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">Equipment</th>
-          <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">Brand / Model</th>
           <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">Serial No.</th>
+          <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">Type</th>
+          <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">Interval</th>
+          <th style="padding:4px 8px;border:0.5pt solid #ccc;font-size:8.5pt;text-align:left;">Condition</th>
         </tr>
       </thead>
       <tbody>${itemRows}</tbody>
     </table>
     <!-- Footer -->
-    <div style="display:flex;justify-content:space-between;margin-top:6mm;">
+    <div style="display:flex;justify-content:space-between;margin-top:10mm;">
       <div style="text-align:center;">
-        <div style="width:52mm;border-top:0.7pt solid #111;padding-top:1.5mm;font-size:8.5pt;">Received by (Customer)</div>
+        <div style="height:12mm;"></div>
+        <div style="width:60mm;border-top:0.7pt solid #111;padding-top:1.5mm;font-size:8.5pt;">Received by (Customer)</div>
       </div>
       <div style="text-align:center;">
-        <div style="width:52mm;border-top:0.7pt solid #111;padding-top:1.5mm;font-size:8.5pt;">Prepared by (${labName})</div>
+        <div style="height:12mm;"></div>
+        <div style="width:60mm;border-top:0.7pt solid #111;padding-top:1.5mm;font-size:8.5pt;">Prepared by (${labName})</div>
       </div>
     </div>
     <div style="margin-top:4mm;font-size:7.5pt;color:#777;text-align:center;border-top:0.3pt solid #ccc;padding-top:2mm;">
-      Please retain this receipt for your records. Contact us with your Job Number for status updates. Thank you.
+      If this receipt is not signed by the customer, it is deemed accepted upon collection of equipment. Please retain this receipt for your records — contact us with your Job Number for status updates.
     </div>
+    <div style="position:absolute;bottom:6mm;right:16mm;font-size:7pt;color:#999;">Page 1 of 1</div>
   </div>`;
+}
 
+function printJobReceipt(jobs){
+  const html=buildReceiptHtml(jobs);
   const frame=el('receipt-print-frame');
   frame.innerHTML=html;
   frame.style.display='block';
   setTimeout(()=>{window.print();setTimeout(()=>{frame.style.display='none';},500);},200);
+}
+
+// Generate the job receipt as a base64 PDF (for email attachment) — reuses the same HTML as print/preview
+async function generateReceiptPdfBase64(jobs){
+  try{
+    if(typeof html2canvas==='undefined'||typeof PDFLib==='undefined'){
+      console.warn('PDF libraries not loaded yet — skipping receipt attachment');
+      return null;
+    }
+    const html=buildReceiptHtml(jobs);
+    const frame=el('receipt-print-frame');
+    frame.innerHTML=html;
+    frame.style.display='block';
+    frame.style.position='fixed';
+    frame.style.left='-9999px';
+    await new Promise(r=>setTimeout(r,150)); // let images (logo, QR) load
+    const target=frame.firstElementChild||frame;
+    const canvas=await html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    frame.style.display='none';
+    frame.style.position='';
+    frame.style.left='';
+    const imgData=canvas.toDataURL('image/jpeg',0.92);
+    const imgBytes=await fetch(imgData).then(r=>r.arrayBuffer());
+    const {PDFDocument}=PDFLib;
+    const pdf=await PDFDocument.create();
+    const jpgImage=await pdf.embedJpg(imgBytes);
+    const page=pdf.addPage([595,421]); // A4 landscape-ish ratio matching 210x148mm half-page receipt
+    page.drawImage(jpgImage,{x:0,y:0,width:595,height:421});
+    const bytes=await pdf.save();
+    // Convert to base64
+    let binary='';
+    const chunk=8192;
+    for(let i=0;i<bytes.length;i+=chunk){
+      binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+    }
+    return btoa(binary);
+  }catch(e){
+    console.error('generateReceiptPdfBase64 error:',e);
+    return null;
+  }
 }
 let _editingItemIdx=0;
 function openEditJobModal(jobNo, itemIdx=0){
@@ -4425,6 +4529,15 @@ function openEditJobModal(jobNo, itemIdx=0){
   el('edit-eq-email').value=j.email||'';
   el('edit-eq-receive-date').value=j.receiveDate||'';
   el('edit-eq-priority').value=j.priority||'Normal';
+  // Onsite detection — if ANY item in this job is Onsite, show site fields and relabel the date
+  const jobHasOnsite=(j.items||[]).some(it=>it.calType==='Onsite');
+  const dateLabel=el('edit-eq-receive-date-label');
+  if(dateLabel) dateLabel.textContent=jobHasOnsite?'Appointment Date':'Receiving Date';
+  const onsiteGroup=el('edit-onsite-fields');
+  if(onsiteGroup) onsiteGroup.style.display=jobHasOnsite?'block':'none';
+  const siteAddr=el('edit-eq-site-address'); if(siteAddr) siteAddr.value=j.siteAddress||'';
+  const siteContact=el('edit-eq-site-contact'); if(siteContact) siteContact.value=j.siteContact||'';
+  const siteMobile=el('edit-eq-site-mobile'); if(siteMobile) siteMobile.value=j.siteMobile||'';
   el('edit-eq-name').value=item.eqName||'';
   el('edit-eq-brand').value=item.brand||'';
   el('edit-eq-model').value=item.model||'';
@@ -4461,6 +4574,11 @@ async function saveEditJob(){
   const eqName=el('edit-eq-name').value.trim();
   if(!company){alert('Customer / Company name is required.');return;}
   if(!eqName){alert('Equipment name is required.');return;}
+  const jBefore=getJob(_editingJobNo);
+  const oldReceiveDate=jBefore?.receiveDate||'';
+  const jobHasOnsite=(jBefore?.items||[]).some(it=>it.calType==='Onsite');
+  const newReceiveDate=el('edit-eq-receive-date').value;
+  const dateChanged=jobHasOnsite&&oldReceiveDate&&newReceiveDate&&oldReceiveDate!==newReceiveDate;
   await updateJob(_editingJobNo,j=>{
     j.company=company; j.custName=company;
     j.attention=el('edit-eq-attention').value.trim();
@@ -4475,6 +4593,13 @@ async function saveEditJob(){
     j.receiveDate=el('edit-eq-receive-date').value;
     j.priority=el('edit-eq-priority').value;
     j.promisedDate=el('edit-eq-promised-date').value;
+    // Onsite site details — only present/relevant for onsite jobs, safe to always sync
+    const siteAddrEl=el('edit-eq-site-address');
+    if(siteAddrEl) j.siteAddress=siteAddrEl.value.trim();
+    const siteContactEl=el('edit-eq-site-contact');
+    if(siteContactEl) j.siteContact=siteContactEl.value.trim();
+    const siteMobileEl=el('edit-eq-site-mobile');
+    if(siteMobileEl) j.siteMobile=siteMobileEl.value.trim();
     // Save equipment-level fields into the specific item being edited
     if(j.items&&j.items[_editingItemIdx]){
       const it=j.items[_editingItemIdx];
@@ -4515,12 +4640,15 @@ async function saveEditJob(){
         if(price>0) j.price=price; else delete j.price;
       }
     }
+    if(dateChanged){
+      j.history.push({action:`📍 Onsite visit rescheduled from ${fmtDateShort(oldReceiveDate)} to ${fmtDateShort(newReceiveDate)}`,by:currentUser,time:new Date().toISOString()});
+    }
     j.history.push({action:'Job details edited',by:currentUser,time:new Date().toISOString()});
   });
   closeModal('modal-edit-job');
   renderEquipmentTable(); renderDashboard();
-  showToast('✅ Job updated successfully','success');
-  addAudit('✏️',`Job <strong>${_editingJobNo}</strong> edited`);
+  showToast(dateChanged?'✅ Onsite visit rescheduled successfully':'✅ Job updated successfully','success');
+  addAudit('✏️',`Job <strong>${_editingJobNo}</strong> edited${dateChanged?' — onsite visit rescheduled':''}`);
   }catch(_err){
     console.error("saveEditJob error:",_err);
     if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
@@ -5070,13 +5198,21 @@ function renderEquipmentTable(){
     filtered.forEach(j=>{
       const items=j.items||[];
       const itemCount=items.length;
+      const onsiteCount=items.filter(it=>it.calType==='Onsite').length;
+      const labCount=itemCount-onsiteCount;
+      let typeBadge='';
+      if(onsiteCount>0&&labCount>0){
+        typeBadge=`<span style="background:#80deea;color:#006064;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;">${labCount} LAB · ${onsiteCount} ONSITE</span>`;
+      } else if(onsiteCount>0){
+        typeBadge=`<span style="background:#80deea;color:#006064;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;">ONSITE</span>`;
+      }
       const overdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
       // ── JOB GROUP HEADER ROW ──
       rows.push(`<tr style="background:var(--navy);color:#fff;">
         <td colspan="2" style="padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:#fff;">
           ${j.jobNo}
           <span style="font-size:11px;font-weight:400;opacity:.8;margin-left:8px;">${itemCount} item${itemCount>1?'s':''}</span>
-          ${j.jobType==='Onsite'?`<span style="background:#80deea;color:#006064;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;">ONSITE</span>`:''}
+          ${typeBadge}
         </td>
         <td colspan="2" style="padding:6px 10px;font-size:12px;color:#fff;">
           <strong>${j.custName}</strong>${j.attention?`<span style="opacity:.7;font-size:11px;"> · ${j.attention}</span>`:''}
@@ -10394,42 +10530,53 @@ function lookupJob(){
     </div>`;
     return;
   }
-  const statusColor={Unassigned:'#f59e0b',Assigned:'#3b82f6','In Progress':'#3b82f6','Pending Approval':'#a855f7',Completed:'#22c55e'};
+  const items=j.items||[];
+  const statusColor={Unassigned:'#f59e0b',Assigned:'#3b82f6','In Progress':'#3b82f6','Scheduled':'#3b82f6','On-Site':'#3b82f6','KIV':'#f97316','Customer Not Ready':'#ef4444','Pending Approval':'#a855f7',Completed:'#22c55e'};
   const statusMsg={
-    Unassigned:'Your equipment has been received and is awaiting assignment to a calibration engineer.',
-    Assigned:'Your calibration is in progress. Our engineer is working on your equipment.',
-    'In Progress':'Your calibration is in progress. Our engineer is working on your equipment.',
-    'Pending Approval':'Calibration is complete and the certificate is under review by our Approved Signatory.',
-    Completed:'✅ Your calibration certificate is ready! Please contact us to collect your equipment.'
+    Unassigned:'Received, awaiting assignment to a calibration engineer.',
+    Assigned:'Calibration in progress.',
+    'In Progress':'Calibration in progress.',
+    Scheduled:'Onsite visit scheduled.',
+    'On-Site':'Our engineer is at the site.',
+    KIV:'On hold — will resume shortly.',
+    'Customer Not Ready':'Awaiting rescheduling.',
+    'Pending Approval':'Certificate under review by our Approved Signatory.',
+    Completed:'Certificate ready for collection.'
   };
-  const color=statusColor[j.status]||'#64748b';
-  const msg=statusMsg[j.status]||'Your job is being processed.';
-  const isReady=j.status==='Completed';
+  const completedCount=items.filter(it=>it.status==='Completed').length;
+  const allDone=items.length>0&&completedCount===items.length;
+  const overallColor=allDone?'#22c55e':(completedCount>0?'#3b82f6':(statusColor[j.status]||'#64748b'));
+
+  const itemRows=items.map(it=>{
+    const c=statusColor[it.status]||'#64748b';
+    const m=statusMsg[it.status]||'Being processed.';
+    return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <strong style="font-size:12.5px;">${it.eqName||'Equipment'}</strong>
+        <span style="background:${c};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">${it.status}</span>
+      </div>
+      <div style="font-size:11px;color:#64748b;">Cert No.: <strong style="color:#3b82f6;">${it.certNo||'—'}</strong> &nbsp;·&nbsp; S/N: ${it.serial||'N/A'}${it.calType==='Onsite'?' &nbsp;·&nbsp; 📍 Onsite':''}</div>
+      <div style="font-size:11px;color:#374151;margin-top:4px;">${m}</div>
+    </div>`;
+  }).join('');
+
   res.style.display='block';
   res.innerHTML=`
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-      <!-- Status bar -->
-      <div style="background:${color};padding:14px 18px;color:#fff;">
+      <!-- Overall status bar -->
+      <div style="background:${overallColor};padding:14px 18px;color:#fff;">
         <div style="font-size:11px;opacity:.8;margin-bottom:2px;">JOB STATUS</div>
-        <div style="font-size:16px;font-weight:700;">${j.status}</div>
+        <div style="font-size:16px;font-weight:700;">${allDone?'✅ All items completed':`${completedCount} of ${items.length} item${items.length!==1?'s':''} completed`}</div>
       </div>
       <div style="padding:16px;">
-        <!-- Job info grid -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:12px;">
           <div><span style="color:#64748b;">Job No.</span><br/><strong>${j.jobNo}</strong></div>
-          <div><span style="color:#64748b;">Cert No.</span><br/><strong style="color:#3b82f6;">${j.certNo||'—'}</strong></div>
-          <div><span style="color:#64748b;">Equipment</span><br/><strong>${j.eqName}</strong></div>
-          <div><span style="color:#64748b;">Serial No.</span><br/><strong>${j.serial||'N/A'}</strong></div>
           <div><span style="color:#64748b;">Received</span><br/><strong>${j.receiveDate||'—'}</strong></div>
-          ${j.promisedDate&&!isReady?`<div><span style="color:#64748b;">Expected Ready</span><br/><strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'#ef4444':'#22c55e'}">${fmtDateShort(j.promisedDate)}</strong></div>`:''}
-          ${isReady?`<div><span style="color:#64748b;">Approved By</span><br/><strong>${USERS[j.approvedBy]?.name||j.approvedBy||'—'}</strong></div>`:''}
+          ${j.promisedDate&&!allDone?`<div><span style="color:#64748b;">Expected Ready</span><br/><strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'#ef4444':'#22c55e'}">${fmtDateShort(j.promisedDate)}</strong></div>`:''}
         </div>
-        <!-- Message -->
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:12px;color:#374151;margin-bottom:${isReady?'12px':'0'};">
-          ${msg}
-        </div>
-        ${isReady?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;font-size:12px;color:#166534;text-align:center;">
-          📞 Please contact us to collect your instrument.<br/>
+        ${itemRows}
+        ${allDone?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;font-size:12px;color:#166534;text-align:center;margin-top:4px;">
+          📞 Please contact us to collect your instrument(s).<br/>
           <strong>${_settings.tel||''}</strong>${_settings.email?' · '+_settings.email:''}
         </div>`:''}
       </div>
