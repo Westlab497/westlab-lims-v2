@@ -1359,25 +1359,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Certificate Number</label><input class="form-control" id="eq-cert-no-preview" readonly style="font-family:'DM Sans',sans-serif;font-weight:700;color:var(--blue);"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Job Type <span class="req">*</span></label>
-          <select class="form-control" id="eq-job-type" onchange="toggleOnsiteFields()">
-            <option value="Lab">Lab — Customer sends equipment to lab</option>
-            <option value="Onsite">Onsite — Engineer goes to customer site</option>
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label" id="eq-receive-date-label">Receiving Date <span class="req">*</span></label><input class="form-control" id="eq-receive-date" type="date" onchange="el('eq-promised-date').value='';calcPromisedDate();"/></div>
+        <div class="form-group"><label class="form-label" id="eq-receive-date-label">Receiving / Appointment Date <span class="req">*</span></label><input class="form-control" id="eq-receive-date" type="date" onchange="el('eq-promised-date').value='';calcPromisedDate();"/></div>
+        <div class="form-group"></div>
       </div>
-
-      <!-- ONSITE FIELDS (shown only when Onsite selected) -->
-      <div id="onsite-fields" style="display:none;background:#fff3e0;border-radius:10px;padding:14px 16px;margin-bottom:12px;border:1px solid #ffb74d;">
-        <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:10px;">📍 Onsite Visit Details</div>
-        <div class="form-group"><label class="form-label">Site Address <span class="req">*</span></label><textarea class="form-control" id="eq-site-address" rows="3" placeholder="Full address of the calibration site (if different from billing address)"></textarea></div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="eq-site-contact" placeholder="Person to meet at site"/></div>
-          <div class="form-group"><label class="form-label">Site Contact Mobile</label><input class="form-control" id="eq-site-mobile" placeholder="e.g. +6012-345 6789"/></div>
-        </div>
-      </div>
+      <input type="hidden" id="eq-job-type" value="Lab"/>
 
       <!-- Customer search autocomplete -->
       <div class="form-group" style="position:relative;">
@@ -1522,6 +1507,16 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Same customer dropping multiple instruments? Add them below — each gets its own job &amp; cert number.</div>
       <div id="multi-eq-list"></div>
       <button class="btn btn-outline btn-sm" onclick="addExtraEquipment()" style="margin-bottom:8px;">+ Add Another Equipment Item</button>
+
+      <!-- ONSITE FIELDS (shown only when at least one item is marked Onsite) -->
+      <div id="onsite-fields" style="display:none;background:#fff3e0;border-radius:10px;padding:14px 16px;margin-bottom:12px;border:1px solid #ffb74d;margin-top:12px;">
+        <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:10px;">📍 Onsite Visit Details <span style="font-weight:400;font-size:11px;color:#92610c;">(shared by all Onsite items above)</span></div>
+        <div class="form-group"><label class="form-label">Site Address <span class="req">*</span></label><textarea class="form-control" id="eq-site-address" rows="3" placeholder="Full address of the calibration site (if different from billing address)"></textarea></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="eq-site-contact" placeholder="Person to meet at site"/></div>
+          <div class="form-group"><label class="form-label">Site Contact Mobile</label><input class="form-control" id="eq-site-mobile" placeholder="e.g. +6012-345 6789"/></div>
+        </div>
+      </div>
 
       <div class="form-section-title" style="margin-top:6px;">📷 Equipment Photos</div>
       <div class="photo-upload-area" id="photo-drop-zone" onclick="document.getElementById('photo-file-input').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handlePhotoDrop(event)">
@@ -3681,7 +3676,7 @@ async function openNewJobModal(){
       const e=document.getElementById(id);if(e)e.value='';});
     const jtEl=el('eq-job-type'); if(jtEl) jtEl.value='Lab';
     const itEl=el('eq-item-type'); if(itEl) itEl.value='Lab';
-    toggleOnsiteFields();
+    updateSiteFieldsVisibility();
     populateUserDropdown('eq-assign-to',false,true);
     calcPromisedDate();
     _extraEquipment=[];
@@ -3691,17 +3686,6 @@ async function openNewJobModal(){
     console.error('openNewJobModal error:',err);
     alert('Error opening new job form: '+err.message+'\n\nPlease refresh the page and try again.');
   }
-}
-function toggleOnsiteFields(){
-  const jobType=el('eq-job-type')?.value||'Lab';
-  const label=el('eq-receive-date-label');
-  const itemType=el('eq-item-type');
-  if(label) label.innerHTML=jobType==='Onsite'
-    ?'Appointment Date <span class="req">*</span>'
-    :'Receiving Date <span class="req">*</span>';
-  // Set a sensible default for the primary item type (only a starting suggestion, not forced)
-  if(itemType) itemType.value=jobType;
-  updateSiteFieldsVisibility();
 }
 function updateSiteFieldsVisibility(){
   // Site Address section shows if ANY item in this job (primary or extra) is Onsite
@@ -3738,11 +3722,13 @@ async function saveEquipment(printReceipt=false){
   const assignNote=el('eq-assign-note').value.trim();
   const promisedDate=el('eq-promised-date').value||'';
   const receiveDate=el('eq-receive-date').value;
-  const jobType=el('eq-job-type')?.value||'Lab';
   const siteAddress=el('eq-site-address')?.value.trim()||'';
   const siteContact=el('eq-site-contact')?.value.trim()||'';
   const siteMobile=el('eq-site-mobile')?.value.trim()||'';
-  const itemType=el('eq-item-type')?.value||jobType;
+  const itemType=el('eq-item-type')?.value||'Lab';
+  // Job-level type is derived from items — Onsite if ANY item is onsite, purely for badges/legacy display
+  const anyOnsite=itemType==='Onsite'||_extraEquipment.some(eq=>eq.calType==='Onsite');
+  const jobType=anyOnsite?'Onsite':'Lab';
 
   const custInfo={
     company, custName:company,
@@ -4237,8 +4223,8 @@ document.addEventListener('click',e=>{
 // ── MULTI-ITEM EQUIPMENT ──
 function addExtraEquipment(){
   const idx=_extraEquipment.length;
-  const jobType=el('eq-job-type')?.value||'Lab';
-  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:jobType});
+  const defaultType=el('eq-item-type')?.value||'Lab';
+  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:defaultType});
   renderExtraEquipment();
   updateSiteFieldsVisibility();
   // Focus first field of new item
