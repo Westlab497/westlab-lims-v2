@@ -1445,7 +1445,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Equipment Name <span class="req">*</span></label><input class="form-control" id="eq-name" placeholder="e.g. Digital Thermometer"/></div>
         <div class="form-group">
           <label class="form-label">Calibration Type</label>
-          <select class="form-control" id="eq-item-type">
+          <select class="form-control" id="eq-item-type" onchange="updateSiteFieldsVisibility()">
             <option value="Lab">Lab Calibration</option>
             <option value="Onsite">Onsite Calibration</option>
           </select>
@@ -3694,15 +3694,21 @@ async function openNewJobModal(){
 }
 function toggleOnsiteFields(){
   const jobType=el('eq-job-type')?.value||'Lab';
-  const onsiteDiv=el('onsite-fields');
   const label=el('eq-receive-date-label');
   const itemType=el('eq-item-type');
-  if(onsiteDiv) onsiteDiv.style.display=jobType==='Onsite'?'block':'none';
   if(label) label.innerHTML=jobType==='Onsite'
     ?'Appointment Date <span class="req">*</span>'
     :'Receiving Date <span class="req">*</span>';
-  // Auto-set item type to match job type
+  // Set a sensible default for the primary item type (only a starting suggestion, not forced)
   if(itemType) itemType.value=jobType;
+  updateSiteFieldsVisibility();
+}
+function updateSiteFieldsVisibility(){
+  // Site Address section shows if ANY item in this job (primary or extra) is Onsite
+  const primaryIsOnsite=el('eq-item-type')?.value==='Onsite';
+  const anyExtraOnsite=_extraEquipment.some(eq=>eq.calType==='Onsite');
+  const onsiteDiv=el('onsite-fields');
+  if(onsiteDiv) onsiteDiv.style.display=(primaryIsOnsite||anyExtraOnsite)?'block':'none';
 }
 function toggleConditionOther(){
   el('eq-condition-other-group').style.display=el('eq-condition').value==='Others'?'block':'none';
@@ -4231,17 +4237,21 @@ document.addEventListener('click',e=>{
 // ── MULTI-ITEM EQUIPMENT ──
 function addExtraEquipment(){
   const idx=_extraEquipment.length;
-  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:''});
+  const jobType=el('eq-job-type')?.value||'Lab';
+  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:jobType});
   renderExtraEquipment();
+  updateSiteFieldsVisibility();
   // Focus first field of new item
   setTimeout(()=>el(`extra-eq-name-${idx}`)?.focus(),100);
 }
 function removeExtraEquipment(idx){
   _extraEquipment.splice(idx,1);
   renderExtraEquipment();
+  updateSiteFieldsVisibility();
 }
 function updateExtraField(idx,field,val){
   if(_extraEquipment[idx]) _extraEquipment[idx][field]=val;
+  if(field==='calType'){ renderExtraEquipment(); updateSiteFieldsVisibility(); }
 }
 function renderExtraEquipment(){
   const container=el('multi-eq-list'); if(!container)return;
@@ -4257,21 +4267,31 @@ function renderExtraEquipment(){
       <div class="form-row">
         <div class="form-group"><label class="form-label">Equipment Name <span class="req">*</span></label>
           <input class="form-control" id="extra-eq-name-${i}" value="${eq.eqName}" placeholder="e.g. Thermometer" oninput="updateExtraField(${i},'eqName',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Calibration Type</label>
+          <select class="form-control" onchange="updateExtraField(${i},'calType',this.value)">
+            <option value="Lab" ${(eq.calType||'Lab')==='Lab'?'selected':''}>Lab Calibration</option>
+            <option value="Onsite" ${eq.calType==='Onsite'?'selected':''}>Onsite Calibration</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label class="form-label">Brand</label>
           <input class="form-control" value="${eq.brand}" placeholder="e.g. Fluke" oninput="updateExtraField(${i},'brand',this.value)"/></div>
-      </div>
-      <div class="form-row">
         <div class="form-group"><label class="form-label">Model</label>
           <input class="form-control" value="${eq.model}" placeholder="Model" oninput="updateExtraField(${i},'model',this.value)"/></div>
-        <div class="form-group"><label class="form-label">Serial No.</label>
-          <input class="form-control" value="${eq.serial}" placeholder="S/N" oninput="updateExtraField(${i},'serial',this.value)"/></div>
       </div>
       <div class="form-row">
+        <div class="form-group"><label class="form-label">Serial No.</label>
+          <input class="form-control" value="${eq.serial}" placeholder="S/N" oninput="updateExtraField(${i},'serial',this.value)"/></div>
         <div class="form-group"><label class="form-label">Range</label>
           <input class="form-control" value="${eq.range}" placeholder="e.g. 0–200°C" oninput="updateExtraField(${i},'range',this.value)"/></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label class="form-label">Tag No.</label>
           <input class="form-control" value="${eq.tagNo}" placeholder="N/A" oninput="updateExtraField(${i},'tagNo',this.value)"/></div>
+        <div class="form-group"></div>
       </div>
+      ${eq.calType==='Onsite'?`<div style="font-size:11px;background:#e0f7fa;color:#006064;border-radius:6px;padding:6px 10px;">📍 This item will use the Site Address / Contact set above for the whole visit.</div>`:''}
     </div>`).join('');
 }
 
@@ -7112,6 +7132,9 @@ function renderMyJobs(){
           📍 <strong>Site:</strong> ${j.siteAddress}
           ${j.siteContact?` &nbsp;·&nbsp; 👤 <strong>${j.siteContact}</strong>`:''}
           ${j.siteMobile?` &nbsp;·&nbsp; <a href="tel:${j.siteMobile}" style="color:#006064;font-weight:700;">📞 ${j.siteMobile}</a>`:''}
+          <br/>
+          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.siteAddress)}" target="_blank" style="color:#006064;font-weight:700;text-decoration:none;background:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;margin-right:6px;">🗺️ Maps</a>
+          <a href="https://waze.com/ul?q=${encodeURIComponent(j.siteAddress)}&navigate=yes" target="_blank" style="color:#006064;font-weight:700;text-decoration:none;background:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;">🚗 Waze</a>
           ${item.checkinTime?`<br/>✅ Checked in: <strong>${new Date(item.checkinTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>${item.checkinFlagged?' <span style="color:#c84b00;">(Remote)</span>':''}`:''} 
           ${item.checkoutTime?` &nbsp;·&nbsp; 🏁 Out: <strong>${new Date(item.checkoutTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>`:''}
         </div>`:''}
