@@ -3213,7 +3213,7 @@ function isEngineer(u){ return getUserRole(u||currentUser)==='Engineer'; }
 function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Sales'; }
 function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='HR'; }
 function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Sales'].includes(r); }
-function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Engineer'].includes(r); }
+function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Engineer','Manager'].includes(r); }
 function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
 function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Sales'].includes(r); }
 function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
@@ -3233,7 +3233,7 @@ function applyRoleUI(){
   // Equipment & Jobs — Admin, Manager, Sales see all; Engineer sees My Jobs only; HR sees nothing
   el('nav-equipment').classList.toggle('hidden-nav', hr); // hidden for HR
   el('nav-completed').classList.toggle('hidden-nav', engineer||hr);
-  el('nav-my-jobs').classList.toggle('hidden-nav', admin||manager||sales||hr); // only for engineers
+  el('nav-my-jobs').classList.toggle('hidden-nav', admin||sales||hr); // shown for Engineer and Manager
   el('nav-approval').classList.toggle('hidden-nav', !(admin||manager));
   el('nav-customers').classList.toggle('hidden-nav', hr);
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
@@ -4183,32 +4183,39 @@ function searchEquipmentHistory(query){
   const box=el('eq-history-suggestions'); if(!box)return;
   if(!query||query.length<2){box.style.display='none';return;}
   const q=query.toLowerCase();
-  // Search all past jobs for matching serial/equipment
-  const matches=_jobs.filter(j=>j.status!=='Deleted'&&(
-    (j.serial||'').toLowerCase().includes(q)||
-    (j.eqName||'').toLowerCase().includes(q)||
-    (j.model||'').toLowerCase().includes(q)
-  )).slice(0,8);
-  if(!matches.length){box.style.display='none';return;}
-  box.innerHTML=matches.map(j=>`
-    <div onclick="fillFromHistory('${j.jobNo}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-      <div style="font-weight:700;">${j.eqName} <span style="color:var(--text-muted);font-weight:400;">— ${j.brand||''} ${j.model||''}</span></div>
-      <div style="color:var(--text-muted);margin-top:2px;">S/N: ${j.serial||'—'} &nbsp;·&nbsp; Last job: ${j.jobNo} &nbsp;·&nbsp; Customer: ${j.custName}</div>
+  // Search all past job ITEMS for matching serial/equipment (equipment lives inside job.items[], not on the job itself)
+  const matches=[];
+  _jobs.filter(j=>j.status!=='Deleted').forEach(j=>{
+    (j.items||[]).forEach((item,idx)=>{
+      if((item.serial||'').toLowerCase().includes(q)||
+         (item.eqName||'').toLowerCase().includes(q)||
+         (item.model||'').toLowerCase().includes(q)){
+        matches.push({job:j,item,itemIdx:idx});
+      }
+    });
+  });
+  const limited=matches.slice(0,8);
+  if(!limited.length){box.style.display='none';return;}
+  box.innerHTML=limited.map(({job:j,item,itemIdx})=>`
+    <div onclick="fillFromHistory('${j.jobNo}',${itemIdx})" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+      <div style="font-weight:700;">${item.eqName} <span style="color:var(--text-muted);font-weight:400;">— ${item.brand||''} ${item.model||''}</span></div>
+      <div style="color:var(--text-muted);margin-top:2px;">S/N: ${item.serial||'—'} &nbsp;·&nbsp; Last job: ${j.jobNo} &nbsp;·&nbsp; Customer: ${j.custName}</div>
     </div>`).join('');
   box.style.display='block';
 }
 
-function fillFromHistory(jobNo){
+function fillFromHistory(jobNo,itemIdx){
   const j=getJob(jobNo); if(!j)return;
-  el('eq-name').value=j.eqName||'';
-  el('eq-brand').value=j.brand||'';
-  el('eq-model').value=j.model||'';
-  el('eq-serial').value=j.serial||'';
-  el('eq-tag-no').value=j.tagNo||'';
-  el('eq-range').value=j.range||'';
-  el('eq-cal-points').value=j.calPoints||'';
-  el('eq-spec').value=j.spec||'';
-  el('eq-resolution').value=j.resolution||'';
+  const item=(j.items&&j.items[itemIdx])||{};
+  el('eq-name').value=item.eqName||'';
+  const brandField=el('eq-brand'); if(brandField) brandField.value=item.brand||'';
+  el('eq-model').value=item.model||'';
+  el('eq-serial').value=item.serial||'';
+  el('eq-tag-no').value=item.tagNo||'';
+  el('eq-range').value=item.range||'';
+  el('eq-cal-points').value=item.calPoints||'';
+  el('eq-spec').value=item.spec||'';
+  el('eq-resolution').value=item.resolution||'';
   el('eq-history-search').value='';
   el('eq-history-suggestions').style.display='none';
   showToast(`✅ Equipment filled from job ${jobNo}`,'success',2000);
@@ -4491,7 +4498,7 @@ function populateUserDropdown(selectId, includeAdmin=false, engineersOnly=false)
   }
   (_staff||[]).filter(s=>{
     if(s.active===false) return false;
-    if(engineersOnly) return s.role==='Engineer'||s.role==='Admin';
+    if(engineersOnly) return s.role==='Engineer'||s.role==='Admin'||s.role==='Manager';
     return true;
   }).forEach(s=>{
     sel.innerHTML+=`<option value="${s.username}">${s.name} (${s.role})</option>`;
