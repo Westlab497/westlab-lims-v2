@@ -1443,7 +1443,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
       <div class="form-row">
+        <div class="form-group"><label class="form-label">Brand</label><input class="form-control" id="eq-brand" placeholder="e.g. Fluke"/></div>
         <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="eq-model" placeholder="Model number" oninput="showPriceHint()"/></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label class="form-label">Serial No.</label><input class="form-control" id="eq-serial" placeholder="Manufacturer S/N"/></div>
       </div>
       <!-- Admin price hint — shown when model matches past job for same customer -->
@@ -3760,11 +3763,11 @@ async function saveEquipment(printReceipt=false){
 
   const custInfo={
     company, custName:company,
-    address:el('eq-address').value.trim(),
-    attention:el('eq-attention').value.trim(),
-    tel:el('eq-tel').value.trim(), mobile:el('eq-mobile').value.trim(),
-    fax:el('eq-fax').value.trim(), email:el('eq-email').value.trim(),
-    po:el('eq-po').value.trim(), priority:el('eq-priority').value,
+    address:el('eq-address')?.value.trim()||'',
+    attention:el('eq-attention')?.value.trim()||'',
+    tel:el('eq-tel')?.value.trim()||'', mobile:el('eq-mobile')?.value.trim()||'',
+    fax:el('eq-fax')?.value.trim()||'', email:el('eq-email')?.value.trim()||'',
+    po:el('eq-po')?.value.trim()||'', priority:el('eq-priority')?.value||'Normal',
     jobType, siteAddress, siteContact, siteMobile,
     endUserName:el('eq-end-user')?.value.trim()||'',
     endUserAddress:el('eq-end-user-address')?.value.trim()||'',
@@ -3775,14 +3778,14 @@ async function saveEquipment(printReceipt=false){
 
   // Build items array — primary + extra
   const primaryItem={
-    eqName, brand:el('eq-brand').value.trim(), model:el('eq-model').value.trim(),
-    serial:el('eq-serial').value.trim(), tagNo:el('eq-tag-no').value.trim()||'N/A',
-    range:el('eq-range').value.trim(), calPoints:el('eq-cal-points').value.trim(),
-    spec:el('eq-spec').value.trim(), resolution:el('eq-resolution').value.trim(),
+    eqName, brand:el('eq-brand')?.value.trim()||'', model:el('eq-model')?.value.trim()||'',
+    serial:el('eq-serial')?.value.trim()||'', tagNo:el('eq-tag-no')?.value.trim()||'N/A',
+    range:el('eq-range')?.value.trim()||'', calPoints:el('eq-cal-points')?.value.trim()||'',
+    spec:el('eq-spec')?.value.trim()||'', resolution:el('eq-resolution')?.value.trim()||'',
     nextDue:'',calInterval:(el('eq-cal-interval')?.value==='open'?'open':parseInt(el('eq-cal-interval')?.value)||0),
     condition:cond==='Others'?condOther:cond,
-    accessories:el('eq-accessories').value.trim(),
-    remarks:el('eq-remarks').value.trim(),
+    accessories:el('eq-accessories')?.value.trim()||'',
+    remarks:el('eq-remarks')?.value.trim()||'',
     calType:itemType, // Lab or Onsite
   };
   const rawItems=[primaryItem,..._extraEquipment];
