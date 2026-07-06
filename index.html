@@ -1392,9 +1392,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
         <div id="end-user-suggestions" style="display:none;position:absolute;top:100%;left:14px;right:52px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
         <input type="hidden" id="eq-end-user-address"/>
-        <div id="end-user-selected-badge" style="display:none;margin-top:8px;align-items:center;justify-content:space-between;">
-          <span style="font-size:12px;color:var(--purple);font-weight:700;">✅ End user loaded</span>
-          <button onclick="clearEndUserSelection()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;">✕</button>
+        <input type="hidden" id="eq-end-user-attention"/>
+        <input type="hidden" id="eq-end-user-tel"/>
+        <input type="hidden" id="eq-end-user-mobile"/>
+        <div id="end-user-selected-badge" style="display:none;margin-top:8px;background:#fff;border:1px solid var(--purple);border-radius:8px;padding:8px 12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;color:var(--purple);font-weight:700;">✅ End user loaded</span>
+            <button onclick="clearEndUserSelection()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;">✕</button>
+          </div>
+          <div id="end-user-summary" style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.5;"></div>
         </div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Leave blank if the dealer is buying calibration for their own equipment (certificate will show the dealer's name).</div>
       </div>
@@ -1511,6 +1517,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <!-- ONSITE FIELDS (shown only when at least one item is marked Onsite) -->
       <div id="onsite-fields" style="display:none;background:#fff3e0;border-radius:10px;padding:14px 16px;margin-bottom:12px;border:1px solid #ffb74d;margin-top:12px;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:10px;">📍 Onsite Visit Details <span style="font-weight:400;font-size:11px;color:#92610c;">(shared by all Onsite items above)</span></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <span style="font-size:11px;color:#92610c;align-self:center;">Quick fill:</span>
+          <button type="button" class="btn btn-outline btn-sm" onclick="quickFillSiteFromCustomer()" style="font-size:11px;padding:4px 10px;">📋 Use Customer/Dealer Address</button>
+          <button type="button" class="btn btn-outline btn-sm" id="quick-fill-enduser-btn" onclick="quickFillSiteFromEndUser()" style="font-size:11px;padding:4px 10px;display:none;">🏭 Use End User Address</button>
+        </div>
         <div class="form-group"><label class="form-label">Site Address <span class="req">*</span></label><textarea class="form-control" id="eq-site-address" rows="3" placeholder="Full address of the calibration site (if different from billing address)"></textarea></div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="eq-site-contact" placeholder="Person to meet at site"/></div>
@@ -3687,12 +3698,29 @@ async function openNewJobModal(){
     alert('Error opening new job form: '+err.message+'\n\nPlease refresh the page and try again.');
   }
 }
+function quickFillSiteFromCustomer(){
+  el('eq-site-address').value=el('eq-address')?.value.trim()||'';
+  el('eq-site-contact').value=el('eq-attention')?.value.trim()||'';
+  el('eq-site-mobile').value=el('eq-mobile')?.value.trim()||el('eq-tel')?.value.trim()||'';
+  showToast('📋 Site details filled from Customer','success',2000);
+}
+function quickFillSiteFromEndUser(){
+  const name=el('eq-end-user')?.value.trim();
+  if(!name){showToast('No End User selected yet','error',2500);return;}
+  el('eq-site-address').value=el('eq-end-user-address')?.value.trim()||'';
+  el('eq-site-contact').value=el('eq-end-user-attention')?.value.trim()||'';
+  el('eq-site-mobile').value=el('eq-end-user-mobile')?.value.trim()||el('eq-end-user-tel')?.value.trim()||'';
+  showToast('🏭 Site details filled from End User','success',2000);
+}
 function updateSiteFieldsVisibility(){
   // Site Address section shows if ANY item in this job (primary or extra) is Onsite
   const primaryIsOnsite=el('eq-item-type')?.value==='Onsite';
   const anyExtraOnsite=_extraEquipment.some(eq=>eq.calType==='Onsite');
   const onsiteDiv=el('onsite-fields');
   if(onsiteDiv) onsiteDiv.style.display=(primaryIsOnsite||anyExtraOnsite)?'block':'none';
+  // Show "Use End User Address" quick-fill only when an end-user is actually selected
+  const euBtn=el('quick-fill-enduser-btn');
+  if(euBtn) euBtn.style.display=el('eq-end-user')?.value.trim()?'inline-flex':'none';
 }
 function toggleConditionOther(){
   el('eq-condition-other-group').style.display=el('eq-condition').value==='Others'?'block':'none';
@@ -3740,6 +3768,9 @@ async function saveEquipment(printReceipt=false){
     jobType, siteAddress, siteContact, siteMobile,
     endUserName:el('eq-end-user')?.value.trim()||'',
     endUserAddress:el('eq-end-user-address')?.value.trim()||'',
+    endUserAttention:el('eq-end-user-attention')?.value.trim()||'',
+    endUserTel:el('eq-end-user-tel')?.value.trim()||'',
+    endUserMobile:el('eq-end-user-mobile')?.value.trim()||'',
   };
 
   // Build items array — primary + extra
@@ -4317,11 +4348,20 @@ function printJobReceipt(jobs){
     <div style="border-top:1.2pt solid #111;margin-bottom:4mm;"></div>
     <div style="display:flex;gap:10mm;margin-bottom:4mm;">
       <div style="flex:1;">
-        <div style="font-size:8pt;color:#555;margin-bottom:1mm;">Customer</div>
+        <div style="font-size:8pt;color:#555;margin-bottom:1mm;">${j0.endUserName?'Customer (Dealer)':'Customer'}</div>
         <div style="font-size:10pt;font-weight:700;">${j0.custName}</div>
         ${j0.attention?`<div style="font-size:8.5pt;">Attn: ${j0.attention}</div>`:''}
         ${j0.address?`<div style="font-size:8pt;color:#555;white-space:pre-line;">${j0.address}</div>`:''}
+        ${j0.tel?`<div style="font-size:8pt;color:#555;">Tel: ${j0.tel}</div>`:''}
       </div>
+      ${j0.endUserName?`
+      <div style="flex:1;">
+        <div style="font-size:8pt;color:#555;margin-bottom:1mm;">End User / Site</div>
+        <div style="font-size:10pt;font-weight:700;">${j0.endUserName}</div>
+        ${j0.endUserAttention?`<div style="font-size:8.5pt;">Attn: ${j0.endUserAttention}</div>`:''}
+        ${j0.endUserAddress?`<div style="font-size:8pt;color:#555;white-space:pre-line;">${j0.endUserAddress}</div>`:''}
+        ${j0.endUserTel||j0.endUserMobile?`<div style="font-size:8pt;color:#555;">Tel: ${j0.endUserTel||j0.endUserMobile}</div>`:''}
+      </div>`:''}
       <div style="flex:1;">
         <div style="font-size:8pt;color:#555;margin-bottom:1mm;">Details</div>
         <div style="font-size:8.5pt;">Job No.: <strong>${j0.jobNo}</strong></div>
@@ -8858,9 +8898,21 @@ function selectEndUser(c){
   const proceed=()=>{
     el('eq-end-user').value=c.company||'';
     el('eq-end-user-address').value=c.address||'';
+    el('eq-end-user-attention').value=c.attention||'';
+    el('eq-end-user-tel').value=c.tel||'';
+    el('eq-end-user-mobile').value=c.mobile||'';
     el('end-user-suggestions').style.display='none';
     const badge=el('end-user-selected-badge');
-    if(badge) badge.style.display='flex';
+    if(badge) badge.style.display='block';
+    const summary=el('end-user-summary');
+    if(summary){
+      const parts=[];
+      if(c.address) parts.push(c.address);
+      const contactLine=[c.attention?`Attn: ${c.attention}`:'',c.tel?`Tel: ${c.tel}`:'',c.mobile?`Mobile: ${c.mobile}`:''].filter(Boolean).join(' &nbsp;·&nbsp; ');
+      if(contactLine) parts.push(contactLine);
+      summary.innerHTML=parts.join('<br/>')||'<span style="color:var(--text-muted);">No address/contact on file — consider updating their customer record.</span>';
+    }
+    if(typeof updateSiteFieldsVisibility==='function') updateSiteFieldsVisibility();
   };
   checkDealerLock(c, dealerName, proceed, ()=>{
     el('end-user-suggestions').style.display='none';
@@ -8870,8 +8922,12 @@ function selectEndUser(c){
 function clearEndUserSelection(){
   const eu=el('eq-end-user'); if(eu) eu.value='';
   const eua=el('eq-end-user-address'); if(eua) eua.value='';
+  const euat=el('eq-end-user-attention'); if(euat) euat.value='';
+  const euTel=el('eq-end-user-tel'); if(euTel) euTel.value='';
+  const euMob=el('eq-end-user-mobile'); if(euMob) euMob.value='';
   const badge=el('end-user-selected-badge'); if(badge) badge.style.display='none';
   const box=el('end-user-suggestions'); if(box) box.style.display='none';
+  if(typeof updateSiteFieldsVisibility==='function') updateSiteFieldsVisibility();
 }
 
 function clearCustomerSelection(){
