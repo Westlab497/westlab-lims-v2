@@ -5246,7 +5246,7 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;font-size:12px;color:#fff;">${j.receiveDate||'—'}</td>
         <td style="padding:6px 10px;font-size:12px;">${j.promisedDate?`<span style="color:${overdue?'#fca5a5':'#86efac'};font-size:11px;">${j.promisedDate}</span>`:'<span style="opacity:.5;font-size:11px;">—</span>'}</td>
         <td style="padding:6px 10px;white-space:nowrap;">
-          ${role==='Admin'?`<button class="btn btn-danger btn-sm" onclick="deleteJob('${j.jobNo}')" style="font-size:11px;">🗑 Delete Job</button>`:''}
+          ${role==='Admin'&&j.status!=='Completed'?`<button class="btn btn-danger btn-sm" onclick="deleteJob('${j.jobNo}')" style="font-size:11px;">🗑 Delete Job</button>`:''}
         </td>
       </tr>`);
       // ── ITEM ROWS ──
@@ -7570,10 +7570,12 @@ async function viewJobDetail(jobNo){
 async function deleteJob(jobNo){
   try{
   const j=getJob(jobNo);
+  if(j&&j.status==='Completed'){
+    alert(`Job ${jobNo} is Completed with issued certificate(s) and cannot be deleted.\n\nCompleted jobs are official accredited records and must be retained.`);
+    return;
+  }
   const itemCount=j?.items?.length||1;
-  const warn=j&&j.status==='Completed'
-    ?`⚠️ Job ${jobNo} is completed with ${itemCount} issued certificate(s).\n\nDeleting will permanently remove all uploaded files from storage.\n\nAre you sure?`
-    :`Delete job ${jobNo} (${itemCount} item${itemCount>1?'s':''}) for ${j?.custName}?\n\nThis will permanently remove all uploaded PDFs from storage.`;
+  const warn=`Delete job ${jobNo} (${itemCount} item${itemCount>1?'s':''}) for ${j?.custName}?\n\nThis will permanently remove all uploaded PDFs from storage.`;
   if(!confirm(warn)) return;
 
   // Collect all R2 file paths to delete
@@ -9394,7 +9396,6 @@ function renderCompletedJobs(){
         &nbsp;
         ${isAdmin(currentUser)&&!j.billed?`<button class="btn btn-primary btn-sm" onclick="markBilled('${j.jobNo}')">💰 Mark Billed</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#25D366;color:#fff;border-color:#25D366;" onclick="sendWhatsAppCollection('${j.jobNo}')">💬 WhatsApp</button>`:''}
-        ${isAdmin(currentUser)?`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteJob('${j.jobNo}')">🗑</button>`:''}
       </td>
     </tr>`);
     j.items.forEach((item,idx)=>{
@@ -9670,7 +9671,8 @@ function renderDeletedJobs(){
       <td style="padding:6px 10px;font-size:11px;color:var(--text-muted);">${USERS[j.deletedBy]?.name||j.deletedBy||'Admin'}</td>
       <td style="padding:6px 10px;font-size:11px;color:var(--text-muted);">${j.deletedAt?j.deletedAt.split('T')[0]:'—'}</td>
       <td colspan="2" style="padding:6px 10px;">
-        <button class="btn btn-danger btn-sm" onclick="permanentlyDeleteJob('${j.jobNo}')">🗑 Purge</button>
+        <button class="btn btn-outline btn-sm" onclick="recoverJob('${j.jobNo}')">↩️ Recover</button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="permanentlyDeleteJob('${j.jobNo}')">🗑 Purge</button>
       </td>
     </tr>`);
     items.forEach(item=>{
@@ -9686,6 +9688,27 @@ function renderDeletedJobs(){
   tbody.innerHTML=rows.join('');
   }catch(_e){
     console.error("renderDeletedJobs error:",_e);
+  }
+}
+
+async function recoverJob(jobNo){
+  if(!isAdmin(currentUser)){alert('Only Admin can recover deleted jobs.');return;}
+  const j=getJob(jobNo); if(!j)return;
+  if(!confirm(`Recover job ${jobNo} for ${j.custName}?\n\nItems will be restored as Unassigned since this job was deleted before completion. Any files removed at deletion time cannot be recovered.`))return;
+  try{
+    await updateJob(jobNo,job=>{
+      job.status='Unassigned';
+      job.deletedAt=null;
+      job.deletedBy=null;
+      if(job.items) job.items.forEach(i=>{ i.status='Unassigned'; i.assignedTo=null; });
+      job.history.push({action:'↩️ Job recovered from Deleted Jobs — items reset to Unassigned',by:currentUser,time:new Date().toISOString()});
+    });
+    renderDeletedJobs(); renderEquipmentTable(); renderDashboard(); refreshAllBadges();
+    showToast(`✅ Job ${jobNo} recovered — items reset to Unassigned`,'success',4000);
+    addAudit('↩️',`Job <strong>${jobNo}</strong> recovered from Deleted Jobs`);
+  }catch(_err){
+    console.error("recoverJob error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
   }
 }
 
