@@ -2018,6 +2018,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-section-title" style="margin-top:6px;">🔩 Equipment Details</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Equipment Name <span class="req">*</span></label><input class="form-control" id="edit-eq-name" placeholder="e.g. Digital Thermometer"/></div>
+        <div class="form-group"><label class="form-label">Calibration Type (this item)</label>
+          <select class="form-control" id="edit-eq-item-type" onchange="onEditItemTypeChange()">
+            <option value="Lab">Lab Calibration</option>
+            <option value="Onsite">Onsite Calibration</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label class="form-label">Brand / Manufacturer</label><input class="form-control" id="edit-eq-brand" placeholder="e.g. Fluke"/></div>
       </div>
       <div class="form-row">
@@ -4612,12 +4620,24 @@ async function generateReceiptPdfBase64(jobs){
   }
 }
 let _editingItemIdx=0;
+function onEditItemTypeChange(){
+  const j=getJob(_editingJobNo); if(!j)return;
+  const newType=el('edit-eq-item-type').value;
+  // Check if ANY item (using the live dropdown value for the item being edited, stored values for the rest) is Onsite
+  const jobHasOnsite=(j.items||[]).some((it,idx)=>idx===_editingItemIdx?newType==='Onsite':it.calType==='Onsite');
+  const dateLabel=el('edit-eq-receive-date-label');
+  if(dateLabel) dateLabel.textContent=jobHasOnsite?'Appointment Date':'Receiving Date';
+  const onsiteGroup=el('edit-onsite-fields');
+  if(onsiteGroup) onsiteGroup.style.display=jobHasOnsite?'block':'none';
+}
+
 function openEditJobModal(jobNo, itemIdx=0){
   const j=getJob(jobNo); if(!j)return;
   _editingJobNo=jobNo;
   _editingItemIdx=itemIdx;
   const item=(j.items&&j.items[itemIdx])||{};
   el('edit-job-no-label').textContent=`${jobNo} — Item ${item.itemNo||itemIdx+1} (${item.eqName||'Equipment'})`;
+  el('edit-eq-item-type').value=item.calType||'Lab';
   el('edit-eq-company').value=j.company||j.custName||'';
   el('edit-eq-attention').value=j.attention||'';
   el('edit-eq-po').value=j.po||'';
@@ -4708,6 +4728,7 @@ async function saveEditJob(){
     if(j.items&&j.items[_editingItemIdx]){
       const it=j.items[_editingItemIdx];
       it.eqName=eqName;
+      it.calType=el('edit-eq-item-type')?.value||'Lab';
       it.brand=el('edit-eq-brand').value.trim();
       it.model=el('edit-eq-model').value.trim();
       it.serial=el('edit-eq-serial').value.trim();
