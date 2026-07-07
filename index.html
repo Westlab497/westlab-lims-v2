@@ -1308,6 +1308,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <div class="form-group"><label class="form-label">Admin Username</label><input id="set-username" class="form-control" placeholder="admin"/></div>
             <div class="form-group"><label class="form-label">New Admin Password</label><input id="set-password" class="form-control" type="password" placeholder="Leave blank to keep current"/></div>
           </div>
+          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px 14px;margin-top:8px;">
+            <div style="font-size:12px;font-weight:700;color:#9a6a1f;margin-bottom:4px;">🔒 One-Time Security Migration</div>
+            <div style="font-size:11px;color:#9a6a1f;margin-bottom:8px;">Run this once after deploying the security update — it converts any existing plain-text passwords (staff and admin) to securely hashed ones. Safe to run more than once; already-secured passwords are skipped automatically.</div>
+            <button class="btn btn-outline btn-sm" onclick="migratePasswords()">🔒 Migrate Passwords Now</button>
+          </div>
         </div>
       </div>
 
@@ -1433,7 +1438,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div id="eq-history-suggestions" style="display:none;position:absolute;left:14px;right:14px;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:200px;overflow-y:auto;margin-top:2px;"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Equipment Name <span class="req">*</span></label><input class="form-control" id="eq-name" placeholder="e.g. Digital Thermometer"/></div>
+        <div class="form-group"><label class="form-label">Equipment Name <span class="req">*</span></label><input class="form-control" id="eq-name" placeholder="e.g. Digital Thermometer" oninput="showPriceHint()"/></div>
         <div class="form-group">
           <label class="form-label">Calibration Type</label>
           <select class="form-control" id="eq-item-type" onchange="updateSiteFieldsVisibility()">
@@ -1489,6 +1494,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div class="form-group"><label class="form-label">Accessories / Included Items</label><input class="form-control" id="eq-accessories" placeholder="e.g. power adapter, manual"/></div>
       <div class="form-group"><label class="form-label">Remarks</label><textarea class="form-control" id="eq-remarks" placeholder="Special instructions…"></textarea></div>
+
+      <div class="form-group" id="eq-price-group" style="display:none;background:#fff7ed;border-radius:8px;padding:12px 14px;border:1px solid #fdba74;">
+        <label class="form-label">💰 Price Quoted (RM)</label>
+        <input class="form-control" id="eq-price" type="number" min="0" step="0.01" placeholder="e.g. 350.00"/>
+      </div>
 
       <!-- ASSIGN & PROMISED DATE -->
       <div class="form-section-title" style="margin-top:6px;">👤 Assignment & Timeline</div>
@@ -1980,11 +1990,19 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="edit-eq-email" type="email" placeholder="customer@company.com"/></div>
         <div class="form-group"><label class="form-label" id="edit-eq-receive-date-label">Receiving Date</label><input class="form-control" id="edit-eq-receive-date" type="date"/></div>
       </div>
-      <div class="form-group"><label class="form-label">Priority</label>
-        <select class="form-control" id="edit-eq-priority">
-          <option value="Normal">Normal</option><option value="Urgent">Urgent</option>
-          <option value="Express">Express</option><option value="Routine">Routine</option>
-        </select>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Priority</label>
+          <select class="form-control" id="edit-eq-priority">
+            <option value="Normal">Normal</option><option value="Urgent">Urgent</option>
+            <option value="Express">Express</option><option value="Routine">Routine</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assign To</label>
+          <select class="form-control" id="edit-eq-assign-to">
+            <option value="">— Unassigned —</option>
+          </select>
+        </div>
       </div>
 
       <div class="form-group" id="edit-onsite-fields" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
@@ -2750,12 +2768,17 @@ window.addEventListener('error', e => {
 
 // ── SECURE API — all DB calls go through Cloudflare Worker (no keys in HTML) ──
 const API='https://westlab-api.sales-2fb.workers.dev';
+// Shared secret — must match the APP_SECRET value set in the Worker's Cloudflare Secrets.
+// NOTE: this is visible to anyone who views this page's source — it stops casual/opportunistic
+// access to the API, but is not a substitute for real per-user authentication.
+const APP_SECRET='D4SIG8OwfFYtiLN03of6mnnnAjz3wjC46BTgaNAJNSg';
 
 async function apiFetch(path, opts={}){
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),15000);
   try{
-    const r=await fetch(API+path,{...opts,signal:ctrl.signal});
+    const headers={...(opts.headers||{}),'X-App-Secret':APP_SECRET};
+    const r=await fetch(API+path,{...opts,headers,signal:ctrl.signal});
     clearTimeout(timer);
     if(!r.ok){
       const e=await r.text();
@@ -3053,23 +3076,22 @@ function showLoadingOverlay(show){
 // ── USERS (dynamic — loaded from Supabase + admin from settings) ──
 // Base USERS — will be extended with staff from wl_staff table
 let USERS={
-  admin:{name:'Administrator',display:'Administrator',avatarClass:'',role:'Admin',password:'westlab123'}
+  admin:{name:'Administrator',display:'Administrator',avatarClass:'',role:'Admin'}
 };
 
 function rebuildUsers(){
   try{
   // Start fresh with admin
-  const adminPw=_settings.password||'westlab123';
   const adminUser=_settings.username||'admin';
   USERS={};
-  USERS[adminUser]={name:'Administrator',display:'Administrator',avatarClass:'',role:'Admin',password:adminPw};
-  // Add staff from _staff array
+  USERS[adminUser]={name:'Administrator',display:'Administrator',avatarClass:'',role:'Admin'};
+  // Add staff from _staff array — passwords are never stored here; login is verified server-side
   (_staff||[]).forEach(s=>{
     if(s.username&&s.username!==adminUser){
       USERS[s.username]={
         name:s.name, display:s.display||s.name,
         avatarClass:s.username,
-        role:s.role, password:s.password,
+        role:s.role,
         active:s.active!==false
       };
     }
@@ -3096,15 +3118,31 @@ async function testSupabaseWrite(){
     alert('❌ Connection error: '+e.message);
   }
 }
-function doLogin(){
+async function doLogin(){
   try{
   const u=document.getElementById('login-username').value.trim().toLowerCase();
   const p=document.getElementById('login-password').value;
   const err=document.getElementById('login-error');
   err.style.display='none';
-  const match=USERS[u];
-  if(match&&p===match.password){
-    if(match.active===false){
+  const btn=document.getElementById('login-btn');
+  if(btn){btn.disabled=true;btn.textContent='Signing in…';}
+  let result;
+  try{
+    result=await apiFetch('/api/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:u,password:p})
+    });
+  }catch(networkErr){
+    console.error('Login request failed:',networkErr);
+    err.textContent='Could not reach the server. Please check your connection and try again.';
+    err.style.display='block';
+    if(btn){btn.disabled=false;btn.textContent='Sign In →';}
+    return;
+  }
+  if(btn){btn.disabled=false;btn.textContent='Sign In →';}
+  if(result&&result.ok&&result.user){
+    if(result.user.active===false){
       err.textContent='Your account is inactive. Please contact your administrator.';
       err.style.display='block'; return;
     }
@@ -3401,6 +3439,19 @@ function applySettings(s){
     if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
   }
 }
+async function migratePasswords(){
+  if(!isAdmin(currentUser)){alert('Only Admin can run this.');return;}
+  if(!confirm('Run the one-time password security migration now?\n\nThis converts any remaining plain-text passwords to secure hashed ones. Safe to run multiple times.'))return;
+  try{
+    const result=await apiFetch('/api/migrate-passwords',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    showToast(`✅ Migration complete — ${result.migrated} password(s) secured`,'success',5000);
+    addAudit('🔒',`Password security migration run — ${result.migrated} password(s) migrated`);
+  }catch(e){
+    console.error('migratePasswords error:',e);
+    showToast('❌ Migration failed: '+e.message,'error',6000);
+  }
+}
+
 async function saveSettings(){
   try{
   const s=Object.assign({},_settings);
@@ -3418,7 +3469,8 @@ async function saveSettings(){
   s.techManager=el('set-tech-manager').value.trim();
   s.qualityManager=el('set-quality-manager').value.trim();
   s.username=el('set-username').value.trim()||'admin';
-  const pw=el('set-password').value;if(pw)s.password=pw;
+  const pw=el('set-password').value;
+  // Password is NOT saved directly here — handled via the secure hashing endpoint after the main save below
 
   s.slaUrgent=parseInt(el('set-sla-urgent').value)||1;
   s.slaExpress=parseInt(el('set-sla-express').value)||2;
@@ -3430,6 +3482,13 @@ async function saveSettings(){
     delete s.logoUrl;
   }
   await SB.upsert('wl_settings','main',s);
+  if(pw){
+    await apiFetch('/api/set-password',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({isAdminSettings:true,newPassword:pw})
+    });
+  }
   applySettings(s);
   const b=el('settings-saved-banner');b.style.display='block';setTimeout(()=>b.style.display='none',3000);
   showToast('✅ Settings saved','success');
@@ -3705,8 +3764,11 @@ async function openNewJobModal(){
      'eq-email','eq-po','eq-name','eq-brand','eq-model','eq-serial','eq-tag-no','eq-range',
      'eq-cal-points','eq-spec','eq-accessories','eq-remarks','eq-condition-other',
      'eq-resolution','eq-assign-note','eq-history-search','eq-promised-date',
-     'eq-site-address','eq-site-contact','eq-site-mobile'].forEach(id=>{
+     'eq-site-address','eq-site-contact','eq-site-mobile','eq-price'].forEach(id=>{
       const e=document.getElementById(id);if(e)e.value='';});
+    const priceGroup=el('eq-price-group');
+    if(priceGroup) priceGroup.style.display=canViewPrice(currentUser)?'block':'none';
+    const priceHintBox=el('price-hint-box'); if(priceHintBox) priceHintBox.style.display='none';
     const jtEl=el('eq-job-type'); if(jtEl) jtEl.value='Lab';
     const itEl=el('eq-item-type'); if(itEl) itEl.value='Lab';
     updateSiteFieldsVisibility();
@@ -3812,6 +3874,10 @@ async function saveEquipment(printReceipt=false){
     calType:itemType, // Lab or Onsite
     assignTo:el('eq-assign-to').value||null,
   };
+  if(canViewPrice(currentUser)){
+    const priceVal=parseFloat(el('eq-price')?.value)||0;
+    if(priceVal>0) primaryItem.price=priceVal;
+  }
   const rawItems=[primaryItem,..._extraEquipment];
 
   // ONE job number for the whole visit
@@ -3824,10 +3890,12 @@ async function saveEquipment(printReceipt=false){
   for(let i=0;i<rawItems.length;i++){
     const certNo=await commitCertNo();
     const itemAssignTo=rawItems[i].assignTo||null;
+    const cleanPrice=parseFloat(rawItems[i].price)||0;
     items.push({
       itemNo:i+1,
       certNo,
       ...rawItems[i],
+      price:cleanPrice>0?cleanPrice:undefined,
       status:itemAssignTo?'Assigned':'Unassigned',
       assignedTo:itemAssignTo,
       assignNote:itemAssignTo?assignNote:'',
@@ -4347,7 +4415,12 @@ function renderExtraEquipment(){
           </select>
         </div>
       </div>
-      ${eq.calType==='Onsite'?`<div style="font-size:11px;background:#e0f7fa;color:#006064;border-radius:6px;padding:6px 10px;">📍 This item will use the Site Address / Contact set above for the whole visit.</div>`:''}
+      ${eq.calType==='Onsite'?`<div style="font-size:11px;background:#e0f7fa;color:#006064;border-radius:6px;padding:6px 10px;margin-bottom:8px;">📍 This item will use the Site Address / Contact set above for the whole visit.</div>`:''}
+      ${canViewPrice(currentUser)?`
+      <div class="form-group" style="background:#fff7ed;border-radius:8px;padding:10px 12px;border:1px solid #fdba74;margin-top:8px;">
+        <label class="form-label">💰 Price Quoted (RM)</label>
+        <input class="form-control" value="${eq.price||''}" type="number" min="0" step="0.01" placeholder="e.g. 350.00" oninput="updateExtraField(${i},'price',this.value)"/>
+      </div>`:''}
     </div>`).join('');
   _extraEquipment.forEach((eq,i)=>{
     populateUserDropdown(`extra-eq-assign-${i}`,false,true);
@@ -4520,8 +4593,11 @@ async function generateReceiptPdfBase64(jobs){
     const {PDFDocument}=PDFLib;
     const pdf=await PDFDocument.create();
     const jpgImage=await pdf.embedJpg(imgBytes);
-    const page=pdf.addPage([595,421]); // A4 landscape-ish ratio matching 210x148mm half-page receipt
-    page.drawImage(jpgImage,{x:0,y:0,width:595,height:421});
+    // Size the PDF page to exactly match the captured image's real aspect ratio — never force-stretch
+    const pageWidth=595; // ~A4 width in points
+    const pageHeight=pageWidth*(canvas.height/canvas.width);
+    const page=pdf.addPage([pageWidth,pageHeight]);
+    page.drawImage(jpgImage,{x:0,y:0,width:pageWidth,height:pageHeight});
     const bytes=await pdf.save();
     // Convert to base64
     let binary='';
@@ -4554,6 +4630,9 @@ function openEditJobModal(jobNo, itemIdx=0){
   el('edit-eq-email').value=j.email||'';
   el('edit-eq-receive-date').value=j.receiveDate||'';
   el('edit-eq-priority').value=j.priority||'Normal';
+  populateUserDropdown('edit-eq-assign-to',false,true);
+  const assignSel=el('edit-eq-assign-to');
+  if(assignSel) assignSel.value=item.assignedTo||'';
   // Onsite detection — if ANY item in this job is Onsite, show site fields and relabel the date
   const jobHasOnsite=(j.items||[]).some(it=>it.calType==='Onsite');
   const dateLabel=el('edit-eq-receive-date-label');
@@ -5253,10 +5332,6 @@ function renderEquipmentTable(){
       items.forEach((item,idx)=>{
         const assignedName=item.assignedTo?USERS[item.assignedTo]?.name||item.assignedTo:'—';
         let actions='';
-        if(canApprove(currentUser)&&item.status==='Unassigned')
-          actions+=`<button class="btn btn-primary btn-sm" onclick="openAssignItemModal('${j.jobNo}',${idx})" style="font-size:11px;">Assign</button> `;
-        if(canApprove(currentUser)&&item.status!=='Unassigned'&&item.status!=='Completed')
-          actions+=`<button class="btn btn-outline btn-sm" onclick="openAssignItemModal('${j.jobNo}',${idx})" style="font-size:11px;">Re-assign</button> `;
         if(item.status==='Completed'&&item.calData)
           actions+=`<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})" style="font-size:11px;">📄</button> `;
         if(canCreateJobs(currentUser))
@@ -5459,8 +5534,11 @@ function buildPriceHistorySection(custName){
   });
   if(!results.length) return `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No price history recorded for this customer yet.</div>`;
   results.sort((a,b)=>b.date.localeCompare(a.date));
-  return `<table style="width:100%;border-collapse:collapse;font-size:12px;">
-    <thead><tr style="background:var(--bg);">
+  const total=results.reduce((s,r)=>s+parseFloat(r.price||0),0);
+  return `<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">${results.length} priced item${results.length!==1?'s':''} on record</div>
+  <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="background:var(--bg);position:sticky;top:0;">
       <th style="padding:6px 10px;text-align:left;color:var(--text-muted);">Date</th>
       <th style="padding:6px 10px;text-align:left;color:var(--text-muted);">Job No.</th>
       <th style="padding:6px 10px;text-align:left;color:var(--text-muted);">Equipment</th>
@@ -5475,12 +5553,13 @@ function buildPriceHistorySection(custName){
       <td style="padding:6px 10px;color:var(--text-muted);">${r.serial||'—'}</td>
       <td style="padding:6px 10px;text-align:right;font-weight:700;color:var(--navy);">RM ${parseFloat(r.price).toFixed(2)}</td>
     </tr>`).join('')}
-    <tr style="background:var(--bg);">
-      <td colspan="4" style="padding:6px 10px;font-weight:700;text-align:right;font-size:13px;">Total billed to ${custName}:</td>
-      <td style="padding:6px 10px;text-align:right;font-weight:800;color:var(--blue);font-size:14px;">RM ${results.reduce((s,r)=>s+parseFloat(r.price||0),0).toFixed(2)}</td>
-    </tr>
     </tbody>
-  </table>`;
+  </table>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding:8px 10px;background:var(--bg);border-radius:8px;margin-top:6px;">
+    <strong style="font-size:13px;">Total billed to ${custName}:</strong>
+    <strong style="font-size:14px;color:var(--blue);">RM ${total.toFixed(2)}</strong>
+  </div>`;
 }
 
 // ── ATTENDANCE & CLOCK-IN SYSTEM ──
@@ -9028,6 +9107,7 @@ function selectCustomer(c){
     const endUserGroup=el('end-user-group');
     if(endUserGroup) endUserGroup.style.display=isDealer?'block':'none';
     if(!isDealer) clearEndUserSelection();
+    if(typeof showPriceHint==='function') showPriceHint();
   };
   // If this company is already an approved end-user of some dealer(s),
   // selecting them directly as the main Customer would bypass those dealers.
@@ -9169,107 +9249,6 @@ function calGoToday(){
   renderCalendar();
 }
 
-function renderCalendar(){
-  const grid=el('calendar-grid');
-  const label=el('cal-month-label');
-  if(!grid) return;
-
-  const monthNames=['January','February','March','April','May','June',
-    'July','August','September','October','November','December'];
-  if(label) label.textContent=`${monthNames[_calMonth]} ${_calYear}`;
-
-  const today=new Date(); today.setHours(0,0,0,0);
-  const firstDay=new Date(_calYear,_calMonth,1);
-  const lastDay=new Date(_calYear,_calMonth+1,0);
-  const startDow=firstDay.getDay(); // 0=Sun
-  const daysInMonth=lastDay.getDate();
-
-  // Build events map: date string → array of events
-  const events={};
-  const addEvent=(dateStr,evt)=>{
-    if(!dateStr) return;
-    if(!events[dateStr]) events[dateStr]=[];
-    events[dateStr].push(evt);
-  };
-
-  // Scan all jobs for events
-  _jobs.forEach(j=>{
-    if(j.status==='Deleted') return;
-    const isOnsite=j.jobType==='Onsite';
-    const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
-
-    // Receive / appointment date
-    if(j.receiveDate){
-      addEvent(j.receiveDate,{
-        label:`${j.jobNo} ${isOnsite?'📍':'🔬'} ${j.custName}`,
-        type:isOnsite?'onsite':'lab',
-        jobNo:j.jobNo, tip:`${j.custName} · ${isOnsite?'Onsite Visit':'Lab Job'} · ${j.receiveDate}`
-      });
-    }
-    // Promised date (if different from receive date and not completed)
-    if(j.promisedDate&&j.promisedDate!==j.receiveDate&&j.status!=='Completed'){
-      addEvent(j.promisedDate,{
-        label:`${j.jobNo} Due: ${j.custName}`,
-        type:isOverdue?'overdue':'promised',
-        jobNo:j.jobNo, tip:`${j.custName} · Promised by ${j.promisedDate}${isOverdue?' ⚠️ OVERDUE':''}`
-      });
-    }
-    // Onsite items with reschedule dates
-    (j.items||[]).forEach(it=>{
-      if(it.customerNotReadyNewDate){
-        addEvent(it.customerNotReadyNewDate,{
-          label:`${j.jobNo} 🔄 ${it.eqName}`,
-          type:'onsite',
-          jobNo:j.jobNo, tip:`${j.custName} · Rescheduled onsite: ${it.eqName}`
-        });
-      }
-    });
-  });
-
-  // Build grid HTML
-  const dayHeaders=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  let html=`<div class="cal-grid">`;
-  // Header row
-  dayHeaders.forEach(d=>{
-    html+=`<div class="cal-day-header">${d}</div>`;
-  });
-
-  // Padding for first week
-  for(let i=0;i<startDow;i++){
-    const prevDate=new Date(_calYear,_calMonth,-(startDow-i-1));
-    html+=`<div class="cal-day other-month"><div class="cal-date-num">${prevDate.getDate()}</div></div>`;
-  }
-
-  // Actual days
-  for(let d=1;d<=daysInMonth;d++){
-    const dateStr=`${_calYear}-${String(_calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const isToday=dateStr===today.toISOString().split('T')[0];
-    const dow=new Date(_calYear,_calMonth,d).getDay();
-    const isWeekend=dow===0||dow===6;
-    const dayEvents=events[dateStr]||[];
-    const maxShow=3;
-    const extra=dayEvents.length-maxShow;
-
-    html+=`<div class="cal-day${isToday?' today':''}${isWeekend?' other-month':''}">
-      <div class="cal-date-num" style="${isToday?'background:#1e3a8a;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;':''}">${d}</div>
-      ${dayEvents.slice(0,maxShow).map(e=>`
-        <div class="cal-event ${e.type}" onclick="openEventJob('${e.jobNo}')" title="${e.tip}">
-          ${e.label}
-        </div>`).join('')}
-      ${extra>0?`<div style="font-size:10px;color:var(--text-muted);padding:1px 4px;">+${extra} more</div>`:''}
-    </div>`;
-  }
-
-  // Trailing days to fill last row
-  const totalCells=startDow+daysInMonth;
-  const trailingDays=(7-totalCells%7)%7;
-  for(let i=1;i<=trailingDays;i++){
-    html+=`<div class="cal-day other-month"><div class="cal-date-num">${i}</div></div>`;
-  }
-  html+=`</div>`;
-  grid.innerHTML=html;
-}
-
 function openEventJob(jobNo){
   const j=getJob(jobNo);
   if(!j) return;
@@ -9298,9 +9277,13 @@ function renderCalendar(){
     };
     _jobs.forEach(j=>{
       if(j.status==='Deleted') return;
-      const isOnsite=j.jobType==='Onsite';
+      const onsiteItems=(j.items||[]).filter(it=>it.calType==='Onsite').length;
+      const totalItems=(j.items||[]).length||1;
+      const isOnsite=onsiteItems>0;
+      const isMixed=onsiteItems>0&&onsiteItems<totalItems;
+      const onsiteTag=isMixed?`📍${onsiteItems}/${totalItems}`:(isOnsite?'📍':'🔬');
       const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
-      if(j.receiveDate) addEvent(j.receiveDate,{label:`${j.jobNo} ${isOnsite?'📍':'🔬'} ${j.custName}`,type:isOnsite?'onsite':'lab',jobNo:j.jobNo,tip:`${j.custName} · ${isOnsite?'Onsite Visit':'Lab Receive'}`});
+      if(j.receiveDate) addEvent(j.receiveDate,{label:`${j.jobNo} ${onsiteTag} ${j.custName}`,type:isOnsite?'onsite':'lab',jobNo:j.jobNo,tip:`${j.custName} · ${isMixed?onsiteItems+' of '+totalItems+' items Onsite':(isOnsite?'Onsite Visit':'Lab Receive')}`});
       if(j.promisedDate&&j.promisedDate!==j.receiveDate&&j.status!=='Completed') addEvent(j.promisedDate,{label:`${j.jobNo} Due: ${j.custName}`,type:isOverdue?'overdue':'promised',jobNo:j.jobNo,tip:`Promised by ${j.promisedDate}${isOverdue?' ⚠️ OVERDUE':''}`});
       (j.items||[]).forEach(it=>{if(it.customerNotReadyNewDate) addEvent(it.customerNotReadyNewDate,{label:`${j.jobNo} 🔄 ${it.eqName}`,type:'onsite',jobNo:j.jobNo,tip:`Rescheduled: ${it.eqName}`});});
     });
@@ -9910,12 +9893,20 @@ async function saveStaff(){
     role,
     joinDate:el('staff-join-date')?.value||existing?.joinDate||'',
     approvedSignatory: !!el('staff-approved-signatory')?.checked,
-    password:pw||(existing?.password||''),
     signature:sigUrl,
     active:existing?.active!==false,
     createdAt:existing?.createdAt||new Date().toISOString()
   };
   await SB.upsert('wl_staff',username,record);
+  if(pw){
+    // Passwords are always set via this dedicated endpoint so they are hashed server-side —
+    // never stored or sent as plain text in the main staff record.
+    await apiFetch('/api/set-password',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username,newPassword:pw})
+    });
+  }
   if(isEdit){
     const idx=_staff.findIndex(s=>s.username===editUsername);
     if(idx>=0)_staff[idx]=record; else _staff.push(record);
