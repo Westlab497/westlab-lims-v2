@@ -1364,7 +1364,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Certificate Number</label><input class="form-control" id="eq-cert-no-preview" readonly style="font-family:'DM Sans',sans-serif;font-weight:700;color:var(--blue);"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label" id="eq-receive-date-label">Receiving / Appointment Date <span class="req">*</span></label><input class="form-control" id="eq-receive-date" type="date" onchange="el('eq-promised-date').value='';calcPromisedDate();"/></div>
+        <div class="form-group"><label class="form-label" id="eq-receive-date-label">Receiving Date <span class="req">*</span></label><input class="form-control" id="eq-receive-date" type="date" onchange="el('eq-promised-date').value='';calcPromisedDate();syncAppointmentDateDefault();"/></div>
         <div class="form-group"></div>
       </div>
       <input type="hidden" id="eq-job-type" value="Lab"/>
@@ -1530,6 +1530,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <!-- ONSITE FIELDS (shown only when at least one item is marked Onsite) -->
       <div id="onsite-fields" style="display:none;background:#fff3e0;border-radius:10px;padding:14px 16px;margin-bottom:12px;border:1px solid #ffb74d;margin-top:12px;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:10px;">📍 Onsite Visit Details <span style="font-weight:400;font-size:11px;color:#92610c;">(shared by all Onsite items above)</span></div>
+        <div class="form-group"><label class="form-label">📅 Appointment Date <span class="req">*</span></label><input class="form-control" id="eq-appointment-date" type="date"/>
+          <div style="font-size:11px;color:#92610c;margin-top:3px;">Defaults to the Receiving Date above — change it if the site visit is scheduled for a different day.</div>
+        </div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
           <span style="font-size:11px;color:#92610c;align-self:center;">Quick fill:</span>
           <button type="button" class="btn btn-outline btn-sm" onclick="quickFillSiteFromCustomer()" style="font-size:11px;padding:4px 10px;">📋 Use Customer/Dealer Address</button>
@@ -2007,6 +2010,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
       <div class="form-group" id="edit-onsite-fields" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:8px;">📍 Onsite Visit Details</div>
+        <div class="form-group"><label class="form-label">📅 Appointment Date</label><input class="form-control" id="edit-eq-appointment-date" type="date"/></div>
         <div class="form-group"><label class="form-label">Site Address</label><textarea class="form-control" id="edit-eq-site-address" rows="2"></textarea></div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="edit-eq-site-contact"/></div>
@@ -3772,7 +3776,7 @@ async function openNewJobModal(){
      'eq-email','eq-po','eq-name','eq-brand','eq-model','eq-serial','eq-tag-no','eq-range',
      'eq-cal-points','eq-spec','eq-accessories','eq-remarks','eq-condition-other',
      'eq-resolution','eq-assign-note','eq-history-search','eq-promised-date',
-     'eq-site-address','eq-site-contact','eq-site-mobile','eq-price'].forEach(id=>{
+     'eq-site-address','eq-site-contact','eq-site-mobile','eq-price','eq-appointment-date'].forEach(id=>{
       const e=document.getElementById(id);if(e)e.value='';});
     const priceGroup=el('eq-price-group');
     if(priceGroup) priceGroup.style.display=canViewPrice(currentUser)?'block':'none';
@@ -3810,13 +3814,19 @@ function updateSiteFieldsVisibility(){
   const anyExtraOnsite=_extraEquipment.some(eq=>eq.calType==='Onsite');
   const anyOnsite=primaryIsOnsite||anyExtraOnsite;
   const onsiteDiv=el('onsite-fields');
+  const wasHidden=onsiteDiv&&onsiteDiv.style.display==='none';
   if(onsiteDiv) onsiteDiv.style.display=anyOnsite?'block':'none';
-  // Relabel the date field so it's obvious this is the appointment date for onsite visits
-  const dateLabel=el('eq-receive-date-label');
-  if(dateLabel) dateLabel.innerHTML=anyOnsite?'📍 Appointment Date <span class="req">*</span>':'Receiving Date <span class="req">*</span>';
+  // The moment the onsite box first appears, default Appointment Date to match Receiving Date
+  if(anyOnsite&&wasHidden) syncAppointmentDateDefault();
   // Show "Use End User Address" quick-fill only when an end-user is actually selected
   const euBtn=el('quick-fill-enduser-btn');
   if(euBtn) euBtn.style.display=el('eq-end-user')?.value.trim()?'inline-flex':'none';
+}
+function syncAppointmentDateDefault(){
+  // Only auto-fill if Appointment Date hasn't been manually set yet — never overwrite a deliberate choice
+  const apptEl=el('eq-appointment-date');
+  const receiveEl=el('eq-receive-date');
+  if(apptEl&&receiveEl&&!apptEl.value) apptEl.value=receiveEl.value;
 }
 function toggleConditionOther(){
   el('eq-condition-other-group').style.display=el('eq-condition').value==='Others'?'block':'none';
@@ -3846,6 +3856,7 @@ async function saveEquipment(printReceipt=false){
   const assignNote=el('eq-assign-note').value.trim();
   const promisedDate=el('eq-promised-date').value||'';
   const receiveDate=el('eq-receive-date').value;
+  const appointmentDate=el('eq-appointment-date')?.value.trim()||receiveDate;
   const siteAddress=el('eq-site-address')?.value.trim()||'';
   const siteContact=el('eq-site-contact')?.value.trim()||'';
   const siteMobile=el('eq-site-mobile')?.value.trim()||'';
@@ -3861,7 +3872,7 @@ async function saveEquipment(printReceipt=false){
     tel:el('eq-tel')?.value.trim()||'', mobile:el('eq-mobile')?.value.trim()||'',
     fax:el('eq-fax')?.value.trim()||'', email:el('eq-email')?.value.trim()||'',
     po:el('eq-po')?.value.trim()||'', priority:el('eq-priority')?.value||'Normal',
-    jobType, siteAddress, siteContact, siteMobile,
+    jobType, siteAddress, siteContact, siteMobile, appointmentDate,
     endUserName:el('eq-end-user')?.value.trim()||'',
     endUserAddress:el('eq-end-user-address')?.value.trim()||'',
     endUserAttention:el('eq-end-user-attention')?.value.trim()||'',
@@ -4411,17 +4422,55 @@ function renderExtraEquipment(){
       <div class="form-row">
         <div class="form-group"><label class="form-label">Serial No.</label>
           <input class="form-control" value="${eq.serial}" placeholder="S/N" oninput="updateExtraField(${i},'serial',this.value)"/></div>
-        <div class="form-group"><label class="form-label">Range</label>
+        <div class="form-group"><label class="form-label">Tag No. <span style="font-size:11px;color:var(--text-muted);">(Customer's asset tag)</span></label>
+          <input class="form-control" value="${eq.tagNo}" placeholder="e.g. EQ-0012 or leave blank if N/A" oninput="updateExtraField(${i},'tagNo',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Specification / Tolerance</label>
+          <input class="form-control" value="${eq.spec}" placeholder="e.g. ±0.5°C" oninput="updateExtraField(${i},'spec',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Range / Capacity</label>
           <input class="form-control" value="${eq.range}" placeholder="e.g. 0–200°C" oninput="updateExtraField(${i},'range',this.value)"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Tag No.</label>
-          <input class="form-control" value="${eq.tagNo}" placeholder="N/A" oninput="updateExtraField(${i},'tagNo',this.value)"/></div>
-        <div class="form-group"><label class="form-label">Assign To (optional)</label>
-          <select class="form-control" id="extra-eq-assign-${i}" onchange="updateExtraField(${i},'assignTo',this.value)">
-            <option value="">— Assign later —</option>
+        <div class="form-group"><label class="form-label">Calibration Points</label>
+          <input class="form-control" value="${eq.calPoints}" placeholder="e.g. 0, 50, 100°C" oninput="updateExtraField(${i},'calPoints',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Resolution / Readability</label>
+          <input class="form-control" value="${eq.resolution}" placeholder="e.g. 0.01 pH, 0.1°C" oninput="updateExtraField(${i},'resolution',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Calibration Interval</label>
+          <select class="form-control" onchange="updateExtraField(${i},'calInterval',this.value)">
+            <option value="">— Select Interval —</option>
+            <option value="3" ${eq.calInterval=='3'?'selected':''}>3 Months</option>
+            <option value="6" ${eq.calInterval=='6'?'selected':''}>6 Months</option>
+            <option value="12" ${eq.calInterval=='12'?'selected':''}>1 Year</option>
+            <option value="24" ${eq.calInterval=='24'?'selected':''}>2 Years</option>
+            <option value="36" ${eq.calInterval=='36'?'selected':''}>3 Years</option>
+            <option value="open" ${eq.calInterval=='open'?'selected':''}>Open Date (No Due Date)</option>
           </select>
         </div>
+        <div class="form-group">
+          <label class="form-label">Condition of Item <span class="req">*</span></label>
+          <select class="form-control" onchange="updateExtraField(${i},'condition',this.value);renderExtraEquipment();">
+            <option value="Good" ${(eq.condition||'Good')==='Good'?'selected':''}>Good</option>
+            <option value="Fair" ${eq.condition==='Fair'?'selected':''}>Fair</option>
+            <option value="Damaged" ${eq.condition==='Damaged'?'selected':''}>Damaged</option>
+            <option value="Others" ${eq.condition==='Others'?'selected':''}>Others (specify)</option>
+          </select>
+        </div>
+      </div>
+      ${eq.condition==='Others'?`<div class="form-group"><label class="form-label">Specify Condition <span class="req">*</span></label>
+        <input class="form-control" value="${eq.conditionOther||''}" placeholder="Describe condition…" oninput="updateExtraField(${i},'conditionOther',this.value)"/></div>`:''}
+      <div class="form-group"><label class="form-label">Accessories / Included Items</label>
+        <input class="form-control" value="${eq.accessories||''}" placeholder="e.g. power adapter, manual" oninput="updateExtraField(${i},'accessories',this.value)"/></div>
+      <div class="form-group"><label class="form-label">Remarks</label>
+        <textarea class="form-control" oninput="updateExtraField(${i},'remarks',this.value)" placeholder="Special instructions…">${eq.remarks||''}</textarea></div>
+      <div class="form-group">
+        <label class="form-label">Assign To (optional)</label>
+        <select class="form-control" id="extra-eq-assign-${i}" onchange="updateExtraField(${i},'assignTo',this.value)">
+          <option value="">— Assign later —</option>
+        </select>
       </div>
       ${eq.calType==='Onsite'?`<div style="font-size:11px;background:#e0f7fa;color:#006064;border-radius:6px;padding:6px 10px;margin-bottom:8px;">📍 This item will use the Site Address / Contact set above for the whole visit.</div>`:''}
       ${canViewPrice(currentUser)?`
@@ -4625,10 +4674,14 @@ function onEditItemTypeChange(){
   const newType=el('edit-eq-item-type').value;
   // Check if ANY item (using the live dropdown value for the item being edited, stored values for the rest) is Onsite
   const jobHasOnsite=(j.items||[]).some((it,idx)=>idx===_editingItemIdx?newType==='Onsite':it.calType==='Onsite');
-  const dateLabel=el('edit-eq-receive-date-label');
-  if(dateLabel) dateLabel.textContent=jobHasOnsite?'Appointment Date':'Receiving Date';
   const onsiteGroup=el('edit-onsite-fields');
+  const wasHidden=onsiteGroup&&onsiteGroup.style.display==='none';
   if(onsiteGroup) onsiteGroup.style.display=jobHasOnsite?'block':'none';
+  if(jobHasOnsite&&wasHidden){
+    const apptEl=el('edit-eq-appointment-date');
+    const receiveEl=el('edit-eq-receive-date');
+    if(apptEl&&receiveEl&&!apptEl.value) apptEl.value=receiveEl.value;
+  }
 }
 
 function openEditJobModal(jobNo, itemIdx=0){
@@ -4653,12 +4706,11 @@ function openEditJobModal(jobNo, itemIdx=0){
   populateUserDropdown('edit-eq-assign-to',false,true);
   const assignSel=el('edit-eq-assign-to');
   if(assignSel) assignSel.value=item.assignedTo||'';
-  // Onsite detection — if ANY item in this job is Onsite, show site fields and relabel the date
+  // Onsite detection — if ANY item in this job is Onsite, show site fields
   const jobHasOnsite=(j.items||[]).some(it=>it.calType==='Onsite');
-  const dateLabel=el('edit-eq-receive-date-label');
-  if(dateLabel) dateLabel.textContent=jobHasOnsite?'Appointment Date':'Receiving Date';
   const onsiteGroup=el('edit-onsite-fields');
   if(onsiteGroup) onsiteGroup.style.display=jobHasOnsite?'block':'none';
+  const apptDate=el('edit-eq-appointment-date'); if(apptDate) apptDate.value=j.appointmentDate||j.receiveDate||'';
   const siteAddr=el('edit-eq-site-address'); if(siteAddr) siteAddr.value=j.siteAddress||'';
   const siteContact=el('edit-eq-site-contact'); if(siteContact) siteContact.value=j.siteContact||'';
   const siteMobile=el('edit-eq-site-mobile'); if(siteMobile) siteMobile.value=j.siteMobile||'';
@@ -4699,10 +4751,10 @@ async function saveEditJob(){
   if(!company){alert('Customer / Company name is required.');return;}
   if(!eqName){alert('Equipment name is required.');return;}
   const jBefore=getJob(_editingJobNo);
-  const oldReceiveDate=jBefore?.receiveDate||'';
+  const oldAppointmentDate=jBefore?.appointmentDate||jBefore?.receiveDate||'';
   const jobHasOnsite=(jBefore?.items||[]).some(it=>it.calType==='Onsite');
-  const newReceiveDate=el('edit-eq-receive-date').value;
-  const dateChanged=jobHasOnsite&&oldReceiveDate&&newReceiveDate&&oldReceiveDate!==newReceiveDate;
+  const newAppointmentDate=el('edit-eq-appointment-date')?.value.trim()||el('edit-eq-receive-date').value;
+  const dateChanged=jobHasOnsite&&oldAppointmentDate&&newAppointmentDate&&oldAppointmentDate!==newAppointmentDate;
   await updateJob(_editingJobNo,j=>{
     j.company=company; j.custName=company;
     j.attention=el('edit-eq-attention').value.trim();
@@ -4715,6 +4767,8 @@ async function saveEditJob(){
     j.fax=el('edit-eq-fax').value.trim();
     j.email=el('edit-eq-email').value.trim();
     j.receiveDate=el('edit-eq-receive-date').value;
+    const apptEl=el('edit-eq-appointment-date');
+    if(apptEl) j.appointmentDate=apptEl.value.trim()||j.receiveDate;
     j.priority=el('edit-eq-priority').value;
     j.promisedDate=el('edit-eq-promised-date').value;
     // Onsite site details — only present/relevant for onsite jobs, safe to always sync
@@ -4766,7 +4820,7 @@ async function saveEditJob(){
       }
     }
     if(dateChanged){
-      j.history.push({action:`📍 Onsite visit rescheduled from ${fmtDateShort(oldReceiveDate)} to ${fmtDateShort(newReceiveDate)}`,by:currentUser,time:new Date().toISOString()});
+      j.history.push({action:`📍 Onsite visit rescheduled from ${fmtDateShort(oldAppointmentDate)} to ${fmtDateShort(newAppointmentDate)}`,by:currentUser,time:new Date().toISOString()});
     }
     j.history.push({action:'Job details edited',by:currentUser,time:new Date().toISOString()});
   });
@@ -9304,7 +9358,8 @@ function renderCalendar(){
       const isMixed=onsiteItems>0&&onsiteItems<totalItems;
       const onsiteTag=isMixed?`📍${onsiteItems}/${totalItems}`:(isOnsite?'📍':'🔬');
       const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
-      if(j.receiveDate) addEvent(j.receiveDate,{label:`${j.jobNo} ${onsiteTag} ${j.custName}`,type:isOnsite?'onsite':'lab',jobNo:j.jobNo,tip:`${j.custName} · ${isMixed?onsiteItems+' of '+totalItems+' items Onsite':(isOnsite?'Onsite Visit':'Lab Receive')}`});
+      const eventDate=isOnsite?(j.appointmentDate||j.receiveDate):j.receiveDate;
+      if(eventDate) addEvent(eventDate,{label:`${j.jobNo} ${onsiteTag} ${j.custName}`,type:isOnsite?'onsite':'lab',jobNo:j.jobNo,tip:`${j.custName} · ${isMixed?onsiteItems+' of '+totalItems+' items Onsite':(isOnsite?'Onsite Visit':'Lab Receive')}`});
       if(j.promisedDate&&j.promisedDate!==j.receiveDate&&j.status!=='Completed') addEvent(j.promisedDate,{label:`${j.jobNo} Due: ${j.custName}`,type:isOverdue?'overdue':'promised',jobNo:j.jobNo,tip:`Promised by ${j.promisedDate}${isOverdue?' ⚠️ OVERDUE':''}`});
       (j.items||[]).forEach(it=>{if(it.customerNotReadyNewDate) addEvent(it.customerNotReadyNewDate,{label:`${j.jobNo} 🔄 ${it.eqName}`,type:'onsite',jobNo:j.jobNo,tip:`Rescheduled: ${it.eqName}`});});
     });
