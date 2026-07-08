@@ -2030,7 +2030,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group" id="edit-onsite-fields" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:8px;">📍 Onsite Visit Details</div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">📅 Appointment Date</label><input class="form-control" id="edit-eq-appointment-date" type="date"/></div>
+          <div class="form-group"><label class="form-label">📅 Appointment Date</label><input class="form-control" id="edit-eq-appointment-date" type="date" onchange="syncEditVisitEndDateMin()"/></div>
           <div class="form-group"><label class="form-label">📅 Visit End Date</label><input class="form-control" id="edit-eq-visit-end-date" type="date"/></div>
         </div>
         <div class="form-group"><label class="form-label">Site Address</label><textarea class="form-control" id="edit-eq-site-address" rows="2"></textarea></div>
@@ -4774,18 +4774,24 @@ async function generateReceiptPdfBase64(jobs){
   }
 }
 let _editingItemIdx=0;
+function syncEditVisitEndDateMin(){
+  const apptEl=el('edit-eq-appointment-date');
+  const endEl=el('edit-eq-visit-end-date');
+  if(!apptEl||!endEl)return;
+  endEl.min=apptEl.value||'';
+  if(!endEl.value||endEl.value<apptEl.value) endEl.value=apptEl.value;
+}
 function onEditItemTypeChange(){
-  const j=getJob(_editingJobNo); if(!j)return;
   const newType=el('edit-eq-item-type').value;
-  // Check if ANY item (using the live dropdown value for the item being edited, stored values for the rest) is Onsite
-  const jobHasOnsite=(j.items||[]).some((it,idx)=>idx===_editingItemIdx?newType==='Onsite':it.calType==='Onsite');
+  const itemIsOnsite=newType==='Onsite';
   const onsiteGroup=el('edit-onsite-fields');
   const wasHidden=onsiteGroup&&onsiteGroup.style.display==='none';
-  if(onsiteGroup) onsiteGroup.style.display=jobHasOnsite?'block':'none';
-  if(jobHasOnsite&&wasHidden){
+  if(onsiteGroup) onsiteGroup.style.display=itemIsOnsite?'block':'none';
+  if(itemIsOnsite&&wasHidden){
     const apptEl=el('edit-eq-appointment-date');
     const receiveEl=el('edit-eq-receive-date');
     if(apptEl&&receiveEl&&!apptEl.value) apptEl.value=receiveEl.value;
+    syncEditVisitEndDateMin();
   }
 }
 
@@ -4811,12 +4817,13 @@ function openEditJobModal(jobNo, itemIdx=0){
   populateUserDropdown('edit-eq-assign-to',false,true);
   const assignSel=el('edit-eq-assign-to');
   if(assignSel) assignSel.value=item.assignedTo||'';
-  // Onsite detection — if ANY item in this job is Onsite, show site fields
-  const jobHasOnsite=(j.items||[]).some(it=>it.calType==='Onsite');
+  // Onsite detection — only show site fields when THIS specific item is Onsite, not the whole job
+  const itemIsOnsite=item.calType==='Onsite';
   const onsiteGroup=el('edit-onsite-fields');
-  if(onsiteGroup) onsiteGroup.style.display=jobHasOnsite?'block':'none';
+  if(onsiteGroup) onsiteGroup.style.display=itemIsOnsite?'block':'none';
   const apptDate=el('edit-eq-appointment-date'); if(apptDate) apptDate.value=j.appointmentDate||j.receiveDate||'';
   const visitEndEl=el('edit-eq-visit-end-date'); if(visitEndEl) visitEndEl.value=j.visitEndDate||j.appointmentDate||j.receiveDate||'';
+  if(visitEndEl) visitEndEl.min=el('edit-eq-appointment-date')?.value||'';
   const siteAddr=el('edit-eq-site-address'); if(siteAddr) siteAddr.value=j.siteAddress||'';
   const siteContact=el('edit-eq-site-contact'); if(siteContact) siteContact.value=j.siteContact||'';
   const siteMobile=el('edit-eq-site-mobile'); if(siteMobile) siteMobile.value=j.siteMobile||'';
