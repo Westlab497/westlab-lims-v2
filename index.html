@@ -4618,7 +4618,7 @@ function buildReceiptHtml(jobs){
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.serial||'—'}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;${it.calType==='Onsite'?'color:#c84b00;font-weight:700;':''}">${it.calType==='Onsite'?'Onsite':'Lab'}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${intervalLabel(it.calInterval)}</td>
-      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.condition||'—'}</td>
+      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${it.calType==='Onsite'?'To be confirmed on-site':(it.condition||'—')}</td>
     </tr>`).join('');
 
   const hasOnsite=allItems.some(it=>it.calType==='Onsite');
@@ -5283,6 +5283,10 @@ async function submitCalibration(){
       it.status='Pending Approval';
       it.calInterval=calData.calInterval||0;
       it.nextDue=calData.next_due||'';
+      // Sync the engineer's actual observed condition back into the item's real record —
+      // this was previously only saved onto the certificate (cond_before), leaving Equipment
+      // Records / Edit Job stuck showing the original intake-time guess forever.
+      if(calData.cond_before) it.condition=calData.cond_before;
       job.history.push({action:`Item ${it.itemNo} (${it.eqName}) submitted for approval`,by:currentUser,time:new Date().toISOString()});
     });
 
