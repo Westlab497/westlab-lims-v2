@@ -1536,8 +1536,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <!-- ONSITE FIELDS (shown only when at least one item is marked Onsite) -->
       <div id="onsite-fields" style="display:none;background:#fff3e0;border-radius:10px;padding:14px 16px;margin-bottom:12px;border:1px solid #ffb74d;margin-top:12px;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:10px;">📍 Onsite Visit Details <span style="font-weight:400;font-size:11px;color:#92610c;">(shared by all Onsite items above)</span></div>
-        <div class="form-group"><label class="form-label">📅 Appointment Date <span class="req">*</span></label><input class="form-control" id="eq-appointment-date" type="date"/>
-          <div style="font-size:11px;color:#92610c;margin-top:3px;">Defaults to the Receiving Date above — change it if the site visit is scheduled for a different day.</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">📅 Appointment Date <span class="req">*</span></label><input class="form-control" id="eq-appointment-date" type="date" onchange="syncVisitEndDateMin()"/>
+            <div style="font-size:11px;color:#92610c;margin-top:3px;">Defaults to the Receiving Date above — change it if the site visit is scheduled for a different day.</div>
+          </div>
+          <div class="form-group"><label class="form-label">📅 Visit End Date</label><input class="form-control" id="eq-visit-end-date" type="date"/>
+            <div style="font-size:11px;color:#92610c;margin-top:3px;">Leave same as Appointment Date for a single-day visit, or set later for a multi-day job.</div>
+          </div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
           <span style="font-size:11px;color:#92610c;align-self:center;">Quick fill:</span>
@@ -2024,13 +2029,16 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
       <div class="form-group" id="edit-onsite-fields" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:8px;">📍 Onsite Visit Details</div>
-        <div class="form-group"><label class="form-label">📅 Appointment Date</label><input class="form-control" id="edit-eq-appointment-date" type="date"/></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">📅 Appointment Date</label><input class="form-control" id="edit-eq-appointment-date" type="date"/></div>
+          <div class="form-group"><label class="form-label">📅 Visit End Date</label><input class="form-control" id="edit-eq-visit-end-date" type="date"/></div>
+        </div>
         <div class="form-group"><label class="form-label">Site Address</label><textarea class="form-control" id="edit-eq-site-address" rows="2"></textarea></div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="edit-eq-site-contact"/></div>
           <div class="form-group"><label class="form-label">Site Contact Mobile</label><input class="form-control" id="edit-eq-site-mobile"/></div>
         </div>
-        <div style="font-size:11px;color:#92610c;">To reschedule the visit, change the Appointment Date above and save.</div>
+        <div style="font-size:11px;color:#92610c;">To reschedule the visit, change the dates above and save. To request a date extension while already onsite, use "Request Extension" on My Jobs instead — extensions need Manager approval.</div>
       </div>
 
       <div class="form-section-title" style="margin-top:6px;">🔩 Equipment Details</div>
@@ -3790,7 +3798,7 @@ async function openNewJobModal(){
      'eq-email','eq-po','eq-name','eq-brand','eq-model','eq-serial','eq-tag-no','eq-range',
      'eq-cal-points','eq-spec','eq-accessories','eq-remarks','eq-condition-other',
      'eq-resolution','eq-assign-note','eq-history-search','eq-promised-date',
-     'eq-site-address','eq-site-contact','eq-site-mobile','eq-price','eq-appointment-date'].forEach(id=>{
+     'eq-site-address','eq-site-contact','eq-site-mobile','eq-price','eq-appointment-date','eq-visit-end-date'].forEach(id=>{
       const e=document.getElementById(id);if(e)e.value='';});
     const priceGroup=el('eq-price-group');
     if(priceGroup) priceGroup.style.display=canViewPrice(currentUser)?'block':'none';
@@ -3822,6 +3830,14 @@ function quickFillSiteFromEndUser(){
   el('eq-site-mobile').value=el('eq-end-user-mobile')?.value.trim()||el('eq-end-user-tel')?.value.trim()||'';
   showToast('🏭 Site details filled from End User','success',2000);
 }
+function syncVisitEndDateMin(){
+  const apptEl=el('eq-appointment-date');
+  const endEl=el('eq-visit-end-date');
+  if(!apptEl||!endEl)return;
+  endEl.min=apptEl.value||'';
+  // If end date is blank or now before the appointment date, default it to match
+  if(!endEl.value||endEl.value<apptEl.value) endEl.value=apptEl.value;
+}
 function updateSiteFieldsVisibility(){
   // Site Address section shows if ANY item in this job (primary or extra) is Onsite
   const primaryIsOnsite=el('eq-item-type')?.value==='Onsite';
@@ -3841,6 +3857,7 @@ function syncAppointmentDateDefault(){
   const apptEl=el('eq-appointment-date');
   const receiveEl=el('eq-receive-date');
   if(apptEl&&receiveEl&&!apptEl.value) apptEl.value=receiveEl.value;
+  syncVisitEndDateMin();
 }
 function toggleConditionOther(){
   el('eq-condition-other-group').style.display=el('eq-condition').value==='Others'?'block':'none';
@@ -3871,6 +3888,7 @@ async function saveEquipment(printReceipt=false){
   const promisedDate=el('eq-promised-date').value||'';
   const receiveDate=el('eq-receive-date').value;
   const appointmentDate=el('eq-appointment-date')?.value.trim()||receiveDate;
+  const visitEndDate=el('eq-visit-end-date')?.value.trim()||appointmentDate;
   const siteAddress=el('eq-site-address')?.value.trim()||'';
   const siteContact=el('eq-site-contact')?.value.trim()||'';
   const siteMobile=el('eq-site-mobile')?.value.trim()||'';
@@ -3886,7 +3904,7 @@ async function saveEquipment(printReceipt=false){
     tel:el('eq-tel')?.value.trim()||'', mobile:el('eq-mobile')?.value.trim()||'',
     fax:el('eq-fax')?.value.trim()||'', email:el('eq-email')?.value.trim()||'',
     po:el('eq-po')?.value.trim()||'', priority:el('eq-priority')?.value||'Normal',
-    jobType, siteAddress, siteContact, siteMobile, appointmentDate,
+    jobType, siteAddress, siteContact, siteMobile, appointmentDate, visitEndDate,
     endUserName:el('eq-end-user')?.value.trim()||'',
     endUserAddress:el('eq-end-user-address')?.value.trim()||'',
     endUserAttention:el('eq-end-user-attention')?.value.trim()||'',
@@ -4798,6 +4816,7 @@ function openEditJobModal(jobNo, itemIdx=0){
   const onsiteGroup=el('edit-onsite-fields');
   if(onsiteGroup) onsiteGroup.style.display=jobHasOnsite?'block':'none';
   const apptDate=el('edit-eq-appointment-date'); if(apptDate) apptDate.value=j.appointmentDate||j.receiveDate||'';
+  const visitEndEl=el('edit-eq-visit-end-date'); if(visitEndEl) visitEndEl.value=j.visitEndDate||j.appointmentDate||j.receiveDate||'';
   const siteAddr=el('edit-eq-site-address'); if(siteAddr) siteAddr.value=j.siteAddress||'';
   const siteContact=el('edit-eq-site-contact'); if(siteContact) siteContact.value=j.siteContact||'';
   const siteMobile=el('edit-eq-site-mobile'); if(siteMobile) siteMobile.value=j.siteMobile||'';
@@ -4857,6 +4876,8 @@ async function saveEditJob(){
     j.receiveDate=el('edit-eq-receive-date').value;
     const apptEl=el('edit-eq-appointment-date');
     if(apptEl) j.appointmentDate=apptEl.value.trim()||j.receiveDate;
+    const visitEndEl=el('edit-eq-visit-end-date');
+    if(visitEndEl) j.visitEndDate=visitEndEl.value.trim()||j.appointmentDate;
     j.priority=el('edit-eq-priority').value;
     // Onsite site details — only present/relevant for onsite jobs, safe to always sync
     const siteAddrEl=el('edit-eq-site-address');
