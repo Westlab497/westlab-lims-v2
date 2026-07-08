@@ -1537,11 +1537,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div id="onsite-fields" style="display:none;background:#fff3e0;border-radius:10px;padding:14px 16px;margin-bottom:12px;border:1px solid #ffb74d;margin-top:12px;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:10px;">📍 Onsite Visit Details <span style="font-weight:400;font-size:11px;color:#92610c;">(shared by all Onsite items above)</span></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">📅 Appointment Date <span class="req">*</span></label><input class="form-control" id="eq-appointment-date" type="date" onchange="syncVisitEndDateMin()"/>
+          <div class="form-group"><label class="form-label">📅 Onsite Start Date <span class="req">*</span></label><input class="form-control" id="eq-appointment-date" type="date" onchange="syncVisitEndDateMin()"/>
             <div style="font-size:11px;color:#92610c;margin-top:3px;">Defaults to the Receiving Date above — change it if the site visit is scheduled for a different day.</div>
           </div>
-          <div class="form-group"><label class="form-label">📅 Visit End Date</label><input class="form-control" id="eq-visit-end-date" type="date"/>
-            <div style="font-size:11px;color:#92610c;margin-top:3px;">Leave same as Appointment Date for a single-day visit, or set later for a multi-day job.</div>
+          <div class="form-group"><label class="form-label">📅 Onsite End Date</label><input class="form-control" id="eq-visit-end-date" type="date"/>
+            <div style="font-size:11px;color:#92610c;margin-top:3px;">Leave same as Onsite Start Date for a single-day visit, or set later for a multi-day job.</div>
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
@@ -2030,8 +2030,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group" id="edit-onsite-fields" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:8px;">📍 Onsite Visit Details</div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">📅 Appointment Date</label><input class="form-control" id="edit-eq-appointment-date" type="date" onchange="syncEditVisitEndDateMin()"/></div>
-          <div class="form-group"><label class="form-label">📅 Visit End Date</label><input class="form-control" id="edit-eq-visit-end-date" type="date"/></div>
+          <div class="form-group"><label class="form-label">📅 Onsite Start Date</label><input class="form-control" id="edit-eq-appointment-date" type="date" onchange="syncEditVisitEndDateMin()"/></div>
+          <div class="form-group"><label class="form-label">📅 Onsite End Date</label><input class="form-control" id="edit-eq-visit-end-date" type="date"/></div>
         </div>
         <div class="form-group"><label class="form-label">Site Address</label><textarea class="form-control" id="edit-eq-site-address" rows="2"></textarea></div>
         <div class="form-row">
@@ -2502,7 +2502,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <textarea class="form-control" id="cnr-notes" rows="2" placeholder="Additional details…"></textarea>
       </div>
       <div class="form-group">
-        <label class="form-label">New Appointment Date <span class="req">*</span></label>
+        <label class="form-label">New Onsite Date <span class="req">*</span></label>
         <input class="form-control" id="cnr-new-date" type="date"/>
       </div>
     </div>
@@ -7962,14 +7962,14 @@ async function updateJob(jobNo,fn){
   if(j.items&&j.items.length) j.status=deriveJobStatus(j);
   await SB.upsert('wl_jobs',jobNo,j);
   cacheFullJob(j);
+  // Fully sync every field back to the lightweight _jobs list — not just a hardcoded subset.
+  // (Previously only status/items/billed/deletedAt/history were copied back, silently leaving
+  // any other changed field — like appointmentDate, visitEndDate, siteAddress — stale here.)
   const idx=_jobs.findIndex(x=>x.jobNo===jobNo);
   if(idx>=0){
-    const cached=_jobs[idx];
-    cached.status=j.status;
-    cached.items=j.items;
-    cached.billed=j.billed; cached.billedAt=j.billedAt;
-    cached.deletedAt=j.deletedAt; cached.deletedBy=j.deletedBy;
-    cached.history=j.history;
+    _jobs[idx]=j;
+  } else {
+    _jobs.push(j);
   }
   }catch(_err){
     console.error("updateJob error:",_err);
