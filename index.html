@@ -424,20 +424,26 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="nav-section-label">Overview</div>
     <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon"><i class="ti ti-layout-dashboard"></i></span><span class="nav-label">Dashboard</span></button>
 
-    <div class="nav-section-label">Modules</div>
-    <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon"><i class="ti ti-tool"></i></span><span class="nav-label">Equipment &amp; Calibration</span></button>
-    <button class="nav-item" id="nav-completed" onclick="showView('completed')" data-label="Completed Jobs"><span class="nav-icon"><i class="ti ti-circle-check"></i></span><span class="nav-label">Completed Jobs</span></button>
-    <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon"><i class="ti ti-building"></i></span><span class="nav-label">Customer Database</span></button>
-    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Lab Reference Equipment</span></button>
-    <button class="nav-item" id="nav-calendar" onclick="showView('calendar')" data-label="Schedule Calendar"><span class="nav-icon"><i class="ti ti-calendar"></i></span><span class="nav-label">Schedule Calendar</span></button>
-    <button class="nav-item" id="nav-claims" onclick="showView('claims')" data-label="Claims"><span class="nav-icon"><i class="ti ti-receipt"></i></span><span class="nav-label">Claims</span></button>
-    <button class="nav-item" id="nav-leave" onclick="showView('leave')" data-label="Leave"><span class="nav-icon"><i class="ti ti-beach"></i></span><span class="nav-label">Leave</span></button>
-    <button class="nav-item" id="nav-attendance" onclick="showView('attendance')" data-label="Attendance"><span class="nav-icon"><i class="ti ti-clock"></i></span><span class="nav-label">Attendance</span></button>
+    <div class="nav-section-label">Job Management</div>
     <button class="nav-item hidden-nav" id="nav-my-jobs" onclick="showView('my-jobs')"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-text">My Jobs <span class="nav-badge" id="my-jobs-badge" style="display:none;">0</span></span></button>
     <button class="nav-item hidden-nav" id="nav-approval" onclick="showView('approval')"><span class="nav-icon"><i class="ti ti-circle-check"></i></span><span class="nav-text">Approval Queue <span class="nav-badge" id="approval-badge" style="display:none;">0</span></span></button>
+    <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon"><i class="ti ti-tool"></i></span><span class="nav-label">Equipment &amp; Calibration</span></button>
+    <button class="nav-item" id="nav-completed" onclick="showView('completed')" data-label="Completed Jobs"><span class="nav-icon"><i class="ti ti-circle-check"></i></span><span class="nav-label">Completed Jobs</span></button>
+    <button class="nav-item" id="nav-calendar" onclick="showView('calendar')" data-label="Schedule Calendar"><span class="nav-icon"><i class="ti ti-calendar"></i></span><span class="nav-label">Schedule Calendar</span></button>
+
+    <div class="nav-section-label">Customers &amp; Equipment</div>
+    <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon"><i class="ti ti-building"></i></span><span class="nav-label">Customer Database</span></button>
+    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Lab Reference Equipment</span></button>
+
+    <div class="nav-section-label">Quality System</div>
     <button class="nav-item" id="nav-tests" onclick="showView('tests')" data-label="Test Requests &amp; Results"><span class="nav-icon"><i class="ti ti-test-pipe"></i></span><span class="nav-label">Test Requests &amp; Results</span></button>
     <button class="nav-item" id="nav-documents" onclick="showView('documents')" data-label="Document Control"><span class="nav-icon"><i class="ti ti-folder"></i></span><span class="nav-label">Document Control</span></button>
     <button class="nav-item" id="nav-capa" onclick="showView('capa')" data-label="Nonconformance &amp; CAPA"><span class="nav-icon"><i class="ti ti-alert-triangle"></i></span><span class="nav-label">Nonconformance &amp; CAPA</span></button>
+
+    <div class="nav-section-label">My Workspace</div>
+    <button class="nav-item" id="nav-claims" onclick="showView('claims')" data-label="Claims"><span class="nav-icon"><i class="ti ti-receipt"></i></span><span class="nav-label">Claims</span></button>
+    <button class="nav-item" id="nav-leave" onclick="showView('leave')" data-label="Leave"><span class="nav-icon"><i class="ti ti-beach"></i></span><span class="nav-label">Leave</span></button>
+    <button class="nav-item" id="nav-attendance" onclick="showView('attendance')" data-label="Attendance"><span class="nav-icon"><i class="ti ti-clock"></i></span><span class="nav-label">Attendance</span></button>
 
     <div class="nav-section-label" id="nav-admin-section">Administration</div>
     <button class="nav-item" id="nav-personnel" onclick="showView('personnel')" data-label="Personnel"><span class="nav-icon"><i class="ti ti-users"></i></span><span class="nav-label">Personnel</span></button>
