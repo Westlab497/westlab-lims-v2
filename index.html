@@ -160,6 +160,22 @@ tbody tr:hover{background:#f8fafc;}
 .cal-event.overdue{background:#c62828;color:#fff;}
 .badge-navy{background:#e0e7ef;color:var(--navy);}
 
+/* ── GANTT-STYLE CALENDAR ── */
+.gantt-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:#fff;}
+.gantt-row{display:grid;align-items:stretch;border-bottom:1px solid var(--border);min-height:38px;}
+.gantt-row:last-child{border-bottom:none;}
+.gantt-header{background:var(--bg);position:sticky;top:0;z-index:2;border-bottom:2px solid var(--border);}
+.gantt-label-cell{padding:8px 10px;font-size:11px;position:sticky;left:0;background:#fff;z-index:1;border-right:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;justify-content:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.gantt-header .gantt-label-cell{background:var(--bg);cursor:default;font-weight:700;color:var(--text-muted);font-size:11px;justify-content:center;}
+.gantt-label-cell:hover{background:#f0f4ff;}
+.gantt-day-cell{text-align:center;font-size:11px;font-weight:700;color:var(--navy);padding:6px 0;border-right:1px solid var(--border);}
+.gantt-day-cell.gantt-today{background:#dbeafe;color:#1e3a8a;}
+.gantt-day-cell.gantt-weekend{background:#f8fafc;color:#94a3b8;}
+.gantt-bar-track{display:grid;grid-template-columns:repeat(31,32px);position:relative;padding:4px 0;}
+.gantt-bar{grid-row:1;border-radius:6px;color:#fff;font-size:10px;font-weight:600;padding:4px 8px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+.gantt-bar:hover{filter:brightness(1.1);}
+.gantt-marker{grid-row:1;color:#dc2626;font-size:14px;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+
 /* ── PROGRESS ── */
 .progress-bar-wrap{background:var(--border);border-radius:99px;height:6px;margin-top:6px;}
 .progress-bar{height:100%;border-radius:99px;background:var(--blue);}
@@ -4689,7 +4705,7 @@ function buildReceiptHtml(jobs){
       </div>
     </div>
     ${hasOnsite?`<div style="background:#fff3e0;border:1px solid #ffb74d;border-radius:2mm;padding:2.5mm 3.5mm;margin-bottom:4mm;font-size:8pt;">
-      <strong style="color:#c84b00;">Onsite Visit Details</strong> — Site: ${j0.siteAddress||'—'}${j0.siteContact?` &nbsp;·&nbsp; Contact: ${j0.siteContact}`:''}${j0.siteMobile?` &nbsp;·&nbsp; Mobile: ${j0.siteMobile}`:''}
+      <strong style="color:#c84b00;">Onsite Visit Details</strong> — ${j0.appointmentDate?`${j0.visitEndDate&&j0.visitEndDate!==j0.appointmentDate?fmtDt(j0.appointmentDate)+' to '+fmtDt(j0.visitEndDate):fmtDt(j0.appointmentDate)}`:''} — Site: ${j0.siteAddress||'—'}${j0.siteContact?` &nbsp;·&nbsp; Contact: ${j0.siteContact}`:''}${j0.siteMobile?` &nbsp;·&nbsp; Mobile: ${j0.siteMobile}`:''}
     </div>`:''}
     <table style="width:100%;border-collapse:collapse;margin-bottom:4mm;">
       <thead>
@@ -4721,6 +4737,38 @@ function buildReceiptHtml(jobs){
     </div>
     <div style="position:absolute;bottom:6mm;right:16mm;font-size:7pt;color:#999;">Page 1 of 1</div>
   </div>`;
+}
+
+async function reissueJobReceipt(jobNo){
+  const j=getJob(jobNo); if(!j){showToast('Job not found','error',3000);return;}
+  const recip=resolveEmailRecipient(j);
+  const wantsEmail=recip.email
+    ? confirm(`Reissue receipt for ${jobNo}?\n\nClick OK to print AND email an updated PDF copy to ${recip.email}.\nClick Cancel to just print, without emailing.`)
+    : false;
+  // Always show the print dialog with current, up-to-date job info
+  printJobReceipt([j]);
+  if(!wantsEmail){
+    if(!recip.email) showToast('ℹ️ No email on file for this customer — printed only','success',3000);
+    return;
+  }
+  showToast('⏳ Generating updated PDF and sending email…','success',2500);
+  try{
+    const pdfBase64=await generateReceiptPdfBase64([j]);
+    const attachments=pdfBase64?[{filename:`${jobNo}_Receipt.pdf`,content:pdfBase64}]:undefined;
+    const dearName=recip.attention||recip.name;
+    const textBody=`Dear ${dearName},\n\nPlease find attached an updated copy of your job receipt for ${jobNo}, reissued to reflect the latest job details.\n\nBest regards,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
+    const htmlBody=`<p>Dear ${dearName},</p><p>Please find attached an <strong>updated copy</strong> of your job receipt for <strong>${jobNo}</strong>, reissued to reflect the latest job details.</p><p>Best regards,<br/>${_settings.labName||'Westlab (M) Sdn. Bhd.'}</p>`;
+    const ok=await sendEmail(recip.email,recip.name,`Updated Job Receipt — ${jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,textBody,htmlBody,attachments);
+    if(ok){
+      showToast(`✅ Updated receipt emailed to ${recip.email}`,'success',4000);
+      addAudit('🧾',`Job receipt reissued and emailed for <strong>${jobNo}</strong>`);
+    } else {
+      showToast('❌ Email failed to send — please try again','error',4000);
+    }
+  }catch(e){
+    console.error('reissueJobReceipt error:',e);
+    showToast('❌ Could not generate/send updated receipt: '+e.message,'error',5000);
+  }
 }
 
 function printJobReceipt(jobs){
@@ -5530,6 +5578,7 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;font-size:12px;color:#fff;">${j.receiveDate||'—'}</td>
         <td style="padding:6px 10px;font-size:12px;">${j.promisedDate?`<span style="color:${overdue?'#fca5a5':'#86efac'};font-size:11px;">${j.promisedDate}</span>`:'<span style="opacity:.5;font-size:11px;">—</span>'}</td>
         <td style="padding:6px 10px;white-space:nowrap;">
+          ${canCreateJobs(currentUser)?`<button class="btn btn-outline btn-sm" onclick="reissueJobReceipt('${j.jobNo}')" style="font-size:11px;">🧾 Reissue Receipt</button>`:''}
           ${role==='Admin'&&j.status!=='Completed'?`<button class="btn btn-danger btn-sm" onclick="deleteJob('${j.jobNo}')" style="font-size:11px;">🗑 Delete Job</button>`:''}
         </td>
       </tr>`);
@@ -7606,6 +7655,7 @@ function renderMyJobs(){
           📍 <strong>Site:</strong> ${j.siteAddress}
           ${j.siteContact?` &nbsp;·&nbsp; 👤 <strong>${j.siteContact}</strong>`:''}
           ${j.siteMobile?` &nbsp;·&nbsp; <a href="tel:${j.siteMobile}" style="color:#006064;font-weight:700;">📞 ${j.siteMobile}</a>`:''}
+          ${j.appointmentDate?`<br/>📅 <strong>${j.visitEndDate&&j.visitEndDate!==j.appointmentDate?fmtDateShort(j.appointmentDate)+' – '+fmtDateShort(j.visitEndDate)+' ('+(Math.round((new Date(j.visitEndDate)-new Date(j.appointmentDate))/86400000)+1)+' days)':fmtDateShort(j.appointmentDate)}</strong>`:''}
           <br/>
           <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.siteAddress)}" target="_blank" style="color:#006064;font-weight:700;text-decoration:none;background:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;margin-right:6px;">🗺️ Maps</a>
           <a href="https://waze.com/ul?q=${encodeURIComponent(j.siteAddress)}&navigate=yes" target="_blank" style="color:#006064;font-weight:700;text-decoration:none;background:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;">🚗 Waze</a>
@@ -9470,53 +9520,78 @@ function renderCalendar(){
     if(label) label.textContent=`${monthNames[_calMonth]} ${_calYear}`;
     const today=new Date(); today.setHours(0,0,0,0);
     const todayStr=today.toISOString().split('T')[0];
-    const firstDay=new Date(_calYear,_calMonth,1);
-    const lastDay=new Date(_calYear,_calMonth+1,0);
-    const startDow=firstDay.getDay();
-    const daysInMonth=lastDay.getDate();
-    const events={};
-    const addEvent=(dateStr,evt)=>{
-      if(!dateStr||!dateStr.startsWith(`${_calYear}-`+String(_calMonth+1).padStart(2,'0'))&&!dateStr.startsWith(`${_calYear}-`)) return;
-      if(!events[dateStr]) events[dateStr]=[];
-      events[dateStr].push(evt);
-    };
+    const daysInMonth=new Date(_calYear,_calMonth+1,0).getDate();
+    const monthPrefix=`${_calYear}-${String(_calMonth+1).padStart(2,'0')}`;
+    const dayOfWeekLetter=d=>['S','M','T','W','T','F','S'][new Date(_calYear,_calMonth,d).getDay()];
+
+    // Build one Gantt row per job that has any activity touching this month
+    const rows=[];
     _jobs.forEach(j=>{
       if(j.status==='Deleted') return;
-      const onsiteItems=(j.items||[]).filter(it=>it.calType==='Onsite').length;
-      const totalItems=(j.items||[]).length||1;
+      const items=j.items||[];
+      const onsiteItems=items.filter(it=>it.calType==='Onsite').length;
+      const totalItems=items.length||1;
       const isOnsite=onsiteItems>0;
       const isMixed=onsiteItems>0&&onsiteItems<totalItems;
-      const onsiteTag=isMixed?`📍${onsiteItems}/${totalItems}`:(isOnsite?'📍':'🔬');
+      // Bar range: Onsite jobs use Appointment→Visit End Date; Lab-only jobs are a single-day marker on Receiving Date
+      const startDate=isOnsite?(j.appointmentDate||j.receiveDate):j.receiveDate;
+      const endDate=isOnsite?(j.visitEndDate||j.appointmentDate||j.receiveDate):j.receiveDate;
+      if(!startDate) return;
+      // Skip jobs whose bar doesn't touch this month at all
+      const startsBeforeMonth=startDate<`${monthPrefix}-01`;
+      const endsAfterMonth=endDate>`${monthPrefix}-${daysInMonth}`;
+      if(endDate<`${monthPrefix}-01`||startDate>`${monthPrefix}-${daysInMonth}`) return;
+      // Clip bar to visible month range
+      const barStartDay=startsBeforeMonth?1:parseInt(startDate.slice(8,10),10);
+      const barEndDay=endsAfterMonth?daysInMonth:parseInt(endDate.slice(8,10),10);
       const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
-      const eventDate=isOnsite?(j.appointmentDate||j.receiveDate):j.receiveDate;
-      if(eventDate) addEvent(eventDate,{label:`${j.jobNo} ${onsiteTag} ${j.custName}`,type:isOnsite?'onsite':'lab',jobNo:j.jobNo,tip:`${j.custName} · ${isMixed?onsiteItems+' of '+totalItems+' items Onsite':(isOnsite?'Onsite Visit':'Lab Receive')}`});
-      if(j.promisedDate&&j.promisedDate!==j.receiveDate&&j.status!=='Completed') addEvent(j.promisedDate,{label:`${j.jobNo} Due: ${j.custName}`,type:isOverdue?'overdue':'promised',jobNo:j.jobNo,tip:`Promised by ${j.promisedDate}${isOverdue?' ⚠️ OVERDUE':''}`});
-      (j.items||[]).forEach(it=>{if(it.customerNotReadyNewDate) addEvent(it.customerNotReadyNewDate,{label:`${j.jobNo} 🔄 ${it.eqName}`,type:'onsite',jobNo:j.jobNo,tip:`Rescheduled: ${it.eqName}`});});
+      const promisedDay=(j.promisedDate&&j.promisedDate.startsWith(monthPrefix))?parseInt(j.promisedDate.slice(8,10),10):null;
+      rows.push({
+        jobNo:j.jobNo, custName:j.custName, isOnsite, isMixed, onsiteItems, totalItems,
+        barStartDay, barEndDay, promisedDay, promisedDateStr:j.promisedDate, isOverdue,
+        tip:`${j.custName} · ${isMixed?onsiteItems+' of '+totalItems+' items Onsite':(isOnsite?'Onsite Visit':'Lab Job')}${startDate!==endDate?' · '+fmtDateShort(startDate)+' – '+fmtDateShort(endDate):''}`
+      });
     });
-    const dayH=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    let html=`<div class="cal-grid">`;
-    dayH.forEach(d=>{html+=`<div class="cal-day-header">${d}</div>`;});
-    for(let i=0;i<startDow;i++){
-      const pd=new Date(_calYear,_calMonth,-(startDow-i-1));
-      html+=`<div class="cal-day other-month"><div class="cal-date-num">${pd.getDate()}</div></div>`;
-    }
+    rows.sort((a,b)=>a.barStartDay-b.barStartDay);
+
+    // ── Header: day-of-month columns ──
+    const colWidth=32; // px per day column, matches CSS below
+    const labelWidth=170;
+    let headerHtml=`<div class="gantt-row gantt-header" style="grid-template-columns:${labelWidth}px repeat(${daysInMonth},${colWidth}px);">
+      <div class="gantt-label-cell">Job</div>`;
     for(let d=1;d<=daysInMonth;d++){
-      const ds=`${_calYear}-${String(_calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const ds=`${monthPrefix}-${String(d).padStart(2,'0')}`;
       const isToday=ds===todayStr;
       const dow=new Date(_calYear,_calMonth,d).getDay();
       const isWeekend=dow===0||dow===6;
-      const dayEvts=events[ds]||[];
-      const extra=dayEvts.length-3;
-      html+=`<div class="cal-day${isToday?' today':''}${isWeekend?' other-month':''}">
-        <div class="cal-date-num" style="${isToday?'background:#1e3a8a;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;margin-bottom:3px;':''}">${d}</div>
-        ${dayEvts.slice(0,3).map(e=>`<div class="cal-event ${e.type}" onclick="openEventJob('${e.jobNo}')" title="${e.tip||''}">${e.label}</div>`).join('')}
-        ${extra>0?`<div style="font-size:10px;color:var(--text-muted);padding:1px 4px;">+${extra} more</div>`:''}
-      </div>`;
+      headerHtml+=`<div class="gantt-day-cell${isToday?' gantt-today':''}${isWeekend?' gantt-weekend':''}"><div style="font-size:8px;opacity:.6;">${dayOfWeekLetter(d)}</div>${d}</div>`;
     }
-    const trailing=(7-(startDow+daysInMonth)%7)%7;
-    for(let i=1;i<=trailing;i++){html+=`<div class="cal-day other-month"><div class="cal-date-num">${i}</div></div>`;}
-    html+=`</div>`;
-    grid.innerHTML=html;
+    headerHtml+=`</div>`;
+
+    // ── Rows ──
+    let rowsHtml='';
+    if(!rows.length){
+      rowsHtml=`<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No jobs scheduled this month.</div>`;
+    } else {
+      rows.forEach(r=>{
+        const barColor=r.isOverdue?'#dc2626':(r.isMixed?'#f59e0b':(r.isOnsite?'#0d9488':'#3b82f6'));
+        const barLabel=r.isMixed?`📍${r.onsiteItems}/${r.totalItems} · ${r.custName}`:(r.isOnsite?`📍 ${r.custName}`:`🔬 ${r.custName}`);
+        rowsHtml+=`<div class="gantt-row" style="grid-template-columns:${labelWidth}px repeat(${daysInMonth},${colWidth}px);">
+          <div class="gantt-label-cell" onclick="openEventJob('${r.jobNo}')" title="${r.jobNo}">
+            <strong>${r.jobNo}</strong><br/><span style="opacity:.7;font-size:10px;">${r.custName}</span>
+          </div>
+          <div class="gantt-bar-track" style="grid-column:2 / span ${daysInMonth};grid-template-columns:repeat(${daysInMonth},${colWidth}px);">
+            <div class="gantt-bar" onclick="openEventJob('${r.jobNo}')" title="${r.tip}"
+              style="grid-column:${r.barStartDay} / ${r.barEndDay+1};background:${barColor};">
+              ${barLabel}
+            </div>
+            ${r.promisedDay?`<div class="gantt-marker" style="grid-column:${r.promisedDay};" title="Promised: ${fmtDateShort(r.promisedDateStr)}">◆</div>`:''}
+          </div>
+        </div>`;
+      });
+    }
+
+    grid.innerHTML=`<div class="gantt-scroll">${headerHtml}${rowsHtml}</div>`;
   }catch(e){console.error('renderCalendar error:',e);}
 }
 
