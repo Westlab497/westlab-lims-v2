@@ -5566,7 +5566,7 @@ function renderEquipmentTable(){
       const overdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
       // ── JOB GROUP HEADER ROW ──
       rows.push(`<tr style="background:var(--navy);color:#fff;">
-        <td colspan="2" style="padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:#fff;">
+        <td colspan="2" style="padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
           ${j.jobNo}
           <span style="font-size:11px;font-weight:400;opacity:.8;margin-left:8px;">${itemCount} item${itemCount>1?'s':''}</span>
           ${typeBadge}
@@ -5577,9 +5577,9 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;font-size:12px;"><span class="badge ${PB[j.priority]||'badge-slate'}">${j.priority}</span></td>
         <td style="padding:6px 10px;font-size:12px;color:#fff;">${j.receiveDate||'—'}</td>
         <td style="padding:6px 10px;font-size:12px;">${j.promisedDate?`<span style="color:${overdue?'#fca5a5':'#86efac'};font-size:11px;">${j.promisedDate}</span>`:'<span style="opacity:.5;font-size:11px;">—</span>'}</td>
-        <td style="padding:6px 10px;white-space:nowrap;">
-          ${canCreateJobs(currentUser)?`<button class="btn btn-outline btn-sm" onclick="reissueJobReceipt('${j.jobNo}')" style="font-size:11px;">🧾 Reissue Receipt</button>`:''}
-          ${role==='Admin'&&j.status!=='Completed'?`<button class="btn btn-danger btn-sm" onclick="deleteJob('${j.jobNo}')" style="font-size:11px;">🗑 Delete Job</button>`:''}
+        <td style="padding:6px 10px;white-space:nowrap;text-align:right;">
+          ${canCreateJobs(currentUser)?`<button onclick="reissueJobReceipt('${j.jobNo}')" title="Reissue Receipt" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🧾</button>`:''}
+          ${role==='Admin'&&j.status!=='Completed'?`<button onclick="deleteJob('${j.jobNo}')" title="Delete Job" style="background:rgba(220,38,38,.85);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑</button>`:''}
         </td>
       </tr>`);
       // ── ITEM ROWS ──
