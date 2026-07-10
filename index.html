@@ -1022,10 +1022,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <!-- Legend -->
       <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;font-size:12px;">
-        <span><span style="display:inline-block;width:12px;height:12px;background:#1e3a8a;border-radius:3px;margin-right:4px;"></span>Lab Job</span>
-        <span><span style="display:inline-block;width:12px;height:12px;background:#006064;border-radius:3px;margin-right:4px;"></span>Onsite Visit</span>
-        <span><span style="display:inline-block;width:12px;height:12px;background:#2e7d32;border-radius:3px;margin-right:4px;"></span>Promised Date</span>
-        <span><span style="display:inline-block;width:12px;height:12px;background:#c62828;border-radius:3px;margin-right:4px;"></span>Overdue</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#3b82f6;border-radius:3px;margin-right:4px;"></span>Lab Job</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#0d9488;border-radius:3px;margin-right:4px;"></span>Onsite Visit</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#f59e0b;border-radius:3px;margin-right:4px;"></span>Mixed (Lab + Onsite)</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#dc2626;border-radius:3px;margin-right:4px;"></span>Overdue</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#16a34a;border-radius:50%;margin-right:4px;"></span>Promised Date</span>
       </div>
       <!-- Calendar grid -->
       <div class="card">
@@ -9588,11 +9589,15 @@ function renderCalendar(){
       overflow.forEach(j=>{ for(let c=j.segStart;c<=j.segEnd;c++) overflowCountByCol[c]++; });
 
       html+=`<div class="mcal-weekrow" style="grid-template-rows:26px repeat(${MAX_SLOTS},20px) ${overflow.length?'16px':'0px'};">`;
-      // Day number cells (row 1)
+      // Day number cells (row 1) — with a small green dot if any not-yet-completed job is promised on this day
       week.forEach((c,ci)=>{
         const ds=dateStr(c.date.getFullYear(),c.date.getMonth(),c.date.getDate());
         const isToday=ds===todayStr;
-        html+=`<div class="mcal-daynum${c.inMonth?'':' mcal-outmonth'}${isToday?' mcal-today':''}" style="grid-column:${ci+1};grid-row:1;">${c.date.getDate()}</div>`;
+        const hasPromised=allJobs.some(j=>j.promisedDate===ds&&j.status!=='Completed');
+        html+=`<div class="mcal-daynum${c.inMonth?'':' mcal-outmonth'}${isToday?' mcal-today':''}" style="grid-column:${ci+1};grid-row:1;display:flex;align-items:center;justify-content:space-between;">
+          <span>${c.date.getDate()}</span>
+          ${hasPromised?`<span style="width:7px;height:7px;background:#16a34a;border-radius:50%;margin-right:2px;" title="Promised ready date"></span>`:''}
+        </div>`;
       });
       // Bars (rows 2..MAX_SLOTS+1)
       visible.forEach(j=>{
