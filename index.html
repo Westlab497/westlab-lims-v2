@@ -160,21 +160,20 @@ tbody tr:hover{background:#f8fafc;}
 .cal-event.overdue{background:#c62828;color:#fff;}
 .badge-navy{background:#e0e7ef;color:var(--navy);}
 
-/* ── GANTT-STYLE CALENDAR ── */
-.gantt-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:#fff;}
-.gantt-row{display:grid;align-items:stretch;border-bottom:1px solid var(--border);min-height:38px;}
-.gantt-row:last-child{border-bottom:none;}
-.gantt-header{background:var(--bg);position:sticky;top:0;z-index:2;border-bottom:2px solid var(--border);}
-.gantt-label-cell{padding:8px 10px;font-size:11px;position:sticky;left:0;background:#fff;z-index:1;border-right:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;justify-content:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
-.gantt-header .gantt-label-cell{background:var(--bg);cursor:default;font-weight:700;color:var(--text-muted);font-size:11px;justify-content:center;}
-.gantt-label-cell:hover{background:#f0f4ff;}
-.gantt-day-cell{text-align:center;font-size:11px;font-weight:700;color:var(--navy);padding:6px 0;border-right:1px solid var(--border);}
-.gantt-day-cell.gantt-today{background:#dbeafe;color:#1e3a8a;}
-.gantt-day-cell.gantt-weekend{background:#f8fafc;color:#94a3b8;}
-.gantt-bar-track{display:grid;grid-template-columns:repeat(31,32px);position:relative;padding:4px 0;}
-.gantt-bar{grid-row:1;border-radius:6px;color:#fff;font-size:10px;font-weight:600;padding:4px 8px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.15);}
-.gantt-bar:hover{filter:brightness(1.1);}
-.gantt-marker{grid-row:1;color:#dc2626;font-size:14px;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+/* ── MONTH-GRID CALENDAR ── */
+.mcal-wrap{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;}
+.mcal-headerrow{display:grid;grid-template-columns:repeat(7,1fr);background:var(--bg);border-bottom:1px solid var(--border);}
+.mcal-headercell{padding:8px 4px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);}
+.mcal-weekrow{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border);position:relative;}
+.mcal-weekrow:last-child{border-bottom:none;}
+.mcal-daynum{font-size:11px;font-weight:700;color:var(--navy);padding:4px 6px;border-right:1px solid #f1f5f9;}
+.mcal-daynum.mcal-outmonth{color:#cbd5e1;background:#f8fafc;}
+.mcal-daynum.mcal-today{background:#1e3a8a;color:#fff;border-radius:0 0 0 8px;}
+.mcal-bar{font-size:10px;font-weight:600;color:#fff;padding:1px 6px;margin:1px 0;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.1);}
+.mcal-bar:hover{filter:brightness(1.1);}
+.mcal-more{font-size:10px;color:var(--text-muted);cursor:pointer;padding:0 6px;font-weight:600;}
+.mcal-more:hover{color:var(--blue);text-decoration:underline;}
+.mcal-popup{background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:12px 14px;width:240px;}
 
 /* ── PROGRESS ── */
 .progress-bar-wrap{background:var(--border);border-radius:99px;height:6px;margin-top:6px;}
@@ -9511,7 +9510,6 @@ function openEventJob(jobNo){
 }
 
 function renderCalendar(){
-  // wrap in try/catch
   try{
     const grid=el('calendar-grid');
     const label=el('cal-month-label');
@@ -9520,12 +9518,13 @@ function renderCalendar(){
     if(label) label.textContent=`${monthNames[_calMonth]} ${_calYear}`;
     const today=new Date(); today.setHours(0,0,0,0);
     const todayStr=today.toISOString().split('T')[0];
+    const firstDay=new Date(_calYear,_calMonth,1);
+    const startDow=firstDay.getDay();
     const daysInMonth=new Date(_calYear,_calMonth+1,0).getDate();
-    const monthPrefix=`${_calYear}-${String(_calMonth+1).padStart(2,'0')}`;
-    const dayOfWeekLetter=d=>['S','M','T','W','T','F','S'][new Date(_calYear,_calMonth,d).getDay()];
+    const dateStr=(y,m,d)=>`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
-    // Build one Gantt row per job that has any activity touching this month
-    const rows=[];
+    // ── Build every job's date range (once) ──
+    const allJobs=[];
     _jobs.forEach(j=>{
       if(j.status==='Deleted') return;
       const items=j.items||[];
@@ -9533,67 +9532,171 @@ function renderCalendar(){
       const totalItems=items.length||1;
       const isOnsite=onsiteItems>0;
       const isMixed=onsiteItems>0&&onsiteItems<totalItems;
-      // Bar range: Onsite jobs use Appointment→Visit End Date; Lab-only jobs are a single-day marker on Receiving Date
       const startDate=isOnsite?(j.appointmentDate||j.receiveDate):j.receiveDate;
       const endDate=isOnsite?(j.visitEndDate||j.appointmentDate||j.receiveDate):j.receiveDate;
       if(!startDate) return;
-      // Skip jobs whose bar doesn't touch this month at all
-      const startsBeforeMonth=startDate<`${monthPrefix}-01`;
-      const endsAfterMonth=endDate>`${monthPrefix}-${daysInMonth}`;
-      if(endDate<`${monthPrefix}-01`||startDate>`${monthPrefix}-${daysInMonth}`) return;
-      // Clip bar to visible month range
-      const barStartDay=startsBeforeMonth?1:parseInt(startDate.slice(8,10),10);
-      const barEndDay=endsAfterMonth?daysInMonth:parseInt(endDate.slice(8,10),10);
       const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
-      const promisedDay=(j.promisedDate&&j.promisedDate.startsWith(monthPrefix))?parseInt(j.promisedDate.slice(8,10),10):null;
-      rows.push({
+      allJobs.push({
         jobNo:j.jobNo, custName:j.custName, isOnsite, isMixed, onsiteItems, totalItems,
-        barStartDay, barEndDay, promisedDay, promisedDateStr:j.promisedDate, isOverdue,
-        tip:`${j.custName} · ${isMixed?onsiteItems+' of '+totalItems+' items Onsite':(isOnsite?'Onsite Visit':'Lab Job')}${startDate!==endDate?' · '+fmtDateShort(startDate)+' – '+fmtDateShort(endDate):''}`
+        startDate, endDate, promisedDate:j.promisedDate, isOverdue, status:j.status
       });
     });
-    rows.sort((a,b)=>a.barStartDay-b.barStartDay);
 
-    // ── Header: day-of-month columns ──
-    const colWidth=32; // px per day column, matches CSS below
-    const labelWidth=170;
-    let headerHtml=`<div class="gantt-row gantt-header" style="grid-template-columns:${labelWidth}px repeat(${daysInMonth},${colWidth}px);">
-      <div class="gantt-label-cell">Job</div>`;
-    for(let d=1;d<=daysInMonth;d++){
-      const ds=`${monthPrefix}-${String(d).padStart(2,'0')}`;
-      const isToday=ds===todayStr;
-      const dow=new Date(_calYear,_calMonth,d).getDay();
-      const isWeekend=dow===0||dow===6;
-      headerHtml+=`<div class="gantt-day-cell${isToday?' gantt-today':''}${isWeekend?' gantt-weekend':''}"><div style="font-size:8px;opacity:.6;">${dayOfWeekLetter(d)}</div>${d}</div>`;
+    // ── Build the 6-week grid (42 day-cells), each with its own date ──
+    const cells=[];
+    for(let i=0;i<startDow;i++){
+      const d=new Date(_calYear,_calMonth,-(startDow-i-1));
+      cells.push({date:d,inMonth:false});
     }
-    headerHtml+=`</div>`;
+    for(let d=1;d<=daysInMonth;d++) cells.push({date:new Date(_calYear,_calMonth,d),inMonth:true});
+    while(cells.length%7!==0||cells.length<42) cells.push({date:new Date(_calYear,_calMonth,daysInMonth+(cells.length-startDow-daysInMonth+1)),inMonth:false});
 
-    // ── Rows ──
-    let rowsHtml='';
-    if(!rows.length){
-      rowsHtml=`<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">No jobs scheduled this month.</div>`;
-    } else {
-      rows.forEach(r=>{
-        const barColor=r.isOverdue?'#dc2626':(r.isMixed?'#f59e0b':(r.isOnsite?'#0d9488':'#3b82f6'));
-        const barLabel=r.isMixed?`📍${r.onsiteItems}/${r.totalItems} · ${r.custName}`:(r.isOnsite?`📍 ${r.custName}`:`🔬 ${r.custName}`);
-        rowsHtml+=`<div class="gantt-row" style="grid-template-columns:${labelWidth}px repeat(${daysInMonth},${colWidth}px);">
-          <div class="gantt-label-cell" onclick="openEventJob('${r.jobNo}')" title="${r.jobNo}">
-            <strong>${r.jobNo}</strong><br/><span style="opacity:.7;font-size:10px;">${r.custName}</span>
-          </div>
-          <div class="gantt-bar-track" style="grid-column:2 / span ${daysInMonth};grid-template-columns:repeat(${daysInMonth},${colWidth}px);">
-            <div class="gantt-bar" onclick="openEventJob('${r.jobNo}')" title="${r.tip}"
-              style="grid-column:${r.barStartDay} / ${r.barEndDay+1};background:${barColor};">
-              ${barLabel}
-            </div>
-            ${r.promisedDay?`<div class="gantt-marker" style="grid-column:${r.promisedDay};" title="Promised: ${fmtDateShort(r.promisedDateStr)}">◆</div>`:''}
-          </div>
-        </div>`;
+    // ── Split cells into week rows ──
+    const weeks=[];
+    for(let i=0;i<cells.length;i+=7) weeks.push(cells.slice(i,i+7));
+
+    const dayHeaders=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    let html=`<div class="mcal-wrap">`;
+    html+=`<div class="mcal-headerrow">${dayHeaders.map(d=>`<div class="mcal-headercell">${d}</div>`).join('')}</div>`;
+
+    weeks.forEach(week=>{
+      const weekStartStr=dateStr(week[0].date.getFullYear(),week[0].date.getMonth(),week[0].date.getDate());
+      const weekEndStr=dateStr(week[6].date.getFullYear(),week[6].date.getMonth(),week[6].date.getDate());
+
+      // Jobs whose range overlaps this week at all
+      const weekJobs=allJobs.filter(j=>j.endDate>=weekStartStr&&j.startDate<=weekEndStr).map(j=>{
+        const segStart=j.startDate<weekStartStr?0:week.findIndex(c=>dateStr(c.date.getFullYear(),c.date.getMonth(),c.date.getDate())===j.startDate);
+        const segEnd=j.endDate>weekEndStr?6:week.findIndex(c=>dateStr(c.date.getFullYear(),c.date.getMonth(),c.date.getDate())===j.endDate);
+        return {...j,segStart,segEnd,continuesBefore:j.startDate<weekStartStr,continuesAfter:j.endDate>weekEndStr};
       });
-    }
+      weekJobs.sort((a,b)=>a.segStart-b.segStart||(b.segEnd-b.segStart)-(a.segEnd-a.segStart));
 
-    grid.innerHTML=`<div class="gantt-scroll">${headerHtml}${rowsHtml}</div>`;
+      // Greedy slot packing — max 3 visible slots per week
+      const MAX_SLOTS=3;
+      const slots=[]; // each: array of {segStart,segEnd}
+      const placed=[];
+      weekJobs.forEach(j=>{
+        let slotIdx=slots.findIndex(slot=>!slot.some(b=>!(j.segEnd<b.segStart||j.segStart>b.segEnd)));
+        if(slotIdx===-1){ slotIdx=slots.length; slots.push([]); }
+        slots[slotIdx].push({segStart:j.segStart,segEnd:j.segEnd});
+        placed.push({...j,slot:slotIdx});
+      });
+      const visible=placed.filter(j=>j.slot<MAX_SLOTS);
+      const overflow=placed.filter(j=>j.slot>=MAX_SLOTS);
+      // Count overflow per day-of-week column
+      const overflowCountByCol=[0,0,0,0,0,0,0];
+      overflow.forEach(j=>{ for(let c=j.segStart;c<=j.segEnd;c++) overflowCountByCol[c]++; });
+
+      html+=`<div class="mcal-weekrow" style="grid-template-rows:26px repeat(${MAX_SLOTS},20px) ${overflow.length?'16px':'0px'};">`;
+      // Day number cells (row 1)
+      week.forEach((c,ci)=>{
+        const ds=dateStr(c.date.getFullYear(),c.date.getMonth(),c.date.getDate());
+        const isToday=ds===todayStr;
+        html+=`<div class="mcal-daynum${c.inMonth?'':' mcal-outmonth'}${isToday?' mcal-today':''}" style="grid-column:${ci+1};grid-row:1;">${c.date.getDate()}</div>`;
+      });
+      // Bars (rows 2..MAX_SLOTS+1)
+      visible.forEach(j=>{
+        const color=j.isOverdue?'#dc2626':(j.isMixed?'#f59e0b':(j.isOnsite?'#0d9488':'#3b82f6'));
+        const labelTxt=j.isMixed?`📍${j.onsiteItems}/${j.totalItems} ${j.custName}`:(j.isOnsite?`📍 ${j.custName}`:`🔬 ${j.custName}`);
+        const radiusStyle=`border-radius:${j.continuesBefore?'0':'4px'} ${j.continuesAfter?'0':'4px'} ${j.continuesAfter?'0':'4px'} ${j.continuesBefore?'0':'4px'};`;
+        html+=`<div class="mcal-bar" onclick="openCalJobPopup(event,'${j.jobNo}')" title="${j.custName}"
+          style="grid-column:${j.segStart+1} / ${j.segEnd+2};grid-row:${j.slot+2};background:${color};${radiusStyle}">${labelTxt}</div>`;
+      });
+      // Overflow "+N" per day (last row)
+      if(overflow.length){
+        week.forEach((c,ci)=>{
+          if(overflowCountByCol[ci]>0){
+            const ds=dateStr(c.date.getFullYear(),c.date.getMonth(),c.date.getDate());
+            html+=`<div class="mcal-more" style="grid-column:${ci+1};grid-row:${MAX_SLOTS+2};" onclick="openCalDayPopup(event,'${ds}')">+${overflowCountByCol[ci]} more</div>`;
+          }
+        });
+      }
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+    grid.innerHTML=html;
   }catch(e){console.error('renderCalendar error:',e);}
 }
+
+// ── Small popup: click a job bar to see a quick summary ──
+function openCalJobPopup(evt,jobNo){
+  evt.stopPropagation();
+  const j=getJob(jobNo); if(!j)return;
+  const items=j.items||[];
+  const onsiteItems=items.filter(it=>it.calType==='Onsite').length;
+  const totalItems=items.length||1;
+  const typeLabel=onsiteItems===0?'Lab':(onsiteItems===totalItems?'Onsite':`${onsiteItems}/${totalItems} Onsite`);
+  closeCalPopup();
+  const popup=document.createElement('div');
+  popup.id='cal-popup';
+  popup.className='mcal-popup';
+  popup.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <strong style="font-size:13px;color:var(--navy);">${j.jobNo}</strong>
+      <button onclick="closeCalPopup()" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text);margin-bottom:4px;"><strong>${j.custName}</strong></div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Type: ${typeLabel} · Items: ${totalItems}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Status: ${j.status}</div>
+    ${j.appointmentDate?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Onsite: ${fmtDateShort(j.appointmentDate)}${j.visitEndDate&&j.visitEndDate!==j.appointmentDate?' – '+fmtDateShort(j.visitEndDate):''}</div>`:''}
+    ${j.promisedDate?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Promised: ${fmtDateShort(j.promisedDate)}</div>`:''}
+    <button class="btn btn-primary btn-sm" style="width:100%;" onclick="closeCalPopup();openEventJob('${j.jobNo}')">Open Full Job</button>
+  `;
+  document.body.appendChild(popup);
+  positionCalPopup(popup,evt);
+}
+
+// ── "+N more" popup: full list of jobs touching one specific day ──
+function openCalDayPopup(evt,dateStr){
+  evt.stopPropagation();
+  const dayJobs=_jobs.filter(j=>{
+    if(j.status==='Deleted')return false;
+    const items=j.items||[];
+    const onsiteItems=items.filter(it=>it.calType==='Onsite').length;
+    const isOnsite=onsiteItems>0;
+    const s=isOnsite?(j.appointmentDate||j.receiveDate):j.receiveDate;
+    const e=isOnsite?(j.visitEndDate||j.appointmentDate||j.receiveDate):j.receiveDate;
+    return s&&e&&dateStr>=s&&dateStr<=e;
+  });
+  closeCalPopup();
+  const popup=document.createElement('div');
+  popup.id='cal-popup';
+  popup.className='mcal-popup';
+  popup.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <strong style="font-size:13px;color:var(--navy);">${fmtDateShort(dateStr)}</strong>
+      <button onclick="closeCalPopup()" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="max-height:240px;overflow-y:auto;">
+    ${dayJobs.map(j=>{
+      const items=j.items||[];
+      const onsiteItems=items.filter(it=>it.calType==='Onsite').length;
+      const isOnsite=onsiteItems>0;
+      return `<div onclick="closeCalPopup();openEventJob('${j.jobNo}')" style="padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;margin-bottom:4px;background:var(--bg);">
+        <strong>${j.jobNo}</strong> ${isOnsite?'📍':'🔬'}<br/><span style="color:var(--text-muted);font-size:11px;">${j.custName}</span>
+      </div>`;
+    }).join('')}
+    </div>
+  `;
+  document.body.appendChild(popup);
+  positionCalPopup(popup,evt);
+}
+
+function positionCalPopup(popup,evt){
+  popup.style.position='fixed';
+  popup.style.zIndex='999';
+  const x=Math.min(evt.clientX+10,window.innerWidth-260);
+  const y=Math.min(evt.clientY+10,window.innerHeight-220);
+  popup.style.left=x+'px';
+  popup.style.top=y+'px';
+}
+function closeCalPopup(){
+  const p=document.getElementById('cal-popup');
+  if(p) p.remove();
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.mcal-popup')&&!e.target.closest('.mcal-bar')&&!e.target.closest('.mcal-more')) closeCalPopup();
+});
 
 function renderCompletedJobs(){
   try{
