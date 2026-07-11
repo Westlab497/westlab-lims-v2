@@ -153,11 +153,7 @@ tbody tr:hover{background:#f8fafc;}
 .cal-day.other-month{background:#f8fafc;}
 .cal-day.other-month .cal-date-num{color:#cbd5e1;}
 .cal-date-num{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:3px;}
-.cal-event{font-size:10px;border-radius:4px;padding:2px 5px;margin-bottom:2px;cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:1.4;}
-.cal-event.lab{background:#1e3a8a;color:#fff;}
-.cal-event.onsite{background:#006064;color:#fff;}
-.cal-event.promised{background:#2e7d32;color:#fff;}
-.cal-event.overdue{background:#c62828;color:#fff;}
+
 .badge-navy{background:#e0e7ef;color:var(--navy);}
 
 /* ── MONTH-GRID CALENDAR ── */
@@ -10865,7 +10861,7 @@ function renderReports(){
   const onsiteCount=yearJobs.filter(j=>j.jobType==='Onsite').length;
   mkChart('chart-jobtype','doughnut',{
     labels:['Lab','Onsite'],
-    datasets:[{data:[labCount,onsiteCount],backgroundColor:['#1e3a8a','#006064'],hoverOffset:4}]
+    datasets:[{data:[labCount,onsiteCount],backgroundColor:['#3b82f6','#0d9488'],hoverOffset:4}]
   });
 
   // TAT table by priority
