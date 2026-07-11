@@ -644,9 +644,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="page-header">
         <div>
           <div class="page-title">✅ Approval Queue</div>
-          <div class="page-sub">Jobs submitted for your review and approval</div>
+          <div class="page-sub">Certificates, reference equipment checkouts, and job extension requests waiting on you</div>
         </div>
       </div>
+      <div id="approval-ref-checkout-section"></div>
+      <div id="approval-extension-section"></div>
+      <div class="form-section-title" style="margin-top:6px;">📋 Certificate Approvals</div>
       <div id="approval-list"></div>
     </div>
 
@@ -800,7 +803,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-title">🏛️ Lab Reference Equipment</div>
           <div class="page-sub" id="ref-eq-sub">Westlab's own calibration reference instruments</div>
         </div>
-        <button class="btn btn-primary" onclick="openAddRefEqModal()">+ Add Reference Equipment</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openRefCheckoutRequestModal()">📤 Request to Take Onsite</button>
+          <button class="btn btn-primary" onclick="openAddRefEqModal()">+ Add Reference Equipment</button>
+        </div>
       </div>
       <div class="kpi-row">
         <div class="kpi-mini"><div class="kpi-val" id="ref-kpi-total">0</div><div class="kpi-lbl">Total Instruments</div></div>
@@ -810,6 +816,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <!-- Due soon alert -->
       <div id="ref-eq-alert" style="display:none;margin-bottom:16px;"></div>
+      <!-- Pending checkout requests (Admin/Manager) -->
+      <div id="ref-checkout-queue" style="display:none;margin-bottom:16px;"></div>
       <div class="card">
         <div class="card-header">
           <span class="card-title">Reference Instrument Register</span>
@@ -827,10 +835,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <table>
             <thead><tr>
               <th>ID</th><th>Equipment Name</th><th>Brand / Model</th><th>Serial No.</th>
-              <th>Location</th><th>Traceability</th><th>Last Cal.</th><th>Due Date</th><th>Status</th><th>Actions</th>
+              <th>Location</th><th>Traceability</th><th>Last Cal.</th><th>Due Date</th><th>Cal Status</th><th>Availability</th><th>Actions</th>
             </tr></thead>
             <tbody id="ref-eq-tbody">
-              <tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🏛️</div><p>No reference equipment added yet.</p></div></td></tr>
+              <tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🏛️</div><p>No reference equipment added yet.</p></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1016,13 +1024,25 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <button class="btn btn-outline btn-sm" onclick="calGoToday()">Today</button>
         </div>
       </div>
+      <!-- View controls: Onsite Only / All Jobs toggle + Engineer filter -->
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <div style="display:flex;background:var(--bg);border-radius:8px;padding:3px;">
+          <button id="cal-view-onsite-btn" class="btn btn-sm btn-primary" onclick="setCalViewMode('onsite')" style="border:none;">📍 Onsite Only</button>
+          <button id="cal-view-all-btn" class="btn btn-sm btn-outline" onclick="setCalViewMode('all')" style="border:none;">All Jobs</button>
+        </div>
+        <select class="form-control" id="cal-engineer-filter" onchange="renderCalendar()" style="width:auto;font-size:12px;padding:6px 10px;">
+          <option value="">All Engineers</option>
+        </select>
+      </div>
       <!-- Legend -->
       <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;font-size:12px;">
         <span><span style="display:inline-block;width:12px;height:12px;background:#3b82f6;border-radius:3px;margin-right:4px;"></span>Lab Job</span>
         <span><span style="display:inline-block;width:12px;height:12px;background:#0d9488;border-radius:3px;margin-right:4px;"></span>Onsite Visit</span>
         <span><span style="display:inline-block;width:12px;height:12px;background:#f59e0b;border-radius:3px;margin-right:4px;"></span>Mixed (Lab + Onsite)</span>
         <span><span style="display:inline-block;width:12px;height:12px;background:#dc2626;border-radius:3px;margin-right:4px;"></span>Overdue</span>
+        <span><span style="display:inline-block;width:12px;height:12px;border:2px dashed #0d9488;border-radius:3px;margin-right:4px;"></span>Unassigned Onsite</span>
         <span><span style="display:inline-block;width:10px;height:10px;background:#16a34a;border-radius:50%;margin-right:4px;"></span>Promised Date</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#1e3a8a;border-radius:3px;margin-right:4px;"></span>Today (date only, not a job)</span>
       </div>
       <!-- Calendar grid -->
       <div class="card">
@@ -3036,6 +3056,8 @@ async function loadAll(){
     await loadClaims();
     await loadLeaveRecords();
     await loadAttendance();
+    await loadRefCheckoutRequests();
+    await loadExtensionRequests();
   }catch(e){
     console.error('Supabase load error',e);
     showLoading('⚠️ Connection issue — retrying…');
@@ -3372,6 +3394,13 @@ function applyRoleUI(){
 }
 
 function el(id){return document.getElementById(id);}
+// Correct local-date string (YYYY-MM-DD) — never use .toISOString() for "today"/date-only values,
+// since that converts to UTC first and can roll the date back a full day in timezones ahead of UTC
+// (e.g. Malaysia UTC+8, any time before 8am local becomes "yesterday" in UTC).
+function toLocalDateStr(d){
+  if(!(d instanceof Date)) d=new Date(d);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 // ── NAV ──
 const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',completed:'Completed Jobs',
@@ -3797,7 +3826,7 @@ async function openNewJobModal(){
     const cnEl=el('eq-cert-no-preview'); if(cnEl) cnEl.value='Generating…';
     if(jnEl) jnEl.value=await peekJobNo();
     if(cnEl) cnEl.value=await peekCertNo();
-    const rd=el('eq-receive-date'); if(rd) rd.value=new Date().toISOString().split('T')[0];
+    const rd=el('eq-receive-date'); if(rd) rd.value=toLocalDateStr(new Date());
     const cond=el('eq-condition'); if(cond) cond.value='Good';
     const pri=el('eq-priority'); if(pri) pri.value='Normal';
     const cog=el('eq-condition-other-group'); if(cog) cog.style.display='none';
@@ -4300,7 +4329,7 @@ function getSLADays(priority){
 }
 function calcNextDueFromInterval(){
   const intervalVal=el('cal-interval')?.value||'';
-  const calDate=el('cal-date')?.value||new Date().toISOString().split('T')[0];
+  const calDate=el('cal-date')?.value||toLocalDateStr(new Date());
   const display=el('cal-next-due-display');
   const text=el('cal-next-due-text');
   const hidden=el('cal-next-due');
@@ -4318,7 +4347,7 @@ function calcNextDueFromInterval(){
   }
   const d=new Date(calDate+'T00:00:00');
   d.setMonth(d.getMonth()+months);
-  const result=d.toISOString().split('T')[0];
+  const result=toLocalDateStr(d);
   if(hidden) hidden.value=result;
   if(text) text.textContent=fmtDateShort(result);
   if(display) display.style.display='block';
@@ -4339,17 +4368,17 @@ function calcNextDueFromCalDate(calDateStr, months){
   if(!calDateStr||!months) return '';
   const d=new Date(calDateStr+'T00:00:00');
   d.setMonth(d.getMonth()+months);
-  return d.toISOString().split('T')[0];
+  return toLocalDateStr(d);
 }
 
 function calcPromisedDate(){
   const priority=el('eq-priority')?.value||'Normal';
-  const receiveDate=el('eq-receive-date')?.value||new Date().toISOString().split('T')[0];
+  const receiveDate=el('eq-receive-date')?.value||toLocalDateStr(new Date());
   const days=getSLADays(priority);
   const d=new Date(receiveDate+'T00:00:00');
   let added=0;
   while(added<days){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)added++;}
-  const result=d.toISOString().split('T')[0];
+  const result=toLocalDateStr(d);
   const hint=el('eq-promised-hint');
   if(el('eq-promised-date')&&!el('eq-promised-date').value){
     el('eq-promised-date').value=result;
@@ -5139,15 +5168,15 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-cond-after').value='Calibrated as Requested by Customer.';
   el('cal-cond-remark').value=item&&item.remarks?item.remarks:'Without Adjustment.';
   // Dates
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   // Date of Issue: limit to today ± 1 month
   const minDate=new Date(); minDate.setMonth(minDate.getMonth()-1);
   const maxDate=new Date(); maxDate.setMonth(maxDate.getMonth()+1);
   const issueDateEl=el('cal-issue-date');
   if(issueDateEl){
     issueDateEl.value=today;
-    issueDateEl.min=minDate.toISOString().split('T')[0];
-    issueDateEl.max=maxDate.toISOString().split('T')[0];
+    issueDateEl.min=toLocalDateStr(minDate);
+    issueDateEl.max=toLocalDateStr(maxDate);
   }
   el('cal-date').value=today;
   el('cal-receipt-date').value=j?j.receiveDate||today:today;
@@ -5476,7 +5505,24 @@ async function approveJob(){
     closeModal('modal-approve-job');
     const freshJobs=await SB.getAll('wl_jobs')||[];
     _jobs=freshJobs.filter(j=>j.items&&Array.isArray(j.items));
+    // If this was an internal reference-equipment calibration job, auto-update the reference item's own record
+    const approvedJob=getJob(approvalJobNo);
+    const approvedItem=approvedJob?.items?.[approvalItemIdx];
+    if(approvedItem?.isInternalRefCal&&approvedItem?.refEqId&&approvedItem?.calData){
+      const refItem=_refEq.find(x=>x.id===approvedItem.refEqId);
+      if(refItem){
+        refItem.lastCal=approvedItem.calData.date||toLocalDateStr(new Date());
+        refItem.dueDate=approvedItem.calData.next_due||refItem.dueDate;
+        refItem.certNo=approvedItem.certNo||refItem.certNo;
+        refItem.calBy=USERS[currentUser]?.name||currentUser;
+        refItem.availability='Available';
+        refItem.calibrationType=null; refItem.calJobNo=null;
+        await SB.upsert('wl_ref_equipment',refItem.id,refItem);
+        showToast(`✅ ${refItem.name} calibration record updated automatically`,'success',3500);
+      }
+    }
     renderApprovalQueue(); renderEquipmentTable(); renderCompletedJobs(); renderDashboard(); refreshAllBadges();
+    if(typeof renderRefEqTable==='function') renderRefEqTable();
     if(allDone){
       showToast('✅ All items approved — job completed!','success',4000);
       addAudit('✅',`Job <strong>${approvalJobNo}</strong> fully completed`);
@@ -5815,6 +5861,10 @@ function buildPriceHistorySection(custName){
 // ── ATTENDANCE & CLOCK-IN SYSTEM ──
 const ATTENDANCE_KEY='wl_attendance';
 const OT_KEY='wl_overtime';
+const REF_CHECKOUT_KEY='wl_ref_checkout_requests';
+let _refCheckoutRequests=[];
+const EXTENSION_KEY='wl_extension_requests';
+let _extensionRequests=[];
 const OFFICE_HOURS_START='08:30';
 const OFFICE_HOURS_END='17:30';
 const LATE_THRESHOLD_MIN=10; // 10 min grace period
@@ -5824,6 +5874,25 @@ let _attSelfieDataUrl=null;
 let _attSelfieStream=null;
 let _clockInLat=null, _clockInLng=null, _clockInFlagged=false;
 let _clockTimer=null;
+
+async function loadRefCheckoutRequests(){
+  try{
+    const data=await SB.get('wl_settings',REF_CHECKOUT_KEY);
+    _refCheckoutRequests=Array.isArray(data)?data:[];
+  }catch(e){_refCheckoutRequests=[];}
+}
+async function saveRefCheckoutRequests(){
+  await SB.upsert('wl_settings',REF_CHECKOUT_KEY,_refCheckoutRequests);
+}
+async function loadExtensionRequests(){
+  try{
+    const data=await SB.get('wl_settings',EXTENSION_KEY);
+    _extensionRequests=Array.isArray(data)?data:[];
+  }catch(e){_extensionRequests=[];}
+}
+async function saveExtensionRequests(){
+  await SB.upsert('wl_settings',EXTENSION_KEY,_extensionRequests);
+}
 
 async function loadAttendance(){
   try{
@@ -5845,7 +5914,7 @@ async function saveOvertime(){
 }
 
 function getTodayRecord(username){
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   return _attendance.find(a=>a.username===username&&a.date===today)||null;
 }
 
@@ -5955,7 +6024,7 @@ async function confirmClockIn(){
   try{
     const now=new Date();
     const timeStr=now.toTimeString().slice(0,5); // HH:MM
-    const today=now.toISOString().split('T')[0];
+    const today=toLocalDateStr(now);
     const isLate=isLateClockIn(timeStr);
     const notes=el('clock-in-notes').value.trim();
     const overrideReason=el('clock-in-override-reason').value.trim();
@@ -6006,7 +6075,7 @@ async function confirmClockIn(){
 }
 
 async function confirmClockOut(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   const record=_attendance.find(a=>a.username===currentUser&&a.date===today);
   if(!record||!record.clockIn){showToast('No clock-in record found for today','error',3000);return;}
   if(record.clockOut){showToast('Already clocked out today','warn',3000);return;}
@@ -6028,7 +6097,7 @@ async function confirmClockOut(){
 }
 
 function updateAttendanceTodayCard(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   const record=getTodayRecord(currentUser);
   const statusEl=el('att-today-status');
   const detailEl=el('att-today-detail');
@@ -6071,7 +6140,7 @@ function updateAttendanceTodayCard(){
 }
 
 function openOTModal(){
-  el('ot-date').value=new Date().toISOString().split('T')[0];
+  el('ot-date').value=toLocalDateStr(new Date());
   el('ot-reason').value='';
   el('ot-hours-preview').textContent='';
   el('ot-start').oninput=el('ot-end').oninput=calcOTHours;
@@ -6397,7 +6466,7 @@ function countWorkingDaysLeave(startStr, endStr){
   const d=new Date(start);
   while(d<=end){
     const dow=d.getDay();
-    const ds=d.toISOString().split('T')[0];
+    const ds=toLocalDateStr(d);
     if(dow!==0&&dow!==6&&!SELANGOR_HOLIDAYS.includes(ds)) count++;
     d.setDate(d.getDate()+1);
   }
@@ -6734,7 +6803,7 @@ function openNewClaimModal(){
   el('claim-edit-id').value='';
   el('claim-modal-title').textContent='🧾 New Claim';
   el('claim-type').value='';
-  el('claim-date').value=new Date().toISOString().split('T')[0];
+  el('claim-date').value=toLocalDateStr(new Date());
   el('claim-amount').value='';
   el('claim-job-no').value='';
   el('claim-description').value='';
@@ -7385,7 +7454,7 @@ async function confirmCheckOut(){
 // ── ADMIN ALERT: unchecked-in onsite visits ──
 function checkOnsiteCheckInAlerts(){
   const now=new Date();
-  const todayStr=now.toISOString().split('T')[0];
+  const todayStr=toLocalDateStr(now);
   const alerts=[];
   _jobs.forEach(j=>{
     if(j.status==='Deleted'||j.jobType!=='Onsite') return;
@@ -7430,7 +7499,7 @@ async function confirmCustomerNotReady(){
   const newDate=el('cnr-new-date').value;
   if(!reason){showToast('Please select a reason','error',3000);return;}
   if(!newDate){showToast('Please select a new appointment date','error',3000);return;}
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   await updateJob(_cnrJobNo,job=>{
     const it=job.items[_cnrItemIdx];
     it.status='Customer Not Ready';
@@ -7484,7 +7553,7 @@ function addWorkingDays(fromDate, days){
     d.setDate(d.getDate()+1);
     if(d.getDay()!==0&&d.getDay()!==6) added++;
   }
-  return d.toISOString().split('T')[0];
+  return toLocalDateStr(d);
 }
 
 function openKIVModal(jobNo, itemIdx){
@@ -7495,7 +7564,7 @@ function openKIVModal(jobNo, itemIdx){
   const info=el('kiv-info');
   // If already KIV, show current KIV info and allow removal
   if(item.status==='KIV'&&item.kivStartDate){
-    const today=new Date().toISOString().split('T')[0];
+    const today=toLocalDateStr(new Date());
     const daysUsed=countWorkingDays(item.kivStartDate,today);
     const daysLeft=Math.max(0,7-daysUsed);
     const expiry=addWorkingDays(item.kivStartDate,7);
@@ -7517,7 +7586,7 @@ function openKIVModal(jobNo, itemIdx){
 async function confirmKIV(){
   const reason=el('kiv-reason').value.trim();
   if(!reason){showToast('Please enter a reason for KIV','error',3000);return;}
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   const j=getJob(_kivJobNo); if(!j)return;
   const item=j.items&&j.items[_kivItemIdx]; if(!item)return;
   // Calculate remaining TAT working days
@@ -7541,7 +7610,7 @@ async function confirmKIV(){
 }
 
 async function removeKIV(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   const j=getJob(_kivJobNo); if(!j)return;
   const item=j.items&&j.items[_kivItemIdx]; if(!item)return;
   // Recalculate new promised date based on remaining TAT
@@ -7563,7 +7632,7 @@ async function removeKIV(){
 
 // Check and expire KIV items on login
 async function checkKIVExpiry(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalDateStr(new Date());
   let anyExpired=false;
   for(const j of _jobs){
     if(!j.items||j.status==='Deleted') continue;
@@ -7625,7 +7694,7 @@ function renderMyJobs(){
     let slaHtml='';
     if(item.status==='KIV'&&item.kivStartDate){
       // Show KIV countdown — max 7 working days
-      const todayStr=new Date().toISOString().split('T')[0];
+      const todayStr=toLocalDateStr(new Date());
       const kivDaysUsed=countWorkingDays(item.kivStartDate,todayStr);
       const kivDaysLeft=Math.max(0,7-kivDaysUsed);
       const tatRemaining=item.kivTATRemaining||0;
@@ -7657,6 +7726,7 @@ function renderMyJobs(){
           <a href="https://waze.com/ul?q=${encodeURIComponent(j.siteAddress)}&navigate=yes" target="_blank" style="color:#006064;font-weight:700;text-decoration:none;background:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;">🚗 Waze</a>
           ${item.checkinTime?`<br/>✅ Checked in: <strong>${new Date(item.checkinTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>${item.checkinFlagged?' <span style="color:#c84b00;">(Remote)</span>':''}`:''} 
           ${item.checkoutTime?` &nbsp;·&nbsp; 🏁 Out: <strong>${new Date(item.checkoutTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>`:''}
+          <br/><button onclick="openRequestExtensionModal('${j.jobNo}',${idx})" style="margin-top:6px;background:#fff;border:1px solid #006064;color:#006064;font-weight:700;font-size:10px;padding:2px 8px;border-radius:10px;cursor:pointer;">🔄 Request Extension</button>
         </div>`:''}
       <div class="approval-card-header">
         <span class="approval-card-title">Item ${item.itemNo}: ${item.eqName} ${slaHtml}</span>
@@ -7704,6 +7774,8 @@ function renderMyJobs(){
 // ── RENDER APPROVAL QUEUE (item-level) ──
 function renderApprovalQueue(){
   try{
+    if(typeof renderApprovalRefCheckoutSection==='function') renderApprovalRefCheckoutSection();
+    if(typeof renderApprovalExtensionSection==='function') renderApprovalExtensionSection();
     const pendingItems=[];
     _jobs.forEach(j=>{
       if(!j||!j.items) return;
@@ -7713,7 +7785,10 @@ function renderApprovalQueue(){
     });
     const container=el('approval-list'); if(!container)return;
     const badge=el('approval-badge');
-    if(badge){badge.textContent=pendingItems.length;badge.style.display=pendingItems.length?'inline':'none';}
+    const canSeeExtras=isAdmin(currentUser)||isManager(currentUser);
+    const extraPending=canSeeExtras?_refCheckoutRequests.filter(r=>r.status==='Pending').length+_extensionRequests.filter(r=>r.status==='Pending').length:0;
+    const totalBadgeCount=pendingItems.length+extraPending;
+    if(badge){badge.textContent=totalBadgeCount;badge.style.display=totalBadgeCount?'inline':'none';}
     if(!pendingItems.length){
       container.innerHTML=`<div class="empty-state"><div class="empty-icon">✅</div><p>No items pending approval. All clear!</p></div>`;
       return;
@@ -8053,7 +8128,7 @@ function allItemsCompleted(job){
 
 function renderDashboard(){
   try{
-  const list=_jobs.filter(j=>j.status!=='Deleted');
+  const list=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal);
   const allItems=list.flatMap(j=>j.items||[]).filter(i=>i.status!=='Deleted');
   const today=new Date(); today.setHours(0,0,0,0);
   const total=list.length;
@@ -8154,10 +8229,13 @@ function refreshAllBadges(){
   const allItems=list.flatMap(j=>j.items||[]);
   const myCount=currentUser?allItems.filter(i=>i.assignedTo===currentUser&&i.status!=='Completed'&&i.status!=='Pending Approval').length:0;
   const approvalCount=allItems.filter(i=>i.status==='Pending Approval').length;
+  const canSeeExtras=isAdmin(currentUser)||isManager(currentUser);
+  const extraPending=canSeeExtras?_refCheckoutRequests.filter(r=>r.status==='Pending').length+_extensionRequests.filter(r=>r.status==='Pending').length:0;
+  const totalApprovalBadge=approvalCount+extraPending;
   const mb=el('my-jobs-badge');
   if(mb){mb.textContent=myCount;mb.style.display=myCount>0?'inline':'none';}
   const ab=el('approval-badge');
-  if(ab){ab.textContent=approvalCount;ab.style.display=approvalCount>0?'inline':'none';}
+  if(ab){ab.textContent=totalApprovalBadge;ab.style.display=totalApprovalBadge>0?'inline':'none';}
   renderDashboard();
   }catch(_e){
     console.error("refreshAllBadges error:",_e);
@@ -8785,10 +8863,35 @@ function renderRefEqTable(){
   } else { alertEl.style.display='none'; }
   const SB2={Current:'badge-green','Due Soon':'badge-amber',Overdue:'badge-red',Unknown:'badge-slate'};
   if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🏛️</div><p>${list.length?'No matching records.':'No reference equipment added yet.'}</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🏛️</div><p>${list.length?'No matching records.':'No reference equipment added yet.'}</p></div></td></tr>`;
     return;
   }
-  tbody.innerHTML=filtered.map(r=>`<tr>
+  tbody.innerHTML=filtered.map(r=>{
+    const avail=r.availability||'Available';
+    let availBadge='';
+    if(avail==='CheckedOut'){
+      const twoDaysAfter=r.checkedOutTo?new Date(new Date(r.checkedOutTo+'T00:00:00').getTime()+2*86400000):null;
+      const isCheckoutOverdue=twoDaysAfter&&new Date()>twoDaysAfter;
+      availBadge=`<span class="badge ${isCheckoutOverdue?'badge-red':'badge-amber'}" title="Job ${r.checkedOutJobNo} · Due back ${r.checkedOutTo}">${isCheckoutOverdue?'⚠️ OVERDUE — ':'🚚 Out — '}${USERS[r.checkedOutBy]?.name||r.checkedOutBy} (${r.checkedOutJobNo})</span>`;
+    } else if(avail==='UnderCalibration'){
+      availBadge=`<span class="badge badge-purple">🔧 Under Cal. (${r.calibrationType||'—'})</span>`;
+    } else {
+      availBadge=`<span class="badge badge-green">✅ Available</span>`;
+    }
+    let actions=`<button class="btn btn-outline btn-sm" onclick="viewRefEq('${r.id}')">View</button>`;
+    if(isAdmin(currentUser)){
+      actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditRefEqModal('${r.id}')">✏️</button>`;
+      actions+=`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteRefEq('${r.id}')">🗑</button>`;
+      if(avail==='Available'){
+        actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openSendForCalModal('${r.id}')">🔧 Send for Cal.</button>`;
+      } else if(avail==='UnderCalibration'&&r.calibrationType==='External'){
+        actions+=`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="openConfirmCalReceivedModal('${r.id}')">✅ Confirm Received</button>`;
+      }
+    }
+    if(avail==='CheckedOut'&&(isAdmin(currentUser)||currentUser===r.checkedOutBy)){
+      actions+=`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="markRefReturned('${r.id}')">↩️ Mark Returned</button>`;
+    }
+    return `<tr>
     <td><span style="font-family:'DM Mono';font-size:12px;font-weight:600;">${r.id}</span></td>
     <td>${r.name}</td>
     <td>${[r.brand,r.model].filter(Boolean).join(' / ')||'—'}</td>
@@ -8798,14 +8901,485 @@ function renderRefEqTable(){
     <td>${r.lastCal||'—'}</td>
     <td><strong style="color:${r.calStatus==='Overdue'?'var(--red)':r.calStatus==='Due Soon'?'var(--amber)':'var(--green)'}">${r.dueDate||'—'}</strong></td>
     <td><span class="badge ${SB2[r.calStatus]||'badge-slate'}">${r.calStatus}</span></td>
-    <td><button class="btn btn-outline btn-sm" onclick="viewRefEq('${r.id}')">View</button>
-        ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditRefEqModal('${r.id}')">✏️</button>`:''}
-        ${isAdmin(currentUser)?`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteRefEq('${r.id}')">🗑</button>`:''}</td>
-  </tr>`).join('');
+    <td>${availBadge}</td>
+    <td style="white-space:nowrap;">${actions}</td>
+  </tr>`;
+  }).join('');
+  renderRefCheckoutQueue();
   }catch(_e){
     console.error("renderRefEqTable error:",_e);
   }
 }
+// ══════════════════════════════════════════════════
+// REFERENCE EQUIPMENT — CHECKOUT (onsite job) WORKFLOW
+// ══════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════
+// CONFLICT DETECTION — used by both checkout and extension approvals
+// Non-blocking — always returns info, never prevents the action itself.
+// ══════════════════════════════════════════════════
+function checkStaffOnsiteConflict(username, fromDate, toDate, excludeJobNo){
+  if(!username||!fromDate||!toDate) return [];
+  return _jobs.filter(j=>{
+    if(j.status==='Deleted'||j.jobNo===excludeJobNo) return false;
+    const items=j.items||[];
+    if(!items.some(it=>it.calType==='Onsite'&&it.assignedTo===username)) return false;
+    const s=j.appointmentDate||j.receiveDate;
+    const e=j.visitEndDate||j.appointmentDate||j.receiveDate;
+    if(!s||!e) return false;
+    return e>=fromDate&&s<=toDate;
+  }).map(j=>({jobNo:j.jobNo,custName:j.custName,startDate:j.appointmentDate||j.receiveDate,endDate:j.visitEndDate||j.appointmentDate||j.receiveDate}));
+}
+function checkRefEquipmentConflict(refIds, fromDate, toDate, excludeJobNo){
+  // Checks for OTHER pending requests wanting the same item(s) with overlapping dates
+  return _refCheckoutRequests.filter(r=>{
+    if(r.status!=='Pending'||r.jobNo===excludeJobNo) return false;
+    if(!r.items.some(it=>refIds.includes(it.refId))) return false;
+    return r.toDate>=fromDate&&r.fromDate<=toDate;
+  });
+}
+
+// ══════════════════════════════════════════════════
+// JOB EXTENSION REQUESTS — engineer requests, Manager approves
+// ══════════════════════════════════════════════════
+function openRequestExtensionModal(jobNo,itemIdx){
+  const j=getJob(jobNo); if(!j)return;
+  const item=(j.items||[])[itemIdx]; if(!item)return;
+  const currentEnd=j.visitEndDate||j.appointmentDate||j.receiveDate;
+  let ov=document.getElementById('ext-request-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='ext-request-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:440px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🔄 Request Extension — ${jobNo}</span>
+      <button onclick="document.getElementById('ext-request-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Current end date: <strong>${fmtDateShort(currentEnd)}</strong></div>
+      <div class="form-group"><label class="form-label">New Proposed End Date <span class="req">*</span></label><input class="form-control" type="date" id="ext-new-date" min="${currentEnd}"/></div>
+      <div class="form-group"><label class="form-label">Reason <span class="req">*</span></label><textarea class="form-control" id="ext-reason" placeholder="e.g. Client requested additional testing, unable to finish on schedule"></textarea></div>
+      <div style="font-size:11px;color:var(--text-muted);background:var(--bg);border-radius:6px;padding:8px 10px;">This requires Manager approval before the job's dates actually change.</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        <button class="btn btn-outline" onclick="document.getElementById('ext-request-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitExtensionRequest('${jobNo}',${itemIdx})">Submit Request</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function submitExtensionRequest(jobNo,itemIdx){
+  const j=getJob(jobNo); if(!j)return;
+  const item=(j.items||[])[itemIdx];
+  const newDate=el('ext-new-date').value;
+  const reason=el('ext-reason').value.trim();
+  const currentEnd=j.visitEndDate||j.appointmentDate||j.receiveDate;
+  if(!newDate){alert('Please select the new proposed end date.');return;}
+  if(newDate<=currentEnd){alert('The new date must be after the current end date.');return;}
+  if(!reason){alert('Please enter a reason for the extension.');return;}
+  const req={
+    id:'EXT-'+Date.now(),
+    jobNo, itemIdx, custName:j.custName,
+    requestedBy:currentUser, requestedAt:new Date().toISOString(),
+    currentEndDate:currentEnd, proposedEndDate:newDate, reason,
+    status:'Pending', managerNote:''
+  };
+  _extensionRequests.push(req);
+  await saveExtensionRequests();
+  document.getElementById('ext-request-overlay').style.display='none';
+  showToast('✅ Extension request submitted — awaiting Manager approval','success',3000);
+  addAudit('🔄',`${USERS[currentUser]?.name||currentUser} requested extension for ${jobNo}: ${currentEnd} → ${newDate}`);
+}
+
+function renderApprovalExtensionSection(){
+  const box=el('approval-extension-section'); if(!box)return;
+  if(!isAdmin(currentUser)&&!isManager(currentUser)){ box.innerHTML=''; return; }
+  const pending=_extensionRequests.filter(r=>r.status==='Pending');
+  if(!pending.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div class="form-section-title" style="margin-top:0;">🔄 Job Extension Requests (${pending.length})</div>
+  <div class="card" style="border:1px solid #93c5fd;background:#eff6ff;margin-bottom:16px;">
+    <div style="padding:10px 16px;">
+    ${pending.map(r=>{
+      const j=getJob(r.jobNo);
+      const item=j?.items?.[r.itemIdx];
+      const staffConflicts=item?.assignedTo?checkStaffOnsiteConflict(item.assignedTo,r.currentEndDate,r.proposedEndDate,r.jobNo):[];
+      return `<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div style="font-size:13px;">
+            <strong>${USERS[r.requestedBy]?.name||r.requestedBy}</strong> requests extension for <strong>${r.jobNo}</strong> (${r.custName})<br/>
+            <span style="color:var(--text-muted);font-size:12px;">${fmtDateShort(r.currentEndDate)} → ${fmtDateShort(r.proposedEndDate)}</span><br/>
+            <span style="font-size:12px;font-style:italic;">"${r.reason}"</span>
+            ${staffConflicts.length?`<div style="margin-top:6px;background:#fef3c7;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400e;">⚠️ ${USERS[r.requestedBy]?.name||r.requestedBy} is already assigned to ${staffConflicts.map(c=>`<strong>${c.jobNo}</strong> (${fmtDateShort(c.startDate)}–${fmtDateShort(c.endDate)})`).join(', ')} — this overlaps with the requested extension.</div>`:''}
+          </div>
+          <div style="white-space:nowrap;">
+            <button class="btn btn-primary btn-sm" onclick="approveExtension('${r.id}')">Approve</button>
+            <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="rejectExtension('${r.id}')">Reject</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+    </div>
+  </div>`;
+}
+async function approveExtension(reqId){
+  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can approve.');return;}
+  const req=_extensionRequests.find(r=>r.id===reqId); if(!req)return;
+  if(!confirm(`Approve extension for ${req.jobNo}?\n\nNew end date: ${req.proposedEndDate}`))return;
+  req.status='Approved'; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+  const oldEnd=req.currentEndDate;
+  await updateJob(req.jobNo,j=>{
+    j.visitEndDate=req.proposedEndDate;
+    j.history.push({action:`📍 Onsite visit extended from ${fmtDateShort(oldEnd)} to ${fmtDateShort(req.proposedEndDate)} (approved by ${USERS[currentUser]?.name||currentUser})`,by:currentUser,time:new Date().toISOString(),note:req.reason});
+  });
+  // Auto-adjust any reference equipment currently checked out for this job to match the new end date
+  const linkedRefs=_refEq.filter(r=>r.availability==='CheckedOut'&&r.checkedOutJobNo===req.jobNo);
+  for(const r of linkedRefs){
+    r.checkedOutTo=req.proposedEndDate;
+    await SB.upsert('wl_ref_equipment',r.id,r);
+  }
+  await saveExtensionRequests();
+  renderApprovalQueue(); renderEquipmentTable(); renderCalendar(); renderMyJobs();
+  if(typeof renderRefEqTable==='function') renderRefEqTable();
+  showToast(`✅ Extension approved for ${req.jobNo}${linkedRefs.length?' — '+linkedRefs.length+' linked reference item(s) auto-adjusted':''}`,'success',4000);
+  addAudit('✅',`Extension approved for ${req.jobNo}`);
+}
+async function rejectExtension(reqId){
+  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can reject.');return;}
+  const req=_extensionRequests.find(r=>r.id===reqId); if(!req)return;
+  const note=prompt('Reason for rejecting (shown to the staff member):','');
+  if(note===null)return;
+  req.status='Rejected'; req.managerNote=note; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+  await saveExtensionRequests();
+  renderApprovalQueue();
+  showToast('Extension request rejected','success',2500);
+}
+
+function openRefCheckoutRequestModal(){
+  const available=_refEq.filter(r=>(r.availability||'Available')==='Available');
+  const myJobs=_jobs.filter(j=>j.status!=='Deleted'&&(j.items||[]).some(it=>it.calType==='Onsite'&&(isAdmin(currentUser)||isManager(currentUser)||it.assignedTo===currentUser)));
+  let ov=document.getElementById('ref-checkout-overlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='ref-checkout-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:520px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📤 Request to Take Reference Equipment Onsite</span>
+      <button onclick="closeRefCheckoutModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-group">
+        <label class="form-label">Which Onsite Job is this for? <span class="req">*</span></label>
+        <select class="form-control" id="ref-checkout-job">
+          <option value="">— Select job —</option>
+          ${myJobs.map(j=>`<option value="${j.jobNo}">${j.jobNo} — ${j.custName}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Take Out From <span class="req">*</span></label><input class="form-control" type="date" id="ref-checkout-from"/></div>
+        <div class="form-group"><label class="form-label">Return By <span class="req">*</span></label><input class="form-control" type="date" id="ref-checkout-to"/></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Select Reference Item(s) <span class="req">*</span></label>
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">
+          ${available.length?available.map(r=>`
+            <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;font-weight:normal;">
+              <input type="checkbox" value="${r.id}" class="ref-checkout-item-cb"/>
+              <span style="font-size:13px;">${r.id} — ${r.name} ${r.serial?'('+r.serial+')':''}</span>
+            </label>`).join(''):'<div style="color:var(--text-muted);font-size:12px;padding:8px;">No reference items currently available.</div>'}
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button class="btn btn-outline" onclick="closeRefCheckoutModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitRefCheckoutRequest()">Submit Request</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  // Auto-fill dates when a job is picked
+  el('ref-checkout-job').addEventListener('change',function(){
+    const j=getJob(this.value); if(!j)return;
+    el('ref-checkout-from').value=j.appointmentDate||j.receiveDate||'';
+    el('ref-checkout-to').value=j.visitEndDate||j.appointmentDate||j.receiveDate||'';
+  });
+}
+function closeRefCheckoutModal(){
+  const ov=document.getElementById('ref-checkout-overlay');
+  if(ov) ov.style.display='none';
+}
+async function submitRefCheckoutRequest(){
+  const jobNo=el('ref-checkout-job').value;
+  const fromDate=el('ref-checkout-from').value;
+  const toDate=el('ref-checkout-to').value;
+  const selected=[...document.querySelectorAll('.ref-checkout-item-cb:checked')].map(cb=>cb.value);
+  if(!jobNo){alert('Please select which job this is for.');return;}
+  if(!fromDate||!toDate){alert('Please set both dates.');return;}
+  if(toDate<fromDate){alert('Return date cannot be before the take-out date.');return;}
+  if(!selected.length){alert('Please select at least one reference item.');return;}
+  const j=getJob(jobNo);
+  const req={
+    id:'REQ-'+Date.now(),
+    jobNo, custName:j?.custName||'',
+    requestedBy:currentUser, requestedAt:new Date().toISOString(),
+    items:selected.map(id=>{const r=_refEq.find(x=>x.id===id);return {refId:id,refName:r?r.name:id};}),
+    fromDate, toDate,
+    status:'Pending', managerNote:''
+  };
+  _refCheckoutRequests.push(req);
+  await saveRefCheckoutRequests();
+  closeRefCheckoutModal();
+  renderRefCheckoutQueue();
+  showToast('✅ Request submitted — awaiting Manager approval','success',3000);
+  addAudit('📤',`${USERS[currentUser]?.name||currentUser} requested ${selected.length} reference item(s) for job ${jobNo}`);
+}
+
+function buildRefCheckoutQueueHtml(pending){
+  return `<div class="form-section-title" style="margin-top:0;">📤 Reference Equipment Checkout Requests (${pending.length})</div>
+  <div class="card" style="border:1px solid #fdba74;background:#fff7ed;margin-bottom:16px;">
+    <div style="padding:10px 16px;">
+    ${pending.map(r=>{
+      const staffConflicts=checkStaffOnsiteConflict(r.requestedBy,r.fromDate,r.toDate,r.jobNo);
+      const itemConflicts=checkRefEquipmentConflict(r.items.map(it=>it.refId),r.fromDate,r.toDate,r.jobNo);
+      return `<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div style="font-size:13px;">
+            <strong>${USERS[r.requestedBy]?.name||r.requestedBy}</strong> requests for job <strong>${r.jobNo}</strong> (${r.custName})<br/>
+            <span style="color:var(--text-muted);font-size:12px;">${fmtDateShort(r.fromDate)} to ${fmtDateShort(r.toDate)} · ${r.items.map(i=>i.refName).join(', ')}</span>
+            ${staffConflicts.length?`<div style="margin-top:6px;background:#fef3c7;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400e;">⚠️ ${USERS[r.requestedBy]?.name||r.requestedBy} is already committed to ${staffConflicts.map(c=>`<strong>${c.jobNo}</strong> (${fmtDateShort(c.startDate)}–${fmtDateShort(c.endDate)})`).join(', ')} — overlaps these dates.</div>`:''}
+            ${itemConflicts.length?`<div style="margin-top:6px;background:#fee2e2;border-radius:6px;padding:6px 10px;font-size:11px;color:#991b1b;">⚠️ Another pending request also wants this item for overlapping dates (job ${itemConflicts.map(c=>c.jobNo).join(', ')}).</div>`:''}
+          </div>
+          <div style="white-space:nowrap;">
+            <button class="btn btn-primary btn-sm" onclick="approveRefCheckout('${r.id}')">Approve</button>
+            <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="rejectRefCheckout('${r.id}')">Reject</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+    </div>
+  </div>`;
+}
+function renderRefCheckoutQueue(){
+  const pending=_refCheckoutRequests.filter(r=>r.status==='Pending');
+  const canSee=isAdmin(currentUser)||isManager(currentUser);
+  const box=el('ref-checkout-queue');
+  if(box){
+    if(!canSee||!pending.length){ box.style.display='none'; box.innerHTML=''; }
+    else { box.style.display='block'; box.innerHTML=buildRefCheckoutQueueHtml(pending); }
+  }
+  renderApprovalRefCheckoutSection();
+}
+function renderApprovalRefCheckoutSection(){
+  const box=el('approval-ref-checkout-section'); if(!box)return;
+  const pending=_refCheckoutRequests.filter(r=>r.status==='Pending');
+  const canSee=isAdmin(currentUser)||isManager(currentUser);
+  if(!canSee||!pending.length){ box.innerHTML=''; return; }
+  box.innerHTML=buildRefCheckoutQueueHtml(pending);
+}
+
+async function approveRefCheckout(reqId){
+  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can approve.');return;}
+  const req=_refCheckoutRequests.find(r=>r.id===reqId); if(!req)return;
+  if(!confirm(`Approve this checkout for ${req.jobNo}?`))return;
+  req.status='Approved'; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+  // Mark each item as Checked Out
+  req.items.forEach(it=>{
+    const r=_refEq.find(x=>x.id===it.refId); if(!r)return;
+    r.availability='CheckedOut';
+    r.checkedOutBy=req.requestedBy; r.checkedOutJobNo=req.jobNo;
+    r.checkedOutFrom=req.fromDate; r.checkedOutTo=req.toDate; r.checkoutRequestId=req.id;
+  });
+  // Auto-cancel any OTHER pending request that also wants any of these same items
+  const claimedIds=req.items.map(it=>it.refId);
+  _refCheckoutRequests.filter(r=>r.status==='Pending'&&r.id!==reqId&&r.items.some(it=>claimedIds.includes(it.refId))).forEach(other=>{
+    other.status='Cancelled';
+    other.managerNote=`Auto-cancelled — item already approved for ${req.jobNo}`;
+  });
+  await Promise.all(req.items.map(it=>{const r=_refEq.find(x=>x.id===it.refId);return r?SB.upsert('wl_ref_equipment',r.id,r):Promise.resolve();}));
+  await saveRefCheckoutRequests();
+  renderRefEqTable();
+  showToast(`✅ Approved — ${req.items.length} item(s) checked out for ${req.jobNo}`,'success',3000);
+  addAudit('✅',`Reference checkout approved for ${req.jobNo}`);
+}
+async function rejectRefCheckout(reqId){
+  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can reject.');return;}
+  const req=_refCheckoutRequests.find(r=>r.id===reqId); if(!req)return;
+  const note=prompt('Reason for rejecting (shown to the staff member):','');
+  if(note===null)return;
+  req.status='Rejected'; req.managerNote=note; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+  await saveRefCheckoutRequests();
+  renderRefCheckoutQueue();
+  showToast('Request rejected','success',2500);
+}
+async function markRefReturned(refId){
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  if(!confirm(`Mark ${r.name} as returned to the lab?`))return;
+  const req=_refCheckoutRequests.find(x=>x.id===r.checkoutRequestId);
+  if(req) req.returnedAt=new Date().toISOString();
+  r.availability='Available';
+  r.checkedOutBy=null; r.checkedOutJobNo=null; r.checkedOutFrom=null; r.checkedOutTo=null; r.checkoutRequestId=null;
+  await SB.upsert('wl_ref_equipment',r.id,r);
+  await saveRefCheckoutRequests();
+  renderRefEqTable();
+  showToast(`✅ ${r.name} marked as returned`,'success',2500);
+  addAudit('↩️',`${r.name} returned to lab`);
+}
+
+// ══════════════════════════════════════════════════
+// REFERENCE EQUIPMENT — SEND FOR CALIBRATION (Internal/External)
+// ══════════════════════════════════════════════════
+
+function openSendForCalModal(refId){
+  if(!isAdmin(currentUser)){alert('Only Admin can send equipment for calibration.');return;}
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  let ov=document.getElementById('ref-cal-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='ref-cal-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:480px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🔧 Send for Calibration — ${r.name}</span>
+      <button onclick="closeRefCalModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-group">
+        <label class="form-label">Calibration Type</label>
+        <select class="form-control" id="ref-cal-type" onchange="toggleRefCalFields()">
+          <option value="External">External — sent to an accredited lab</option>
+          <option value="Internal">Internal — one of our own engineers</option>
+        </select>
+      </div>
+      <div id="ref-cal-external-fields">
+        <div class="form-group"><label class="form-label">Vendor / External Lab Name <span class="req">*</span></label><input class="form-control" id="ref-cal-vendor"/></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Date Sent</label><input class="form-control" type="date" id="ref-cal-sent-date"/></div>
+          <div class="form-group"><label class="form-label">Expected Return</label><input class="form-control" type="date" id="ref-cal-expected-return"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Cost (RM)</label><input class="form-control" type="number" step="0.01" id="ref-cal-cost"/></div>
+          <div class="form-group"><label class="form-label">Tracking / Reference No.</label><input class="form-control" id="ref-cal-tracking"/></div>
+        </div>
+      </div>
+      <div id="ref-cal-internal-fields" style="display:none;">
+        <div class="form-group"><label class="form-label">Assign to Engineer <span class="req">*</span></label>
+          <select class="form-control" id="ref-cal-engineer"><option value="">— Select —</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Expected Completion</label><input class="form-control" type="date" id="ref-cal-expected-return-int"/></div>
+        <div style="font-size:11px;color:var(--text-muted);background:var(--bg);border-radius:6px;padding:8px 10px;">This will create a job (Customer: Westlab Internal) so your engineer can perform the full calibration using the same data-entry and approval process as a customer job. Once approved, this reference item's Last Calibrated and Next Due dates update automatically.</div>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="ref-cal-notes"></textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button class="btn btn-outline" onclick="closeRefCalModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitSendForCal('${refId}')">Send</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  populateUserDropdown('ref-cal-engineer',false,true);
+}
+function toggleRefCalFields(){
+  const type=el('ref-cal-type').value;
+  el('ref-cal-external-fields').style.display=type==='External'?'block':'none';
+  el('ref-cal-internal-fields').style.display=type==='Internal'?'block':'none';
+}
+function closeRefCalModal(){
+  const ov=document.getElementById('ref-cal-overlay');
+  if(ov) ov.style.display='none';
+}
+async function submitSendForCal(refId){
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  const type=el('ref-cal-type').value;
+  const notes=el('ref-cal-notes').value.trim();
+  if(type==='External'){
+    const vendor=el('ref-cal-vendor').value.trim();
+    if(!vendor){alert('Please enter the vendor/lab name.');return;}
+    r.availability='UnderCalibration';
+    r.calibrationType='External';
+    r.calVendor=vendor;
+    r.calSentDate=el('ref-cal-sent-date').value;
+    r.calExpectedReturn=el('ref-cal-expected-return').value;
+    r.calCost=el('ref-cal-cost').value;
+    r.calTrackingNo=el('ref-cal-tracking').value.trim();
+    r.calNotes=notes;
+    await SB.upsert('wl_ref_equipment',r.id,r);
+    closeRefCalModal(); renderRefEqTable();
+    showToast(`✅ ${r.name} marked as sent for external calibration`,'success',3000);
+    addAudit('🔧',`${r.name} sent to ${vendor} for external calibration`);
+  } else {
+    const engineer=el('ref-cal-engineer').value;
+    if(!engineer){alert('Please select an engineer.');return;}
+    // Create an internal job so the full data-entry/approval workflow can be reused
+    const jobNo=await commitJobNo();
+    const certNo=await commitCertNo();
+    const item={
+      itemNo:1, certNo, eqName:r.name, brand:r.brand||'', model:r.model||'', serial:r.serial||'',
+      tagNo:r.id, range:r.range||'', resolution:r.resolution||'', calType:'Lab',
+      condition:'Good', accessories:'', remarks:notes,
+      status:'Assigned', assignedTo:engineer, assignNote:'Internal reference equipment calibration',
+      calData:null, excelFile:null, approvalComments:'', approvedBy:null, approvedAt:null, photos:[],
+      isInternalRefCal:true, refEqId:r.id
+    };
+    const job={
+      jobNo, receiveDate:toLocalDateStr(new Date()),
+      company:'WESTLAB (M) SDN. BHD. — INTERNAL', custName:'Westlab (M) Sdn. Bhd. — Internal',
+      attention:'', address:'', tel:'', mobile:'', fax:'', email:'', po:'', priority:'Normal',
+      promisedDate:el('ref-cal-expected-return-int').value||'',
+      items:[item], status:'In Progress', billed:true, billedAt:null,
+      deletedAt:null, deletedBy:null, jobType:'Lab',
+      isInternalRefCal:true,
+      history:[{action:`Internal reference calibration job created for ${r.name} (${r.id})`,by:currentUser,time:new Date().toISOString()}]
+    };
+    await SB.upsert('wl_jobs',jobNo,job);
+    cacheFullJob(job); _jobs.unshift(job);
+    r.availability='UnderCalibration';
+    r.calibrationType='Internal';
+    r.calJobNo=jobNo;
+    r.calExpectedReturn=el('ref-cal-expected-return-int').value;
+    r.calNotes=notes;
+    await SB.upsert('wl_ref_equipment',r.id,r);
+    closeRefCalModal(); renderRefEqTable(); renderEquipmentTable();
+    showToast(`✅ Internal calibration job ${jobNo} created and assigned to ${USERS[engineer]?.name||engineer}`,'success',4000);
+    addAudit('🔧',`${r.name} sent for internal calibration — job ${jobNo}`);
+  }
+}
+
+function openConfirmCalReceivedModal(refId){
+  if(!isAdmin(currentUser)){alert('Only Admin can confirm this.');return;}
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  let ov=document.getElementById('ref-cal-received-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='ref-cal-received-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:440px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">✅ Confirm Received — ${r.name}</span>
+      <button onclick="document.getElementById('ref-cal-received-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-group"><label class="form-label">New Certificate No.</label><input class="form-control" id="ref-recv-cert-no" value="${r.certNo||''}"/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">New Last Calibrated Date <span class="req">*</span></label><input class="form-control" type="date" id="ref-recv-last-cal"/></div>
+        <div class="form-group"><label class="form-label">New Next Due Date <span class="req">*</span></label><input class="form-control" type="date" id="ref-recv-due-date"/></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('ref-cal-received-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmCalReceived('${refId}')">Confirm</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function confirmCalReceived(refId){
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  const lastCal=el('ref-recv-last-cal').value;
+  const dueDate=el('ref-recv-due-date').value;
+  if(!lastCal||!dueDate){alert('Please enter both dates.');return;}
+  r.lastCal=lastCal; r.dueDate=dueDate;
+  r.certNo=el('ref-recv-cert-no').value.trim();
+  r.availability='Available';
+  r.calibrationType=null; r.calVendor=null; r.calSentDate=null; r.calExpectedReturn=null; r.calCost=null; r.calTrackingNo=null;
+  await SB.upsert('wl_ref_equipment',r.id,r);
+  document.getElementById('ref-cal-received-overlay').style.display='none';
+  renderRefEqTable();
+  showToast(`✅ ${r.name} calibration confirmed — new due date ${dueDate}`,'success',3500);
+  addAudit('✅',`${r.name} external calibration confirmed received`);
+}
+
 function viewRefEq(id){
   const r=_refEq.find(x=>x.id===id); if(!r)return;
   const st=getRefStatus(r.dueDate);
@@ -9129,7 +9703,7 @@ async function removeApprovedDealer(custId, dealerName){
   }
 }
 
-function viewJobDetail(jobNo){
+function viewCalendarJobSummary(jobNo){
   const j=getJob(jobNo); if(!j){showToast('Job not found','error',3000);return;}
   const items=j.items||[];
   const statusColor={Unassigned:'#f59e0b',Assigned:'#3b82f6','In Progress':'#3b82f6',KIV:'#f97316','Customer Not Ready':'#ef4444','Pending Approval':'#a855f7',Completed:'#22c55e'};
@@ -9549,6 +10123,21 @@ document.addEventListener('click',e=>{
 // ── SCHEDULE CALENDAR ──
 let _calYear=new Date().getFullYear();
 let _calMonth=new Date().getMonth(); // 0-indexed
+let _calViewMode='onsite'; // 'onsite' or 'all'
+
+function setCalViewMode(mode){
+  _calViewMode=mode;
+  const onsiteBtn=el('cal-view-onsite-btn'), allBtn=el('cal-view-all-btn');
+  if(onsiteBtn) onsiteBtn.className=mode==='onsite'?'btn btn-sm btn-primary':'btn btn-sm btn-outline';
+  if(allBtn) allBtn.className=mode==='all'?'btn btn-sm btn-primary':'btn btn-sm btn-outline';
+  renderCalendar();
+}
+function populateCalEngineerFilter(){
+  const sel=el('cal-engineer-filter'); if(!sel||sel.dataset.populated)return;
+  const eligible=(_staff||[]).filter(s=>['Engineer','Manager','Admin'].includes(s.role));
+  sel.innerHTML='<option value="">All Engineers</option>'+eligible.map(s=>`<option value="${s.username}">${s.name}</option>`).join('');
+  sel.dataset.populated='1';
+}
 
 function calNavMonth(dir){
   _calMonth+=dir;
@@ -9566,7 +10155,7 @@ function calGoToday(){
 function openEventJob(jobNo){
   const j=getJob(jobNo);
   if(!j) return;
-  viewJobDetail(jobNo);
+  viewCalendarJobSummary(jobNo);
 }
 
 function renderCalendar(){
@@ -9577,27 +10166,41 @@ function renderCalendar(){
     const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
     if(label) label.textContent=`${monthNames[_calMonth]} ${_calYear}`;
     const today=new Date(); today.setHours(0,0,0,0);
-    const todayStr=today.toISOString().split('T')[0];
+    const dateStr=(y,m,d)=>`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const todayStr=dateStr(today.getFullYear(),today.getMonth(),today.getDate());
     const firstDay=new Date(_calYear,_calMonth,1);
     const startDow=firstDay.getDay();
     const daysInMonth=new Date(_calYear,_calMonth+1,0).getDate();
-    const dateStr=(y,m,d)=>`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+    populateCalEngineerFilter();
+    const engineerFilter=el('cal-engineer-filter')?.value||'';
 
     // ── Build every job's date range (once) ──
     const allJobs=[];
     _jobs.forEach(j=>{
       if(j.status==='Deleted') return;
       const items=j.items||[];
-      const onsiteItems=items.filter(it=>it.calType==='Onsite').length;
+      const onsiteItemsList=items.filter(it=>it.calType==='Onsite');
+      const onsiteItems=onsiteItemsList.length;
       const totalItems=items.length||1;
       const isOnsite=onsiteItems>0;
       const isMixed=onsiteItems>0&&onsiteItems<totalItems;
+      // View mode: Onsite Only hides pure Lab jobs entirely
+      if(_calViewMode==='onsite'&&!isOnsite) return;
+      // Assigned engineer(s) for the onsite item(s) specifically
+      const onsiteAssignees=[...new Set(onsiteItemsList.map(it=>it.assignedTo).filter(Boolean))];
+      const isUnassignedOnsite=isOnsite&&onsiteAssignees.length===0;
+      const engineerNames=onsiteAssignees.map(u=>USERS[u]?.name||u);
+      // Engineer filter — only applies meaningfully to onsite jobs; skip non-matching
+      if(engineerFilter&&isOnsite&&!onsiteAssignees.includes(engineerFilter)) return;
+      if(engineerFilter&&!isOnsite) return; // Lab jobs have no "engineer" concept here, hide when filtering
       const startDate=isOnsite?(j.appointmentDate||j.receiveDate):j.receiveDate;
       const endDate=isOnsite?(j.visitEndDate||j.appointmentDate||j.receiveDate):j.receiveDate;
       if(!startDate) return;
       const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
       allJobs.push({
         jobNo:j.jobNo, custName:j.custName, isOnsite, isMixed, onsiteItems, totalItems,
+        isUnassignedOnsite, engineerNames,
         startDate, endDate, promisedDate:j.promisedDate, isOverdue, status:j.status
       });
     });
@@ -9661,10 +10264,12 @@ function renderCalendar(){
       // Bars (rows 2..MAX_SLOTS+1)
       visible.forEach(j=>{
         const color=j.isOverdue?'#dc2626':(j.isMixed?'#f59e0b':(j.isOnsite?'#0d9488':'#3b82f6'));
-        const labelTxt=j.isMixed?`📍${j.onsiteItems}/${j.totalItems} ${j.custName}`:(j.isOnsite?`📍 ${j.custName}`:`🔬 ${j.custName}`);
+        const engineerTxt=j.isOnsite?(j.engineerNames.length?j.engineerNames.join(', ')+' — ':'Unassigned — '):'';
+        const labelTxt=j.isMixed?`📍${j.onsiteItems}/${j.totalItems} ${engineerTxt}${j.custName}`:(j.isOnsite?`📍 ${engineerTxt}${j.custName}`:`🔬 ${j.custName}`);
         const radiusStyle=`border-radius:${j.continuesBefore?'0':'4px'} ${j.continuesAfter?'0':'4px'} ${j.continuesAfter?'0':'4px'} ${j.continuesBefore?'0':'4px'};`;
-        html+=`<div class="mcal-bar" onclick="openCalJobPopup(event,'${j.jobNo}')" title="${j.custName}"
-          style="grid-column:${j.segStart+1} / ${j.segEnd+2};grid-row:${j.slot+2};background:${color};${radiusStyle}">${labelTxt}</div>`;
+        const unassignedStyle=j.isUnassignedOnsite?`background:#fff;border:2px dashed ${color};color:${color};`:`background:${color};color:#fff;`;
+        html+=`<div class="mcal-bar" onclick="openCalJobPopup(event,'${j.jobNo}')" title="${j.isOnsite?(j.engineerNames.length?j.engineerNames.join(', '):'Unassigned')+' — ':''}${j.custName}"
+          style="grid-column:${j.segStart+1} / ${j.segEnd+2};grid-row:${j.slot+2};${unassignedStyle}${radiusStyle}">${labelTxt}</div>`;
       });
       // Overflow "+N" per day (last row)
       if(overflow.length){
@@ -9687,9 +10292,11 @@ function openCalJobPopup(evt,jobNo){
   evt.stopPropagation();
   const j=getJob(jobNo); if(!j)return;
   const items=j.items||[];
-  const onsiteItems=items.filter(it=>it.calType==='Onsite').length;
+  const onsiteItemsList=items.filter(it=>it.calType==='Onsite');
+  const onsiteItems=onsiteItemsList.length;
   const totalItems=items.length||1;
   const typeLabel=onsiteItems===0?'Lab':(onsiteItems===totalItems?'Onsite':`${onsiteItems}/${totalItems} Onsite`);
+  const onsiteAssignees=[...new Set(onsiteItemsList.map(it=>it.assignedTo).filter(Boolean))].map(u=>USERS[u]?.name||u);
   closeCalPopup();
   const popup=document.createElement('div');
   popup.id='cal-popup';
@@ -9701,6 +10308,7 @@ function openCalJobPopup(evt,jobNo){
     </div>
     <div style="font-size:12px;color:var(--text);margin-bottom:4px;"><strong>${j.custName}</strong></div>
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Type: ${typeLabel} · Items: ${totalItems}</div>
+    ${onsiteItems>0?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Engineer: ${onsiteAssignees.length?onsiteAssignees.join(', '):'⚠️ Unassigned'}</div>`:''}
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Status: ${j.status}</div>
     ${j.appointmentDate?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Onsite: ${fmtDateShort(j.appointmentDate)}${j.visitEndDate&&j.visitEndDate!==j.appointmentDate?' – '+fmtDateShort(j.visitEndDate):''}</div>`:''}
     ${j.promisedDate?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Promised: ${fmtDateShort(j.promisedDate)}</div>`:''}
@@ -10484,7 +11092,7 @@ function buildEmailReminderTable(items, showLastCalDate=false){
 async function checkRecalReminders(){
   try{
   const today=new Date(); today.setHours(0,0,0,0);
-  const reminderKey='wl_recal_sent_'+today.toISOString().split('T')[0];
+  const reminderKey='wl_recal_sent_'+toLocalDateStr(today);
   const alreadySent=sessionStorage.getItem(reminderKey);
   if(alreadySent) return;
 
@@ -10578,7 +11186,7 @@ async function checkRecalReminders(){
 async function checkRefEqDueReminders(){
   try{
   const today=new Date(); today.setHours(0,0,0,0);
-  const reminderKey='wl_refeq_sent_'+today.toISOString().split('T')[0];
+  const reminderKey='wl_refeq_sent_'+toLocalDateStr(today);
   if(sessionStorage.getItem(reminderKey)) return;
 
   const overdue=[];
@@ -10717,7 +11325,7 @@ function renderReports(){
   }
   const selectedYear=(yearSel?.value)||new Date().getFullYear().toString();
 
-  const allJobs=_jobs.filter(j=>j.status!=='Deleted');
+  const allJobs=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal);
   const yearJobs=allJobs.filter(j=>(j.receiveDate||'').startsWith(selectedYear));
   const today=new Date(); today.setHours(0,0,0,0);
   const slaMap={Urgent:_settings.slaUrgent||1,Express:_settings.slaExpress||2,Normal:_settings.slaNormal||5,Routine:_settings.slaRoutine||10};
