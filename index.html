@@ -7268,11 +7268,12 @@ function openCheckinModal(jobNo, itemIdx){
 
   openModal('modal-checkin');
 
-  // Get geolocation
+  // Record geolocation — no pass/fail judgment, just a timestamped log entry.
+  // (Comparing against the office would be backwards for an onsite visit — the
+  // whole point is being away from the office, at the customer's site instead.)
   const statusEl=el('checkin-location-status');
   if(!navigator.geolocation){
-    statusEl.innerHTML='<span style="color:#c84b00;">⚠️ Geolocation not supported by this browser.</span>';
-    el('checkin-override-reason').style.display='block';
+    statusEl.innerHTML='<span style="color:#c84b00;">⚠️ Geolocation not supported by this browser — you can still check in, location just will not be recorded.</span>';
     el('checkin-confirm-btn').disabled=false;
     return;
   }
@@ -7281,24 +7282,12 @@ function openCheckinModal(jobNo, itemIdx){
     (pos)=>{
       _checkinLat=pos.coords.latitude;
       _checkinLng=pos.coords.longitude;
-      const dist=Math.round(haversineDistance(_checkinLat,_checkinLng,OFFICE_LAT,OFFICE_LNG));
-      const j=getJob(_checkinJobNo);
-      // Check against office (for office check-in) or just record location
-      if(dist<=CHECKIN_RADIUS_M){
-        statusEl.innerHTML=`<span style="color:#2e7d32;">✅ Location verified — ${dist}m from office (within ${CHECKIN_RADIUS_M}m range)</span>`;
-        _checkinFlagged=false;
-      } else {
-        statusEl.innerHTML=`<span style="color:#c84b00;">⚠️ You appear to be ${dist}m from the office (range: ${CHECKIN_RADIUS_M}m).<br/>If you are at the customer site, please explain below.</span>`;
-        _checkinFlagged=true;
-        el('checkin-override-reason').style.display='block';
-        el('checkin-modal-title').textContent='📍 Check In (Remote)';
-      }
+      statusEl.innerHTML=`<span style="color:#2e7d32;">✅ Location recorded — this will be saved with your check-in for reference.</span>`;
+      _checkinFlagged=false;
       el('checkin-confirm-btn').disabled=false;
     },
     (err)=>{
-      statusEl.innerHTML=`<span style="color:#c84b00;">⚠️ Could not get location (${err.message}). Please allow location access.</span>`;
-      _checkinFlagged=true;
-      el('checkin-override-reason').style.display='block';
+      statusEl.innerHTML=`<span style="color:#c84b00;">⚠️ Could not get location (${err.message}). You can still check in — location just will not be recorded.</span>`;
       el('checkin-confirm-btn').disabled=false;
     },
     {enableHighAccuracy:true, timeout:15000, maximumAge:0}
@@ -7354,16 +7343,11 @@ function cancelSelfie(){
 }
 
 async function confirmCheckIn(){
-  if(_checkinFlagged){
-    const reason=el('checkin-override-text')?.value.trim();
-    if(!reason){showToast('Please explain reason for remote check-in','error',3000);return;}
-  }
   const btn=el('checkin-confirm-btn');
   if(btn){btn.disabled=true;btn.textContent='⏳ Checking in…';}
   try{
     const now=new Date().toISOString();
     const notes=el('checkin-notes').value.trim();
-    const overrideReason=el('checkin-override-text')?.value.trim()||'';
 
     // Upload selfie to R2 if captured
     let selfieUrl='';
@@ -7388,12 +7372,11 @@ async function confirmCheckIn(){
       it.checkinTime=now;
       it.checkinLat=_checkinLat;
       it.checkinLng=_checkinLng;
-      it.checkinFlagged=_checkinFlagged;
       it.checkinSelfie=selfieUrl;
-      it.checkinNotes=notes+(overrideReason?' | Override: '+overrideReason:'');
+      it.checkinNotes=notes;
       it.status='On-Site';
       job.history.push({
-        action:`Item ${it.itemNo} Check-In at ${new Date(now).toLocaleTimeString('en-MY')}${_checkinFlagged?' (Remote - '+overrideReason+')':''}`,
+        action:`Item ${it.itemNo} Check-In at ${new Date(now).toLocaleTimeString('en-MY')}`,
         by:currentUser,time:now
       });
     });
@@ -7402,8 +7385,8 @@ async function confirmCheckIn(){
     if(_selfieStream){_selfieStream.getTracks().forEach(t=>t.stop());_selfieStream=null;}
     closeModal('modal-checkin');
     renderMyJobs();
-    showToast(`✅ Checked in at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}${_checkinFlagged?' — Flagged as remote':''}`,'success',4000);
-    addAudit('📍',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked in${_checkinFlagged?' (Remote)':''}`);
+    showToast(`✅ Checked in at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`,'success',4000);
+    addAudit('📍',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked in`);
   }catch(e){
     console.error('confirmCheckIn error:',e);
     showToast('❌ Check-in failed: '+e.message,'error',5000);
