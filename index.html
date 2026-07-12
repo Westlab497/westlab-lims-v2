@@ -7717,6 +7717,7 @@ function renderMyJobs(){
       </div>
       ${item.calType==='Onsite'&&j.siteAddress?`
         <div style="font-size:11px;background:#e0f7fa;border-radius:6px;padding:6px 10px;margin-bottom:6px;color:#006064;">
+          🏢 <strong style="font-size:12.5px;">${j.endUserName||j.custName}</strong>${j.endUserName?' <span style="font-weight:400;opacity:.8;">(End User)</span>':''}<br/>
           📍 <strong>Site:</strong> ${j.siteAddress}
           ${j.siteContact?` &nbsp;·&nbsp; 👤 <strong>${j.siteContact}</strong>`:''}
           ${j.siteMobile?` &nbsp;·&nbsp; <a href="tel:${j.siteMobile}" style="color:#006064;font-weight:700;">📞 ${j.siteMobile}</a>`:''}
