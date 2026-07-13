@@ -445,6 +445,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="nav-section-label">Customers &amp; Equipment</div>
     <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon"><i class="ti ti-building"></i></span><span class="nav-label">Customer Database</span></button>
     <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Lab Reference Equipment</span></button>
+    <button class="nav-item hidden-nav" id="nav-price-ref" onclick="openPriceReferenceModal()" data-label="Price Reference"><span class="nav-icon"><i class="ti ti-tag"></i></span><span class="nav-label">Price Reference</span></button>
 
     <div class="nav-section-label">Quality System</div>
     <button class="nav-item" id="nav-tests" onclick="showView('tests')" data-label="Test Requests &amp; Results"><span class="nav-icon"><i class="ti ti-test-pipe"></i></span><span class="nav-label">Test Requests &amp; Results</span></button>
@@ -455,6 +456,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item" id="nav-claims" onclick="showView('claims')" data-label="Claims"><span class="nav-icon"><i class="ti ti-receipt"></i></span><span class="nav-label">Claims</span></button>
     <button class="nav-item" id="nav-leave" onclick="showView('leave')" data-label="Leave"><span class="nav-icon"><i class="ti ti-beach"></i></span><span class="nav-label">Leave</span></button>
     <button class="nav-item" id="nav-attendance" onclick="showView('attendance')" data-label="Attendance"><span class="nav-icon"><i class="ti ti-clock"></i></span><span class="nav-label">Attendance</span></button>
+    <button class="nav-item" id="nav-my-requests" onclick="showView('my-requests')" data-label="My Requests"><span class="nav-icon"><i class="ti ti-list-check"></i></span><span class="nav-label">My Requests</span></button>
 
     <div class="nav-section-label" id="nav-admin-section">Administration</div>
     <button class="nav-item" id="nav-personnel" onclick="showView('personnel')" data-label="Personnel"><span class="nav-icon"><i class="ti ti-users"></i></span><span class="nav-label">Personnel</span></button>
@@ -907,6 +909,21 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="empty-state"><div class="empty-icon">⏰</div><p>Loading attendance records…</p></div>
         </div>
       </div>
+    </div>
+
+    <!-- ════ MY REQUESTS ════ -->
+    <div class="view" id="view-my-requests">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📋 My Requests</div>
+          <div class="page-sub">Status of your reference equipment checkouts and job extension requests</div>
+        </div>
+      </div>
+      <div id="my-requests-summary-strip" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;"></div>
+      <div class="form-section-title" style="margin-top:0;">📤 Reference Equipment Checkout Requests</div>
+      <div id="my-requests-checkout-list" class="card"><div style="padding:16px;"></div></div>
+      <div class="form-section-title">🔄 Extension Requests</div>
+      <div id="my-requests-extension-list" class="card"><div style="padding:16px;"></div></div>
     </div>
 
     <!-- ════ LEAVE MANAGEMENT ════ -->
@@ -1586,6 +1603,16 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="eq-site-contact" placeholder="Person to meet at site"/></div>
           <div class="form-group"><label class="form-label">Site Contact Mobile</label><input class="form-control" id="eq-site-mobile" placeholder="e.g. +6012-345 6789"/></div>
         </div>
+        <div class="form-group" id="eq-deposit-group" style="display:none;background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #fdba74;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" id="eq-deposit-required" onchange="toggleDepositAmountField()" style="width:16px;height:16px;"/>
+            <strong style="font-size:12.5px;">💰 Requires Deposit Before Visit</strong>
+          </label>
+          <div id="eq-deposit-amount-row" style="display:none;margin-top:8px;">
+            <label class="form-label">Deposit Amount (RM)</label>
+            <input class="form-control" id="eq-deposit-amount" type="number" min="0" step="0.01" placeholder="e.g. 500.00"/>
+          </div>
+        </div>
       </div>
 
       <div class="form-section-title" style="margin-top:6px;">📷 Equipment Photos</div>
@@ -2069,6 +2096,17 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-row">
           <div class="form-group"><label class="form-label">Site Contact Person</label><input class="form-control" id="edit-eq-site-contact"/></div>
           <div class="form-group"><label class="form-label">Site Contact Mobile</label><input class="form-control" id="edit-eq-site-mobile"/></div>
+        </div>
+        <div class="form-group" id="edit-eq-deposit-group" style="display:none;background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #fdba74;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+            <input type="checkbox" id="edit-eq-deposit-required" onchange="toggleEditDepositAmountField()" style="width:16px;height:16px;"/>
+            <strong style="font-size:12.5px;">💰 Requires Deposit Before Visit</strong>
+          </label>
+          <div id="edit-eq-deposit-amount-row" style="display:none;margin-top:8px;">
+            <label class="form-label">Deposit Amount (RM)</label>
+            <input class="form-control" id="edit-eq-deposit-amount" type="number" min="0" step="0.01"/>
+          </div>
+          <div id="edit-eq-deposit-status" style="margin-top:8px;font-size:11px;"></div>
         </div>
         <div style="font-size:11px;color:#92610c;">To reschedule the visit, change the dates above and save. To request a date extension while already onsite, use "Request Extension" on My Jobs instead — extensions need Manager approval.</div>
       </div>
@@ -2651,11 +2689,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <input class="form-control" id="staff-cert-name" placeholder="Name to appear on calibration certificate e.g. Lim Jia Yu"/>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">This name appears under the signature line on Page 1 of the certificate.</div>
       </div>
+      <div class="form-group"><label class="form-label">Mobile Number <span style="font-weight:normal;font-size:11px;color:var(--text-muted);">(for WhatsApp notifications)</span></label>
+        <input class="form-control" id="staff-mobile" placeholder="e.g. 012-345 6789"/>
+      </div>
       <div class="form-group"><label class="form-label">Role <span class="req">*</span></label>
         <select class="form-control" id="staff-role">
           <option value="Engineer">Engineer / Technician</option>
           <option value="Manager">Manager (Approve certs, view reports, assign jobs)</option>
-          <option value="Sales">Sales / Front Desk (Create jobs, customer database)</option>
+          <option value="Coordinator">Coordinator (Create/edit jobs, receive items, pricing, deposits)</option>
+          <option value="Sales">Sales (Lead capture only)</option>
           <option value="HR">HR / Accounts (Leave, claims, attendance only)</option>
           <option value="Admin">Admin (Full access)</option>
         </select>
@@ -3160,6 +3202,7 @@ function rebuildUsers(){
         name:s.name, display:s.display||s.name,
         avatarClass:s.username,
         role:s.role,
+        mobile:s.mobile||'',
         active:s.active!==false
       };
     }
@@ -3344,14 +3387,14 @@ function isSignatory(u){
   return !!(s&&s.approvedSignatory);
 }
 function isEngineer(u){ return getUserRole(u||currentUser)==='Engineer'; }
-function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Sales'; }
+function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Coordinator'; }
 function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='HR'; }
-function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Sales'].includes(r); }
+function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Coordinator'].includes(r); }
 function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Engineer','Manager'].includes(r); }
 function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
-function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Sales'].includes(r); }
+function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Coordinator'].includes(r); }
 function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
-function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
+function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Coordinator'].includes(r); }
 function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','HR'].includes(r); }
 
 function applyRoleUI(){
@@ -3360,17 +3403,19 @@ function applyRoleUI(){
   const admin=role==='Admin';
   const manager=role==='Manager';
   const engineer=role==='Engineer';
+  const coordinator=role==='Coordinator';
   const sales=role==='Sales';
   const hr=role==='HR';
 
   // Sidebar nav visibility per role
-  // Equipment & Jobs — Admin, Manager, Sales see all; Engineer sees My Jobs only; HR sees nothing
-  el('nav-equipment').classList.toggle('hidden-nav', hr); // hidden for HR
-  el('nav-completed').classList.toggle('hidden-nav', engineer||hr);
-  el('nav-my-jobs').classList.toggle('hidden-nav', admin||sales||hr); // shown for Engineer and Manager
+  // Equipment & Jobs — Admin, Manager, Coordinator see all; Engineer sees My Jobs only; Sales/HR see nothing (Sales is lead-capture only)
+  el('nav-equipment').classList.toggle('hidden-nav', sales||hr);
+  el('nav-completed').classList.toggle('hidden-nav', engineer||sales||hr);
+  el('nav-my-jobs').classList.toggle('hidden-nav', admin||coordinator||sales||hr); // shown for Engineer and Manager
   el('nav-approval').classList.toggle('hidden-nav', !(admin||manager));
   el('nav-customers').classList.toggle('hidden-nav', hr);
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
+  el('nav-price-ref').classList.toggle('hidden-nav', !(admin||manager||coordinator));
   el('nav-calendar').classList.toggle('hidden-nav', hr);
   el('nav-claims').classList.toggle('hidden-nav', false); // all can see own claims
   el('nav-leave').classList.toggle('hidden-nav', false);  // all can see own leave
@@ -3406,7 +3451,7 @@ function toLocalDateStr(d){
 const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',completed:'Completed Jobs',
   customers:'Customer Database',deleted:'Deleted Jobs',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
-  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Lab Reference Equipment',
+  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Lab Reference Equipment','my-requests':'My Requests',
   personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings'};
 
 function showView(name){
@@ -3443,6 +3488,7 @@ function showView(name){
   }
   if(name==='dashboard') renderDashboard();
   if(name==='ref-eq') renderRefEqTable();
+  if(name==='my-requests') renderMyRequests();
 }
 
 // ── MODALS ──
@@ -3844,6 +3890,11 @@ async function openNewJobModal(){
     const priceGroup=el('eq-price-group');
     if(priceGroup) priceGroup.style.display=canViewPrice(currentUser)?'block':'none';
     const priceHintBox=el('price-hint-box'); if(priceHintBox) priceHintBox.style.display='none';
+    const depositGroup=el('eq-deposit-group');
+    if(depositGroup) depositGroup.style.display=canViewPrice(currentUser)?'block':'none';
+    const depositCb=el('eq-deposit-required'); if(depositCb) depositCb.checked=false;
+    const depositAmt=el('eq-deposit-amount'); if(depositAmt) depositAmt.value='';
+    const depositRow=el('eq-deposit-amount-row'); if(depositRow) depositRow.style.display='none';
     const jtEl=el('eq-job-type'); if(jtEl) jtEl.value='Lab';
     const itEl=el('eq-item-type'); if(itEl) itEl.value='Lab';
     updateSiteFieldsVisibility();
@@ -3870,6 +3921,31 @@ function quickFillSiteFromEndUser(){
   el('eq-site-contact').value=el('eq-end-user-attention')?.value.trim()||'';
   el('eq-site-mobile').value=el('eq-end-user-mobile')?.value.trim()||el('eq-end-user-tel')?.value.trim()||'';
   showToast('🏭 Site details filled from End User','success',2000);
+}
+function toggleEditDepositAmountField(){
+  const checked=el('edit-eq-deposit-required')?.checked;
+  const row=el('edit-eq-deposit-amount-row');
+  if(row) row.style.display=checked?'block':'none';
+}
+async function markDepositCollected(jobNo){
+  if(!canViewPrice(currentUser)){alert('Only Admin, Manager, or Coordinator can mark deposits collected.');return;}
+  const j=getJob(jobNo); if(!j)return;
+  if(!confirm(`Mark deposit of RM${(j.depositAmount||0).toFixed(2)} as collected for ${jobNo}?`))return;
+  await updateJob(jobNo,job=>{
+    job.depositCollected=true;
+    job.depositCollectedDate=toLocalDateStr(new Date());
+    job.depositCollectedBy=currentUser;
+    job.history.push({action:`💰 Deposit of RM${(job.depositAmount||0).toFixed(2)} marked as collected`,by:currentUser,time:new Date().toISOString()});
+  });
+  showToast('✅ Deposit marked as collected','success',3000);
+  addAudit('💰',`Deposit collected for job <strong>${jobNo}</strong>`);
+  renderEquipmentTable();
+  if(_editingJobNo===jobNo) openEditJobModal(jobNo,_editingItemIdx);
+}
+function toggleDepositAmountField(){
+  const checked=el('eq-deposit-required')?.checked;
+  const row=el('eq-deposit-amount-row');
+  if(row) row.style.display=checked?'block':'none';
 }
 function syncVisitEndDateMin(){
   const apptEl=el('eq-appointment-date');
@@ -3933,6 +4009,8 @@ async function saveEquipment(printReceipt=false){
   const siteAddress=el('eq-site-address')?.value.trim()||'';
   const siteContact=el('eq-site-contact')?.value.trim()||'';
   const siteMobile=el('eq-site-mobile')?.value.trim()||'';
+  const depositRequired=canViewPrice(currentUser)?!!el('eq-deposit-required')?.checked:false;
+  const depositAmount=depositRequired?(parseFloat(el('eq-deposit-amount')?.value)||0):0;
   const itemType=el('eq-item-type')?.value||'Lab';
   // Job-level type is derived from items — Onsite if ANY item is onsite, purely for badges/legacy display
   const anyOnsite=itemType==='Onsite'||_extraEquipment.some(eq=>eq.calType==='Onsite');
@@ -3946,6 +4024,7 @@ async function saveEquipment(printReceipt=false){
     fax:el('eq-fax')?.value.trim()||'', email:el('eq-email')?.value.trim()||'',
     po:el('eq-po')?.value.trim()||'', priority:el('eq-priority')?.value||'Normal',
     jobType, siteAddress, siteContact, siteMobile, appointmentDate, visitEndDate,
+    depositRequired, depositAmount, depositCollected:false, depositCollectedDate:null, depositCollectedBy:null,
     endUserName:el('eq-end-user')?.value.trim()||'',
     endUserAddress:el('eq-end-user-address')?.value.trim()||'',
     endUserAttention:el('eq-end-user-attention')?.value.trim()||'',
@@ -4900,6 +4979,21 @@ function openEditJobModal(jobNo, itemIdx=0){
   const siteAddr=el('edit-eq-site-address'); if(siteAddr) siteAddr.value=j.siteAddress||'';
   const siteContact=el('edit-eq-site-contact'); if(siteContact) siteContact.value=j.siteContact||'';
   const siteMobile=el('edit-eq-site-mobile'); if(siteMobile) siteMobile.value=j.siteMobile||'';
+  const depositGroup=el('edit-eq-deposit-group');
+  if(depositGroup) depositGroup.style.display=canViewPrice(currentUser)?'block':'none';
+  const depositCb=el('edit-eq-deposit-required'); if(depositCb) depositCb.checked=!!j.depositRequired;
+  const depositAmtRow=el('edit-eq-deposit-amount-row'); if(depositAmtRow) depositAmtRow.style.display=j.depositRequired?'block':'none';
+  const depositAmt=el('edit-eq-deposit-amount'); if(depositAmt) depositAmt.value=j.depositAmount||'';
+  const depositStatusEl=el('edit-eq-deposit-status');
+  if(depositStatusEl){
+    if(j.depositRequired&&j.depositCollected){
+      depositStatusEl.innerHTML=`<span style="color:#16a34a;">✅ Deposit collected on ${j.depositCollectedDate||'—'} by ${USERS[j.depositCollectedBy]?.name||j.depositCollectedBy||'—'}</span>`;
+    } else if(j.depositRequired&&!j.depositCollected&&canViewPrice(currentUser)){
+      depositStatusEl.innerHTML=`<span style="color:#c84b00;">⚠️ Not yet collected</span> &nbsp; <button type="button" class="btn btn-primary btn-sm" onclick="markDepositCollected('${jobNo}')" style="font-size:11px;padding:3px 10px;">Mark Collected</button>`;
+    } else {
+      depositStatusEl.innerHTML='';
+    }
+  }
   el('edit-eq-name').value=item.eqName||'';
   el('edit-eq-brand').value=item.brand||'';
   el('edit-eq-model').value=item.model||'';
@@ -4966,6 +5060,14 @@ async function saveEditJob(){
     if(siteContactEl) j.siteContact=siteContactEl.value.trim();
     const siteMobileEl=el('edit-eq-site-mobile');
     if(siteMobileEl) j.siteMobile=siteMobileEl.value.trim();
+    if(canViewPrice(currentUser)){
+      const depositReqEl=el('edit-eq-deposit-required');
+      if(depositReqEl){
+        j.depositRequired=depositReqEl.checked;
+        j.depositAmount=j.depositRequired?(parseFloat(el('edit-eq-deposit-amount')?.value)||0):0;
+        if(!j.depositRequired){ j.depositCollected=false; j.depositCollectedDate=null; j.depositCollectedBy=null; }
+      }
+    }
     // Save equipment-level fields into the specific item being edited
     if(j.items&&j.items[_editingItemIdx]){
       const it=j.items[_editingItemIdx];
@@ -5606,12 +5708,13 @@ function renderEquipmentTable(){
         typeBadge=`<span style="background:#80deea;color:#006064;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;">ONSITE</span>`;
       }
       const overdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
+      const depositBadge=(j.depositRequired&&!j.depositCollected&&canViewPrice(currentUser))?`<span style="background:#fca5a5;color:#7f1d1d;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;" title="Deposit of RM${(j.depositAmount||0).toFixed(2)} not yet collected">💰 DEPOSIT DUE</span>`:'';
       // ── JOB GROUP HEADER ROW ──
       rows.push(`<tr style="background:var(--navy);color:#fff;">
         <td colspan="2" style="padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
           ${j.jobNo}
           <span style="font-size:11px;font-weight:400;opacity:.8;margin-left:8px;">${itemCount} item${itemCount>1?'s':''}</span>
-          ${typeBadge}
+          ${typeBadge}${depositBadge}
         </td>
         <td colspan="2" style="padding:6px 10px;font-size:12px;color:#fff;">
           <strong>${j.custName}</strong>${j.attention?`<span style="opacity:.7;font-size:11px;"> · ${j.attention}</span>`:''}
@@ -9003,6 +9106,17 @@ function renderApprovalExtensionSection(){
     </div>
   </div>`;
 }
+// Offers to open a pre-filled WhatsApp message to a staff member — matches the existing
+// pattern used for customer notifications (opens wa.me, human clicks Send themselves;
+// there is no automated backend WhatsApp API in this app).
+function offerWhatsAppNotify(username,message){
+  const mobile=USERS[username]?.mobile;
+  if(!mobile) return;
+  if(confirm(`Notify ${USERS[username]?.name||username} via WhatsApp too?`)){
+    window.open(buildWhatsAppUrl(mobile,message),'_blank');
+  }
+}
+
 async function approveExtension(reqId){
   if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can approve.');return;}
   const req=_extensionRequests.find(r=>r.id===reqId); if(!req)return;
@@ -9024,6 +9138,7 @@ async function approveExtension(reqId){
   if(typeof renderRefEqTable==='function') renderRefEqTable();
   showToast(`✅ Extension approved for ${req.jobNo}${linkedRefs.length?' — '+linkedRefs.length+' linked reference item(s) auto-adjusted':''}`,'success',4000);
   addAudit('✅',`Extension approved for ${req.jobNo}`);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your extension request for job ${req.jobNo} has been APPROVED. New end date: ${fmtDateShort(req.proposedEndDate)}.`);
 }
 async function rejectExtension(reqId){
   if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can reject.');return;}
@@ -9034,6 +9149,7 @@ async function rejectExtension(reqId){
   await saveExtensionRequests();
   renderApprovalQueue();
   showToast('Extension request rejected','success',2500);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your extension request for job ${req.jobNo} was not approved. Reason: ${note||'—'}. Please check My Requests for details.`);
 }
 
 function openRefCheckoutRequestModal(){
@@ -9183,6 +9299,7 @@ async function approveRefCheckout(reqId){
   renderRefEqTable();
   showToast(`✅ Approved — ${req.items.length} item(s) checked out for ${req.jobNo}`,'success',3000);
   addAudit('✅',`Reference checkout approved for ${req.jobNo}`);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your reference equipment checkout request for job ${req.jobNo} has been APPROVED. Items: ${req.items.map(i=>i.refName).join(', ')}.`);
 }
 async function rejectRefCheckout(reqId){
   if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can reject.');return;}
@@ -9193,6 +9310,7 @@ async function rejectRefCheckout(reqId){
   await saveRefCheckoutRequests();
   renderRefCheckoutQueue();
   showToast('Request rejected','success',2500);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your reference equipment checkout request for job ${req.jobNo} was not approved. Reason: ${note||'—'}. Please check My Requests for details.`);
 }
 async function markRefReturned(refId){
   const r=_refEq.find(x=>x.id===refId); if(!r)return;
@@ -9748,6 +9866,145 @@ function viewCalendarJobSummary(jobNo){
 function closeJobDetailView(){
   const ov=document.getElementById('job-detail-overlay');
   if(ov) ov.style.display='none';
+}
+
+// ══════════════════════════════════════════════════
+// PRICE REFERENCE LIST — market-wide (all customers) price lookup by equipment
+// ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// MY REQUESTS — personal status view for checkout + extension requests, with pointers to Claims/Leave
+// ══════════════════════════════════════════════════
+function renderMyRequests(){
+  try{
+  const myCheckouts=_refCheckoutRequests.filter(r=>r.requestedBy===currentUser).sort((a,b)=>(b.requestedAt||'').localeCompare(a.requestedAt||''));
+  const myExtensions=_extensionRequests.filter(r=>r.requestedBy===currentUser).sort((a,b)=>(b.requestedAt||'').localeCompare(a.requestedAt||''));
+
+  // Summary strip — quick counts + links to Claims/Leave (which already have their own full pages)
+  const pendingClaims=(_claims||[]).filter(c=>c.submittedBy===currentUser&&c.status==='Pending').length;
+  const pendingLeave=(_leaveRecords||[]).filter(l=>l.submittedBy===currentUser&&l.status==='Pending').length;
+  const strip=el('my-requests-summary-strip');
+  if(strip){
+    strip.innerHTML=`
+      <div class="kpi-mini" style="cursor:pointer;" onclick="showView('claims')"><div class="kpi-val" style="color:${pendingClaims?'var(--amber)':'var(--green)'}">${pendingClaims}</div><div class="kpi-lbl">Pending Claims →</div></div>
+      <div class="kpi-mini" style="cursor:pointer;" onclick="showView('leave')"><div class="kpi-val" style="color:${pendingLeave?'var(--amber)':'var(--green)'}">${pendingLeave}</div><div class="kpi-lbl">Pending Leave →</div></div>
+      <div class="kpi-mini"><div class="kpi-val" style="color:${myCheckouts.filter(r=>r.status==='Pending').length?'var(--amber)':'var(--green)'}">${myCheckouts.filter(r=>r.status==='Pending').length}</div><div class="kpi-lbl">Pending Checkouts</div></div>
+      <div class="kpi-mini"><div class="kpi-val" style="color:${myExtensions.filter(r=>r.status==='Pending').length?'var(--amber)':'var(--green)'}">${myExtensions.filter(r=>r.status==='Pending').length}</div><div class="kpi-lbl">Pending Extensions</div></div>
+    `;
+  }
+
+  const statusBadge=s=>{
+    const map={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate'};
+    return `<span class="badge ${map[s]||'badge-slate'}">${s}</span>`;
+  };
+
+  const checkoutBox=el('my-requests-checkout-list');
+  if(checkoutBox){
+    checkoutBox.innerHTML=!myCheckouts.length
+      ? `<div class="empty-state"><div class="empty-icon">📤</div><p>You haven't requested any reference equipment yet.</p></div>`
+      : `<div style="padding:8px 16px;">${myCheckouts.map(r=>`
+        <div style="border-bottom:1px solid var(--border);padding:10px 0;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="font-size:13px;">
+              <strong>${r.jobNo}</strong> (${r.custName}) — ${r.items.map(i=>i.refName).join(', ')}<br/>
+              <span style="color:var(--text-muted);font-size:11px;">${fmtDateShort(r.fromDate)} to ${fmtDateShort(r.toDate)} · Requested ${r.requestedAt?r.requestedAt.split('T')[0]:''}</span>
+            </div>
+            ${statusBadge(r.status)}
+          </div>
+          ${r.status==='Rejected'&&r.managerNote?`<div style="margin-top:6px;background:#fef2f2;border-radius:6px;padding:6px 10px;font-size:11px;color:#991b1b;">Reason: ${r.managerNote}</div>`:''}
+          ${r.status==='Cancelled'&&r.managerNote?`<div style="margin-top:6px;background:var(--bg);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--text-muted);">${r.managerNote}</div>`:''}
+        </div>`).join('')}</div>`;
+  }
+
+  const extensionBox=el('my-requests-extension-list');
+  if(extensionBox){
+    extensionBox.innerHTML=!myExtensions.length
+      ? `<div class="empty-state"><div class="empty-icon">🔄</div><p>You haven't requested any job extensions yet.</p></div>`
+      : `<div style="padding:8px 16px;">${myExtensions.map(r=>`
+        <div style="border-bottom:1px solid var(--border);padding:10px 0;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="font-size:13px;">
+              <strong>${r.jobNo}</strong> (${r.custName})<br/>
+              <span style="color:var(--text-muted);font-size:11px;">${fmtDateShort(r.currentEndDate)} → ${fmtDateShort(r.proposedEndDate)} · "${r.reason}"</span>
+            </div>
+            ${statusBadge(r.status)}
+          </div>
+          ${r.status==='Rejected'&&r.managerNote?`<div style="margin-top:6px;background:#fef2f2;border-radius:6px;padding:6px 10px;font-size:11px;color:#991b1b;">Reason: ${r.managerNote}</div>`:''}
+        </div>`).join('')}</div>`;
+  }
+  }catch(e){console.error('renderMyRequests error:',e);}
+}
+
+function openPriceReferenceModal(){
+  if(!canViewPrice(currentUser)){alert('You do not have access to pricing information.');return;}
+  let ov=document.getElementById('price-ref-overlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='price-ref-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">💰 Price Reference — All Customers</span>
+      <button onclick="document.getElementById('price-ref-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <input class="form-control" id="price-ref-search" placeholder="Search equipment name or model, e.g. Pressure Gauge, Fluke 717…" oninput="renderPriceReferenceResults()" autocomplete="off"/>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Based on your own historical pricing across all customers — a reference range to help quote quickly, not a fixed rate. Actual quotes may vary by complexity.</div>
+      <div id="price-ref-results" style="margin-top:14px;max-height:400px;overflow-y:auto;"></div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  el('price-ref-search').focus();
+  renderPriceReferenceResults();
+}
+function renderPriceReferenceResults(){
+  const box=el('price-ref-results'); if(!box)return;
+  const q=(el('price-ref-search')?.value||'').trim().toLowerCase();
+  // Gather every priced item across every job, grouped by normalized equipment name+model
+  const groups={};
+  _jobs.forEach(j=>{
+    if(j.status==='Deleted'||j.isInternalRefCal) return;
+    (j.items||[]).forEach(it=>{
+      if(!it.price||it.price<=0) return;
+      const key=`${(it.eqName||'').trim().toLowerCase()}|${(it.model||'').trim().toLowerCase()}`;
+      if(!groups[key]) groups[key]={eqName:it.eqName,model:it.model,prices:[],lastDate:'',lastCust:'',lastJobNo:''};
+      groups[key].prices.push(it.price);
+      const jobDate=j.receiveDate||'';
+      if(jobDate>=groups[key].lastDate){ groups[key].lastDate=jobDate; groups[key].lastCust=j.custName; groups[key].lastJobNo=j.jobNo; }
+    });
+  });
+  let rows=Object.values(groups);
+  if(q) rows=rows.filter(r=>(r.eqName||'').toLowerCase().includes(q)||(r.model||'').toLowerCase().includes(q));
+  rows.sort((a,b)=>(a.eqName||'').localeCompare(b.eqName||''));
+  if(!rows.length){
+    box.innerHTML=`<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:20px;">${q?'No matching equipment found.':'No priced jobs on record yet.'}</div>`;
+    return;
+  }
+  box.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="background:var(--bg);position:sticky;top:0;">
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);">Equipment</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);">Model</th>
+      <th style="padding:6px 8px;text-align:right;color:var(--text-muted);">Range</th>
+      <th style="padding:6px 8px;text-align:right;color:var(--text-muted);">Avg</th>
+      <th style="padding:6px 8px;text-align:center;color:var(--text-muted);">Jobs</th>
+      <th style="padding:6px 8px;text-align:left;color:var(--text-muted);">Last Quoted</th>
+    </tr></thead>
+    <tbody>
+    ${rows.map(r=>{
+      const min=Math.min(...r.prices), max=Math.max(...r.prices);
+      const avg=r.prices.reduce((s,p)=>s+p,0)/r.prices.length;
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:6px 8px;font-weight:600;">${r.eqName}</td>
+        <td style="padding:6px 8px;color:var(--text-muted);">${r.model||'—'}</td>
+        <td style="padding:6px 8px;text-align:right;">${min===max?`RM ${min.toFixed(2)}`:`RM ${min.toFixed(2)}–${max.toFixed(2)}`}</td>
+        <td style="padding:6px 8px;text-align:right;font-weight:700;color:var(--blue);">RM ${avg.toFixed(2)}</td>
+        <td style="padding:6px 8px;text-align:center;">${r.prices.length}</td>
+        <td style="padding:6px 8px;color:var(--text-muted);font-size:11px;">${r.lastCust} (${r.lastDate})</td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table>`;
 }
 
 function viewCustomerDetail(custId){
@@ -10758,7 +11015,8 @@ const ROLE_DISPLAY={
   Admin:{label:'Admin',access:'Full access — all modules including Settings and Personnel',badge:'badge-green'},
   Manager:{label:'Manager',access:'Approve certs, assign jobs, view reports, approve leave/claims/OT, view pricing',badge:'badge-purple'},
   Engineer:{label:'Engineer',access:'My Jobs, perform calibration, clock in/out, own leave and claims',badge:'badge-blue'},
-  Sales:{label:'Sales',access:'Create jobs, view all jobs, customer database, calendar',badge:'badge-teal'},
+  Coordinator:{label:'Coordinator',access:'Create/edit jobs, receive items, view pricing and deposit tracking, customer database, calendar',badge:'badge-teal'},
+  Sales:{label:'Sales',access:'Lead capture — no job creation, no pricing visibility',badge:'badge-slate'},
   HR:{label:'HR',access:'Leave, claims, and attendance only — no access to jobs or calibration',badge:'badge-amber'},
   Signatory:{label:'Manager',access:'Approve certs, assign jobs, view reports',badge:'badge-purple'} // legacy
 };
@@ -10832,6 +11090,7 @@ function openAddStaffModal(){
   el('staff-edit-username').value='';
   el('staff-name').value='';
   el('staff-cert-name').value='';
+  const staffMobileClear=el('staff-mobile'); if(staffMobileClear) staffMobileClear.value='';
   el('staff-username').value='';
   el('staff-username').readOnly=false;
   el('staff-role').value='Engineer';
@@ -10851,6 +11110,7 @@ function openEditStaffModal(username){
   el('staff-edit-username').value=username;
   el('staff-name').value=s.name||'';
   el('staff-cert-name').value=s.certName||s.name||'';
+  const staffMobileEl=el('staff-mobile'); if(staffMobileEl) staffMobileEl.value=s.mobile||'';
   el('staff-username').value=username;
   el('staff-username').readOnly=true;
   el('staff-role').value=s.role||'Engineer';
@@ -10870,6 +11130,7 @@ function openResetPwModal(username){
   el('staff-edit-username').value=username;
   el('staff-name').value=s.name||'';
   el('staff-cert-name').value=s.certName||s.name||'';
+  const staffMobileEl2=el('staff-mobile'); if(staffMobileEl2) staffMobileEl2.value=s.mobile||'';
   el('staff-username').value=username;
   el('staff-username').readOnly=true;
   el('staff-role').value=s.role||'Engineer';
@@ -10929,6 +11190,7 @@ async function saveStaff(){
   const record={
     username, name,
     certName: el('staff-cert-name').value.trim()||name,
+    mobile: el('staff-mobile')?.value.trim()||'',
     display:role,
     role,
     joinDate:el('staff-join-date')?.value||existing?.joinDate||'',
