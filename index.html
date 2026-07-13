@@ -10892,7 +10892,7 @@ async function markBilled(jobNo){
     const lab=_settings.labName||'Westlab (M) Sdn. Bhd.';
     const dearName=recip.attention||recip.name;
     const endUserNote=recip.isDealer
-      ?`\n\nKindly remind your client (${recip.endUserName}) to collect the instruments and certificates from our laboratory.`:'';
+      ?`\n\nKindly arrange to collect the instruments and certificates from our laboratory, for return to your client (${recip.endUserName}).`:'';
     const textItemLines=(jFull.items||[]).map((it,i)=>{
       const calDate=it.calData?.date?fmtDateShort(it.calData.date):'';
       return `Item ${it.itemNo}: ${it.eqName}\n         Cert No.: ${it.certNo}  |  S/N: ${it.serial||'N/A'}${calDate?'  |  Cal Date: '+calDate:''}`;
@@ -10909,8 +10909,7 @@ Job Number: ${jFull.jobNo}
 ${textItemLines}
 ${endUserNote}${paymentNote}
 
-Kindly visit our laboratory at your earliest convenience to collect your instruments and certificates.
-
+${recip.isDealer?'':'Kindly visit our laboratory at your earliest convenience to collect your instruments and certificates.\n'}
 Please quote Job Number ${jFull.jobNo} when contacting us.
 
 Email: sales@westlab.com.my
@@ -10941,9 +10940,9 @@ ${lab}`;
           </tr>`;
         }).join('')}
       </table>
-      ${recip.isDealer?`<p style="color:#c84b00;">Kindly remind your client (<strong>${recip.endUserName}</strong>) to collect the instruments and certificates from our laboratory.</p>`:''}
+      ${recip.isDealer?`<p style="color:#c84b00;">Kindly arrange to collect the instruments and certificates from our laboratory, for return to your client (<strong>${recip.endUserName}</strong>).</p>`:''}
       ${recip.paymentTerms==='cod'?`<p style="background:#fff3e0;border-radius:8px;padding:12px 16px;color:#c84b00;font-weight:600;">💳 Please note: payment is required prior to collection of your instruments and certificates.</p>`:''}
-      <p>Kindly visit our laboratory at your earliest convenience to collect your instruments and certificates.</p>
+      ${!recip.isDealer?`<p>Kindly visit our laboratory at your earliest convenience to collect your instruments and certificates.</p>`:''}
       <p>Please quote Job Number <strong>${jFull.jobNo}</strong> when contacting us.</p>
       <p>Email: <a href="mailto:sales@westlab.com.my" style="color:#378ADD;">sales@westlab.com.my</a><br/>
       Contact No.: +6011-3508 9986${_settings.address?'<br/>Address: '+_settings.address:''}</p>
