@@ -5326,6 +5326,20 @@ async function openCalModal(jobNo, itemIdx=0){
       }));
       renderTraceCards();
     }
+  } else {
+    // Fresh job, no prior calibration data yet — auto-fill traceability from an approved
+    // reference equipment checkout for this job, if one exists, so the engineer doesn't
+    // need to search for it manually.
+    const approvedForThisJob=_refCheckoutRequests.find(r=>r.status==='Approved'&&r.jobNo===jobNo);
+    if(approvedForThisJob){
+      approvedForThisJob.items.forEach(reqItem=>{
+        const r=_refEq.find(x=>x.id===reqItem.refId);
+        if(r&&!_traceSelected.find(x=>x.id===r.id)){
+          _traceSelected.push({id:r.id,name:r.name,serial:r.serial||'',certNo:r.certNo||'',traceability:r.traceability||'',dueDate:r.dueDate||''});
+        }
+      });
+      if(_traceSelected.length) renderTraceCards();
+    }
   }
   // cal-cert-no already correctly set above from item.certNo — don't overwrite it here
   openModal('modal-perform-cal');
@@ -5366,6 +5380,14 @@ function addTraceFromRef(r){
   if(_traceSelected.find(x=>x.id===r.id)){
     alert(`"${r.name}" is already added.`); return;
   }
+  // Backup safety net — flag if this item isn't currently marked Available
+  // (e.g. checked out to someone else's onsite job, or away for its own calibration)
+  const avail=r.availability||'Available';
+  if(avail==='CheckedOut'&&r.checkedOutJobNo!==calJobNo){
+    if(!confirm(`⚠️ "${r.name}" is currently checked out to ${USERS[r.checkedOutBy]?.name||r.checkedOutBy||'another staff member'} for job ${r.checkedOutJobNo}.\n\nAre you sure you used this item for THIS job?`)) return;
+  } else if(avail==='UnderCalibration'){
+    if(!confirm(`⚠️ "${r.name}" is currently marked as away for its own calibration (${r.calibrationType||'—'}).\n\nAre you sure you used this item?`)) return;
+  }
   _traceSelected.push({
     id:r.id, name:r.name, serial:r.serial||'',
     certNo:r.certNo||'', traceability:r.traceability||'',
@@ -5393,6 +5415,16 @@ function renderTraceCards(){
   container.innerHTML=_traceSelected.map((r,i)=>{
     const st=getRefStatus(r.dueDate);
     const stClass=st==='Overdue'?'trace-card-status-overdue':st==='Due Soon'?'trace-card-status-soon':'trace-card-status-ok';
+    // Live availability check — this reference item might be checked out or under calibration
+    // right now even if it was fine when first added to this form
+    const live=_refEq.find(x=>x.id===r.id);
+    const liveAvail=live?.availability||'Available';
+    let availFlag='';
+    if(liveAvail==='CheckedOut'&&live.checkedOutJobNo!==calJobNo){
+      availFlag=`<span class="badge badge-amber" style="font-size:10px;" title="Currently checked out to ${USERS[live.checkedOutBy]?.name||live.checkedOutBy} for job ${live.checkedOutJobNo}">⚠️ Checked Out Elsewhere</span>`;
+    } else if(liveAvail==='UnderCalibration'){
+      availFlag=`<span class="badge badge-purple" style="font-size:10px;">⚠️ Under Its Own Calibration</span>`;
+    }
     return `<div class="trace-card">
       <div class="trace-card-info">
         <div class="trace-card-name">${r.name}</div>
@@ -5402,6 +5434,7 @@ function renderTraceCards(){
           <span class="trace-card-field">Source: <span>${r.traceability||'—'}</span></span>
           <span class="trace-card-field">Due: <span class="${stClass}">${r.dueDate||'—'}</span></span>
           ${st==='Overdue'?'<span class="badge badge-red" style="font-size:10px;">Overdue!</span>':st==='Due Soon'?'<span class="badge badge-amber" style="font-size:10px;">Due Soon</span>':''}
+          ${availFlag}
         </div>
       </div>
       <button onclick="removeTraceItem('${r.id}')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;padding:0;" title="Remove">✕</button>
