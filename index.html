@@ -441,6 +441,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon"><i class="ti ti-tool"></i></span><span class="nav-label">Equipment &amp; Calibration</span></button>
     <button class="nav-item" id="nav-completed" onclick="showView('completed')" data-label="Completed Jobs"><span class="nav-icon"><i class="ti ti-circle-check"></i></span><span class="nav-label">Completed Jobs</span></button>
     <button class="nav-item" id="nav-calendar" onclick="showView('calendar')" data-label="Schedule Calendar"><span class="nav-icon"><i class="ti ti-calendar"></i></span><span class="nav-label">Schedule Calendar</span></button>
+    <button class="nav-item" id="nav-stickers" onclick="showView('stickers')" data-label="Calibration Stickers"><span class="nav-icon"><i class="ti ti-label"></i></span><span class="nav-text">Calibration Stickers <span class="nav-badge" id="stickers-badge" style="display:none;">0</span></span></button>
 
     <div class="nav-section-label">Customers &amp; Equipment</div>
     <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon"><i class="ti ti-building"></i></span><span class="nav-label">Customer Database</span></button>
@@ -845,6 +846,29 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- ════ CALIBRATION STICKERS ════ -->
+    <div class="view" id="view-stickers">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🏷️ Calibration Stickers</div>
+          <div class="page-sub">Pre-printed sticker batch tracking — request, issue, and usage</div>
+        </div>
+        <button class="btn btn-primary" onclick="requestStickerBatch()">📤 Request Stickers</button>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-mini"><div class="kpi-val" id="sticker-kpi-printed">0</div><div class="kpi-lbl">Total Printed</div></div>
+        <div class="kpi-mini"><div class="kpi-val" id="sticker-kpi-available">0</div><div class="kpi-lbl">Available to Issue</div></div>
+        <div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)" id="sticker-kpi-used">0</div><div class="kpi-lbl">Used</div></div>
+        <div class="kpi-mini"><div class="kpi-val" style="color:var(--red)" id="sticker-kpi-wasted">0</div><div class="kpi-lbl">Wasted</div></div>
+      </div>
+      <div id="sticker-lowstock-banner" style="display:none;margin-bottom:16px;"></div>
+      <div id="sticker-pending-requests" style="margin-bottom:16px;"></div>
+      <div class="form-section-title" style="margin-top:0;">My Stickers</div>
+      <div id="sticker-my-holdings" class="card"><div style="padding:16px;"></div></div>
+      <div class="form-section-title" id="sticker-summary-title" style="display:none;">Admin Summary — All Staff</div>
+      <div id="sticker-admin-summary"></div>
     </div>
 
     <!-- ════ ATTENDANCE ════ -->
@@ -1371,6 +1395,31 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
 
+      <!-- Calibration Stickers -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">🏷️ Calibration Stickers</span></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Sticker Number Prefix</label><input id="set-sticker-prefix" class="form-control" placeholder="e.g. WSA"/></div>
+            <div class="form-group"><label class="form-label">Stickers Per Batch (issued to a staff member)</label><input id="set-sticker-batch-size" class="form-control" type="number" min="1" placeholder="50"/></div>
+          </div>
+          <div class="form-group"><label class="form-label">Low Stock Reminder Threshold (%)</label><input id="set-sticker-low-pct" class="form-control" type="number" min="1" max="99" placeholder="30"/>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Admin gets a reminder banner when unissued stickers remaining drops to this % of total printed.</div>
+          </div>
+          <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
+          <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Printed Batches</div>
+          <div id="sticker-batch-list" style="margin-bottom:10px;"></div>
+          <div style="background:var(--bg);border-radius:8px;padding:12px;">
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Start Number</label><input id="new-batch-start" class="form-control" type="number" min="1"/></div>
+              <div class="form-group"><label class="form-label">End Number</label><input id="new-batch-end" class="form-control" type="number" min="1"/></div>
+            </div>
+            <div class="form-group"><label class="form-label">Date Printed</label><input id="new-batch-date" class="form-control" type="date"/></div>
+            <button class="btn btn-primary btn-sm" onclick="addStickerBatch()">+ Add Batch</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Counters -->
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header"><span class="card-title">🔧 Job & Certificate Counters</span></div>
@@ -1802,6 +1851,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Calibration Points</label><input class="form-control" id="cal-cal-points" readonly style="background:#f1f5f9;"/></div>
       </div>
 
+      <!-- Calibration Sticker -->
+      <div class="form-group" id="cal-sticker-group" style="background:#fff7ed;border-radius:8px;padding:10px 14px;border:1px solid #fdba74;">
+        <label class="form-label">🏷️ Sticker Number Used <span class="req">*</span></label>
+        <select class="form-control" id="cal-sticker-number">
+          <option value="">— Select sticker —</option>
+        </select>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Only your own unused stickers are shown. Attach this sticker to the equipment body after servicing.</div>
+      </div>
+
       <!-- SECTION 4: Dates -->
       <div class="form-section-title" style="margin-top:4px;">📅 Calibration Dates</div>
       <div class="form-row">
@@ -1851,7 +1909,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </select>
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Calibration Sticker No.</label><input class="form-control" id="cal-sticker-no" placeholder="e.g. fhud7436821"/></div>
 
       <!-- SECTION 7: Ambient Conditions -->
       <div class="form-section-title" style="margin-top:4px;">🌡️ Ambient Conditions During Calibration</div>
@@ -3040,7 +3097,8 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
   techManager:'Lab Manager',address:'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor Darul Ehsan, Malaysia',
   email:'lab@westlab.com',username:'admin',password:'westlab123',
   logoUrl:'',
-  slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10};
+  slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10,
+  stickerPrefix:'WSA',stickerBatchSize:50,stickerLowPct:30,stickerNextToIssue:1};
 
 // In-memory cache
 let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[];
@@ -3108,6 +3166,7 @@ async function loadAll(){
     await loadAttendance();
     await loadRefCheckoutRequests();
     await loadExtensionRequests();
+    await loadStickerData();
   }catch(e){
     console.error('Supabase load error',e);
     showLoading('⚠️ Connection issue — retrying…');
@@ -3425,6 +3484,7 @@ function applyRoleUI(){
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
   el('nav-price-ref').classList.toggle('hidden-nav', !(admin||manager||coordinator));
   el('nav-calendar').classList.toggle('hidden-nav', hr);
+  el('nav-stickers').classList.toggle('hidden-nav', sales||hr||coordinator);
   el('nav-claims').classList.toggle('hidden-nav', false); // all can see own claims
   el('nav-leave').classList.toggle('hidden-nav', false);  // all can see own leave
   el('nav-attendance').classList.toggle('hidden-nav', false); // all can clock in
@@ -3459,7 +3519,7 @@ function toLocalDateStr(d){
 const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',completed:'Completed Jobs',
   customers:'Customer Database',deleted:'Deleted Jobs',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
-  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Lab Reference Equipment','my-requests':'My Requests',
+  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Lab Reference Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',
   personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings'};
 
 function showView(name){
@@ -3497,6 +3557,7 @@ function showView(name){
   if(name==='dashboard') renderDashboard();
   if(name==='ref-eq') renderRefEqTable();
   if(name==='my-requests') renderMyRequests();
+  if(name==='stickers') renderStickerPage();
 }
 
 // ── MODALS ──
@@ -3515,6 +3576,46 @@ function closeModal(id){
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
 // ── SETTINGS ──
+function renderStickerBatchList(){
+  const box=el('sticker-batch-list'); if(!box)return;
+  const sorted=[..._stickerBatches].sort((a,b)=>a.startNum-b.startNum);
+  if(!sorted.length){
+    box.innerHTML=`<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No batches recorded yet.</div>`;
+  } else {
+    box.innerHTML=sorted.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:12px;">
+        <span><strong>${stickerFmt(b.startNum)}</strong> – <strong>${stickerFmt(b.endNum)}</strong> <span style="color:var(--text-muted);">(${b.endNum-b.startNum+1} pcs)</span> ${b.printedDate?'· Printed '+b.printedDate:''}</span>
+      </div>`).join('');
+  }
+  // Auto-suggest next start number
+  const maxEnd=_stickerBatches.reduce((m,b)=>Math.max(m,b.endNum),0);
+  const startInput=el('new-batch-start');
+  if(startInput&&!startInput.dataset.userTouched) startInput.value=maxEnd+1;
+  const endInput=el('new-batch-end');
+  if(startInput) startInput.addEventListener('input',()=>{startInput.dataset.userTouched='1';});
+}
+async function addStickerBatch(){
+  if(!isAdmin(currentUser)){alert('Only Admin can add sticker batches.');return;}
+  const startNum=parseInt(el('new-batch-start').value);
+  const endNum=parseInt(el('new-batch-end').value);
+  const printedDate=el('new-batch-date').value;
+  if(!startNum||!endNum||endNum<startNum){alert('Please enter a valid start and end number (end must be after start).');return;}
+  // Hard-block overlaps with any existing batch
+  const conflict=_stickerBatches.find(b=>startNum<=b.endNum&&endNum>=b.startNum);
+  if(conflict){
+    alert(`This range overlaps with an existing batch: ${stickerFmt(conflict.startNum)}–${stickerFmt(conflict.endNum)}.\n\nPlease check the numbers and try again.`);
+    return;
+  }
+  _stickerBatches.push({id:'BATCH-'+Date.now(),startNum,endNum,printedDate,addedBy:currentUser,addedAt:new Date().toISOString()});
+  await saveStickerBatches();
+  el('new-batch-start').value=''; el('new-batch-start').dataset.userTouched='';
+  el('new-batch-end').value=''; el('new-batch-date').value='';
+  renderStickerBatchList();
+  showToast(`✅ Batch ${stickerFmt(startNum)}–${stickerFmt(endNum)} added (${endNum-startNum+1} stickers)`,'success',3500);
+  addAudit('🏷️',`Sticker batch added: ${stickerFmt(startNum)}–${stickerFmt(endNum)}`);
+  if(typeof renderStickerPage==='function') renderStickerPage();
+}
+
 function applySettings(s){
   try{
   _settings=Object.assign({},DEF,s);
@@ -3534,9 +3635,12 @@ function applySettings(s){
     username:'set-username',
     
     slaUrgent:'set-sla-urgent', slaExpress:'set-sla-express',
-    slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine'
+    slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine',
+    stickerPrefix:'set-sticker-prefix', stickerBatchSize:'set-sticker-batch-size',
+    stickerLowPct:'set-sticker-low-pct'
   };
   Object.entries(map).forEach(([k,id])=>{const e=document.getElementById(id);if(e&&s[k]!==undefined)e.value=s[k];});
+  if(typeof renderStickerBatchList==='function') renderStickerBatchList();
   // Show logo if saved
   if(s.logoUrl){
     const img=el('logo-preview-img');if(img)img.src=s.logoUrl;
@@ -3605,6 +3709,9 @@ async function saveSettings(){
   s.slaExpress=parseInt(el('set-sla-express').value)||2;
   s.slaNormal=parseInt(el('set-sla-normal').value)||5;
   s.slaRoutine=parseInt(el('set-sla-routine').value)||10;
+  s.stickerPrefix=el('set-sticker-prefix')?.value.trim()||'WSA';
+  s.stickerBatchSize=parseInt(el('set-sticker-batch-size')?.value)||50;
+  s.stickerLowPct=parseInt(el('set-sticker-low-pct')?.value)||30;
   // Never save base64 logo to DB — only save Storage URL
   if(s.logoUrl&&s.logoUrl.startsWith('data:')){
     // Logo is still base64 — don't save it to DB, it makes the row huge
@@ -5267,6 +5374,16 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-cal-points').value=item?item.calPoints||'':'';
   el('cal-tag-no').value=item&&item.tagNo?item.tagNo:'N/A';
   el('cal-resolution').value=item&&item.resolution?item.resolution:(item&&item.spec?item.spec:'');
+  // Populate sticker dropdown — only this staff member's own unused, held stickers, lowest first
+  const stickerSel=el('cal-sticker-number');
+  if(stickerSel){
+    const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').sort((a,b)=>a.number-b.number);
+    const alreadyUsedOnThisItem=item?.calData?.stickerNumber;
+    stickerSel.innerHTML='<option value="">— Select sticker —</option>'+
+      myHeld.map(r=>`<option value="${r.number}">${stickerFmt(r.number)}</option>`).join('')+
+      (alreadyUsedOnThisItem&&!myHeld.find(r=>r.number===alreadyUsedOnThisItem)?`<option value="${alreadyUsedOnThisItem}" selected>${stickerFmt(alreadyUsedOnThisItem)} (already recorded)</option>`:'');
+    if(alreadyUsedOnThisItem) stickerSel.value=alreadyUsedOnThisItem;
+  }
   // Pre-fill calibration interval from item
   const calInterval=el('cal-interval');
   if(calInterval){
@@ -5294,7 +5411,7 @@ async function openCalModal(jobNo, itemIdx=0){
   const calStaffRec=_staff&&_staff.find(x=>x.username===currentUser);
   el('cal-calibrated-by').value=calStaffRec?.certName||calStaffRec?.name||USERS[currentUser]?.name||currentUser;
   el('cal-location').value='Westlab Calibration Laboratory';
-  ['cal-sticker-no','cal-temp-val','cal-temp-pm',
+  ['cal-temp-val','cal-temp-pm',
    'cal-humidity-val','cal-humidity-pm','cal-pressure-val','cal-pressure-pm',
    ].forEach(id=>{const e=el(id);if(e)e.value='';});
   el('cal-procedure').value='';
@@ -5460,6 +5577,13 @@ async function submitCalibration(){
   const approvedBy=el('cal-approved-by').value;
   if(!approvedBy){alert('Please select the Approved Signatory.');return;}
   if(!currentExcel){alert('Please upload the calibration data PDF before submitting.');return;}
+  const stickerNumSel=el('cal-sticker-number')?.value;
+  if(!stickerNumSel){alert('Please select the sticker number you attached to this equipment.');return;}
+  const stickerNum=parseInt(stickerNumSel);
+  const myHeldSorted=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').sort((a,b)=>a.number-b.number);
+  if(myHeldSorted.length&&myHeldSorted[0].number!==stickerNum){
+    if(!confirm(`⚠️ You still have ${stickerFmt(myHeldSorted[0].number)} unused — are you sure you want to use ${stickerFmt(stickerNum)} instead (skipping ahead)?`)) return;
+  }
 
   // Check file size — warn if over 5MB
   if(_excelFile&&_excelFile.size>5*1024*1024){
@@ -5484,6 +5608,7 @@ async function submitCalibration(){
     const totalPages=el('cal-total-pages').value||'2';
     const calData={
       cert_no:certNo, job_no:calJobNo,
+      stickerNumber:stickerNum,
       page:`1 of ${totalPages}`, total_pages:totalPages,
       issue_date:el('cal-issue-date').value,
       date:el('cal-date').value,
@@ -5507,7 +5632,7 @@ async function submitCalibration(){
       cond_remark:el('cal-cond-remark').value.trim(),
       location:el('cal-location').value.trim(),
       procedure:el('cal-procedure').value,
-      sticker_no:el('cal-sticker-no').value.trim(),
+      sticker_no:stickerFmt(stickerNum),
       temp:buildAmbient('cal-temp-val','cal-temp-pm'),
       humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
       pressure:buildAmbient('cal-pressure-val','cal-pressure-pm'),
@@ -5541,6 +5666,15 @@ async function submitCalibration(){
     });
 
     closeModal('modal-perform-cal');
+    // Mark this sticker as Used, linked to the job/certificate
+    const stickerRec=_stickerRecords.find(r=>r.number===stickerNum&&r.issuedTo===currentUser&&r.status==='Held');
+    if(stickerRec){
+      stickerRec.status='Used';
+      stickerRec.usedJobNo=calJobNo;
+      stickerRec.usedCertNo=item?.certNo||certNo;
+      stickerRec.usedAt=new Date().toISOString();
+      await saveStickerRecords();
+    }
     renderMyJobs(); renderDashboard(); refreshAllBadges();
     showToast('📬 Submitted for approval','success');
     addAudit('📬',`Job <strong>${calJobNo}</strong> Item ${calItemIdx+1} submitted for approval by <strong>${USERS[currentUser]?.name||currentUser}</strong>`);
@@ -5766,6 +5900,7 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;white-space:nowrap;text-align:right;">
           ${canCreateJobs(currentUser)?`<button onclick="reissueJobReceipt('${j.jobNo}')" title="Reissue Receipt" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🧾</button>`:''}
           ${role==='Admin'&&j.status!=='Completed'?`<button onclick="deleteJob('${j.jobNo}')" title="Delete Job" style="background:rgba(220,38,38,.85);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑</button>`:''}
+          ${role==='Admin'&&j.status==='Completed'?`<button onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (Admin override — irreversible)" style="background:rgba(153,27,27,.9);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑️⚠️</button>`:''}
         </td>
       </tr>`);
       // ── ITEM ROWS ──
@@ -6008,6 +6143,12 @@ const OT_KEY='wl_overtime';
 const REF_CHECKOUT_KEY='wl_ref_checkout_requests';
 let _refCheckoutRequests=[];
 const EXTENSION_KEY='wl_extension_requests';
+const STICKER_BATCHES_KEY='wl_sticker_batches';
+const STICKER_REQUESTS_KEY='wl_sticker_requests';
+const STICKER_RECORDS_KEY='wl_sticker_records';
+let _stickerBatches=[];
+let _stickerRequests=[];
+let _stickerRecords=[]; // one entry per individual sticker number ever issued
 let _extensionRequests=[];
 const OFFICE_HOURS_START='08:30';
 const OFFICE_HOURS_END='17:30';
@@ -6028,6 +6169,36 @@ async function loadRefCheckoutRequests(){
 async function saveRefCheckoutRequests(){
   await SB.upsert('wl_settings',REF_CHECKOUT_KEY,_refCheckoutRequests);
 }
+async function loadStickerData(){
+  try{
+    const b=await SB.get('wl_settings',STICKER_BATCHES_KEY);
+    _stickerBatches=Array.isArray(b)?b:[];
+  }catch(e){_stickerBatches=[];}
+  try{
+    const r=await SB.get('wl_settings',STICKER_REQUESTS_KEY);
+    _stickerRequests=Array.isArray(r)?r:[];
+  }catch(e){_stickerRequests=[];}
+  try{
+    const rec=await SB.get('wl_settings',STICKER_RECORDS_KEY);
+    _stickerRecords=Array.isArray(rec)?rec:[];
+  }catch(e){_stickerRecords=[];}
+}
+async function saveStickerBatches(){ await SB.upsert('wl_settings',STICKER_BATCHES_KEY,_stickerBatches); }
+async function saveStickerRequests(){ await SB.upsert('wl_settings',STICKER_REQUESTS_KEY,_stickerRequests); }
+async function saveStickerRecords(){ await SB.upsert('wl_settings',STICKER_RECORDS_KEY,_stickerRecords); }
+
+// ── Sticker number helpers ──
+function stickerFmt(n){
+  const prefix=_settings.stickerPrefix||'WSA';
+  return `${prefix}${String(n).padStart(5,'0')}`;
+}
+function stickerTotalPrinted(){
+  return _stickerBatches.reduce((sum,b)=>sum+(b.endNum-b.startNum+1),0);
+}
+function stickerNextToIssue(){
+  return _settings.stickerNextToIssue||1;
+}
+
 async function loadExtensionRequests(){
   try{
     const data=await SB.get('wl_settings',EXTENSION_KEY);
@@ -8099,6 +8270,92 @@ async function viewJobDetail(jobNo){
   }
 }
 
+// ══════════════════════════════════════════════════
+// PERMANENT DELETION OF A COMPLETED JOB — Admin only, deliberate override
+// Separate from the normal deleteJob() above, which still hard-blocks Completed jobs.
+// ══════════════════════════════════════════════════
+function openRequestPermanentDeletionModal(jobNo){
+  if(!isAdmin(currentUser)){alert('Only Admin can permanently delete a completed job.');return;}
+  const j=getJob(jobNo); if(!j)return;
+  let ov=document.getElementById('perm-delete-overlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='perm-delete-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:460px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);background:#fef2f2;border-radius:16px 16px 0 0;">
+      <span style="font-weight:700;font-size:15px;color:#991b1b;">🗑️ Request Permanent Deletion</span>
+      <button onclick="document.getElementById('perm-delete-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="background:#fef2f2;border-radius:8px;padding:10px 14px;font-size:12px;color:#991b1b;margin-bottom:14px;">
+        ⚠️ <strong>${jobNo}</strong> (${j.custName}) is a Completed job with issued certificate(s). This is an official accredited record. Deleting it permanently removes the job, all certificates, and all uploaded files — this cannot be undone.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reason for deletion <span class="req">*</span></label>
+        <textarea class="form-control" id="perm-delete-reason" placeholder="e.g. Duplicate job created by mistake, customer never actually sent this equipment"></textarea>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;font-size:12px;margin-bottom:14px;">
+        <input type="checkbox" id="perm-delete-confirm-cb" onchange="el('perm-delete-confirm-btn').disabled=!(this.checked&&el('perm-delete-reason').value.trim())" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;"/>
+        <span>I understand this permanently deletes the certificate and all associated files, and cannot be undone.</span>
+      </label>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('perm-delete-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-danger" id="perm-delete-confirm-btn" disabled onclick="confirmPermanentDeletionOfCompletedJob('${jobNo}')">Confirm Permanent Deletion</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  el('perm-delete-reason').addEventListener('input',function(){
+    el('perm-delete-confirm-btn').disabled=!(el('perm-delete-confirm-cb').checked&&this.value.trim());
+  });
+}
+
+async function confirmPermanentDeletionOfCompletedJob(jobNo){
+  if(!isAdmin(currentUser)){alert('Only Admin can permanently delete a completed job.');return;}
+  const j=getJob(jobNo); if(!j)return;
+  const reason=el('perm-delete-reason')?.value.trim();
+  if(!reason){alert('Please enter a reason.');return;}
+  try{
+    // Collect and remove all R2 files (same pattern as normal deleteJob)
+    const pathsToDelete=[];
+    (j.items||[]).forEach(item=>{
+      if(item.excelFile&&item.excelFile.url){
+        const path=extractR2Path(item.excelFile.url);
+        if(path) pathsToDelete.push(path);
+      }
+      if(item.photos&&item.photos.length){
+        item.photos.forEach(p=>{
+          const path=extractR2Path(p.url||p);
+          if(path) pathsToDelete.push(path);
+        });
+      }
+    });
+    if(pathsToDelete.length){
+      try{
+        await fetch('https://westlab-upload.sales-2fb.workers.dev',{
+          method:'DELETE', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(pathsToDelete)
+        });
+      }catch(e){console.warn('R2 delete failed (continuing with job delete):',e);}
+    }
+    // Hard delete from Supabase — this job is gone completely, not soft-deleted/recoverable
+    await SB.delete('wl_jobs',jobNo);
+    _jobs=_jobs.filter(x=>x.jobNo!==jobNo);
+    delete _jobsCache[jobNo];
+    document.getElementById('perm-delete-overlay').style.display='none';
+    renderEquipmentTable(); renderCompletedJobs(); renderDashboard(); refreshAllBadges();
+    showToast(`🗑️ Job ${jobNo} permanently deleted`,'success',4000);
+    // Permanent audit trail entry — stays in the Audit Log forever, even though the job itself is gone
+    addAudit('🗑️',`<strong>PERMANENT DELETION</strong> of Completed job <strong>${jobNo}</strong> (${j.custName}) by ${USERS[currentUser]?.name||currentUser}. Reason: "${reason}". ${pathsToDelete.length} file(s) removed from storage.`);
+  }catch(_err){
+    console.error("confirmPermanentDeletionOfCompletedJob error:",_err);
+    showToast("❌ Error: "+_err.message,"error",5000);
+  }
+}
+
 async function deleteJob(jobNo){
   try{
   const j=getJob(jobNo);
@@ -8363,6 +8620,11 @@ function refreshAllBadges(){
   if(mb){mb.textContent=myCount;mb.style.display=myCount>0?'inline':'none';}
   const ab=el('approval-badge');
   if(ab){ab.textContent=totalApprovalBadge;ab.style.display=totalApprovalBadge>0?'inline':'none';}
+  const sb=el('stickers-badge');
+  if(sb){
+    const stkPending=canSeeExtras?_stickerRequests.filter(r=>r.status==='Pending').length:0;
+    sb.textContent=stkPending; sb.style.display=stkPending>0?'inline':'none';
+  }
   renderDashboard();
   }catch(_e){
     console.error("refreshAllBadges error:",_e);
@@ -8493,7 +8755,7 @@ function previewCertPage1(){
     cond_remark:el('cal-cond-remark').value||'',
     location:el('cal-location').value||'Westlab Calibration Laboratory',
     procedure:el('cal-procedure').value||'—',
-    sticker_no:el('cal-sticker-no').value||'—',
+    sticker_no:el('cal-sticker-number')?.value?stickerFmt(parseInt(el('cal-sticker-number').value)):'—',
     temp:buildAmbient('cal-temp-val','cal-temp-pm'),
     humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
 
@@ -9914,6 +10176,196 @@ function closeJobDetailView(){
 // ══════════════════════════════════════════════════
 // MY REQUESTS — personal status view for checkout + extension requests, with pointers to Claims/Leave
 // ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// CALIBRATION STICKERS — request, approve, track, waste
+// ══════════════════════════════════════════════════
+function stickerCounts(){
+  const totalPrinted=stickerTotalPrinted();
+  const totalIssued=_stickerRecords.length;
+  const used=_stickerRecords.filter(r=>r.status==='Used').length;
+  const wasted=_stickerRecords.filter(r=>r.status==='Wasted').length;
+  const held=_stickerRecords.filter(r=>r.status==='Held').length;
+  const available=totalPrinted-totalIssued;
+  return {totalPrinted,totalIssued,used,wasted,held,available};
+}
+function renderStickerPage(){
+  try{
+  const c=stickerCounts();
+  const set=(id,v)=>{const e=el(id);if(e)e.textContent=v;};
+  set('sticker-kpi-printed',c.totalPrinted);
+  set('sticker-kpi-available',c.available);
+  set('sticker-kpi-used',c.used);
+  set('sticker-kpi-wasted',c.wasted);
+
+  // Low stock banner
+  const banner=el('sticker-lowstock-banner');
+  const lowPct=_settings.stickerLowPct||30;
+  const pctRemaining=c.totalPrinted>0?(c.available/c.totalPrinted*100):0;
+  if(banner){
+    if(c.totalPrinted>0&&pctRemaining<=lowPct){
+      banner.style.display='block';
+      banner.innerHTML=`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;color:#991b1b;font-size:13px;">
+        ⚠️ <strong>Sticker stock running low</strong> — only ${c.available} of ${c.totalPrinted} printed stickers (${pctRemaining.toFixed(0)}%) remain unissued. Time to print the next batch.
+      </div>`;
+    } else banner.style.display='none';
+  }
+
+  // Pending requests (Admin/Manager)
+  const pendBox=el('sticker-pending-requests');
+  const badge=el('stickers-badge');
+  const pending=_stickerRequests.filter(r=>r.status==='Pending');
+  if(badge){ const showBadge=(isAdmin(currentUser)||isManager(currentUser))&&pending.length; badge.textContent=pending.length; badge.style.display=showBadge?'inline':'none'; }
+  if(pendBox){
+    if((isAdmin(currentUser)||isManager(currentUser))&&pending.length){
+      pendBox.innerHTML=`<div class="form-section-title" style="margin-top:0;">🔔 Pending Sticker Requests (${pending.length})</div>
+      <div class="card" style="border:1px solid #fdba74;background:#fff7ed;">
+        <div style="padding:10px 16px;">
+        ${pending.map(r=>{
+          const heldByRequester=_stickerRecords.filter(s=>s.issuedTo===r.requestedBy&&s.status==='Held');
+          return `<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="font-size:13px;">
+                <strong>${USERS[r.requestedBy]?.name||r.requestedBy}</strong> requests a new batch (${_settings.stickerBatchSize||50} stickers)<br/>
+                <span style="color:var(--text-muted);font-size:12px;">Requested ${r.requestedAt?r.requestedAt.split('T')[0]:''}</span>
+                ${heldByRequester.length?`<div style="margin-top:4px;font-size:11px;color:#92400e;">ℹ️ Currently still holds ${heldByRequester.length} unused sticker(s): ${heldByRequester.map(s=>stickerFmt(s.number)).join(', ')}</div>`:''}
+              </div>
+              <div style="white-space:nowrap;">
+                <button class="btn btn-primary btn-sm" onclick="approveStickerRequest('${r.id}')">Approve</button>
+                <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="rejectStickerRequest('${r.id}')">Reject</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+        </div>
+      </div>`;
+    } else pendBox.innerHTML='';
+  }
+
+  // My Stickers — held + recent usage for the current user
+  const myBox=el('sticker-my-holdings');
+  if(myBox){
+    const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').sort((a,b)=>a.number-b.number);
+    const myRecent=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status!=='Held').sort((a,b)=>b.number-a.number).slice(0,10);
+    myBox.innerHTML=`<div style="padding:12px 16px;">
+      ${myHeld.length?`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">Unused — ${myHeld.length} sticker(s)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+        ${myHeld.map(r=>`<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:6px;">${stickerFmt(r.number)}
+          <span onclick="promptMarkWasted(${r.number})" style="cursor:pointer;font-weight:700;" title="Mark wasted">✕</span></span>`).join('')}
+      </div>`:`<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">You have no unused stickers on hand right now.</div>`}
+      ${myRecent.length?`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">Recent Activity</div>
+      <div style="font-size:12px;">
+        ${myRecent.map(r=>`<div style="padding:4px 0;border-bottom:1px solid var(--border);">
+          <strong>${stickerFmt(r.number)}</strong> — ${r.status==='Used'?`Used on job <strong>${r.usedJobNo||'—'}</strong> (${r.usedAt?r.usedAt.split('T')[0]:''})`:`<span style="color:var(--red);">Wasted</span> — ${r.wastedReason||'—'} (${r.wastedAt?r.wastedAt.split('T')[0]:''})`}
+        </div>`).join('')}
+      </div>`:''}
+    </div>`;
+  }
+
+  // Admin Summary — per staff member
+  const summaryTitle=el('sticker-summary-title');
+  const summaryBox=el('sticker-admin-summary');
+  if(summaryTitle) summaryTitle.style.display=isAdmin(currentUser)?'block':'none';
+  if(summaryBox&&isAdmin(currentUser)){
+    const byStaff={};
+    _stickerRecords.forEach(r=>{
+      if(!byStaff[r.issuedTo]) byStaff[r.issuedTo]={issued:0,used:0,wasted:0,held:0,wasteReasons:[]};
+      byStaff[r.issuedTo].issued++;
+      if(r.status==='Used') byStaff[r.issuedTo].used++;
+      if(r.status==='Held') byStaff[r.issuedTo].held++;
+      if(r.status==='Wasted'){ byStaff[r.issuedTo].wasted++; byStaff[r.issuedTo].wasteReasons.push(`${stickerFmt(r.number)}: ${r.wastedReason||'—'}`); }
+    });
+    const staffList=Object.keys(byStaff);
+    summaryBox.innerHTML=!staffList.length?`<div class="empty-state"><div class="empty-icon">🏷️</div><p>No stickers issued yet.</p></div>`:
+    `<div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>Staff</th><th>Issued</th><th>Used</th><th>Wasted</th><th>Still Holding</th><th>Waste Reasons</th></tr></thead>
+      <tbody>
+      ${staffList.map(u=>{
+        const s=byStaff[u];
+        return `<tr>
+          <td><strong>${USERS[u]?.name||u}</strong></td>
+          <td>${s.issued}</td>
+          <td>${s.used}</td>
+          <td>${s.wasted>0?`<span style="color:var(--red);font-weight:700;">${s.wasted}</span>`:'0'}</td>
+          <td>${s.held}</td>
+          <td style="font-size:11px;color:var(--text-muted);">${s.wasteReasons.join('; ')||'—'}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table></div></div>`;
+  }
+  }catch(e){console.error('renderStickerPage error:',e);}
+}
+
+async function requestStickerBatch(){
+  if(!canPerformCal(currentUser)&&!isAdmin(currentUser)){alert('Only staff who perform calibration can request stickers.');return;}
+  const pendingAlready=_stickerRequests.find(r=>r.requestedBy===currentUser&&r.status==='Pending');
+  if(pendingAlready){alert('You already have a pending sticker request awaiting approval.');return;}
+  const held=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').length;
+  const msg=held>0
+    ?`You still have ${held} unused sticker(s) on hand. Submit a new request anyway?`
+    :`Submit a request for a new batch of ${_settings.stickerBatchSize||50} stickers?`;
+  if(!confirm(msg))return;
+  const req={id:'STK-'+Date.now(),requestedBy:currentUser,requestedAt:new Date().toISOString(),status:'Pending'};
+  _stickerRequests.push(req);
+  await saveStickerRequests();
+  renderStickerPage();
+  showToast('✅ Sticker request submitted — awaiting approval','success',3000);
+  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} requested a new sticker batch`);
+}
+
+async function approveStickerRequest(reqId){
+  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can approve.');return;}
+  const req=_stickerRequests.find(r=>r.id===reqId); if(!req)return;
+  const batchSize=_settings.stickerBatchSize||50;
+  const nextStart=stickerNextToIssue();
+  const nextEnd=nextStart+batchSize-1;
+  const totalPrinted=stickerTotalPrinted();
+  if(nextEnd>totalPrinted){
+    alert(`Not enough printed stickers remaining.\n\nNext available would be ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)}, but only ${totalPrinted} have been printed in total.\n\nPlease add a new printed batch in Settings first.`);
+    return;
+  }
+  if(!confirm(`Approve — issue ${stickerFmt(nextStart)} to ${stickerFmt(nextEnd)} (${batchSize} stickers) to ${USERS[req.requestedBy]?.name||req.requestedBy}?`))return;
+  req.status='Approved'; req.issuedStart=nextStart; req.issuedEnd=nextEnd; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+  for(let n=nextStart;n<=nextEnd;n++){
+    _stickerRecords.push({number:n,issuedTo:req.requestedBy,issuedAt:new Date().toISOString(),requestId:req.id,status:'Held'});
+  }
+  _settings.stickerNextToIssue=nextEnd+1;
+  await SB.upsert('wl_settings','main',_settings);
+  await saveStickerRequests();
+  await saveStickerRecords();
+  renderStickerPage();
+  showToast(`✅ Issued ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)} to ${USERS[req.requestedBy]?.name||req.requestedBy}`,'success',4000);
+  addAudit('🏷️',`Sticker batch ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)} issued to ${USERS[req.requestedBy]?.name||req.requestedBy}`);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your sticker request has been APPROVED. Please collect ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)} from Admin.`);
+}
+async function rejectStickerRequest(reqId){
+  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can reject.');return;}
+  const req=_stickerRequests.find(r=>r.id===reqId); if(!req)return;
+  const note=prompt('Reason for rejecting (shown to the staff member):','');
+  if(note===null)return;
+  req.status='Rejected'; req.managerNote=note; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+  await saveStickerRequests();
+  renderStickerPage();
+  showToast('Request rejected','success',2500);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your sticker request was not approved. Reason: ${note||'—'}.`);
+}
+
+function promptMarkWasted(number){
+  const reason=prompt(`Mark ${stickerFmt(number)} as wasted — please give a reason:`,'');
+  if(reason===null)return;
+  if(!reason.trim()){alert('A reason is required.');return;}
+  markStickerWasted(number,reason.trim());
+}
+async function markStickerWasted(number,reason){
+  const rec=_stickerRecords.find(r=>r.number===number&&r.issuedTo===currentUser&&r.status==='Held');
+  if(!rec){alert('Sticker not found in your held list.');return;}
+  rec.status='Wasted'; rec.wastedReason=reason; rec.wastedAt=new Date().toISOString();
+  await saveStickerRecords();
+  renderStickerPage();
+  showToast(`Marked ${stickerFmt(number)} as wasted`,'success',2500);
+  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} marked sticker ${stickerFmt(number)} as wasted — ${reason}`);
+}
+
 function renderMyRequests(){
   try{
   const myCheckouts=_refCheckoutRequests.filter(r=>r.requestedBy===currentUser).sort((a,b)=>(b.requestedAt||'').localeCompare(a.requestedAt||''));
@@ -10716,6 +11168,7 @@ function renderCompletedJobs(){
         &nbsp;
         ${isAdmin(currentUser)&&!j.billed?`<button class="btn btn-primary btn-sm" onclick="markBilled('${j.jobNo}')">💰 Mark Billed</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#25D366;color:#fff;border-color:#25D366;" onclick="sendWhatsAppCollection('${j.jobNo}')">💬 WhatsApp</button>`:''}
+        ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#991b1b;color:#fff;border-color:#991b1b;" onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (irreversible)">🗑️⚠️ Delete</button>`:''}
       </td>
     </tr>`);
     j.items.forEach((item,idx)=>{
