@@ -3639,16 +3639,16 @@ document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click
 function renderStickerSettingsBody(){
   const box=el('sticker-settings-body'); if(!box)return;
   box.innerHTML=Object.entries(STICKER_TYPES).map(([type,cfg])=>{
-    const printed=cfg.numbered?stickerTotalPrinted(type):null;
+    const printed=stickerTotalPrinted(type);
     return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
       <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">${cfg.label} ${cfg.numbered?`<span style="font-weight:400;color:var(--text-muted);font-size:11px;">(${cfg.prefix}${'0'.repeat(cfg.digits)})</span>`:'<span style="font-weight:400;color:var(--text-muted);font-size:11px;">(count-based, not individually numbered)</span>'}</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Stickers Per Batch (issued to staff)</label><input id="set-sticker-${type}-batchSize" class="form-control" type="number" min="1"/></div>
         <div class="form-group"><label class="form-label">Low Stock Reminder (%)</label><input id="set-sticker-${type}-lowPct" class="form-control" type="number" min="1" max="99"/></div>
       </div>
+      <div style="font-size:12px;font-weight:700;color:var(--navy);margin:10px 0 6px;">Printed Batches — Total Printed: ${printed}</div>
+      <div id="sticker-batch-list-${type}" style="margin-bottom:8px;"></div>
       ${cfg.numbered?`
-        <div style="font-size:12px;font-weight:700;color:var(--navy);margin:10px 0 6px;">Printed Batches — Total Printed: ${printed}</div>
-        <div id="sticker-batch-list-${type}" style="margin-bottom:8px;"></div>
         <div style="background:var(--bg);border-radius:8px;padding:10px;">
           <div class="form-row">
             <div class="form-group"><label class="form-label">Start Number</label><input id="new-batch-start-${type}" class="form-control" type="number" min="1"/></div>
@@ -3656,7 +3656,14 @@ function renderStickerSettingsBody(){
           </div>
           <div class="form-group"><label class="form-label">Date Printed</label><input id="new-batch-date-${type}" class="form-control" type="date"/></div>
           <button class="btn btn-primary btn-sm" onclick="addStickerBatch('${type}')">+ Add Batch</button>
-        </div>`:''}
+        </div>`:`
+        <div style="background:var(--bg);border-radius:8px;padding:10px;">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Quantity Printed</label><input id="new-batch-qty-${type}" class="form-control" type="number" min="1"/></div>
+            <div class="form-group"><label class="form-label">Date Printed</label><input id="new-batch-date-${type}" class="form-control" type="date"/></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addStickerBatchCount('${type}')">+ Add Batch</button>
+        </div>`}
     </div>`;
   }).join('');
   // Populate current setting values
@@ -3664,23 +3671,110 @@ function renderStickerSettingsBody(){
     const bsEl=el(`set-sticker-${type}-batchSize`); if(bsEl) bsEl.value=stickerTypeCfg(type).batchSize;
     const lpEl=el(`set-sticker-${type}-lowPct`); if(lpEl) lpEl.value=stickerTypeCfg(type).lowPct;
   });
-  Object.keys(STICKER_TYPES).forEach(type=>{ if(STICKER_TYPES[type].numbered) renderStickerBatchList(type); });
+  Object.keys(STICKER_TYPES).forEach(type=>renderStickerBatchList(type));
 }
 function renderStickerBatchList(type){
   const box=el(`sticker-batch-list-${type}`); if(!box)return;
-  const sorted=_stickerBatches.filter(b=>b.type===type).sort((a,b)=>a.startNum-b.startNum);
+  const cfg=STICKER_TYPES[type];
+  const sorted=cfg.numbered
+    ?_stickerBatches.filter(b=>b.type===type).sort((a,b)=>a.startNum-b.startNum)
+    :_stickerBatches.filter(b=>b.type===type).sort((a,b)=>(a.printedDate||'').localeCompare(b.printedDate||''));
   if(!sorted.length){
     box.innerHTML=`<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">No batches recorded yet.</div>`;
-  } else {
+  } else if(cfg.numbered){
     box.innerHTML=sorted.map(b=>`
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:12px;">
         <span><strong>${stickerFmt(type,b.startNum)}</strong> – <strong>${stickerFmt(type,b.endNum)}</strong> <span style="color:var(--text-muted);">(${b.endNum-b.startNum+1} pcs)</span> ${b.printedDate?'· Printed '+b.printedDate:''}</span>
+        <button onclick="deleteStickerBatch('${b.id}','${type}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">✕</button>
+      </div>`).join('');
+  } else {
+    box.innerHTML=sorted.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:12px;">
+        <span><strong>${b.quantity} pcs</strong> ${b.printedDate?'· Printed '+b.printedDate:''}</span>
+        <span>
+          <button onclick="editStickerBatchCount('${b.id}','${type}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;margin-right:8px;" title="Edit">✏️ Edit</button>
+          <button onclick="deleteStickerBatchCount('${b.id}','${type}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;" title="Delete">✕</button>
+        </span>
       </div>`).join('');
   }
-  const maxEnd=_stickerBatches.filter(b=>b.type===type).reduce((m,b)=>Math.max(m,b.endNum),0);
+  const maxEnd=_stickerBatches.filter(b=>b.type===type).reduce((m,b)=>Math.max(m,b.endNum||0),0);
   const startInput=el(`new-batch-start-${type}`);
   if(startInput&&!startInput.dataset.userTouched) startInput.value=maxEnd+1;
   if(startInput) startInput.addEventListener('input',()=>{startInput.dataset.userTouched='1';});
+}
+
+// ── Quantity-based batches (Void / Abnormal) ──
+async function addStickerBatchCount(type){
+  if(!isAdmin(currentUser)){alert('Only Admin can add sticker batches.');return;}
+  const qty=parseInt(el(`new-batch-qty-${type}`).value);
+  const printedDate=el(`new-batch-date-${type}`).value;
+  if(!qty||qty<1){alert('Please enter a valid quantity.');return;}
+  _stickerBatches.push({id:'BATCH-'+Date.now(),type,quantity:qty,printedDate,addedBy:currentUser,addedAt:new Date().toISOString()});
+  await saveStickerBatches();
+  el(`new-batch-qty-${type}`).value=''; el(`new-batch-date-${type}`).value='';
+  renderStickerSettingsBody();
+  showToast(`✅ Batch of ${qty} ${STICKER_TYPES[type].label} stickers added`,'success',3500);
+  addAudit('🏷️',`${STICKER_TYPES[type].label} sticker batch added: ${qty} pcs`);
+  if(typeof renderStickerPage==='function') renderStickerPage();
+}
+async function editStickerBatchCount(batchId,type){
+  if(!isAdmin(currentUser)){alert('Only Admin can edit sticker batches.');return;}
+  const b=_stickerBatches.find(x=>x.id===batchId); if(!b)return;
+  const newQty=prompt('Quantity printed:',b.quantity);
+  if(newQty===null)return;
+  const qty=parseInt(newQty);
+  if(!qty||qty<1){alert('Please enter a valid quantity.');return;}
+  const newDate=prompt('Date printed (YYYY-MM-DD):',b.printedDate||'');
+  if(newDate===null)return;
+  // Safety check — don't let the edited total drop below what's already been issued
+  const otherBatchesTotal=_stickerBatches.filter(x=>x.type===type&&x.id!==batchId).reduce((s,x)=>s+(x.quantity||0),0);
+  const totalIssued=stickerCounts(type).totalIssued;
+  if(otherBatchesTotal+qty<totalIssued){
+    alert(`Can't save — this would make Total Printed (${otherBatchesTotal+qty}) less than what's already been issued (${totalIssued}).`);
+    return;
+  }
+  b.quantity=qty; b.printedDate=newDate;
+  await saveStickerBatches();
+  renderStickerSettingsBody();
+  showToast('✅ Batch updated','success',2500);
+  addAudit('🏷️',`${STICKER_TYPES[type].label} sticker batch edited — now ${qty} pcs`);
+  if(typeof renderStickerPage==='function') renderStickerPage();
+}
+async function deleteStickerBatchCount(batchId,type){
+  if(!isAdmin(currentUser)){alert('Only Admin can delete sticker batches.');return;}
+  const b=_stickerBatches.find(x=>x.id===batchId); if(!b)return;
+  const otherBatchesTotal=_stickerBatches.filter(x=>x.type===type&&x.id!==batchId).reduce((s,x)=>s+(x.quantity||0),0);
+  const totalIssued=stickerCounts(type).totalIssued;
+  if(otherBatchesTotal<totalIssued){
+    alert(`Can't delete — ${totalIssued} ${STICKER_TYPES[type].label} stickers have already been issued, but removing this batch would leave only ${otherBatchesTotal} printed on record.\n\nOnly delete batches that haven't been (fully) issued yet.`);
+    return;
+  }
+  if(!confirm(`Delete this batch of ${b.quantity} ${STICKER_TYPES[type].label} stickers?`))return;
+  _stickerBatches=_stickerBatches.filter(x=>x.id!==batchId);
+  await saveStickerBatches();
+  renderStickerSettingsBody();
+  showToast('🗑️ Batch deleted','success',2500);
+  addAudit('🏷️',`${STICKER_TYPES[type].label} sticker batch deleted — ${b.quantity} pcs`);
+  if(typeof renderStickerPage==='function') renderStickerPage();
+}
+
+// ── Numbered batches (Accredited / Non-Accredited) — delete only, edit not offered since
+// changing a range after issuing has already begun risks the overlap/gap problems we avoided earlier ──
+async function deleteStickerBatch(batchId,type){
+  if(!isAdmin(currentUser)){alert('Only Admin can delete sticker batches.');return;}
+  const b=_stickerBatches.find(x=>x.id===batchId); if(!b)return;
+  const anyIssued=_stickerRecords.some(r=>r.type===type&&r.number>=b.startNum&&r.number<=b.endNum);
+  if(anyIssued){
+    alert(`Can't delete — some numbers in ${stickerFmt(type,b.startNum)}–${stickerFmt(type,b.endNum)} have already been issued to staff.\n\nOnly batches with nothing issued yet can be deleted.`);
+    return;
+  }
+  if(!confirm(`Delete batch ${stickerFmt(type,b.startNum)}–${stickerFmt(type,b.endNum)}?`))return;
+  _stickerBatches=_stickerBatches.filter(x=>x.id!==batchId);
+  await saveStickerBatches();
+  renderStickerSettingsBody();
+  showToast('🗑️ Batch deleted','success',2500);
+  addAudit('🏷️',`${STICKER_TYPES[type].label} sticker batch deleted — ${stickerFmt(type,b.startNum)}–${stickerFmt(type,b.endNum)}`);
+  if(typeof renderStickerPage==='function') renderStickerPage();
 }
 async function addStickerBatch(type){
   if(!isAdmin(currentUser)){alert('Only Admin can add sticker batches.');return;}
@@ -6634,7 +6728,11 @@ function stickerFmt(type,n){
   return `${cfg.prefix}${String(n).padStart(cfg.digits,'0')}`;
 }
 function stickerTotalPrinted(type){
-  return _stickerBatches.filter(b=>b.type===type).reduce((sum,b)=>sum+(b.endNum-b.startNum+1),0);
+  const cfg=STICKER_TYPES[type];
+  if(cfg.numbered){
+    return _stickerBatches.filter(b=>b.type===type).reduce((sum,b)=>sum+(b.endNum-b.startNum+1),0);
+  }
+  return _stickerBatches.filter(b=>b.type===type).reduce((sum,b)=>sum+(b.quantity||0),0);
 }
 function stickerNextToIssue(type){
   const key=isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`;
@@ -10662,7 +10760,9 @@ function stickerCounts(type){
     const used=recs.reduce((s,r)=>s+r.totalUsed,0);
     const wasted=recs.reduce((s,r)=>s+r.totalWasted,0);
     const held=recs.reduce((s,r)=>s+r.held,0);
-    return {totalPrinted:null,totalIssued,used,wasted,held,available:null};
+    const totalPrinted=stickerTotalPrinted(type);
+    const available=totalPrinted-totalIssued;
+    return {totalPrinted,totalIssued,used,wasted,held,available};
   }
 }
 
@@ -10675,17 +10775,15 @@ function renderStickerPage(){
   if(!box)return;
 
   let kpiHtml=`<div class="kpi-row">`;
-  if(cfg.numbered){
-    kpiHtml+=`<div class="kpi-mini"><div class="kpi-val">${c.totalPrinted}</div><div class="kpi-lbl">Total Printed</div></div>
-      <div class="kpi-mini"><div class="kpi-val">${c.available}</div><div class="kpi-lbl">Available to Issue</div></div>`;
-  }
+  kpiHtml+=`<div class="kpi-mini"><div class="kpi-val">${c.totalPrinted}</div><div class="kpi-lbl">Total Printed</div></div>
+    <div class="kpi-mini"><div class="kpi-val">${c.available}</div><div class="kpi-lbl">Available to Issue</div></div>`;
   kpiHtml+=`<div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)">${c.used}</div><div class="kpi-lbl">Used</div></div>
     <div class="kpi-mini"><div class="kpi-val" style="color:var(--red)">${c.wasted}</div><div class="kpi-lbl">Wasted</div></div>
     <div class="kpi-mini"><div class="kpi-val">${c.held}</div><div class="kpi-lbl">Currently Held (all staff)</div></div>
   </div>`;
 
   let bannerHtml='';
-  if(cfg.numbered&&c.totalPrinted>0){
+  if(c.totalPrinted>0){
     const tcfg=stickerTypeCfg(type);
     const pctRemaining=c.available/c.totalPrinted*100;
     if(pctRemaining<=tcfg.lowPct){
