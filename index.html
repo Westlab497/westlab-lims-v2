@@ -431,6 +431,18 @@ textarea.form-control{resize:vertical;min-height:70px;}
   <div id="sidebar-toggle-row">
     <button onclick="toggleSidebar()" title="Toggle sidebar" id="sidebar-toggle-btn"><i class="ti ti-layout-sidebar-left-collapse" id="sidebar-toggle-icon"></i></button>
   </div>
+  <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.1);">
+    <button class="btn btn-sm btn-outline" id="testing-mode-toggle-btn" onclick="setTestingMode(!isTestingModeOn())" style="width:100%;margin-bottom:6px;">Testing Mode: OFF</button>
+    <select class="form-control" id="testing-mode-role-select" onchange="setSimulatedRole(this.value)" style="font-size:11px;padding:4px 8px;">
+      <option value="">Testing as: (my real role)</option>
+      <option value="Admin">Testing as: Admin</option>
+      <option value="Manager">Testing as: Manager</option>
+      <option value="Engineer">Testing as: Engineer</option>
+      <option value="Coordinator">Testing as: Coordinator</option>
+      <option value="Sales">Testing as: Sales</option>
+      <option value="HR">Testing as: HR</option>
+    </select>
+  </div>
   <div class="sidebar-nav">
     <div class="nav-section-label">Overview</div>
     <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon"><i class="ti ti-layout-dashboard"></i></span><span class="nav-label">Dashboard</span></button>
@@ -500,6 +512,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div class="avatar" id="topbar-avatar">—</div>
     </div>
+  </div>
+
+  <div id="testing-mode-banner" style="display:none;background:#7c2d12;color:#fff;padding:8px 20px;align-items:center;justify-content:center;gap:10px;font-size:12.5px;font-weight:700;">
+    🧪 TESTING MODE IS ON — all new data is temporary and kept separate from real records
   </div>
 
   <div id="content">
@@ -855,19 +871,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-title">🏷️ Calibration Stickers</div>
           <div class="page-sub">Pre-printed sticker batch tracking — request, issue, and usage</div>
         </div>
-        <button class="btn btn-primary" onclick="requestStickerBatch()">📤 Request Stickers</button>
       </div>
-      <div class="kpi-row">
-        <div class="kpi-mini"><div class="kpi-val" id="sticker-kpi-printed">0</div><div class="kpi-lbl">Total Printed</div></div>
-        <div class="kpi-mini"><div class="kpi-val" id="sticker-kpi-available">0</div><div class="kpi-lbl">Available to Issue</div></div>
-        <div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)" id="sticker-kpi-used">0</div><div class="kpi-lbl">Used</div></div>
-        <div class="kpi-mini"><div class="kpi-val" style="color:var(--red)" id="sticker-kpi-wasted">0</div><div class="kpi-lbl">Wasted</div></div>
+      <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-primary" id="stk-tab-accredited" onclick="setStickerTab('accredited')">Accredited</button>
+        <button class="btn btn-sm btn-outline" id="stk-tab-nonAccredited" onclick="setStickerTab('nonAccredited')">Non-Accredited</button>
+        <button class="btn btn-sm btn-outline" id="stk-tab-voidSticker" onclick="setStickerTab('voidSticker')">Void</button>
+        <button class="btn btn-sm btn-outline" id="stk-tab-abnormal" onclick="setStickerTab('abnormal')">Abnormal</button>
       </div>
-      <div id="sticker-lowstock-banner" style="display:none;margin-bottom:16px;"></div>
-      <div id="sticker-pending-requests" style="margin-bottom:16px;"></div>
-      <div class="form-section-title" style="margin-top:0;">My Stickers</div>
-      <div id="sticker-my-holdings" class="card"><div style="padding:16px;"></div></div>
-      <div class="form-section-title" id="sticker-summary-title" style="display:none;">Admin Summary — All Staff</div>
+      <div id="sticker-tab-content"></div>
+      <div class="form-section-title" id="sticker-summary-title" style="display:none;">Admin Summary — All Staff, All Types</div>
       <div id="sticker-admin-summary"></div>
     </div>
 
@@ -1399,24 +1411,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header"><span class="card-title">🏷️ Calibration Stickers</span></div>
         <div class="card-body">
-          <div class="form-row">
-            <div class="form-group"><label class="form-label">Sticker Number Prefix</label><input id="set-sticker-prefix" class="form-control" placeholder="e.g. WSA"/></div>
-            <div class="form-group"><label class="form-label">Stickers Per Batch (issued to a staff member)</label><input id="set-sticker-batch-size" class="form-control" type="number" min="1" placeholder="50"/></div>
+          <div id="sticker-clear-test-row" style="display:none;margin-bottom:14px;background:#fef2f2;border-radius:8px;padding:10px 14px;">
+            <span style="font-size:12px;color:#991b1b;">🧪 Testing Mode is ON — settings below apply to test data only.</span>
+            <button class="btn btn-outline btn-sm" style="margin-left:10px;color:#991b1b;border-color:#fca5a5;" onclick="clearStickerTestData()">Clear Test Data</button>
           </div>
-          <div class="form-group"><label class="form-label">Low Stock Reminder Threshold (%)</label><input id="set-sticker-low-pct" class="form-control" type="number" min="1" max="99" placeholder="30"/>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Admin gets a reminder banner when unissued stickers remaining drops to this % of total printed.</div>
-          </div>
-          <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
-          <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Printed Batches</div>
-          <div id="sticker-batch-list" style="margin-bottom:10px;"></div>
-          <div style="background:var(--bg);border-radius:8px;padding:12px;">
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">Start Number</label><input id="new-batch-start" class="form-control" type="number" min="1"/></div>
-              <div class="form-group"><label class="form-label">End Number</label><input id="new-batch-end" class="form-control" type="number" min="1"/></div>
-            </div>
-            <div class="form-group"><label class="form-label">Date Printed</label><input id="new-batch-date" class="form-control" type="date"/></div>
-            <button class="btn btn-primary btn-sm" onclick="addStickerBatch()">+ Add Batch</button>
-          </div>
+          <div id="sticker-settings-body"></div>
         </div>
       </div>
 
@@ -1853,11 +1852,23 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
       <!-- Calibration Sticker -->
       <div class="form-group" id="cal-sticker-group" style="background:#fff7ed;border-radius:8px;padding:10px 14px;border:1px solid #fdba74;">
-        <label class="form-label">🏷️ Sticker Number Used <span class="req">*</span></label>
+        <label class="form-label">🏷️ Sticker Type <span class="req">*</span></label>
+        <select class="form-control" id="cal-sticker-type" onchange="populateCalStickerDropdown()">
+          <option value="accredited">Accredited</option>
+          <option value="nonAccredited">Non-Accredited</option>
+        </select>
+        <label class="form-label" style="margin-top:8px;">Sticker Number Used <span class="req">*</span></label>
         <select class="form-control" id="cal-sticker-number">
           <option value="">— Select sticker —</option>
         </select>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Only your own unused stickers are shown. Attach this sticker to the equipment body after servicing.</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Only your own unused stickers of this type are shown. Attach this sticker to the equipment body after servicing.</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;margin-top:10px;">
+          <input type="checkbox" id="cal-void-applied" style="width:16px;height:16px;"/>
+          <span style="font-size:12.5px;">Also applied a <strong>Void</strong> seal to this item (uses 1 from your Void sticker count)</span>
+        </label>
+      </div>
+      <div style="text-align:right;margin-bottom:12px;">
+        <button type="button" class="btn btn-outline btn-sm" style="color:#c0001a;border-color:#ffb3bc;" onclick="openCannotCalibrateModal()">⚠️ Cannot Calibrate — Return Item</button>
       </div>
 
       <!-- SECTION 4: Dates -->
@@ -3097,8 +3108,7 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
   techManager:'Lab Manager',address:'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor Darul Ehsan, Malaysia',
   email:'lab@westlab.com',username:'admin',password:'westlab123',
   logoUrl:'',
-  slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10,
-  stickerPrefix:'WSA',stickerBatchSize:50,stickerLowPct:30,stickerNextToIssue:1};
+  slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10,testingModeOn:false};
 
 // In-memory cache
 let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[];
@@ -3124,6 +3134,50 @@ let _custSuggestIdx=-1;
 let _staffSigData='';
 let _refEqCertFile=null;
 let currentUser=null;
+
+// ══════════════════════════════════════════════════
+// TESTING MODE — a permanent, reusable app-wide feature.
+// Testing Mode ON/OFF is GLOBAL (shared setting) — everyone sees the same test data together,
+// so a test request from one simulated role can be approved by another, exactly like real use.
+// Role Simulation is PERSONAL (this browser only, via localStorage) — each person can independently
+// view the app as a different role while testing, without affecting anyone else's session.
+// ══════════════════════════════════════════════════
+let _simulatedRole=localStorage.getItem('wl_simulated_role')||null;
+function isTestingModeOn(){ return !!_settings.testingModeOn; }
+async function setTestingMode(on){
+  if(!confirm(on
+    ?'Turn ON Testing Mode?\n\nAll new data created from now on (across supported modules) will be tagged as test data, kept separate from real records, until you turn it off.'
+    :'Turn OFF Testing Mode?\n\nYou will go back to seeing only real data. Test data is not deleted — it stays saved until you clear it.'))return;
+  _settings.testingModeOn=on;
+  await SB.upsert('wl_settings','main',_settings);
+  if(!on){ setSimulatedRole(null); }
+  if(typeof loadStickerData==='function') await loadStickerData();
+  renderTestingModeUI();
+  showToast(on?'🧪 Testing Mode is now ON':'✅ Testing Mode is now OFF','success',3000);
+  addAudit('🧪',`Testing Mode turned ${on?'ON':'OFF'} by ${USERS[currentUser]?.name||currentUser}`);
+  // Re-render whatever's currently on screen so data visibility updates immediately
+  if(typeof renderStickerPage==='function') renderStickerPage();
+  if(typeof renderStickerSettingsBody==='function') renderStickerSettingsBody();
+}
+function setSimulatedRole(role){
+  _simulatedRole=role||null;
+  if(role) localStorage.setItem('wl_simulated_role',role);
+  else localStorage.removeItem('wl_simulated_role');
+  renderTestingModeUI();
+  applyRoleUI();
+  showToast(role?`🧪 Now viewing as: ${role}`:'Role simulation cleared — back to your real role','success',2500);
+}
+function renderTestingModeUI(){
+  const banner=el('testing-mode-banner');
+  if(banner) banner.style.display=isTestingModeOn()?'flex':'none';
+  const roleSel=el('testing-mode-role-select');
+  if(roleSel){ roleSel.value=_simulatedRole||''; roleSel.disabled=!isTestingModeOn(); roleSel.title=isTestingModeOn()?'':'Turn on Testing Mode first'; }
+  const toggleBtn=el('testing-mode-toggle-btn');
+  if(toggleBtn) toggleBtn.textContent=isTestingModeOn()?'🧪 Testing Mode: ON':'Testing Mode: OFF';
+  if(toggleBtn) toggleBtn.className=isTestingModeOn()?'btn btn-sm btn-danger':'btn btn-sm btn-outline';
+  const clearRow=el('sticker-clear-test-row');
+  if(clearRow) clearRow.style.display=isTestingModeOn()?'block':'none';
+}
 
 async function loadAll(){
   try{
@@ -3167,6 +3221,7 @@ async function loadAll(){
     await loadRefCheckoutRequests();
     await loadExtensionRequests();
     await loadStickerData();
+    await loadAbnormalReports();
   }catch(e){
     console.error('Supabase load error',e);
     showLoading('⚠️ Connection issue — retrying…');
@@ -3444,6 +3499,11 @@ function doLogout(){
 // ── ROLE-BASED UI ──
 // Roles: Admin, Manager, Engineer, Sales, HR
 function getUserRole(username){
+  // Role Simulation — only affects the CURRENT user's own session, only while Testing Mode is on,
+  // and only when checking their own role (never affects how other users/records are treated).
+  if(username===currentUser&&isTestingModeOn()&&_simulatedRole){
+    return _simulatedRole;
+  }
   return USERS[username]?.role||'Engineer';
 }
 function isAdmin(u){ return getUserRole(u||currentUser)==='Admin'; }
@@ -3576,49 +3636,78 @@ function closeModal(id){
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
 // ── SETTINGS ──
-function renderStickerBatchList(){
-  const box=el('sticker-batch-list'); if(!box)return;
-  const sorted=[..._stickerBatches].sort((a,b)=>a.startNum-b.startNum);
+function renderStickerSettingsBody(){
+  const box=el('sticker-settings-body'); if(!box)return;
+  box.innerHTML=Object.entries(STICKER_TYPES).map(([type,cfg])=>{
+    const printed=cfg.numbered?stickerTotalPrinted(type):null;
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">${cfg.label} ${cfg.numbered?`<span style="font-weight:400;color:var(--text-muted);font-size:11px;">(${cfg.prefix}${'0'.repeat(cfg.digits)})</span>`:'<span style="font-weight:400;color:var(--text-muted);font-size:11px;">(count-based, not individually numbered)</span>'}</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Stickers Per Batch (issued to staff)</label><input id="set-sticker-${type}-batchSize" class="form-control" type="number" min="1"/></div>
+        <div class="form-group"><label class="form-label">Low Stock Reminder (%)</label><input id="set-sticker-${type}-lowPct" class="form-control" type="number" min="1" max="99"/></div>
+      </div>
+      ${cfg.numbered?`
+        <div style="font-size:12px;font-weight:700;color:var(--navy);margin:10px 0 6px;">Printed Batches — Total Printed: ${printed}</div>
+        <div id="sticker-batch-list-${type}" style="margin-bottom:8px;"></div>
+        <div style="background:var(--bg);border-radius:8px;padding:10px;">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Start Number</label><input id="new-batch-start-${type}" class="form-control" type="number" min="1"/></div>
+            <div class="form-group"><label class="form-label">End Number</label><input id="new-batch-end-${type}" class="form-control" type="number" min="1"/></div>
+          </div>
+          <div class="form-group"><label class="form-label">Date Printed</label><input id="new-batch-date-${type}" class="form-control" type="date"/></div>
+          <button class="btn btn-primary btn-sm" onclick="addStickerBatch('${type}')">+ Add Batch</button>
+        </div>`:''}
+    </div>`;
+  }).join('');
+  // Populate current setting values
+  Object.keys(STICKER_TYPES).forEach(type=>{
+    const bsEl=el(`set-sticker-${type}-batchSize`); if(bsEl) bsEl.value=stickerTypeCfg(type).batchSize;
+    const lpEl=el(`set-sticker-${type}-lowPct`); if(lpEl) lpEl.value=stickerTypeCfg(type).lowPct;
+  });
+  Object.keys(STICKER_TYPES).forEach(type=>{ if(STICKER_TYPES[type].numbered) renderStickerBatchList(type); });
+}
+function renderStickerBatchList(type){
+  const box=el(`sticker-batch-list-${type}`); if(!box)return;
+  const sorted=_stickerBatches.filter(b=>b.type===type).sort((a,b)=>a.startNum-b.startNum);
   if(!sorted.length){
-    box.innerHTML=`<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No batches recorded yet.</div>`;
+    box.innerHTML=`<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">No batches recorded yet.</div>`;
   } else {
     box.innerHTML=sorted.map(b=>`
       <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:12px;">
-        <span><strong>${stickerFmt(b.startNum)}</strong> – <strong>${stickerFmt(b.endNum)}</strong> <span style="color:var(--text-muted);">(${b.endNum-b.startNum+1} pcs)</span> ${b.printedDate?'· Printed '+b.printedDate:''}</span>
+        <span><strong>${stickerFmt(type,b.startNum)}</strong> – <strong>${stickerFmt(type,b.endNum)}</strong> <span style="color:var(--text-muted);">(${b.endNum-b.startNum+1} pcs)</span> ${b.printedDate?'· Printed '+b.printedDate:''}</span>
       </div>`).join('');
   }
-  // Auto-suggest next start number
-  const maxEnd=_stickerBatches.reduce((m,b)=>Math.max(m,b.endNum),0);
-  const startInput=el('new-batch-start');
+  const maxEnd=_stickerBatches.filter(b=>b.type===type).reduce((m,b)=>Math.max(m,b.endNum),0);
+  const startInput=el(`new-batch-start-${type}`);
   if(startInput&&!startInput.dataset.userTouched) startInput.value=maxEnd+1;
-  const endInput=el('new-batch-end');
   if(startInput) startInput.addEventListener('input',()=>{startInput.dataset.userTouched='1';});
 }
-async function addStickerBatch(){
+async function addStickerBatch(type){
   if(!isAdmin(currentUser)){alert('Only Admin can add sticker batches.');return;}
-  const startNum=parseInt(el('new-batch-start').value);
-  const endNum=parseInt(el('new-batch-end').value);
-  const printedDate=el('new-batch-date').value;
+  const startNum=parseInt(el(`new-batch-start-${type}`).value);
+  const endNum=parseInt(el(`new-batch-end-${type}`).value);
+  const printedDate=el(`new-batch-date-${type}`).value;
   if(!startNum||!endNum||endNum<startNum){alert('Please enter a valid start and end number (end must be after start).');return;}
-  // Hard-block overlaps with any existing batch
-  const conflict=_stickerBatches.find(b=>startNum<=b.endNum&&endNum>=b.startNum);
+  // Hard-block overlaps within this same type's own sequence only
+  const conflict=_stickerBatches.filter(b=>b.type===type).find(b=>startNum<=b.endNum&&endNum>=b.startNum);
   if(conflict){
-    alert(`This range overlaps with an existing batch: ${stickerFmt(conflict.startNum)}–${stickerFmt(conflict.endNum)}.\n\nPlease check the numbers and try again.`);
+    alert(`This range overlaps with an existing ${STICKER_TYPES[type].label} batch: ${stickerFmt(type,conflict.startNum)}–${stickerFmt(type,conflict.endNum)}.\n\nPlease check the numbers and try again.`);
     return;
   }
-  _stickerBatches.push({id:'BATCH-'+Date.now(),startNum,endNum,printedDate,addedBy:currentUser,addedAt:new Date().toISOString()});
+  _stickerBatches.push({id:'BATCH-'+Date.now(),type,startNum,endNum,printedDate,addedBy:currentUser,addedAt:new Date().toISOString()});
   await saveStickerBatches();
-  el('new-batch-start').value=''; el('new-batch-start').dataset.userTouched='';
-  el('new-batch-end').value=''; el('new-batch-date').value='';
-  renderStickerBatchList();
-  showToast(`✅ Batch ${stickerFmt(startNum)}–${stickerFmt(endNum)} added (${endNum-startNum+1} stickers)`,'success',3500);
-  addAudit('🏷️',`Sticker batch added: ${stickerFmt(startNum)}–${stickerFmt(endNum)}`);
+  el(`new-batch-start-${type}`).value=''; el(`new-batch-start-${type}`).dataset.userTouched='';
+  el(`new-batch-end-${type}`).value=''; el(`new-batch-date-${type}`).value='';
+  renderStickerSettingsBody();
+  showToast(`✅ Batch ${stickerFmt(type,startNum)}–${stickerFmt(type,endNum)} added (${endNum-startNum+1} stickers)`,'success',3500);
+  addAudit('🏷️',`${STICKER_TYPES[type].label} sticker batch added: ${stickerFmt(type,startNum)}–${stickerFmt(type,endNum)}`);
   if(typeof renderStickerPage==='function') renderStickerPage();
 }
 
 function applySettings(s){
   try{
   _settings=Object.assign({},DEF,s);
+  if(typeof renderTestingModeUI==='function') renderTestingModeUI();
   const name=s.labName||'Westlab (M) Sdn. Bhd.';
   ['sidebar-lab-name','sidebar-lab-label','login-lab-name'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=name;});
   const an=document.getElementById('sidebar-accred-num');if(an)an.textContent=s.accredNum||'';
@@ -3635,12 +3724,10 @@ function applySettings(s){
     username:'set-username',
     
     slaUrgent:'set-sla-urgent', slaExpress:'set-sla-express',
-    slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine',
-    stickerPrefix:'set-sticker-prefix', stickerBatchSize:'set-sticker-batch-size',
-    stickerLowPct:'set-sticker-low-pct'
+    slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine'
   };
   Object.entries(map).forEach(([k,id])=>{const e=document.getElementById(id);if(e&&s[k]!==undefined)e.value=s[k];});
-  if(typeof renderStickerBatchList==='function') renderStickerBatchList();
+  if(typeof renderStickerSettingsBody==='function') renderStickerSettingsBody();
   // Show logo if saved
   if(s.logoUrl){
     const img=el('logo-preview-img');if(img)img.src=s.logoUrl;
@@ -3709,9 +3796,12 @@ async function saveSettings(){
   s.slaExpress=parseInt(el('set-sla-express').value)||2;
   s.slaNormal=parseInt(el('set-sla-normal').value)||5;
   s.slaRoutine=parseInt(el('set-sla-routine').value)||10;
-  s.stickerPrefix=el('set-sticker-prefix')?.value.trim()||'WSA';
-  s.stickerBatchSize=parseInt(el('set-sticker-batch-size')?.value)||50;
-  s.stickerLowPct=parseInt(el('set-sticker-low-pct')?.value)||30;
+  Object.keys(STICKER_TYPES).forEach(type=>{
+    const bsEl=el(`set-sticker-${type}-batchSize`);
+    const lpEl=el(`set-sticker-${type}-lowPct`);
+    if(bsEl) s[`sticker_${type}_batchSize`]=parseInt(bsEl.value)||(STICKER_TYPES[type].numbered?50:20);
+    if(lpEl) s[`sticker_${type}_lowPct`]=parseInt(lpEl.value)||30;
+  });
   // Never save base64 logo to DB — only save Storage URL
   if(s.logoUrl&&s.logoUrl.startsWith('data:')){
     // Logo is still base64 — don't save it to DB, it makes the row huge
@@ -3854,6 +3944,21 @@ async function peekCertNo(){
     if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
   }
 }
+async function commitAbnormalReportNo(){
+  try{
+  const yk=getCertYearKey();
+  const mm=getCertMonthStr();
+  const id='abnormal_seq_'+yk+mm;
+  const cur=await apiFetch(`/api/seq/${encodeURIComponent(id)}`);
+  const next=(cur&&cur.val?cur.val:0)+1;
+  await apiFetch('/api/seq',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,val:next})});
+  return 'AB-WLCS'+yk+mm+String(next).padStart(4,'0');
+  }catch(_err){
+    console.error("commitAbnormalReportNo error:",_err);
+    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
+  }
+}
+
 async function commitCertNo(){
   try{
   const yk=getCertYearKey();
@@ -5336,6 +5441,277 @@ async function confirmReassign(){
 }
 
 // ── CALIBRATION ──
+function populateCalStickerDropdown(){
+  const type=el('cal-sticker-type')?.value||'accredited';
+  const stickerSel=el('cal-sticker-number');
+  if(!stickerSel)return;
+  const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===type).sort((a,b)=>a.number-b.number);
+  stickerSel.innerHTML='<option value="">— Select sticker —</option>'+
+    myHeld.map(r=>`<option value="${r.number}">${stickerFmt(type,r.number)}</option>`).join('');
+}
+// ══════════════════════════════════════════════════
+// CANNOT CALIBRATE — RETURN ITEM (Abnormal Report)
+// ══════════════════════════════════════════════════
+const ABNORMALITY_REASONS=['Out of Specification','No Respond / No Function','Excessive Error - Over Read','Excessive Error - Under Read','Reading Unstable','Unable To Adjust / Repair','Mechanical Damage','Electrical Failure','Application Failure'];
+const CONDITION_DETECTED=['During Calibration','Before Calibration','During Repair','Incoming Inspection'];
+const LAB_RECOMMENDATIONS=['Return without calibration','Proceed with calibration (limited / conditional)','Replacement recommended','Further Investigation required','Repair required'];
+
+function openCannotCalibrateModal(){
+  const j=getJob(calJobNo); const item=j?.items?.[calItemIdx];
+  if(!j||!item)return;
+  const voidRec=null; // not required for abnormal — separate from void
+  const abnormalRec=getStickerCountRec(currentUser,'abnormal');
+  let ov=document.getElementById('cannot-cal-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='cannot-cal-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1100;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  const engineerCertName=(_staff&&_staff.find(x=>x.username===currentUser))?.certName||USERS[currentUser]?.name||currentUser;
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:560px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);background:#fef2f2;border-radius:16px 16px 0 0;">
+      <span style="font-weight:700;font-size:15px;color:#991b1b;">⚠️ Cannot Calibrate — Return Item</span>
+      <button onclick="document.getElementById('cannot-cal-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">${item.eqName} — ${item.brand||''} ${item.model||''} — S/N: ${item.serial||'—'}</div>
+      ${abnormalRec.held<=0?`<div style="background:#fef2f2;border-radius:8px;padding:10px 14px;font-size:12px;color:#991b1b;margin-bottom:12px;">⚠️ You have no unused Abnormal stickers on hand. Please request more before continuing.</div>`:''}
+
+      <div class="form-group">
+        <label class="form-label">Condition When Detected <span class="req">*</span></label>
+        <select class="form-control" id="ab-condition">
+          <option value="">— Select —</option>
+          ${CONDITION_DETECTED.map(c=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Type of Abnormality <span class="req">*</span> (select all that apply)</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--bg);border-radius:8px;padding:10px;">
+          ${ABNORMALITY_REASONS.map((r,i)=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="ab-reason-cb" value="${r}"/> ${r}</label>`).join('')}
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin-top:6px;cursor:pointer;">
+          <input type="checkbox" id="ab-reason-other-cb"/> Others:
+          <input class="form-control" id="ab-reason-other-text" style="flex:1;padding:4px 8px;" placeholder="Specify…"/>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Details of Findings <span class="req">*</span></label>
+        <textarea class="form-control" id="ab-findings" placeholder="Describe what was found…"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Recommended Action by Lab <span class="req">*</span></label>
+        <select class="form-control" id="ab-recommendation">
+          <option value="">— Select —</option>
+          ${LAB_RECOMMENDATIONS.map(r=>`<option value="${r}">${r}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Checked By</label><input class="form-control" value="${engineerCertName}" readonly style="background:#f1f5f9;"/></div>
+        <div class="form-group">
+          <label class="form-label">Verified By (Approved Signatory) <span class="req">*</span></label>
+          <select class="form-control" id="ab-verified-by"><option value="">— Select —</option></select>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        <button class="btn btn-outline" onclick="document.getElementById('cannot-cal-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-danger" ${abnormalRec.held<=0?'disabled':''} onclick="submitCannotCalibrate()">Submit Abnormal Report</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  populateApprovedByDropdownInto('ab-verified-by');
+}
+function populateApprovedByDropdownInto(selectId){
+  const sel=el(selectId); if(!sel)return;
+  const signatories=(_staff||[]).filter(s=>s.approvedSignatory);
+  sel.innerHTML='<option value="">— Select —</option>'+signatories.map(s=>`<option value="${s.username}">${s.certName||s.name}</option>`).join('');
+}
+
+async function submitCannotCalibrate(){
+  const j=getJob(calJobNo); const item=j?.items?.[calItemIdx];
+  if(!j||!item)return;
+  const condition=el('ab-condition').value;
+  if(!condition){alert('Please select the Condition When Detected.');return;}
+  const reasons=[...document.querySelectorAll('.ab-reason-cb:checked')].map(cb=>cb.value);
+  const otherChecked=el('ab-reason-other-cb').checked;
+  const otherText=el('ab-reason-other-text').value.trim();
+  if(otherChecked&&!otherText){alert('Please specify the "Others" reason.');return;}
+  if(!reasons.length&&!otherChecked){alert('Please select at least one Type of Abnormality.');return;}
+  const findings=el('ab-findings').value.trim();
+  if(!findings){alert('Please enter Details of Findings.');return;}
+  const recommendation=el('ab-recommendation').value;
+  if(!recommendation){alert('Please select a Recommended Action by Lab.');return;}
+  const verifiedBy=el('ab-verified-by').value;
+  if(!verifiedBy){alert('Please select who verified this report.');return;}
+  const abnormalRec=getStickerCountRec(currentUser,'abnormal');
+  if(abnormalRec.held<=0){alert('You have no unused Abnormal stickers on hand.');return;}
+
+  const btn=document.querySelector('#cannot-cal-overlay .btn-danger');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Submitting…';}
+  try{
+    const reportNo=await commitAbnormalReportNo();
+    const checkedByName=(_staff&&_staff.find(x=>x.username===currentUser))?.certName||USERS[currentUser]?.name||currentUser;
+    const verifiedByName=(_staff&&_staff.find(x=>x.username===verifiedBy))?.certName||USERS[verifiedBy]?.name||verifiedBy;
+    const report={
+      reportNo, jobNo:calJobNo, itemIdx:calItemIdx,
+      custName:j.custName, address:j.address||'', tel:j.tel||'', fax:j.fax||'',
+      issueDate:toLocalDateStr(new Date()), attention:j.attention||'',
+      eqName:item.eqName, model:item.model||'', serial:item.serial||'', range:item.range||'',
+      condition, reasons, otherReason:otherChecked?otherText:'', findings, recommendation,
+      checkedBy:currentUser, checkedByName, verifiedBy, verifiedByName,
+      createdAt:new Date().toISOString()
+    };
+    _abnormalReports.push(report);
+    await saveAbnormalReports();
+
+    // Deduct 1 Abnormal sticker
+    abnormalRec.held--; abnormalRec.totalUsed=(abnormalRec.totalUsed||0)+1;
+    await saveStickerCounts();
+
+    // Mark item as returned without calibration — bypasses normal certificate/approval flow entirely
+    await updateJob(calJobNo,job=>{
+      const it=job.items[calItemIdx];
+      it.status='Returned - Abnormal';
+      it.abnormalReportNo=reportNo;
+      job.history.push({action:`Item ${it.itemNo} (${it.eqName}) returned without calibration — Abnormal Report ${reportNo}`,by:currentUser,time:new Date().toISOString()});
+    });
+
+    document.getElementById('cannot-cal-overlay').style.display='none';
+    closeModal('modal-perform-cal');
+    renderMyJobs(); renderDashboard(); refreshAllBadges();
+    showToast(`✅ Abnormal Report ${reportNo} submitted`,'success',4000);
+    addAudit('⚠️',`Abnormal Report ${reportNo} — Job ${calJobNo}, Item ${calItemIdx+1} returned without calibration`);
+    await downloadAbnormalReportPdf(report);
+  }catch(_err){
+    console.error("submitCannotCalibrate error:",_err);
+    showToast("❌ Error: "+_err.message,"error",5000);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Submit Abnormal Report';}
+  }
+}
+
+function buildAbnormalReportHtml(r){
+  const chk=(list,val)=>list.includes(val)?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>';
+  const chkOne=(val,expected)=>val===expected?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>';
+  const logoUrl=_settings.logoUrl&&!_settings.logoUrl.startsWith('data:')?_settings.logoUrl:'';
+  return `<div style="width:794px;padding:28px 36px;font-family:'DM Sans',Arial,sans-serif;color:#111;background:#fff;font-size:9.5pt;">
+    <div style="text-align:center;margin-bottom:10px;">
+      ${logoUrl?`<img src="${logoUrl}" style="height:40px;"/>`:`<div style="font-weight:800;font-size:16pt;color:#0f1f3d;">${_settings.labName||'WESTLAB'}</div>`}
+    </div>
+    <div style="text-align:center;font-weight:800;font-size:14pt;margin-bottom:4px;">ABNORMAL REPORT / NOTIFICATION</div>
+    <div style="text-align:center;font-size:9pt;margin-bottom:14px;">Report Number: ${r.reportNo}</div>
+    <div style="border:1pt solid #333;padding:10px 14px;margin-bottom:0;">
+      <table style="width:100%;font-size:9pt;"><tr>
+        <td style="width:55%;vertical-align:top;">
+          <strong>Customer</strong> &nbsp;: &nbsp;${r.custName}<br/>
+          ${r.address?r.address.replace(/\n/g,'<br/>')+'<br/>':''}
+        </td>
+        <td style="vertical-align:top;">
+          Issue Date &nbsp;: &nbsp;${fmtDateShort(r.issueDate)}<br/>
+          Tel &nbsp;: &nbsp;${r.tel||'—'}<br/>
+          Fax &nbsp;: &nbsp;${r.fax||'—'}<br/>
+          Job Number &nbsp;: &nbsp;${r.jobNo}
+        </td>
+      </tr></table>
+      <div style="margin-top:6px;">Contact / Dept &nbsp;: &nbsp;${r.attention||'—'}</div>
+    </div>
+    <div style="border:1pt solid #333;border-top:none;padding:10px 14px;">
+      <div style="font-weight:700;margin-bottom:4px;">Equipment Details:</div>
+      <table style="width:100%;font-size:9pt;margin-bottom:8px;"><tr>
+        <td style="width:55%;">Descriptions &nbsp;: &nbsp;${r.eqName}<br/>Model &nbsp;: &nbsp;${r.model||'—'}</td>
+        <td>Serial No. &nbsp;: &nbsp;${r.serial||'—'}<br/>Range / Capacity &nbsp;: &nbsp;${r.range||'N/A'}</td>
+      </tr></table>
+      <div style="margin-bottom:4px;"><strong>Condition when detected:</strong></div>
+      <div style="margin-bottom:8px;">
+        ${CONDITION_DETECTED.map(c=>`${chkOne(r.condition,c)}${c} &nbsp;&nbsp; `).join('')}
+      </div>
+      <div style="margin-bottom:4px;"><strong>Type of Abnormality:</strong></div>
+      <table style="width:100%;font-size:9pt;margin-bottom:8px;">
+        ${(()=>{
+          const rows=[];
+          for(let i=0;i<ABNORMALITY_REASONS.length;i+=2){
+            rows.push(`<tr>
+              <td style="padding:2px 0;">${chk(r.reasons,ABNORMALITY_REASONS[i])}${ABNORMALITY_REASONS[i]}</td>
+              <td style="padding:2px 0;">${ABNORMALITY_REASONS[i+1]?chk(r.reasons,ABNORMALITY_REASONS[i+1])+ABNORMALITY_REASONS[i+1]:''}</td>
+            </tr>`);
+          }
+          rows.push(`<tr><td colspan="2" style="padding:2px 0;">${r.otherReason?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>'}Others: ${r.otherReason||''}</td></tr>`);
+          return rows.join('');
+        })()}
+      </table>
+      <div style="margin-bottom:8px;"><strong>Details of Findings</strong> &nbsp;: &nbsp;${r.findings}</div>
+      <div style="margin-bottom:4px;"><strong>Recommended Action by Lab:</strong></div>
+      <div style="margin-bottom:14px;">
+        ${LAB_RECOMMENDATIONS.map(a=>`<div style="padding:1px 0;">${chkOne(r.recommendation,a)}${a}</div>`).join('')}
+      </div>
+      <table style="width:100%;font-size:9pt;margin-top:20px;"><tr>
+        <td style="width:50%;text-align:center;">
+          <div style="border-top:1pt solid #333;padding-top:4px;margin:0 20px;">${r.checkedByName}</div>
+        </td>
+        <td style="text-align:center;">
+          <div style="border-top:1pt solid #333;padding-top:4px;margin:0 20px;">${r.verifiedByName}</div>
+        </td>
+      </tr><tr>
+        <td style="text-align:center;font-size:8pt;color:#555;">Checked By</td>
+        <td style="text-align:center;font-size:8pt;color:#555;">Verified By</td>
+      </tr></table>
+    </div>
+    <div style="border:1pt solid #333;border-top:none;padding:10px 14px;font-size:9pt;">
+      <strong>Customer Instruction:</strong>
+      <div style="margin-top:6px;">
+        ${['Return without service','Proceed with calibration','Proceed with repair','Scrap Equipment'].map(o=>`<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>${o} &nbsp;&nbsp; `).join('')}
+        <span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>Others: <span style="display:inline-block;width:120px;border-bottom:1pt solid #333;">&nbsp;</span>
+      </div>
+      <table style="width:100%;font-size:9pt;margin-top:24px;"><tr>
+        <td style="width:60%;">
+          Signature &nbsp;: <span style="display:inline-block;width:180px;border-bottom:1pt solid #333;">&nbsp;</span><br/><br/>
+          Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <span style="display:inline-block;width:180px;border-bottom:1pt solid #333;">&nbsp;</span><br/><br/>
+          Designation : <span style="display:inline-block;width:180px;border-bottom:1pt solid #333;">&nbsp;</span>
+        </td>
+        <td style="vertical-align:bottom;">Company Stamp/Chop:</td>
+      </tr></table>
+    </div>
+    <div style="text-align:center;font-size:7.5pt;color:#555;margin-top:10px;border-top:0.5pt solid #ccc;padding-top:6px;">
+      ${_settings.labName||'WESTLAB (M) SDN. BHD.'}<br/>${_settings.address||''}
+    </div>
+  </div>`;
+}
+async function generateAbnormalReportPdfBase64(r){
+  try{
+    if(typeof html2canvas==='undefined'||typeof PDFLib==='undefined')return null;
+    const html=buildAbnormalReportHtml(r);
+    const frame=el('receipt-print-frame');
+    frame.innerHTML=html;
+    frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
+    await new Promise(res=>setTimeout(res,150));
+    const target=frame.firstElementChild||frame;
+    const canvas=await html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    frame.style.display='none'; frame.style.position=''; frame.style.left='';
+    const imgData=canvas.toDataURL('image/jpeg',0.92);
+    const imgBytes=await fetch(imgData).then(x=>x.arrayBuffer());
+    const {PDFDocument}=PDFLib;
+    const pdf=await PDFDocument.create();
+    const jpgImage=await pdf.embedJpg(imgBytes);
+    const pageWidth=595;
+    const pageHeight=pageWidth*(canvas.height/canvas.width);
+    const page=pdf.addPage([pageWidth,pageHeight]);
+    page.drawImage(jpgImage,{x:0,y:0,width:pageWidth,height:pageHeight});
+    const bytes=await pdf.save();
+    let binary=''; const chunk=8192;
+    for(let i=0;i<bytes.length;i+=chunk){ binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk)); }
+    return btoa(binary);
+  }catch(e){ console.error('generateAbnormalReportPdfBase64 error:',e); return null; }
+}
+async function downloadAbnormalReportPdf(r){
+  const b64=await generateAbnormalReportPdfBase64(r);
+  if(!b64){showToast('⚠️ Report saved, but PDF preview failed to generate — you can still find the record in the job history.','error',5000);return;}
+  const link=document.createElement('a');
+  link.href='data:application/pdf;base64,'+b64;
+  link.download=`${r.reportNo}_Abnormal_Report.pdf`;
+  link.click();
+}
+
 async function openCalModal(jobNo, itemIdx=0){
   try{
   calJobNo=jobNo; calItemIdx=itemIdx;
@@ -5374,16 +5750,16 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-cal-points').value=item?item.calPoints||'':'';
   el('cal-tag-no').value=item&&item.tagNo?item.tagNo:'N/A';
   el('cal-resolution').value=item&&item.resolution?item.resolution:(item&&item.spec?item.spec:'');
-  // Populate sticker dropdown — only this staff member's own unused, held stickers, lowest first
-  const stickerSel=el('cal-sticker-number');
-  if(stickerSel){
-    const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').sort((a,b)=>a.number-b.number);
+  // Populate sticker type + number dropdowns — restore previous type if resubmitting, else default to Accredited
+  const stickerTypeSel=el('cal-sticker-type');
+  const voidCb=el('cal-void-applied');
+  if(stickerTypeSel){
+    stickerTypeSel.value=item?.calData?.stickerType||'accredited';
+    populateCalStickerDropdown();
     const alreadyUsedOnThisItem=item?.calData?.stickerNumber;
-    stickerSel.innerHTML='<option value="">— Select sticker —</option>'+
-      myHeld.map(r=>`<option value="${r.number}">${stickerFmt(r.number)}</option>`).join('')+
-      (alreadyUsedOnThisItem&&!myHeld.find(r=>r.number===alreadyUsedOnThisItem)?`<option value="${alreadyUsedOnThisItem}" selected>${stickerFmt(alreadyUsedOnThisItem)} (already recorded)</option>`:'');
-    if(alreadyUsedOnThisItem) stickerSel.value=alreadyUsedOnThisItem;
+    if(alreadyUsedOnThisItem) el('cal-sticker-number').value=alreadyUsedOnThisItem;
   }
+  if(voidCb) voidCb.checked=!!item?.calData?.voidApplied;
   // Pre-fill calibration interval from item
   const calInterval=el('cal-interval');
   if(calInterval){
@@ -5577,12 +5953,18 @@ async function submitCalibration(){
   const approvedBy=el('cal-approved-by').value;
   if(!approvedBy){alert('Please select the Approved Signatory.');return;}
   if(!currentExcel){alert('Please upload the calibration data PDF before submitting.');return;}
+  const stickerType=el('cal-sticker-type')?.value||'accredited';
   const stickerNumSel=el('cal-sticker-number')?.value;
   if(!stickerNumSel){alert('Please select the sticker number you attached to this equipment.');return;}
   const stickerNum=parseInt(stickerNumSel);
-  const myHeldSorted=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').sort((a,b)=>a.number-b.number);
+  const myHeldSorted=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===stickerType).sort((a,b)=>a.number-b.number);
   if(myHeldSorted.length&&myHeldSorted[0].number!==stickerNum){
-    if(!confirm(`⚠️ You still have ${stickerFmt(myHeldSorted[0].number)} unused — are you sure you want to use ${stickerFmt(stickerNum)} instead (skipping ahead)?`)) return;
+    if(!confirm(`⚠️ You still have ${stickerFmt(stickerType,myHeldSorted[0].number)} unused — are you sure you want to use ${stickerFmt(stickerType,stickerNum)} instead (skipping ahead)?`)) return;
+  }
+  const voidApplied=!!el('cal-void-applied')?.checked;
+  if(voidApplied){
+    const voidRec=getStickerCountRec(currentUser,'voidSticker');
+    if(voidRec.held<=0){alert('You have no unused Void stickers on hand. Please request more before continuing, or uncheck the Void option.');return;}
   }
 
   // Check file size — warn if over 5MB
@@ -5609,6 +5991,8 @@ async function submitCalibration(){
     const calData={
       cert_no:certNo, job_no:calJobNo,
       stickerNumber:stickerNum,
+      stickerType:stickerType,
+      voidApplied:voidApplied,
       page:`1 of ${totalPages}`, total_pages:totalPages,
       issue_date:el('cal-issue-date').value,
       date:el('cal-date').value,
@@ -5632,7 +6016,7 @@ async function submitCalibration(){
       cond_remark:el('cal-cond-remark').value.trim(),
       location:el('cal-location').value.trim(),
       procedure:el('cal-procedure').value,
-      sticker_no:stickerFmt(stickerNum),
+      sticker_no:stickerFmt(stickerType,stickerNum),
       temp:buildAmbient('cal-temp-val','cal-temp-pm'),
       humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
       pressure:buildAmbient('cal-pressure-val','cal-pressure-pm'),
@@ -5667,13 +6051,19 @@ async function submitCalibration(){
 
     closeModal('modal-perform-cal');
     // Mark this sticker as Used, linked to the job/certificate
-    const stickerRec=_stickerRecords.find(r=>r.number===stickerNum&&r.issuedTo===currentUser&&r.status==='Held');
+    const stickerRec=_stickerRecords.find(r=>r.number===stickerNum&&r.type===stickerType&&r.issuedTo===currentUser&&r.status==='Held');
     if(stickerRec){
       stickerRec.status='Used';
       stickerRec.usedJobNo=calJobNo;
       stickerRec.usedCertNo=item?.certNo||certNo;
       stickerRec.usedAt=new Date().toISOString();
       await saveStickerRecords();
+    }
+    if(voidApplied){
+      const voidRec=getStickerCountRec(currentUser,'voidSticker');
+      voidRec.held=Math.max(0,voidRec.held-1);
+      voidRec.totalUsed=(voidRec.totalUsed||0)+1;
+      await saveStickerCounts();
     }
     renderMyJobs(); renderDashboard(); refreshAllBadges();
     showToast('📬 Submitted for approval','success');
@@ -6146,9 +6536,28 @@ const EXTENSION_KEY='wl_extension_requests';
 const STICKER_BATCHES_KEY='wl_sticker_batches';
 const STICKER_REQUESTS_KEY='wl_sticker_requests';
 const STICKER_RECORDS_KEY='wl_sticker_records';
+const STICKER_COUNTS_KEY='wl_sticker_counts'; // Void/Abnormal count-based holdings per staff
+const STICKER_RECON_KEY='wl_sticker_reconciliations';
 let _stickerBatches=[];
 let _stickerRequests=[];
-let _stickerRecords=[]; // one entry per individual sticker number ever issued
+let _stickerRecords=[]; // one entry per individual sticker number ever issued (Accredited/Non-Accredited only)
+let _stickerCounts=[]; // one entry per (staff, type) for Void/Abnormal — {username,type,held,totalIssued,totalUsed,totalWasted,wasteLog:[]}
+let _stickerRecons=[]; // reconciliation log
+const ABNORMAL_REPORTS_KEY='wl_abnormal_reports';
+let _abnormalReports=[];
+
+const STICKER_TYPES={
+  accredited:{label:'Accredited',numbered:true,prefix:'WS',digits:6},
+  nonAccredited:{label:'Non-Accredited',numbered:true,prefix:'WSA',digits:5},
+  voidSticker:{label:'Void',numbered:false},
+  abnormal:{label:'Abnormal',numbered:false}
+};
+function stickerTypeCfg(type){
+  return {
+    batchSize:_settings[`sticker_${type}_batchSize`]||(STICKER_TYPES[type].numbered?50:20),
+    lowPct:_settings[`sticker_${type}_lowPct`]||30
+  };
+}
 let _extensionRequests=[];
 const OFFICE_HOURS_START='08:30';
 const OFFICE_HOURS_END='17:30';
@@ -6169,35 +6578,77 @@ async function loadRefCheckoutRequests(){
 async function saveRefCheckoutRequests(){
   await SB.upsert('wl_settings',REF_CHECKOUT_KEY,_refCheckoutRequests);
 }
+async function loadAbnormalReports(){
+  try{
+    const r=await SB.get('wl_settings',ABNORMAL_REPORTS_KEY);
+    _abnormalReports=Array.isArray(r)?r:[];
+  }catch(e){_abnormalReports=[];}
+}
+async function saveAbnormalReports(){ await SB.upsert('wl_settings',ABNORMAL_REPORTS_KEY,_abnormalReports); }
+
+function stkKey(baseKey){
+  return isTestingModeOn()?baseKey+'_test':baseKey;
+}
 async function loadStickerData(){
   try{
-    const b=await SB.get('wl_settings',STICKER_BATCHES_KEY);
+    const b=await SB.get('wl_settings',stkKey(STICKER_BATCHES_KEY));
     _stickerBatches=Array.isArray(b)?b:[];
   }catch(e){_stickerBatches=[];}
   try{
-    const r=await SB.get('wl_settings',STICKER_REQUESTS_KEY);
+    const r=await SB.get('wl_settings',stkKey(STICKER_REQUESTS_KEY));
     _stickerRequests=Array.isArray(r)?r:[];
   }catch(e){_stickerRequests=[];}
   try{
-    const rec=await SB.get('wl_settings',STICKER_RECORDS_KEY);
+    const rec=await SB.get('wl_settings',stkKey(STICKER_RECORDS_KEY));
     _stickerRecords=Array.isArray(rec)?rec:[];
   }catch(e){_stickerRecords=[];}
+  try{
+    const cnt=await SB.get('wl_settings',stkKey(STICKER_COUNTS_KEY));
+    _stickerCounts=Array.isArray(cnt)?cnt:[];
+  }catch(e){_stickerCounts=[];}
+  try{
+    const rc=await SB.get('wl_settings',stkKey(STICKER_RECON_KEY));
+    _stickerRecons=Array.isArray(rc)?rc:[];
+  }catch(e){_stickerRecons=[];}
 }
-async function saveStickerBatches(){ await SB.upsert('wl_settings',STICKER_BATCHES_KEY,_stickerBatches); }
-async function saveStickerRequests(){ await SB.upsert('wl_settings',STICKER_REQUESTS_KEY,_stickerRequests); }
-async function saveStickerRecords(){ await SB.upsert('wl_settings',STICKER_RECORDS_KEY,_stickerRecords); }
+async function saveStickerBatches(){ await SB.upsert('wl_settings',stkKey(STICKER_BATCHES_KEY),_stickerBatches); }
+async function saveStickerRequests(){ await SB.upsert('wl_settings',stkKey(STICKER_REQUESTS_KEY),_stickerRequests); }
+async function saveStickerRecords(){ await SB.upsert('wl_settings',stkKey(STICKER_RECORDS_KEY),_stickerRecords); }
+async function saveStickerCounts(){ await SB.upsert('wl_settings',stkKey(STICKER_COUNTS_KEY),_stickerCounts); }
+async function saveStickerRecons(){ await SB.upsert('wl_settings',stkKey(STICKER_RECON_KEY),_stickerRecons); }
+async function clearStickerTestData(){
+  if(!confirm('Clear all Testing Mode sticker data?\n\nThis only affects test data — your real sticker records are completely untouched.'))return;
+  _stickerBatches=[]; _stickerRequests=[]; _stickerRecords=[]; _stickerCounts=[]; _stickerRecons=[];
+  await Promise.all([saveStickerBatches(),saveStickerRequests(),saveStickerRecords(),saveStickerCounts(),saveStickerRecons()]);
+  // Also reset the test-mode numbering counters so test sequences restart cleanly
+  Object.keys(STICKER_TYPES).forEach(t=>{ delete _settings[`sticker_${t}_nextToIssue_test`]; });
+  showToast('🧪 Test sticker data cleared','success',3000);
+  if(typeof renderStickerPage==='function') renderStickerPage();
+  if(typeof renderStickerSettingsBody==='function') renderStickerSettingsBody();
+}
 
-// ── Sticker number helpers ──
-function stickerFmt(n){
-  const prefix=_settings.stickerPrefix||'WSA';
-  return `${prefix}${String(n).padStart(5,'0')}`;
+// ── Sticker number helpers — type-aware ──
+function stickerFmt(type,n){
+  const cfg=STICKER_TYPES[type];
+  if(!cfg||!cfg.numbered) return `#${n}`;
+  return `${cfg.prefix}${String(n).padStart(cfg.digits,'0')}`;
 }
-function stickerTotalPrinted(){
-  return _stickerBatches.reduce((sum,b)=>sum+(b.endNum-b.startNum+1),0);
+function stickerTotalPrinted(type){
+  return _stickerBatches.filter(b=>b.type===type).reduce((sum,b)=>sum+(b.endNum-b.startNum+1),0);
 }
-function stickerNextToIssue(){
-  return _settings.stickerNextToIssue||1;
+function stickerNextToIssue(type){
+  const key=isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`;
+  return _settings[key]||1;
 }
+function getStickerCountRec(username,type){
+  let rec=_stickerCounts.find(c=>c.username===username&&c.type===type);
+  if(!rec){
+    rec={username,type,held:0,totalIssued:0,totalUsed:0,totalWasted:0,wasteLog:[]};
+    _stickerCounts.push(rec);
+  }
+  return rec;
+}
+
 
 async function loadExtensionRequests(){
   try{
@@ -7997,7 +8448,7 @@ function renderMyJobs(){
       const kivDaysLeft=Math.max(0,7-kivDaysUsed);
       const tatRemaining=item.kivTATRemaining||0;
       slaHtml=`<span class="badge badge-orange" style="margin-left:6px;">⏸ KIV: ${kivDaysLeft}d left (TAT: ${tatRemaining}d frozen)</span>`;
-    } else if(j.promisedDate&&item.status!=='Completed'&&item.status!=='Pending Approval'){
+    } else if(j.promisedDate&&item.status!=='Completed'&&item.status!=='Pending Approval'&&item.status!=='Returned - Abnormal'){
       const diff=Math.round((new Date(j.promisedDate+'T00:00:00')-today)/(1000*60*60*24));
       if(diff<0) slaHtml=`<span class="badge badge-red" style="margin-left:6px;">🚨 ${Math.abs(diff)}d overdue</span>`;
       else if(diff===0) slaHtml=`<span class="badge badge-amber" style="margin-left:6px;">⚠️ Due today</span>`;
@@ -8045,7 +8496,7 @@ function renderMyJobs(){
         ${item.status==='Customer Not Ready'?`
           <span class="badge badge-red" style="font-size:11px;padding:5px 8px;">⚠️ Customer Not Ready</span>
           <button class="btn btn-outline btn-sm" onclick="resolveCustomerNotReady('${j.jobNo}',${idx})">✅ Resolved — Resume</button>`:''}
-        ${item.status!=='Pending Approval'&&item.status!=='Completed'&&item.status!=='KIV'&&item.status!=='Customer Not Ready'?`
+        ${item.status!=='Pending Approval'&&item.status!=='Completed'&&item.status!=='KIV'&&item.status!=='Customer Not Ready'&&item.status!=='Returned - Abnormal'?`
           <button class="btn btn-primary btn-sm" onclick="openCalModal('${j.jobNo}',${idx})">🔬 Perform Calibration</button>
           ${item.calType==='Onsite'?`
             <button class="btn btn-outline btn-sm" style="background:#ffeaee;color:#c0001a;border-color:#ffb3bc;" onclick="openCustomerNotReadyModal('${j.jobNo}',${idx})">⚠️ Not Ready</button>
@@ -8486,7 +8937,11 @@ async function updateJob(jobNo,fn){
 function deriveJobStatus(job){
   if(!job.items||!job.items.length) return job.status||'Unassigned';
   const statuses=job.items.map(i=>i.status||'Unassigned');
-  if(statuses.every(s=>s==='Completed')) return 'Completed';
+  // Returned - Abnormal is a terminal state (no further calibration work will happen on that item) —
+  // treat it the same as Completed for job-level "is everything done" purposes, so one abnormal item
+  // doesn't permanently block the rest of a mixed job from ever showing as Completed.
+  const isDone=s=>s==='Completed'||s==='Returned - Abnormal';
+  if(statuses.every(isDone)) return 'Completed';
   if(statuses.every(s=>s==='Deleted')) return 'Deleted';
   if(statuses.some(s=>s==='Pending Approval')) return 'Pending Approval';
   if(statuses.some(s=>s==='Customer Not Ready'||s==='Reschedule Required')) return 'In Progress';
@@ -8494,6 +8949,7 @@ function deriveJobStatus(job){
   if(statuses.some(s=>s==='Scheduled')) return 'In Progress';
   if(statuses.some(s=>s==='KIV')) return 'In Progress';
   if(statuses.some(s=>s==='In Progress'||s==='Assigned')) return 'In Progress';
+  if(statuses.some(s=>s==='Returned - Abnormal')) return 'In Progress';
   return 'Unassigned';
 }
 
@@ -8598,7 +9054,7 @@ function renderDashboard(){
     el('jay-approval-banner').style.display=pendApproval>0?'block':'none';
     el('jay-approval-count-text').textContent=`${pendApproval} item(s) awaiting your approval.`;
   } else { el('jay-approval-banner').style.display='none'; }
-  const myItems=list.flatMap(j=>(j.items||[]).filter(i=>i.assignedTo===currentUser&&i.status!=='Completed'&&i.status!=='Pending Approval')).length;
+  const myItems=list.flatMap(j=>(j.items||[]).filter(i=>i.assignedTo===currentUser&&i.status!=='Completed'&&i.status!=='Pending Approval'&&i.status!=='Returned - Abnormal')).length;
   const adminUser=_settings.username||'admin';
   el('my-jobs-banner').style.display=myItems>0&&currentUser!==adminUser?'block':'none';
   el('my-jobs-count-text').textContent=`${myItems} item(s) assigned to you.`;
@@ -8611,7 +9067,7 @@ function refreshAllBadges(){
   try{
   const list=_jobs.filter(j=>j.status!=='Deleted');
   const allItems=list.flatMap(j=>j.items||[]);
-  const myCount=currentUser?allItems.filter(i=>i.assignedTo===currentUser&&i.status!=='Completed'&&i.status!=='Pending Approval').length:0;
+  const myCount=currentUser?allItems.filter(i=>i.assignedTo===currentUser&&i.status!=='Completed'&&i.status!=='Pending Approval'&&i.status!=='Returned - Abnormal').length:0;
   const approvalCount=allItems.filter(i=>i.status==='Pending Approval').length;
   const canSeeExtras=isAdmin(currentUser)||isManager(currentUser);
   const extraPending=canSeeExtras?_refCheckoutRequests.filter(r=>r.status==='Pending').length+_extensionRequests.filter(r=>r.status==='Pending').length:0;
@@ -8755,7 +9211,7 @@ function previewCertPage1(){
     cond_remark:el('cal-cond-remark').value||'',
     location:el('cal-location').value||'Westlab Calibration Laboratory',
     procedure:el('cal-procedure').value||'—',
-    sticker_no:el('cal-sticker-number')?.value?stickerFmt(parseInt(el('cal-sticker-number').value)):'—',
+    sticker_no:el('cal-sticker-number')?.value?stickerFmt(el('cal-sticker-type')?.value||'accredited',parseInt(el('cal-sticker-number').value)):'—',
     temp:buildAmbient('cal-temp-val','cal-temp-pm'),
     humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
 
@@ -10110,7 +10566,7 @@ async function removeApprovedDealer(custId, dealerName){
 function viewCalendarJobSummary(jobNo){
   const j=getJob(jobNo); if(!j){showToast('Job not found','error',3000);return;}
   const items=j.items||[];
-  const statusColor={Unassigned:'#f59e0b',Assigned:'#3b82f6','In Progress':'#3b82f6',KIV:'#f97316','Customer Not Ready':'#ef4444','Pending Approval':'#a855f7',Completed:'#22c55e'};
+  const statusColor={Unassigned:'#f59e0b',Assigned:'#3b82f6','In Progress':'#3b82f6',KIV:'#f97316','Customer Not Ready':'#ef4444','Pending Approval':'#a855f7',Completed:'#22c55e','Returned - Abnormal':'#991b1b'};
   const hasOnsite=items.some(it=>it.calType==='Onsite');
   const html=`
     <div style="padding:16px 20px;">
@@ -10179,164 +10635,293 @@ function closeJobDetailView(){
 // ══════════════════════════════════════════════════
 // CALIBRATION STICKERS — request, approve, track, waste
 // ══════════════════════════════════════════════════
-function stickerCounts(){
-  const totalPrinted=stickerTotalPrinted();
-  const totalIssued=_stickerRecords.length;
-  const used=_stickerRecords.filter(r=>r.status==='Used').length;
-  const wasted=_stickerRecords.filter(r=>r.status==='Wasted').length;
-  const held=_stickerRecords.filter(r=>r.status==='Held').length;
-  const available=totalPrinted-totalIssued;
-  return {totalPrinted,totalIssued,used,wasted,held,available};
+let _stickerActiveTab='accredited';
+function setStickerTab(type){
+  _stickerActiveTab=type;
+  Object.keys(STICKER_TYPES).forEach(t=>{
+    const btn=el(`stk-tab-${t}`);
+    if(btn) btn.className=t===type?'btn btn-sm btn-primary':'btn btn-sm btn-outline';
+  });
+  renderStickerPage();
 }
+
+function stickerCounts(type){
+  const cfg=STICKER_TYPES[type];
+  if(cfg.numbered){
+    const totalPrinted=stickerTotalPrinted(type);
+    const recs=_stickerRecords.filter(r=>r.type===type);
+    const totalIssued=recs.length;
+    const used=recs.filter(r=>r.status==='Used').length;
+    const wasted=recs.filter(r=>r.status==='Wasted').length;
+    const held=recs.filter(r=>r.status==='Held').length;
+    const available=totalPrinted-totalIssued;
+    return {totalPrinted,totalIssued,used,wasted,held,available};
+  } else {
+    const recs=_stickerCounts.filter(r=>r.type===type);
+    const totalIssued=recs.reduce((s,r)=>s+r.totalIssued,0);
+    const used=recs.reduce((s,r)=>s+r.totalUsed,0);
+    const wasted=recs.reduce((s,r)=>s+r.totalWasted,0);
+    const held=recs.reduce((s,r)=>s+r.held,0);
+    return {totalPrinted:null,totalIssued,used,wasted,held,available:null};
+  }
+}
+
 function renderStickerPage(){
   try{
-  const c=stickerCounts();
-  const set=(id,v)=>{const e=el(id);if(e)e.textContent=v;};
-  set('sticker-kpi-printed',c.totalPrinted);
-  set('sticker-kpi-available',c.available);
-  set('sticker-kpi-used',c.used);
-  set('sticker-kpi-wasted',c.wasted);
+  const type=_stickerActiveTab;
+  const cfg=STICKER_TYPES[type];
+  const c=stickerCounts(type);
+  const box=el('sticker-tab-content');
+  if(!box)return;
 
-  // Low stock banner
-  const banner=el('sticker-lowstock-banner');
-  const lowPct=_settings.stickerLowPct||30;
-  const pctRemaining=c.totalPrinted>0?(c.available/c.totalPrinted*100):0;
-  if(banner){
-    if(c.totalPrinted>0&&pctRemaining<=lowPct){
-      banner.style.display='block';
-      banner.innerHTML=`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;color:#991b1b;font-size:13px;">
-        ⚠️ <strong>Sticker stock running low</strong> — only ${c.available} of ${c.totalPrinted} printed stickers (${pctRemaining.toFixed(0)}%) remain unissued. Time to print the next batch.
+  let kpiHtml=`<div class="kpi-row">`;
+  if(cfg.numbered){
+    kpiHtml+=`<div class="kpi-mini"><div class="kpi-val">${c.totalPrinted}</div><div class="kpi-lbl">Total Printed</div></div>
+      <div class="kpi-mini"><div class="kpi-val">${c.available}</div><div class="kpi-lbl">Available to Issue</div></div>`;
+  }
+  kpiHtml+=`<div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)">${c.used}</div><div class="kpi-lbl">Used</div></div>
+    <div class="kpi-mini"><div class="kpi-val" style="color:var(--red)">${c.wasted}</div><div class="kpi-lbl">Wasted</div></div>
+    <div class="kpi-mini"><div class="kpi-val">${c.held}</div><div class="kpi-lbl">Currently Held (all staff)</div></div>
+  </div>`;
+
+  let bannerHtml='';
+  if(cfg.numbered&&c.totalPrinted>0){
+    const tcfg=stickerTypeCfg(type);
+    const pctRemaining=c.available/c.totalPrinted*100;
+    if(pctRemaining<=tcfg.lowPct){
+      bannerHtml=`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;color:#991b1b;font-size:13px;margin-bottom:16px;">
+        ⚠️ <strong>${cfg.label} sticker stock running low</strong> — only ${c.available} of ${c.totalPrinted} printed (${pctRemaining.toFixed(0)}%) remain unissued. Time to print the next batch.
       </div>`;
-    } else banner.style.display='none';
+    }
   }
 
-  // Pending requests (Admin/Manager)
-  const pendBox=el('sticker-pending-requests');
-  const badge=el('stickers-badge');
-  const pending=_stickerRequests.filter(r=>r.status==='Pending');
-  if(badge){ const showBadge=(isAdmin(currentUser)||isManager(currentUser))&&pending.length; badge.textContent=pending.length; badge.style.display=showBadge?'inline':'none'; }
-  if(pendBox){
-    if((isAdmin(currentUser)||isManager(currentUser))&&pending.length){
-      pendBox.innerHTML=`<div class="form-section-title" style="margin-top:0;">🔔 Pending Sticker Requests (${pending.length})</div>
-      <div class="card" style="border:1px solid #fdba74;background:#fff7ed;">
-        <div style="padding:10px 16px;">
-        ${pending.map(r=>{
-          const heldByRequester=_stickerRecords.filter(s=>s.issuedTo===r.requestedBy&&s.status==='Held');
-          return `<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-              <div style="font-size:13px;">
-                <strong>${USERS[r.requestedBy]?.name||r.requestedBy}</strong> requests a new batch (${_settings.stickerBatchSize||50} stickers)<br/>
-                <span style="color:var(--text-muted);font-size:12px;">Requested ${r.requestedAt?r.requestedAt.split('T')[0]:''}</span>
-                ${heldByRequester.length?`<div style="margin-top:4px;font-size:11px;color:#92400e;">ℹ️ Currently still holds ${heldByRequester.length} unused sticker(s): ${heldByRequester.map(s=>stickerFmt(s.number)).join(', ')}</div>`:''}
-              </div>
-              <div style="white-space:nowrap;">
-                <button class="btn btn-primary btn-sm" onclick="approveStickerRequest('${r.id}')">Approve</button>
-                <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="rejectStickerRequest('${r.id}')">Reject</button>
-              </div>
-            </div>
+  const pending=_stickerRequests.filter(r=>r.status==='Pending'&&r.type===type);
+  let pendingHtml='';
+  if((isAdmin(currentUser)||isManager(currentUser))&&pending.length){
+    pendingHtml=`<div class="form-section-title" style="margin-top:0;">🔔 Pending ${cfg.label} Requests (${pending.length})</div>
+    <div class="card" style="border:1px solid #fdba74;background:#fff7ed;margin-bottom:16px;">
+      <div style="padding:10px 16px;">
+      ${pending.map(r=>{
+        let extraInfo='';
+        if(!cfg.numbered){
+          const holdRec=getStickerCountRec(r.requestedBy,type);
+          const expected=holdRec.held;
+          const reported=r.reportedRemaining;
+          const mismatch=reported!==undefined&&reported!==expected;
+          extraInfo=`<div style="margin-top:4px;font-size:11px;color:${mismatch?'#991b1b':'#92400e'};">
+            Staff reports currently holding: <strong>${reported}</strong> — system expected: <strong>${expected}</strong>
+            ${mismatch?` ⚠️ Mismatch of ${Math.abs(reported-expected)}`:' ✓ matches'}
           </div>`;
-        }).join('')}
-        </div>
-      </div>`;
-    } else pendBox.innerHTML='';
+        } else {
+          const heldByRequester=_stickerRecords.filter(s=>s.issuedTo===r.requestedBy&&s.status==='Held'&&s.type===type);
+          if(heldByRequester.length) extraInfo=`<div style="margin-top:4px;font-size:11px;color:#92400e;">ℹ️ Currently still holds ${heldByRequester.length} unused: ${heldByRequester.map(s=>stickerFmt(type,s.number)).join(', ')}</div>`;
+        }
+        return `<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="font-size:13px;">
+              <strong>${USERS[r.requestedBy]?.name||r.requestedBy}</strong> requests a new batch (${stickerTypeCfg(type).batchSize} stickers)<br/>
+              <span style="color:var(--text-muted);font-size:12px;">Requested ${r.requestedAt?r.requestedAt.split('T')[0]:''}</span>
+              ${extraInfo}
+            </div>
+            <div style="white-space:nowrap;">
+              <button class="btn btn-primary btn-sm" onclick="approveStickerRequest('${r.id}')">Approve</button>
+              <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="rejectStickerRequest('${r.id}')">Reject</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+      </div>
+    </div>`;
   }
 
-  // My Stickers — held + recent usage for the current user
-  const myBox=el('sticker-my-holdings');
-  if(myBox){
-    const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').sort((a,b)=>a.number-b.number);
-    const myRecent=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status!=='Held').sort((a,b)=>b.number-a.number).slice(0,10);
-    myBox.innerHTML=`<div style="padding:12px 16px;">
+  let myHtml='';
+  if(cfg.numbered){
+    const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===type).sort((a,b)=>a.number-b.number);
+    const myRecent=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status!=='Held'&&r.type===type).sort((a,b)=>b.number-a.number).slice(0,10);
+    myHtml=`<div style="padding:12px 16px;">
       ${myHeld.length?`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">Unused — ${myHeld.length} sticker(s)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
-        ${myHeld.map(r=>`<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:6px;">${stickerFmt(r.number)}
-          <span onclick="promptMarkWasted(${r.number})" style="cursor:pointer;font-weight:700;" title="Mark wasted">✕</span></span>`).join('')}
-      </div>`:`<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">You have no unused stickers on hand right now.</div>`}
+        ${myHeld.map(r=>`<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:6px;">${stickerFmt(type,r.number)}
+          <span onclick="promptMarkWastedNumbered('${type}',${r.number})" style="cursor:pointer;font-weight:700;" title="Mark wasted">✕</span></span>`).join('')}
+      </div>`:`<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">You have no unused ${cfg.label.toLowerCase()} stickers on hand right now.</div>`}
       ${myRecent.length?`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">Recent Activity</div>
       <div style="font-size:12px;">
         ${myRecent.map(r=>`<div style="padding:4px 0;border-bottom:1px solid var(--border);">
-          <strong>${stickerFmt(r.number)}</strong> — ${r.status==='Used'?`Used on job <strong>${r.usedJobNo||'—'}</strong> (${r.usedAt?r.usedAt.split('T')[0]:''})`:`<span style="color:var(--red);">Wasted</span> — ${r.wastedReason||'—'} (${r.wastedAt?r.wastedAt.split('T')[0]:''})`}
+          <strong>${stickerFmt(type,r.number)}</strong> — ${r.status==='Used'?`Used on job <strong>${r.usedJobNo||'—'}</strong> (${r.usedAt?r.usedAt.split('T')[0]:''})`:`<span style="color:var(--red);">Wasted</span> — ${r.wastedReason||'—'} (${r.wastedAt?r.wastedAt.split('T')[0]:''})`}
         </div>`).join('')}
+      </div>`:''}
+    </div>`;
+  } else {
+    const myRec=getStickerCountRec(currentUser,type);
+    myHtml=`<div style="padding:12px 16px;">
+      <div style="font-size:13px;margin-bottom:10px;">You currently hold <strong style="font-size:16px;color:var(--navy);">${myRec.held}</strong> unused ${cfg.label.toLowerCase()} sticker(s).</div>
+      ${myRec.held>0?`<button class="btn btn-outline btn-sm" onclick="promptMarkWastedCount('${type}')">Mark One Wasted</button>`:''}
+      ${myRec.wasteLog&&myRec.wasteLog.length?`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-top:14px;margin-bottom:6px;">Waste Log</div>
+      <div style="font-size:12px;">
+        ${myRec.wasteLog.slice(-10).reverse().map(w=>`<div style="padding:4px 0;border-bottom:1px solid var(--border);">${w.date?w.date.split('T')[0]:''} — ${w.reason}</div>`).join('')}
       </div>`:''}
     </div>`;
   }
 
-  // Admin Summary — per staff member
+  const requestBtnLabel=`📤 Request ${cfg.label} Stickers`;
+
+  box.innerHTML=`
+    ${kpiHtml}
+    ${bannerHtml}
+    <div style="margin-bottom:16px;">
+      <button class="btn btn-primary" onclick="${cfg.numbered?`requestStickerBatch('${type}')`:`openCountBasedRequestModal('${type}')`}">${requestBtnLabel}</button>
+    </div>
+    ${pendingHtml}
+    <div class="form-section-title" style="margin-top:0;">My ${cfg.label} Stickers</div>
+    <div class="card">${myHtml}</div>
+  `;
+
   const summaryTitle=el('sticker-summary-title');
   const summaryBox=el('sticker-admin-summary');
   if(summaryTitle) summaryTitle.style.display=isAdmin(currentUser)?'block':'none';
   if(summaryBox&&isAdmin(currentUser)){
-    const byStaff={};
-    _stickerRecords.forEach(r=>{
-      if(!byStaff[r.issuedTo]) byStaff[r.issuedTo]={issued:0,used:0,wasted:0,held:0,wasteReasons:[]};
-      byStaff[r.issuedTo].issued++;
-      if(r.status==='Used') byStaff[r.issuedTo].used++;
-      if(r.status==='Held') byStaff[r.issuedTo].held++;
-      if(r.status==='Wasted'){ byStaff[r.issuedTo].wasted++; byStaff[r.issuedTo].wasteReasons.push(`${stickerFmt(r.number)}: ${r.wastedReason||'—'}`); }
+    const rows=[];
+    ['accredited','nonAccredited'].forEach(t=>{
+      const byStaff={};
+      _stickerRecords.filter(r=>r.type===t).forEach(r=>{
+        if(!byStaff[r.issuedTo]) byStaff[r.issuedTo]={issued:0,used:0,wasted:0,held:0,wasteReasons:[]};
+        byStaff[r.issuedTo].issued++;
+        if(r.status==='Used') byStaff[r.issuedTo].used++;
+        if(r.status==='Held') byStaff[r.issuedTo].held++;
+        if(r.status==='Wasted'){ byStaff[r.issuedTo].wasted++; byStaff[r.issuedTo].wasteReasons.push(`${stickerFmt(t,r.number)}: ${r.wastedReason||'—'}`); }
+      });
+      Object.keys(byStaff).forEach(u=>rows.push({staff:u,type:t,...byStaff[u]}));
     });
-    const staffList=Object.keys(byStaff);
-    summaryBox.innerHTML=!staffList.length?`<div class="empty-state"><div class="empty-icon">🏷️</div><p>No stickers issued yet.</p></div>`:
+    ['voidSticker','abnormal'].forEach(t=>{
+      _stickerCounts.filter(r=>r.type===t).forEach(r=>{
+        rows.push({staff:r.username,type:t,issued:r.totalIssued,used:r.totalUsed,wasted:r.totalWasted,held:r.held,wasteReasons:(r.wasteLog||[]).map(w=>w.reason)});
+      });
+    });
+    summaryBox.innerHTML=!rows.length?`<div class="empty-state"><div class="empty-icon">🏷️</div><p>No stickers issued yet.</p></div>`:
     `<div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>Staff</th><th>Issued</th><th>Used</th><th>Wasted</th><th>Still Holding</th><th>Waste Reasons</th></tr></thead>
+      <thead><tr><th>Staff</th><th>Type</th><th>Issued</th><th>Used</th><th>Wasted</th><th>Holding</th><th>Waste Reasons</th><th></th></tr></thead>
       <tbody>
-      ${staffList.map(u=>{
-        const s=byStaff[u];
-        return `<tr>
-          <td><strong>${USERS[u]?.name||u}</strong></td>
-          <td>${s.issued}</td>
-          <td>${s.used}</td>
-          <td>${s.wasted>0?`<span style="color:var(--red);font-weight:700;">${s.wasted}</span>`:'0'}</td>
-          <td>${s.held}</td>
-          <td style="font-size:11px;color:var(--text-muted);">${s.wasteReasons.join('; ')||'—'}</td>
-        </tr>`;
-      }).join('')}
+      ${rows.map(r=>`<tr>
+          <td><strong>${USERS[r.staff]?.name||r.staff}</strong></td>
+          <td>${STICKER_TYPES[r.type].label}</td>
+          <td>${r.issued}</td>
+          <td>${r.used}</td>
+          <td>${r.wasted>0?`<span style="color:var(--red);font-weight:700;">${r.wasted}</span>`:'0'}</td>
+          <td>${r.held}</td>
+          <td style="font-size:11px;color:var(--text-muted);">${r.wasteReasons.join('; ')||'—'}</td>
+          <td>${!STICKER_TYPES[r.type].numbered?`<button class="btn btn-outline btn-sm" onclick="openReconcileModal('${r.staff}','${r.type}')">Reconcile</button>`:''}</td>
+        </tr>`).join('')}
       </tbody>
     </table></div></div>`;
   }
   }catch(e){console.error('renderStickerPage error:',e);}
 }
 
-async function requestStickerBatch(){
+async function requestStickerBatch(type){
   if(!canPerformCal(currentUser)&&!isAdmin(currentUser)){alert('Only staff who perform calibration can request stickers.');return;}
-  const pendingAlready=_stickerRequests.find(r=>r.requestedBy===currentUser&&r.status==='Pending');
-  if(pendingAlready){alert('You already have a pending sticker request awaiting approval.');return;}
-  const held=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held').length;
+  const pendingAlready=_stickerRequests.find(r=>r.requestedBy===currentUser&&r.status==='Pending'&&r.type===type);
+  if(pendingAlready){alert('You already have a pending request for this sticker type awaiting approval.');return;}
+  const held=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===type).length;
+  const cfg=STICKER_TYPES[type];
   const msg=held>0
-    ?`You still have ${held} unused sticker(s) on hand. Submit a new request anyway?`
-    :`Submit a request for a new batch of ${_settings.stickerBatchSize||50} stickers?`;
+    ?`You still have ${held} unused ${cfg.label} sticker(s) on hand. Submit a new request anyway?`
+    :`Submit a request for a new batch of ${stickerTypeCfg(type).batchSize} ${cfg.label} stickers?`;
   if(!confirm(msg))return;
-  const req={id:'STK-'+Date.now(),requestedBy:currentUser,requestedAt:new Date().toISOString(),status:'Pending'};
+  const req={id:'STK-'+Date.now(),type,requestedBy:currentUser,requestedAt:new Date().toISOString(),status:'Pending'};
   _stickerRequests.push(req);
   await saveStickerRequests();
   renderStickerPage();
   showToast('✅ Sticker request submitted — awaiting approval','success',3000);
-  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} requested a new sticker batch`);
+  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} requested a new ${cfg.label} sticker batch`);
+}
+
+function openCountBasedRequestModal(type){
+  if(!canPerformCal(currentUser)&&!isAdmin(currentUser)){alert('Only staff who perform calibration can request stickers.');return;}
+  const pendingAlready=_stickerRequests.find(r=>r.requestedBy===currentUser&&r.status==='Pending'&&r.type===type);
+  if(pendingAlready){alert('You already have a pending request for this sticker type awaiting approval.');return;}
+  const cfg=STICKER_TYPES[type];
+  let ov=document.getElementById('sticker-count-request-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='sticker-count-request-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:420px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📤 Request ${cfg.label} Stickers</span>
+      <button onclick="document.getElementById('sticker-count-request-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-group">
+        <label class="form-label">How many ${cfg.label} stickers do you currently physically have left? <span class="req">*</span></label>
+        <input class="form-control" type="number" min="0" id="count-request-current"/>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Please count what you actually have on hand right now before requesting more.</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('sticker-count-request-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitCountBasedRequest('${type}')">Submit Request</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function submitCountBasedRequest(type){
+  const val=el('count-request-current').value;
+  if(val===''||val===null){alert('Please enter how many you currently have.');return;}
+  const reportedRemaining=parseInt(val);
+  const req={id:'STK-'+Date.now(),type,requestedBy:currentUser,requestedAt:new Date().toISOString(),status:'Pending',reportedRemaining};
+  _stickerRequests.push(req);
+  await saveStickerRequests();
+  document.getElementById('sticker-count-request-overlay').style.display='none';
+  renderStickerPage();
+  showToast('✅ Sticker request submitted — awaiting approval','success',3000);
+  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} requested a new ${STICKER_TYPES[type].label} sticker batch (reported ${reportedRemaining} remaining)`);
 }
 
 async function approveStickerRequest(reqId){
   if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can approve.');return;}
   const req=_stickerRequests.find(r=>r.id===reqId); if(!req)return;
-  const batchSize=_settings.stickerBatchSize||50;
-  const nextStart=stickerNextToIssue();
-  const nextEnd=nextStart+batchSize-1;
-  const totalPrinted=stickerTotalPrinted();
-  if(nextEnd>totalPrinted){
-    alert(`Not enough printed stickers remaining.\n\nNext available would be ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)}, but only ${totalPrinted} have been printed in total.\n\nPlease add a new printed batch in Settings first.`);
-    return;
+  const type=req.type;
+  const cfg=STICKER_TYPES[type];
+  const batchSize=stickerTypeCfg(type).batchSize;
+
+  if(cfg.numbered){
+    const nextStart=stickerNextToIssue(type);
+    const nextEnd=nextStart+batchSize-1;
+    const totalPrinted=stickerTotalPrinted(type);
+    if(nextEnd>totalPrinted){
+      alert(`Not enough printed ${cfg.label} stickers remaining.\n\nNext available would be ${stickerFmt(type,nextStart)}–${stickerFmt(type,nextEnd)}, but only ${totalPrinted} have been printed in total.\n\nPlease add a new printed batch in Settings first.`);
+      return;
+    }
+    if(!confirm(`Approve — issue ${stickerFmt(type,nextStart)} to ${stickerFmt(type,nextEnd)} (${batchSize} stickers) to ${USERS[req.requestedBy]?.name||req.requestedBy}?`))return;
+    req.status='Approved'; req.issuedStart=nextStart; req.issuedEnd=nextEnd; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+    for(let n=nextStart;n<=nextEnd;n++){
+      _stickerRecords.push({number:n,type,issuedTo:req.requestedBy,issuedAt:new Date().toISOString(),requestId:req.id,status:'Held'});
+    }
+    _settings[isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`]=nextEnd+1;
+    await SB.upsert('wl_settings','main',_settings);
+    await saveStickerRecords();
+    showToast(`✅ Issued ${stickerFmt(type,nextStart)}–${stickerFmt(type,nextEnd)} to ${USERS[req.requestedBy]?.name||req.requestedBy}`,'success',4000);
+    addAudit('🏷️',`${cfg.label} sticker batch ${stickerFmt(type,nextStart)}–${stickerFmt(type,nextEnd)} issued to ${USERS[req.requestedBy]?.name||req.requestedBy}`);
+  } else {
+    const holdRec=getStickerCountRec(req.requestedBy,type);
+    const expected=holdRec.held;
+    const reported=req.reportedRemaining!==undefined?req.reportedRemaining:expected;
+    const mismatch=reported-expected;
+    if(mismatch!==0){
+      if(!confirm(`⚠️ Mismatch detected: staff reports ${reported} remaining, system expected ${expected} (difference of ${mismatch>0?'+':''}${mismatch}).\n\nApprove anyway and adjust their held count to match what they reported?`)) return;
+      _stickerRecons.push({id:'RECON-'+Date.now(),username:req.requestedBy,type,reportedCount:reported,expectedCount:expected,discrepancy:mismatch,date:new Date().toISOString(),checkedBy:currentUser,note:'Auto-flagged during sticker request approval',source:'request'});
+      await saveStickerRecons();
+      holdRec.held=reported;
+    } else {
+      if(!confirm(`Approve — issue ${batchSize} ${cfg.label} stickers to ${USERS[req.requestedBy]?.name||req.requestedBy}?`))return;
+    }
+    req.status='Approved'; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+    holdRec.held+=batchSize;
+    holdRec.totalIssued+=batchSize;
+    await saveStickerCounts();
+    showToast(`✅ Issued ${batchSize} ${cfg.label} stickers to ${USERS[req.requestedBy]?.name||req.requestedBy}`,'success',4000);
+    addAudit('🏷️',`${batchSize} ${cfg.label} stickers issued to ${USERS[req.requestedBy]?.name||req.requestedBy}`);
   }
-  if(!confirm(`Approve — issue ${stickerFmt(nextStart)} to ${stickerFmt(nextEnd)} (${batchSize} stickers) to ${USERS[req.requestedBy]?.name||req.requestedBy}?`))return;
-  req.status='Approved'; req.issuedStart=nextStart; req.issuedEnd=nextEnd; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
-  for(let n=nextStart;n<=nextEnd;n++){
-    _stickerRecords.push({number:n,issuedTo:req.requestedBy,issuedAt:new Date().toISOString(),requestId:req.id,status:'Held'});
-  }
-  _settings.stickerNextToIssue=nextEnd+1;
-  await SB.upsert('wl_settings','main',_settings);
   await saveStickerRequests();
-  await saveStickerRecords();
   renderStickerPage();
-  showToast(`✅ Issued ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)} to ${USERS[req.requestedBy]?.name||req.requestedBy}`,'success',4000);
-  addAudit('🏷️',`Sticker batch ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)} issued to ${USERS[req.requestedBy]?.name||req.requestedBy}`);
-  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your sticker request has been APPROVED. Please collect ${stickerFmt(nextStart)}–${stickerFmt(nextEnd)} from Admin.`);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your ${cfg.label} sticker request has been APPROVED. Please collect from Admin.`);
 }
 async function rejectStickerRequest(reqId){
   if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can reject.');return;}
@@ -10350,20 +10935,82 @@ async function rejectStickerRequest(reqId){
   offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your sticker request was not approved. Reason: ${note||'—'}.`);
 }
 
-function promptMarkWasted(number){
-  const reason=prompt(`Mark ${stickerFmt(number)} as wasted — please give a reason:`,'');
+function promptMarkWastedNumbered(type,number){
+  const reason=prompt(`Mark ${stickerFmt(type,number)} as wasted — please give a reason:`,'');
   if(reason===null)return;
   if(!reason.trim()){alert('A reason is required.');return;}
-  markStickerWasted(number,reason.trim());
+  markStickerWastedNumbered(type,number,reason.trim());
 }
-async function markStickerWasted(number,reason){
-  const rec=_stickerRecords.find(r=>r.number===number&&r.issuedTo===currentUser&&r.status==='Held');
+async function markStickerWastedNumbered(type,number,reason){
+  const rec=_stickerRecords.find(r=>r.number===number&&r.type===type&&r.issuedTo===currentUser&&r.status==='Held');
   if(!rec){alert('Sticker not found in your held list.');return;}
   rec.status='Wasted'; rec.wastedReason=reason; rec.wastedAt=new Date().toISOString();
   await saveStickerRecords();
   renderStickerPage();
-  showToast(`Marked ${stickerFmt(number)} as wasted`,'success',2500);
-  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} marked sticker ${stickerFmt(number)} as wasted — ${reason}`);
+  showToast(`Marked ${stickerFmt(type,number)} as wasted`,'success',2500);
+  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} marked ${STICKER_TYPES[type].label} sticker ${stickerFmt(type,number)} as wasted — ${reason}`);
+}
+
+function promptMarkWastedCount(type){
+  const reason=prompt(`Mark 1 ${STICKER_TYPES[type].label} sticker as wasted — please give a reason:`,'');
+  if(reason===null)return;
+  if(!reason.trim()){alert('A reason is required.');return;}
+  markStickerWastedCount(type,reason.trim());
+}
+async function markStickerWastedCount(type,reason){
+  const rec=getStickerCountRec(currentUser,type);
+  if(rec.held<=0){alert('You have no unused stickers of this type to mark as wasted.');return;}
+  rec.held--; rec.totalWasted++;
+  if(!rec.wasteLog) rec.wasteLog=[];
+  rec.wasteLog.push({reason,date:new Date().toISOString()});
+  await saveStickerCounts();
+  renderStickerPage();
+  showToast(`Marked 1 ${STICKER_TYPES[type].label} sticker as wasted`,'success',2500);
+  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} marked 1 ${STICKER_TYPES[type].label} sticker as wasted — ${reason}`);
+}
+
+function openReconcileModal(username,type){
+  if(!isAdmin(currentUser)){alert('Only Admin can reconcile sticker counts.');return;}
+  const cfg=STICKER_TYPES[type];
+  const rec=getStickerCountRec(username,type);
+  let ov=document.getElementById('sticker-reconcile-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='sticker-reconcile-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:400px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🔍 Reconcile — ${USERS[username]?.name||username} (${cfg.label})</span>
+      <button onclick="document.getElementById('sticker-reconcile-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="font-size:13px;margin-bottom:10px;">System currently expects them to hold: <strong>${rec.held}</strong></div>
+      <div class="form-group">
+        <label class="form-label">Actual physical count <span class="req">*</span></label>
+        <input class="form-control" type="number" min="0" id="reconcile-actual-count"/>
+      </div>
+      <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-control" id="reconcile-note"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('sticker-reconcile-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitReconcile('${username}','${type}')">Save</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function submitReconcile(username,type){
+  const val=el('reconcile-actual-count').value;
+  if(val===''||val===null){alert('Please enter the actual count.');return;}
+  const actual=parseInt(val);
+  const note=el('reconcile-note').value.trim();
+  const rec=getStickerCountRec(username,type);
+  const expected=rec.held;
+  const discrepancy=actual-expected;
+  _stickerRecons.push({id:'RECON-'+Date.now(),username,type,reportedCount:actual,expectedCount:expected,discrepancy,date:new Date().toISOString(),checkedBy:currentUser,note,source:'manual'});
+  rec.held=actual;
+  await saveStickerRecons();
+  await saveStickerCounts();
+  document.getElementById('sticker-reconcile-overlay').style.display='none';
+  renderStickerPage();
+  showToast(discrepancy!==0?`⚠️ Reconciled — discrepancy of ${discrepancy>0?'+':''}${discrepancy} recorded`:'✅ Reconciled — count matches','success',3500);
+  addAudit('🔍',`Reconciled ${STICKER_TYPES[type].label} stickers for ${USERS[username]?.name||username} — expected ${expected}, actual ${actual}${note?' — '+note:''}`);
 }
 
 function renderMyRequests(){
@@ -12364,7 +13011,7 @@ function lookupJob(){
     return;
   }
   const items=j.items||[];
-  const statusColor={Unassigned:'#f59e0b',Assigned:'#3b82f6','In Progress':'#3b82f6','Scheduled':'#3b82f6','On-Site':'#3b82f6','KIV':'#f97316','Customer Not Ready':'#ef4444','Pending Approval':'#a855f7',Completed:'#22c55e'};
+  const statusColor={Unassigned:'#f59e0b',Assigned:'#3b82f6','In Progress':'#3b82f6','Scheduled':'#3b82f6','On-Site':'#3b82f6','KIV':'#f97316','Customer Not Ready':'#ef4444','Pending Approval':'#a855f7',Completed:'#22c55e','Returned - Abnormal':'#991b1b'};
   const statusMsg={
     Unassigned:'Received, awaiting assignment to a calibration engineer.',
     Assigned:'Calibration in progress.',
