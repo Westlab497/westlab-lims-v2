@@ -436,7 +436,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <select class="form-control" id="testing-mode-role-select" onchange="setSimulatedRole(this.value)" style="font-size:11px;padding:4px 8px;">
       <option value="">Testing as: (my real role)</option>
       <option value="Admin">Testing as: Admin</option>
-      <option value="Manager">Testing as: Manager</option>
+      <option value="Manager">Testing as: Technical Manager</option>
+      <option value="Quality Manager">Testing as: Quality Manager</option>
       <option value="Engineer">Testing as: Engineer</option>
       <option value="Coordinator">Testing as: Coordinator</option>
       <option value="Sales">Testing as: Sales</option>
@@ -654,6 +655,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-title" id="my-jobs-title">My Jobs</div>
           <div class="page-sub" id="my-jobs-sub">Jobs assigned to you</div>
         </div>
+        <button id="my-jobs-clear-test-btn" class="btn btn-outline btn-sm" style="display:none;color:#991b1b;border-color:#fca5a5;" onclick="clearTestCheckinData()">🧪 Clear Test Check-In Data</button>
       </div>
       <div id="my-jobs-list"></div>
     </div>
@@ -2259,15 +2261,16 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div id="checkin-location-status" style="background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;">
         🔍 Getting your location…
       </div>
-      <!-- Selfie capture — hidden for now per request; underlying code kept intact to re-enable easily later -->
-      <div class="form-group" style="display:none;">
-        <label class="form-label">Selfie at Site <span style="font-size:11px;color:var(--text-muted);">(optional but recommended)</span></label>
+      <!-- Selfie capture — required for onsite Check-In. Live camera capture only (getUserMedia),
+           no file/gallery picker exists on this control, so a pre-existing photo cannot be substituted. -->
+      <div class="form-group">
+        <label class="form-label">Selfie at Site <span class="req">*</span> <span style="font-size:11px;color:var(--text-muted);">(front camera, taken live — required)</span></label>
         <div id="selfie-area" style="text-align:center;">
           <video id="selfie-video" style="display:none;width:100%;border-radius:8px;max-height:200px;" autoplay playsinline></video>
           <canvas id="selfie-canvas" style="display:none;width:100%;border-radius:8px;"></canvas>
           <img id="selfie-preview" style="display:none;width:100%;border-radius:8px;max-height:200px;object-fit:cover;" alt="Selfie"/>
           <div id="selfie-buttons" style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
-            <button class="btn btn-outline btn-sm" onclick="startSelfieCamera()">📷 Take Selfie</button>
+            <button class="btn btn-outline btn-sm" onclick="startSelfieCamera()">📷 Take Selfie (required)</button>
           </div>
         </div>
       </div>
@@ -2763,7 +2766,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group"><label class="form-label">Role <span class="req">*</span></label>
         <select class="form-control" id="staff-role">
           <option value="Engineer">Engineer / Technician</option>
-          <option value="Manager">Manager (Approve certs, view reports, assign jobs)</option>
+          <option value="Manager">Technical Manager (Approve certs, view reports, assign jobs)</option>
+          <option value="Quality Manager">Quality Manager (Same as Technical Manager, plus sole sticker approval authority)</option>
           <option value="Coordinator">Coordinator (Create/edit jobs, receive items, pricing, deposits)</option>
           <option value="Sales">Sales (Lead capture only)</option>
           <option value="HR">HR / Accounts (Leave, claims, attendance only)</option>
@@ -3177,6 +3181,8 @@ function renderTestingModeUI(){
   if(toggleBtn) toggleBtn.className=isTestingModeOn()?'btn btn-sm btn-danger':'btn btn-sm btn-outline';
   const clearRow=el('sticker-clear-test-row');
   if(clearRow) clearRow.style.display=isTestingModeOn()?'block':'none';
+  const myJobsClearBtn=el('my-jobs-clear-test-btn');
+  if(myJobsClearBtn) myJobsClearBtn.style.display=isTestingModeOn()?'inline-block':'none';
 }
 
 async function loadAll(){
@@ -3222,6 +3228,8 @@ async function loadAll(){
     await loadExtensionRequests();
     await loadStickerData();
     await loadAbnormalReports();
+    await loadTestCheckins();
+    if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
   }catch(e){
     console.error('Supabase load error',e);
     showLoading('⚠️ Connection issue — retrying…');
@@ -3507,28 +3515,29 @@ function getUserRole(username){
   return USERS[username]?.role||'Engineer';
 }
 function isAdmin(u){ return getUserRole(u||currentUser)==='Admin'; }
-function isManager(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'; }
+function isManager(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Quality Manager'; }
+function canApproveStickers(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Quality Manager'; }
 function isSignatory(u){
   const uname=u||currentUser;
   const s=_staff.find(x=>x.username===uname);
   return !!(s&&s.approvedSignatory);
 }
 function isEngineer(u){ return getUserRole(u||currentUser)==='Engineer'; }
-function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Coordinator'; }
-function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='HR'; }
-function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Coordinator'].includes(r); }
-function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Engineer','Manager'].includes(r); }
-function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
-function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Coordinator'].includes(r); }
-function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager'].includes(r); }
-function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Coordinator'].includes(r); }
-function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','HR'].includes(r); }
+function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Quality Manager'||r==='Coordinator'; }
+function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Quality Manager'||r==='HR'; }
+function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','Coordinator'].includes(r); }
+function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Engineer','Manager','Quality Manager'].includes(r); }
+function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
+function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','Coordinator'].includes(r); }
+function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
+function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','Coordinator'].includes(r); }
+function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','HR'].includes(r); }
 
 function applyRoleUI(){
   try{
   const role=getUserRole(currentUser);
   const admin=role==='Admin';
-  const manager=role==='Manager';
+  const manager=role==='Manager'||role==='Quality Manager';
   const engineer=role==='Engineer';
   const coordinator=role==='Coordinator';
   const sales=role==='Sales';
@@ -5469,7 +5478,7 @@ function populateUserDropdown(selectId, includeAdmin=false, engineersOnly=false)
   }
   (_staff||[]).filter(s=>{
     if(s.active===false) return false;
-    if(engineersOnly) return s.role==='Engineer'||s.role==='Admin'||s.role==='Manager';
+    if(engineersOnly) return s.role==='Engineer'||s.role==='Admin'||s.role==='Manager'||s.role==='Quality Manager';
     return true;
   }).forEach(s=>{
     sel.innerHTML+=`<option value="${s.username}">${s.name} (${s.role})</option>`;
@@ -6638,6 +6647,8 @@ let _stickerRecords=[]; // one entry per individual sticker number ever issued (
 let _stickerCounts=[]; // one entry per (staff, type) for Void/Abnormal — {username,type,held,totalIssued,totalUsed,totalWasted,wasteLog:[]}
 let _stickerRecons=[]; // reconciliation log
 const ABNORMAL_REPORTS_KEY='wl_abnormal_reports';
+const TEST_CHECKINS_KEY='wl_test_checkins';
+let _testCheckins=[]; // isolated Check-In/Check-Out data used only while Testing Mode is on
 let _abnormalReports=[];
 
 const STICKER_TYPES={
@@ -6672,6 +6683,34 @@ async function loadRefCheckoutRequests(){
 async function saveRefCheckoutRequests(){
   await SB.upsert('wl_settings',REF_CHECKOUT_KEY,_refCheckoutRequests);
 }
+async function loadTestCheckins(){
+  try{
+    const r=await SB.get('wl_settings',TEST_CHECKINS_KEY);
+    _testCheckins=Array.isArray(r)?r:[];
+  }catch(e){_testCheckins=[];}
+}
+async function saveTestCheckins(){ await SB.upsert('wl_settings',TEST_CHECKINS_KEY,_testCheckins); }
+function getTestCheckinRec(jobNo,itemIdx){
+  let rec=_testCheckins.find(t=>t.jobNo===jobNo&&t.itemIdx===itemIdx);
+  if(!rec){ rec={jobNo,itemIdx}; _testCheckins.push(rec); }
+  return rec;
+}
+// Mode-aware read — while Testing Mode is on, Check-In/Check-Out data comes from the isolated
+// test store instead of the real job record, so testing never touches or reveals real data.
+function getCheckinData(jobNo,itemIdx){
+  if(isTestingModeOn()){
+    return _testCheckins.find(t=>t.jobNo===jobNo&&t.itemIdx===itemIdx)||{};
+  }
+  const j=getJob(jobNo);
+  const it=j?.items?.[itemIdx];
+  return it?{
+    checkinTime:it.checkinTime, checkinLat:it.checkinLat, checkinLng:it.checkinLng,
+    checkinAccuracy:it.checkinAccuracy, checkinFlagged:it.checkinFlagged,
+    checkinSelfie:it.checkinSelfie, checkinNotes:it.checkinNotes,
+    checkoutTime:it.checkoutTime, checkoutNotes:it.checkoutNotes
+  }:{};
+}
+
 async function loadAbnormalReports(){
   try{
     const r=await SB.get('wl_settings',ABNORMAL_REPORTS_KEY);
@@ -6710,6 +6749,14 @@ async function saveStickerRequests(){ await SB.upsert('wl_settings',stkKey(STICK
 async function saveStickerRecords(){ await SB.upsert('wl_settings',stkKey(STICKER_RECORDS_KEY),_stickerRecords); }
 async function saveStickerCounts(){ await SB.upsert('wl_settings',stkKey(STICKER_COUNTS_KEY),_stickerCounts); }
 async function saveStickerRecons(){ await SB.upsert('wl_settings',stkKey(STICKER_RECON_KEY),_stickerRecons); }
+async function clearTestCheckinData(){
+  if(!confirm('Clear all Testing Mode Check-In/Check-Out data?\n\nThis only affects test data — real Check-In records on real jobs are completely untouched.'))return;
+  _testCheckins=[];
+  await saveTestCheckins();
+  showToast('🧪 Test Check-In data cleared','success',3000);
+  if(typeof renderMyJobs==='function') renderMyJobs();
+}
+
 async function clearStickerTestData(){
   if(!confirm('Clear all Testing Mode sticker data?\n\nThis only affects test data — your real sticker records are completely untouched.'))return;
   _stickerBatches=[]; _stickerRequests=[]; _stickerRecords=[]; _stickerCounts=[]; _stickerRecons=[];
@@ -8095,7 +8142,7 @@ const OFFICE_LNG=101.56902557255597;
 const CHECKIN_RADIUS_M=500;
 
 let _checkinJobNo=null, _checkinItemIdx=null;
-let _checkinLat=null, _checkinLng=null;
+let _checkinLat=null, _checkinLng=null, _checkinAccuracy=null;
 let _checkinFlagged=false;
 let _selfieDataUrl=null;
 let _selfieStream=null;
@@ -8112,33 +8159,27 @@ function haversineDistance(lat1,lon1,lat2,lon2){
 
 function openCheckinModal(jobNo, itemIdx){
   _checkinJobNo=jobNo; _checkinItemIdx=itemIdx;
-  _checkinLat=null; _checkinLng=null; _checkinFlagged=false;
+  _checkinLat=null; _checkinLng=null; _checkinAccuracy=null; _checkinFlagged=false;
   _selfieDataUrl=null;
   el('checkin-notes').value='';
-  el('checkin-override-text') && (el('checkin-override-text').value='');
-  el('checkin-override-reason').style.display='none';
   el('checkin-confirm-btn').disabled=true;
   el('checkin-modal-title').textContent='📍 Check In at Site';
 
-  // Reset selfie UI
+  // Reset selfie UI — required for onsite check-in, live capture only (no gallery/upload option)
   const vid=el('selfie-video'); if(vid) vid.style.display='none';
   const canvas=el('selfie-canvas'); if(canvas) canvas.style.display='none';
   const preview=el('selfie-preview'); if(preview){preview.style.display='none';preview.src='';}
   const btns=el('selfie-buttons');
-  if(btns) btns.innerHTML='<button class="btn btn-outline btn-sm" onclick="startSelfieCamera()">📷 Take Selfie</button>';
+  if(btns) btns.innerHTML='<button class="btn btn-outline btn-sm" onclick="startSelfieCamera()">📷 Take Selfie (required)</button>';
 
-  // Stop any existing stream
   if(_selfieStream){_selfieStream.getTracks().forEach(t=>t.stop());_selfieStream=null;}
 
   openModal('modal-checkin');
 
-  // Record geolocation — no pass/fail judgment, just a timestamped log entry.
-  // (Comparing against the office would be backwards for an onsite visit — the
-  // whole point is being away from the office, at the customer's site instead.)
+  // Location is now mandatory — Check-In cannot proceed without it.
   const statusEl=el('checkin-location-status');
   if(!navigator.geolocation){
-    statusEl.innerHTML='<span style="color:#c84b00;">⚠️ Geolocation not supported by this browser — you can still check in, location just will not be recorded.</span>';
-    el('checkin-confirm-btn').disabled=false;
+    statusEl.innerHTML='<span style="color:#c0001a;">❌ Geolocation not supported by this browser. Check-In requires location — please use a different device.</span>';
     return;
   }
   statusEl.innerHTML='🔍 Getting your location…';
@@ -8146,16 +8187,22 @@ function openCheckinModal(jobNo, itemIdx){
     (pos)=>{
       _checkinLat=pos.coords.latitude;
       _checkinLng=pos.coords.longitude;
-      statusEl.innerHTML=`<span style="color:#2e7d32;">✅ Location recorded — this will be saved with your check-in for reference.</span>`;
-      _checkinFlagged=false;
-      el('checkin-confirm-btn').disabled=false;
+      _checkinAccuracy=pos.coords.accuracy;
+      // Flag suspiciously perfect or unusually poor accuracy — fake-GPS apps often report
+      // an unnaturally exact, repeated figure. This is informational only, never blocks check-in.
+      _checkinFlagged=(_checkinAccuracy!=null&&(_checkinAccuracy<3||_checkinAccuracy>500));
+      statusEl.innerHTML=`<span style="color:#2e7d32;">✅ Location recorded (accuracy: ±${Math.round(_checkinAccuracy)}m)</span>`;
+      updateCheckinConfirmState();
     },
     (err)=>{
-      statusEl.innerHTML=`<span style="color:#c84b00;">⚠️ Could not get location (${err.message}). You can still check in — location just will not be recorded.</span>`;
-      el('checkin-confirm-btn').disabled=false;
+      statusEl.innerHTML=`<span style="color:#c0001a;">❌ Could not get your location (${err.message}). Location is required — please enable location access in your phone settings and try again.</span>`;
     },
     {enableHighAccuracy:true, timeout:15000, maximumAge:0}
   );
+}
+function updateCheckinConfirmState(){
+  const btn=el('checkin-confirm-btn'); if(!btn)return;
+  btn.disabled=!(_checkinLat!=null&&_selfieDataUrl);
 }
 
 function startSelfieCamera(){
@@ -8189,6 +8236,7 @@ function captureSelfie(){
   vid.style.display='none';
   if(_selfieStream){_selfieStream.getTracks().forEach(t=>t.stop());_selfieStream=null;}
   btns.innerHTML=`<button class="btn btn-outline btn-sm" onclick="retakeSelfie()">🔄 Retake</button>`;
+  updateCheckinConfirmState();
 }
 
 function retakeSelfie(){
@@ -8196,6 +8244,7 @@ function retakeSelfie(){
   preview.style.display='none';
   preview.src='';
   _selfieDataUrl=null;
+  updateCheckinConfirmState();
   startSelfieCamera();
 }
 
@@ -8206,19 +8255,59 @@ function cancelSelfie(){
   if(btns) btns.innerHTML='<button class="btn btn-outline btn-sm" onclick="startSelfieCamera()">📷 Take Selfie</button>';
 }
 
+async function cleanupExpiredCheckinSelfies(){
+  // Throttled to once per calendar day per browser, Admin-only — no need to scan every login.
+  if(!isAdmin(currentUser))return;
+  const todayStr=toLocalDateStr(new Date());
+  if(localStorage.getItem('wl_last_selfie_cleanup')===todayStr)return;
+  try{
+    const now=new Date();
+    const pathsToDelete=[];
+    const jobsToClean=[];
+    _jobs.forEach(j=>{
+      (j.items||[]).forEach((it,idx)=>{
+        if(it.checkinSelfie&&it.checkinSelfieExpiresAt&&new Date(it.checkinSelfieExpiresAt)<now){
+          const path=extractR2Path(it.checkinSelfie);
+          if(path) pathsToDelete.push(path);
+          jobsToClean.push({jobNo:j.jobNo,itemIdx:idx});
+        }
+      });
+    });
+    if(pathsToDelete.length){
+      try{
+        await fetch('https://westlab-upload.sales-2fb.workers.dev',{
+          method:'DELETE', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(pathsToDelete)
+        });
+      }catch(e){console.warn('Selfie cleanup R2 delete failed:',e);}
+      for(const {jobNo,itemIdx} of jobsToClean){
+        await updateJob(jobNo,job=>{
+          const it=job.items[itemIdx];
+          if(it){ it.checkinSelfie=''; it.checkinSelfiePath=''; it.checkinSelfieExpiresAt=null; }
+        });
+      }
+      addAudit('🗑️',`${pathsToDelete.length} check-in selfie(s) older than 90 days automatically deleted`);
+    }
+    localStorage.setItem('wl_last_selfie_cleanup',todayStr);
+  }catch(e){console.warn('cleanupExpiredCheckinSelfies error:',e);}
+}
+
 async function confirmCheckIn(){
+  if(_checkinLat==null){showToast('❌ Location is required to check in.','error',3500);return;}
+  if(!_selfieDataUrl){showToast('❌ A live selfie is required to check in.','error',3500);return;}
   const btn=el('checkin-confirm-btn');
   if(btn){btn.disabled=true;btn.textContent='⏳ Checking in…';}
   try{
     const now=new Date().toISOString();
     const notes=el('checkin-notes').value.trim();
 
-    // Upload selfie to R2 if captured
+    // Upload selfie to R2 — test-mode uploads go to a separate folder, auto-delete after 90 days
+    // is enforced by cleanupExpiredCheckinSelfies(), run on app load, using the expiresAt saved below.
     let selfieUrl='';
     if(_selfieDataUrl){
       try{
         const blob=await fetch(_selfieDataUrl).then(r=>r.blob());
-        const path=`checkins/${_checkinJobNo}_item${_checkinItemIdx}_${Date.now()}.jpg`;
+        const path=`${isTestingModeOn()?'checkins_test':'checkins'}/${_checkinJobNo}_item${_checkinItemIdx}_${Date.now()}.jpg`;
         const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
           method:'POST',
           headers:{'X-File-Path':path,'Content-Type':'image/jpeg'},
@@ -8230,27 +8319,43 @@ async function confirmCheckIn(){
         }
       }catch(e){console.warn('Selfie upload failed:',e);}
     }
+    if(!selfieUrl){showToast('❌ Selfie upload failed — please check your connection and try again.','error',4000);if(btn){btn.disabled=false;btn.textContent='📍 Confirm Check In';}return;}
 
-    await updateJob(_checkinJobNo,job=>{
-      const it=job.items[_checkinItemIdx];
-      it.checkinTime=now;
-      it.checkinLat=_checkinLat;
-      it.checkinLng=_checkinLng;
-      it.checkinSelfie=selfieUrl;
-      it.checkinNotes=notes;
-      it.status='On-Site';
-      job.history.push({
-        action:`Item ${it.itemNo} Check-In at ${new Date(now).toLocaleTimeString('en-MY')}`,
-        by:currentUser,time:now
+    const selfieExpiresAt=new Date(Date.now()+90*86400000).toISOString(); // 90 days from now
+
+    if(isTestingModeOn()){
+      const rec=getTestCheckinRec(_checkinJobNo,_checkinItemIdx);
+      rec.checkinTime=now; rec.checkinLat=_checkinLat; rec.checkinLng=_checkinLng;
+      rec.checkinAccuracy=_checkinAccuracy; rec.checkinFlagged=_checkinFlagged;
+      rec.checkinSelfie=selfieUrl; rec.checkinSelfiePath=selfieUrl?selfieUrl.split('/').slice(-2).join('/'):'';
+      rec.checkinSelfieExpiresAt=selfieExpiresAt; rec.checkinNotes=notes;
+      await saveTestCheckins();
+    } else {
+      await updateJob(_checkinJobNo,job=>{
+        const it=job.items[_checkinItemIdx];
+        it.checkinTime=now;
+        it.checkinLat=_checkinLat;
+        it.checkinLng=_checkinLng;
+        it.checkinAccuracy=_checkinAccuracy;
+        it.checkinFlagged=_checkinFlagged;
+        it.checkinSelfie=selfieUrl;
+        it.checkinSelfiePath=selfieUrl?selfieUrl.split('/').slice(-2).join('/'):''; // for later deletion
+        it.checkinSelfieExpiresAt=selfieExpiresAt;
+        it.checkinNotes=notes;
+        it.status='On-Site';
+        job.history.push({
+          action:`Item ${it.itemNo} Check-In at ${new Date(now).toLocaleTimeString('en-MY')}${_checkinFlagged?' ⚠️ (unusual GPS accuracy reading)':''}`,
+          by:currentUser,time:now
+        });
       });
-    });
+    }
 
     // Stop camera if still running
     if(_selfieStream){_selfieStream.getTracks().forEach(t=>t.stop());_selfieStream=null;}
     closeModal('modal-checkin');
     renderMyJobs();
     showToast(`✅ Checked in at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`,'success',4000);
-    addAudit('📍',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked in`);
+    addAudit('📍',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked in${_checkinFlagged?' (⚠️ unusual GPS accuracy)':''}`);
   }catch(e){
     console.error('confirmCheckIn error:',e);
     showToast('❌ Check-in failed: '+e.message,'error',5000);
@@ -8262,10 +8367,10 @@ async function confirmCheckIn(){
 function openCheckoutModal(jobNo, itemIdx){
   _checkinJobNo=jobNo; _checkinItemIdx=itemIdx;
   el('checkout-notes').value='';
-  const item=getJob(jobNo)?.items?.[itemIdx];
+  const cd=getCheckinData(jobNo,itemIdx);
   const summary=el('checkout-summary');
-  if(summary&&item?.checkinTime){
-    const inTime=new Date(item.checkinTime);
+  if(summary&&cd.checkinTime){
+    const inTime=new Date(cd.checkinTime);
     const now=new Date();
     const duration=Math.round((now-inTime)/60000);
     const hrs=Math.floor(duration/60);
@@ -8280,19 +8385,25 @@ async function confirmCheckOut(){
   const now=new Date().toISOString();
   const notes=el('checkout-notes').value.trim();
   try{
-    await updateJob(_checkinJobNo,job=>{
-      const it=job.items[_checkinItemIdx];
-      it.checkoutTime=now;
-      it.checkoutNotes=notes;
-      job.history.push({
-        action:`Item ${it.itemNo} Check-Out at ${new Date(now).toLocaleTimeString('en-MY')}`,
-        by:currentUser,time:now
+    if(isTestingModeOn()){
+      const rec=getTestCheckinRec(_checkinJobNo,_checkinItemIdx);
+      rec.checkoutTime=now; rec.checkoutNotes=notes;
+      await saveTestCheckins();
+    } else {
+      await updateJob(_checkinJobNo,job=>{
+        const it=job.items[_checkinItemIdx];
+        it.checkoutTime=now;
+        it.checkoutNotes=notes;
+        job.history.push({
+          action:`Item ${it.itemNo} Check-Out at ${new Date(now).toLocaleTimeString('en-MY')}`,
+          by:currentUser,time:now
+        });
       });
-    });
+    }
     closeModal('modal-checkout');
     renderMyJobs();
     showToast(`🏁 Checked out at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`,'success',3000);
-    addAudit('🏁',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked out`);
+    addAudit('🏁',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked out${isTestingModeOn()?' (test)':''}`);
   }catch(e){
     showToast('❌ Check-out failed: '+e.message,'error',5000);
   }
@@ -8537,6 +8648,7 @@ function renderMyJobs(){
     return (a.job.promisedDate||'9')>(b.job.promisedDate||'9')?1:-1;
   });
   container.innerHTML=myItems.map(({job:j,item,idx})=>{
+    const cd=getCheckinData(j.jobNo,idx);
     const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&item.status!=='Completed'&&item.status!=='KIV';
     let slaHtml='';
     if(item.status==='KIV'&&item.kivStartDate){
@@ -8572,8 +8684,8 @@ function renderMyJobs(){
           <br/>
           <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.siteAddress)}" target="_blank" style="color:#006064;font-weight:700;text-decoration:none;background:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;margin-right:6px;">🗺️ Maps</a>
           <a href="https://waze.com/ul?q=${encodeURIComponent(j.siteAddress)}&navigate=yes" target="_blank" style="color:#006064;font-weight:700;text-decoration:none;background:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;">🚗 Waze</a>
-          ${item.checkinTime?`<br/>✅ Checked in: <strong>${new Date(item.checkinTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>${item.checkinFlagged?' <span style="color:#c84b00;">(Remote)</span>':''}`:''} 
-          ${item.checkoutTime?` &nbsp;·&nbsp; 🏁 Out: <strong>${new Date(item.checkoutTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>`:''}
+          ${cd.checkinTime?`<br/>✅ Checked in: <strong>${new Date(cd.checkinTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>${cd.checkinFlagged?' <span style="color:#c84b00;">(⚠️ unusual GPS)</span>':''}${isTestingModeOn()?' <span style="color:#7c2d12;font-weight:700;">🧪 TEST</span>':''}`:''} 
+          ${cd.checkoutTime?` &nbsp;·&nbsp; 🏁 Out: <strong>${new Date(cd.checkoutTime).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</strong>`:''}
           <br/><button onclick="openRequestExtensionModal('${j.jobNo}',${idx})" style="margin-top:6px;background:#fff;border:1px solid #006064;color:#006064;font-weight:700;font-size:10px;padding:2px 8px;border-radius:10px;cursor:pointer;">🔄 Request Extension</button>
         </div>`:''}
       <div class="approval-card-header">
@@ -8598,7 +8710,7 @@ function renderMyJobs(){
           <button class="btn btn-primary btn-sm" onclick="openCalModal('${j.jobNo}',${idx})">🔬 Perform Calibration</button>
           ${item.calType==='Onsite'?`
             <button class="btn btn-outline btn-sm" style="background:#ffeaee;color:#c0001a;border-color:#ffb3bc;" onclick="openCustomerNotReadyModal('${j.jobNo}',${idx})">⚠️ Not Ready</button>
-            ${!item.checkinTime?`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${j.jobNo}',${idx})">📍 Check In</button>`:`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${j.jobNo}',${idx})">🏁 Check Out</button>`}
+            ${!cd.checkinTime?`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${j.jobNo}',${idx})">📍 Check In${isTestingModeOn()?' 🧪':''}</button>`:`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${j.jobNo}',${idx})">🏁 Check Out${isTestingModeOn()?' 🧪':''}</button>`}
           `:`<button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">🔶 KIV</button>`}
         `:''}        ${item.status==='Pending Approval'?
           `<span style="font-size:12px;color:var(--purple);font-weight:600;padding:5px;">📬 Awaiting approval…</span>`:''}
@@ -9176,7 +9288,7 @@ function refreshAllBadges(){
   if(ab){ab.textContent=totalApprovalBadge;ab.style.display=totalApprovalBadge>0?'inline':'none';}
   const sb=el('stickers-badge');
   if(sb){
-    const stkPending=canSeeExtras?_stickerRequests.filter(r=>r.status==='Pending').length:0;
+    const stkPending=canApproveStickers(currentUser)?_stickerRequests.filter(r=>r.status==='Pending').length:0;
     sb.textContent=stkPending; sb.style.display=stkPending>0?'inline':'none';
   }
   renderDashboard();
@@ -10795,7 +10907,7 @@ function renderStickerPage(){
 
   const pending=_stickerRequests.filter(r=>r.status==='Pending'&&r.type===type);
   let pendingHtml='';
-  if((isAdmin(currentUser)||isManager(currentUser))&&pending.length){
+  if(canApproveStickers(currentUser)&&pending.length){
     pendingHtml=`<div class="form-section-title" style="margin-top:0;">🔔 Pending ${cfg.label} Requests (${pending.length})</div>
     <div class="card" style="border:1px solid #fdba74;background:#fff7ed;margin-bottom:16px;">
       <div style="padding:10px 16px;">
@@ -10876,8 +10988,8 @@ function renderStickerPage(){
 
   const summaryTitle=el('sticker-summary-title');
   const summaryBox=el('sticker-admin-summary');
-  if(summaryTitle) summaryTitle.style.display=isAdmin(currentUser)?'block':'none';
-  if(summaryBox&&isAdmin(currentUser)){
+  if(summaryTitle) summaryTitle.style.display=(isAdmin(currentUser)||getUserRole(currentUser)==='Quality Manager')?'block':'none';
+  if(summaryBox&&(isAdmin(currentUser)||getUserRole(currentUser)==='Quality Manager')){
     const rows=[];
     ['accredited','nonAccredited'].forEach(t=>{
       const byStaff={};
@@ -10973,7 +11085,7 @@ async function submitCountBasedRequest(type){
 }
 
 async function approveStickerRequest(reqId){
-  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can approve.');return;}
+  if(!canApproveStickers(currentUser)){alert('Only Admin and Quality Manager can approve sticker requests.');return;}
   const req=_stickerRequests.find(r=>r.id===reqId); if(!req)return;
   const type=req.type;
   const cfg=STICKER_TYPES[type];
@@ -11022,7 +11134,7 @@ async function approveStickerRequest(reqId){
   offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your ${cfg.label} sticker request has been APPROVED. Please collect from Admin.`);
 }
 async function rejectStickerRequest(reqId){
-  if(!isAdmin(currentUser)&&!isManager(currentUser)){alert('Only Admin/Manager can reject.');return;}
+  if(!canApproveStickers(currentUser)){alert('Only Admin and Quality Manager can reject sticker requests.');return;}
   const req=_stickerRequests.find(r=>r.id===reqId); if(!req)return;
   const note=prompt('Reason for rejecting (shown to the staff member):','');
   if(note===null)return;
@@ -11068,7 +11180,7 @@ async function markStickerWastedCount(type,reason){
 }
 
 function openReconcileModal(username,type){
-  if(!isAdmin(currentUser)){alert('Only Admin can reconcile sticker counts.');return;}
+  if(!canApproveStickers(currentUser)){alert('Only Admin and Quality Manager can reconcile sticker counts.');return;}
   const cfg=STICKER_TYPES[type];
   const rec=getStickerCountRec(username,type);
   let ov=document.getElementById('sticker-reconcile-overlay');
@@ -11612,7 +11724,7 @@ function setCalViewMode(mode){
 }
 function populateCalEngineerFilter(){
   const sel=el('cal-engineer-filter'); if(!sel||sel.dataset.populated)return;
-  const eligible=(_staff||[]).filter(s=>['Engineer','Manager','Admin'].includes(s.role));
+  const eligible=(_staff||[]).filter(s=>['Engineer','Manager','Quality Manager','Admin'].includes(s.role));
   sel.innerHTML='<option value="">All Engineers</option>'+eligible.map(s=>`<option value="${s.username}">${s.name}</option>`).join('');
   sel.dataset.populated='1';
 }
@@ -12250,12 +12362,13 @@ async function permanentlyDeleteJob(jobNo){
 // ── PERSONNEL MANAGEMENT ──
 const ROLE_DISPLAY={
   Admin:{label:'Admin',access:'Full access — all modules including Settings and Personnel',badge:'badge-green'},
-  Manager:{label:'Manager',access:'Approve certs, assign jobs, view reports, approve leave/claims/OT, view pricing',badge:'badge-purple'},
+  Manager:{label:'Technical Manager',access:'Approve certs, assign jobs, view reports, approve leave/claims/OT, view pricing',badge:'badge-purple'},
+  'Quality Manager':{label:'Quality Manager',access:'Same as Technical Manager, plus sole authority (with Admin) to approve calibration sticker requests and reconcile counts',badge:'badge-purple'},
   Engineer:{label:'Engineer',access:'My Jobs, perform calibration, clock in/out, own leave and claims',badge:'badge-blue'},
   Coordinator:{label:'Coordinator',access:'Create/edit jobs, receive items, view pricing and deposit tracking, customer database, calendar',badge:'badge-teal'},
   Sales:{label:'Sales',access:'Lead capture — no job creation, no pricing visibility',badge:'badge-slate'},
   HR:{label:'HR',access:'Leave, claims, and attendance only — no access to jobs or calibration',badge:'badge-amber'},
-  Signatory:{label:'Manager',access:'Approve certs, assign jobs, view reports',badge:'badge-purple'} // legacy
+  Signatory:{label:'Technical Manager',access:'Approve certs, assign jobs, view reports',badge:'badge-purple'} // legacy
 };
 
 function renderPersonnel(){
