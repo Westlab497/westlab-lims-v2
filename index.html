@@ -460,6 +460,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon"><i class="ti ti-building"></i></span><span class="nav-label">Customer Database</span></button>
     <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Lab Reference Equipment</span></button>
     <button class="nav-item hidden-nav" id="nav-price-ref" onclick="openPriceReferenceModal()" data-label="Price Reference"><span class="nav-icon"><i class="ti ti-tag"></i></span><span class="nav-label">Price Reference</span></button>
+    <button class="nav-item hidden-nav" id="nav-quotations" onclick="showView('quotations')" data-label="Quotations"><span class="nav-icon"><i class="ti ti-file-invoice"></i></span><span class="nav-label">Quotations</span></button>
 
     <div class="nav-section-label">Quality System</div>
     <button class="nav-item" id="nav-tests" onclick="showView('tests')" data-label="Test Requests &amp; Results"><span class="nav-icon"><i class="ti ti-test-pipe"></i></span><span class="nav-label">Test Requests &amp; Results</span></button>
@@ -883,6 +884,36 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div id="sticker-tab-content"></div>
       <div class="form-section-title" id="sticker-summary-title" style="display:none;">Admin Summary — All Staff, All Types</div>
       <div id="sticker-admin-summary"></div>
+    </div>
+
+    <!-- ════ QUOTATIONS ════ -->
+    <div class="view" id="view-quotations">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📋 Quotations</div>
+          <div class="page-sub">Log quotes given to customers — won and lost, so we always have a record</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" id="btn-quotation-dashboard" style="display:none;" onclick="openQuotationDashboard()">📊 Performance Dashboard</button>
+          <button class="btn btn-primary" onclick="openNewQuotationModal()">+ New Quotation</button>
+        </div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-mini"><div class="kpi-val" id="qt-kpi-pending">0</div><div class="kpi-lbl">Pending Items</div></div>
+        <div class="kpi-mini"><div class="kpi-val" style="color:var(--green)" id="qt-kpi-won">0</div><div class="kpi-lbl">Won This Month</div></div>
+        <div class="kpi-mini"><div class="kpi-val" style="color:var(--red)" id="qt-kpi-lost">0</div><div class="kpi-lbl">Lost This Month</div></div>
+      </div>
+      <div id="qt-closing-soon-banner" style="display:none;margin-bottom:14px;"></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <input class="filter-select" id="qt-search" placeholder="Search customer or equipment…" style="width:220px;" oninput="renderQuotationsList()"/>
+        <select class="filter-select" id="qt-filter-status" onchange="renderQuotationsList()">
+          <option value="">All Statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="Won">Won</option>
+          <option value="Lost">Lost</option>
+        </select>
+      </div>
+      <div id="quotations-list"></div>
     </div>
 
     <!-- ════ ATTENDANCE ════ -->
@@ -3228,6 +3259,8 @@ async function loadAll(){
     await loadExtensionRequests();
     await loadStickerData();
     await loadAbnormalReports();
+    await loadQuotations();
+    if(typeof autoExpireQuotations==='function') autoExpireQuotations();
     await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
   }catch(e){
@@ -3530,7 +3563,10 @@ function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin',
 function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
 function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','Coordinator'].includes(r); }
 function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
-function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','Coordinator'].includes(r); }
+function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator'].includes(r); }
+function canViewPriceReference(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
+function canLogQuotation(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
+function canViewQuotationDashboard(u){ const r=getUserRole(u||currentUser); return ['Admin','Sales'].includes(r); }
 function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','HR'].includes(r); }
 
 function applyRoleUI(){
@@ -3551,7 +3587,8 @@ function applyRoleUI(){
   el('nav-approval').classList.toggle('hidden-nav', !(admin||manager));
   el('nav-customers').classList.toggle('hidden-nav', hr);
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
-  el('nav-price-ref').classList.toggle('hidden-nav', !(admin||manager||coordinator));
+  el('nav-price-ref').classList.toggle('hidden-nav', !canViewPriceReference(currentUser));
+  el('nav-quotations').classList.toggle('hidden-nav', !canLogQuotation(currentUser));
   el('nav-calendar').classList.toggle('hidden-nav', hr);
   el('nav-stickers').classList.toggle('hidden-nav', sales||hr||coordinator);
   el('nav-claims').classList.toggle('hidden-nav', false); // all can see own claims
@@ -3588,7 +3625,7 @@ function toLocalDateStr(d){
 const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',completed:'Completed Jobs',
   customers:'Customer Database',deleted:'Deleted Jobs',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
-  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Lab Reference Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',
+  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Lab Reference Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
   personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings'};
 
 function showView(name){
@@ -3627,6 +3664,7 @@ function showView(name){
   if(name==='ref-eq') renderRefEqTable();
   if(name==='my-requests') renderMyRequests();
   if(name==='stickers') renderStickerPage();
+  if(name==='quotations') renderQuotationsPage();
 }
 
 // ── MODALS ──
@@ -4225,6 +4263,40 @@ async function openNewJobModal(){
     calcPromisedDate();
     _extraEquipment=[];
     renderExtraEquipment();
+
+    // If starting from a Quotation, pre-fill customer + all Won items now, on top of the clean reset above
+    if(_startingFromQuotationId){
+      const quo=_quotations.find(q=>q.id===_startingFromQuotationId);
+      if(quo){
+        const wonItems=quo.items.filter(it=>it.status==='Won'&&!it.wonJobNo);
+        if(wonItems.length){
+          const compEl=el('eq-company'); if(compEl) compEl.value=quo.custName||'';
+          const attEl=el('eq-attention'); if(attEl) attEl.value=quo.attention||'';
+          const addrEl=el('eq-address'); if(addrEl) addrEl.value=quo.address||'';
+          const mobEl=el('eq-mobile'); if(mobEl) mobEl.value=quo.mobile||'';
+          if(quo.custTypes&&quo.custTypes.includes('Dealer')&&(quo.endUserName||quo.endUserMobile)){
+            const euGroup=el('end-user-group'); if(euGroup) euGroup.style.display='block';
+            const euNameEl=el('eq-end-user'); if(euNameEl) euNameEl.value=quo.endUserName||'';
+            const euMobEl=el('eq-end-user-mobile'); if(euMobEl) euMobEl.value=quo.endUserMobile||'';
+          }
+          // First Won item → primary item fields
+          const first=wonItems[0];
+          const nameEl=el('eq-name'); if(nameEl) nameEl.value=first.eqName||'';
+          const brandEl=el('eq-brand'); if(brandEl) brandEl.value=first.brand||'';
+          const modelEl=el('eq-model'); if(modelEl) modelEl.value=first.model||'';
+          if(itEl) itEl.value=first.calType||'Lab';
+          if(canViewPrice(currentUser)){ const priceEl=el('eq-price'); if(priceEl) priceEl.value=first.price||''; }
+          updateSiteFieldsVisibility();
+          // Remaining Won items → additional equipment lines
+          wonItems.slice(1).forEach(it=>{
+            _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.price||0):0});
+          });
+          renderExtraEquipment();
+          showToast(`✅ Pre-filled from quotation — ${wonItems.length} item(s). Please fill in Serial No. and other physical details once the item arrives.`,'success',5000);
+        }
+      }
+    }
+
     openModal('modal-add-equipment');
   }catch(err){
     console.error('openNewJobModal error:',err);
@@ -4425,6 +4497,17 @@ async function saveEquipment(printReceipt=false){
   await SB.upsert('wl_jobs',jobNo,job);
   cacheFullJob(job);
   _jobs.unshift(job);
+
+  // If this job was started from a Quotation, link the Won items to this job number
+  if(_startingFromQuotationId){
+    const quo=_quotations.find(q=>q.id===_startingFromQuotationId);
+    if(quo){
+      const wonItems=quo.items.filter(it=>it.status==='Won'&&!it.wonJobNo);
+      items.forEach((jobItem,i)=>{ if(wonItems[i]){ wonItems[i].wonJobNo=jobNo; wonItems[i].wonJobItemIdx=i; } });
+      await saveQuotations();
+    }
+    _startingFromQuotationId=null;
+  }
 
   closeModal('modal-add-equipment');
   renderEquipmentTable(); renderDashboard(); refreshAllBadges();
@@ -6647,6 +6730,8 @@ let _stickerRecords=[]; // one entry per individual sticker number ever issued (
 let _stickerCounts=[]; // one entry per (staff, type) for Void/Abnormal — {username,type,held,totalIssued,totalUsed,totalWasted,wasteLog:[]}
 let _stickerRecons=[]; // reconciliation log
 const ABNORMAL_REPORTS_KEY='wl_abnormal_reports';
+const QUOTATIONS_KEY='wl_quotations';
+let _quotations=[];
 const TEST_CHECKINS_KEY='wl_test_checkins';
 let _testCheckins=[]; // isolated Check-In/Check-Out data used only while Testing Mode is on
 let _abnormalReports=[];
@@ -6710,6 +6795,14 @@ function getCheckinData(jobNo,itemIdx){
     checkoutTime:it.checkoutTime, checkoutNotes:it.checkoutNotes
   }:{};
 }
+
+async function loadQuotations(){
+  try{
+    const q=await SB.get('wl_settings',QUOTATIONS_KEY);
+    _quotations=Array.isArray(q)?q:[];
+  }catch(e){_quotations=[];}
+}
+async function saveQuotations(){ await SB.upsert('wl_settings',QUOTATIONS_KEY,_quotations); }
 
 async function loadAbnormalReports(){
   try{
@@ -11223,6 +11316,600 @@ async function submitReconcile(username,type){
   addAudit('🔍',`Reconciled ${STICKER_TYPES[type].label} stickers for ${USERS[username]?.name||username} — expected ${expected}, actual ${actual}${note?' — '+note:''}`);
 }
 
+// ══════════════════════════════════════════════════
+// QUOTATION LOG — multi-item, per-item Won/Lost, Lab/Onsite split
+// ══════════════════════════════════════════════════
+let _qtDraftItems=[];
+
+function renderQuotationsPage(){
+  el('btn-quotation-dashboard').style.display=canViewQuotationDashboard(currentUser)?'inline-flex':'none';
+  const allItems=_quotations.flatMap(q=>q.items.map(it=>({...it,q})));
+  const pending=allItems.filter(it=>it.status==='Pending').length;
+  const thisMonth=toLocalDateStr(new Date()).slice(0,7);
+  const wonThisMonth=allItems.filter(it=>it.status==='Won'&&(it.decidedAt||'').slice(0,7)===thisMonth).length;
+  const lostThisMonth=allItems.filter(it=>it.status==='Lost'&&(it.decidedAt||'').slice(0,7)===thisMonth).length;
+  el('qt-kpi-pending').textContent=pending;
+  el('qt-kpi-won').textContent=wonThisMonth;
+  el('qt-kpi-lost').textContent=lostThisMonth;
+
+  // Day-25 nudge — items 25-29 days since last update, about to auto-expire to Lost at day 30,
+  // so a genuinely near-close deal doesn't quietly slip away unnoticed.
+  const now=new Date();
+  const closingSoon=allItems.filter(it=>{
+    if(it.status!=='Pending')return false;
+    const daysSince=Math.floor((now-new Date(it.lastUpdated||it.q.quotedAt))/86400000);
+    return daysSince>=25&&daysSince<30;
+  });
+  const banner=el('qt-closing-soon-banner');
+  if(banner){
+    if(closingSoon.length){
+      banner.style.display='block';
+      banner.innerHTML=`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px 16px;font-size:13px;">
+        ⏰ <strong>${closingSoon.length} item(s) closing soon</strong> — will auto-mark as Lost in the next few days if not updated:
+        <div style="margin-top:6px;">
+          ${closingSoon.map(it=>{
+            const daysSince=Math.floor((now-new Date(it.lastUpdated||it.q.quotedAt))/86400000);
+            return `<div style="font-size:12px;color:#92400e;">${it.q.custName} — ${it.eqName} (${30-daysSince} day${30-daysSince===1?'':'s'} left) <a href="#" onclick="event.preventDefault();el('qt-search').value='${it.q.custName.replace(/'/g,"\\'")}'; renderQuotationsList(); document.getElementById('quotations-list').scrollIntoView({behavior:'smooth'});" style="color:var(--blue);margin-left:6px;">Follow up →</a></div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    } else banner.style.display='none';
+  }
+  renderQuotationsList();
+}
+
+function renderQuotationsList(){
+  const box=el('quotations-list'); if(!box)return;
+  const q=(el('qt-search')?.value||'').trim().toLowerCase();
+  const statusFilter=el('qt-filter-status')?.value||'';
+  let list=[..._quotations].sort((a,b)=>(b.quotedAt||'').localeCompare(a.quotedAt||''));
+  if(q) list=list.filter(quo=>quo.custName.toLowerCase().includes(q)||quo.items.some(it=>it.eqName.toLowerCase().includes(q)));
+  if(statusFilter) list=list.filter(quo=>quo.items.some(it=>it.status===statusFilter));
+  if(!list.length){
+    box.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><p>No quotations logged yet.</p></div>`;
+    return;
+  }
+  box.innerHTML=list.map(quo=>{
+    const totalVal=quo.items.reduce((s,it)=>s+(it.price||0)+(it.transportCost||0),0);
+    return `<div class="card" style="margin-bottom:12px;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <strong style="font-size:14px;">${quo.custName}</strong>
+          <span class="badge badge-slate" style="margin-left:6px;">${quo.custTypes.join(', ')}</span>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Quoted by ${USERS[quo.quotedBy]?.name||quo.quotedBy} on ${fmtDateShort(quo.quotedAt)} · Total quoted: RM${totalVal.toFixed(2)}</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="openStartJobFromQuotation('${quo.id}')">🚀 Create Job From Won Items</button>
+      </div>
+      <div style="padding:8px 16px;">
+        ${quo.items.map((it,idx)=>{
+          const statusBadge={Pending:'badge-amber',Won:'badge-green',Lost:'badge-red'}[it.status]||'badge-slate';
+          const daysSince=Math.floor((new Date()-new Date(it.lastUpdated||quo.quotedAt))/86400000);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <div>
+              <strong>${it.eqName}</strong> ${it.brand||''} ${it.model||''} — ${it.calType==='Onsite'?'📍 Onsite':'🔬 Lab'}
+              — RM${(it.price||0).toFixed(2)}${it.calType==='Onsite'&&it.transportCost?` + RM${it.transportCost.toFixed(2)} transport`:''}
+              ${!it.offeredService?'<span style="color:var(--red);margin-left:6px;">⚠️ Not in our scope</span>':''}
+              ${it.status==='Pending'&&daysSince>=25&&daysSince<30?`<span style="color:#c84b00;margin-left:6px;">⏳ Auto-closes in ${30-daysSince}d</span>`:''}
+              ${it.wonJobNo?`<span style="color:var(--blue);margin-left:6px;">→ Job ${it.wonJobNo}</span>`:''}
+            </div>
+            <div style="white-space:nowrap;">
+              <span class="badge ${statusBadge}">${it.status}</span>
+              ${it.status==='Pending'?`<button class="btn btn-outline btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="openEditQuotationItemModal('${quo.id}',${idx})">✏️ Edit</button>
+                <button class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;" onclick="markQuotationItemStatus('${quo.id}',${idx},'Won')">Won</button>
+                <button class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;" onclick="markQuotationItemStatus('${quo.id}',${idx},'Lost')">Lost</button>`:''}
+              ${it.status==='Lost'&&!it.wonJobNo?`<button class="btn btn-outline btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="reactivateQuotationItem('${quo.id}',${idx})">↩️ Reactivate</button>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openEditQuotationItemModal(qtId,itemIdx){
+  const quo=_quotations.find(q=>q.id===qtId); if(!quo)return;
+  const it=quo.items[itemIdx]; if(!it||it.status!=='Pending'){alert('Only Pending items can be edited — this item has already been decided.');return;}
+  let ov=document.getElementById('qt-edit-item-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='qt-edit-item-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:440px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">✏️ Edit Quotation Item — ${quo.custName}</span>
+      <button onclick="document.getElementById('qt-edit-item-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Equipment Name <span class="req">*</span></label><input class="form-control" id="qte-eqname" value="${it.eqName||''}"/></div>
+        <div class="form-group"><label class="form-label">Brand</label><input class="form-control" id="qte-brand" value="${it.brand||''}"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="qte-model" value="${it.model||''}"/></div>
+        <div class="form-group"><label class="form-label">Calibration Type</label>
+          <select class="form-control" id="qte-caltype" onchange="el('qte-transport-row').style.display=this.value==='Onsite'?'block':'none';">
+            <option value="Lab" ${it.calType==='Lab'?'selected':''}>Lab</option>
+            <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Quoted Price (RM) <span class="req">*</span></label><input class="form-control" id="qte-price" type="number" min="0" step="0.01" value="${it.price||0}"/></div>
+      <div class="form-group" id="qte-transport-row" style="display:${it.calType==='Onsite'?'block':'none'};">
+        <label class="form-label">Transportation / Accommodation Quoted (RM)</label>
+        <input class="form-control" id="qte-transport" type="number" min="0" step="0.01" value="${it.transportCost||0}"/>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;margin-bottom:14px;">
+        <input type="checkbox" id="qte-offered" ${it.offeredService?'checked':''} style="width:16px;height:16px;"/>
+        <span style="font-size:12.5px;">We currently offer this service</span>
+      </label>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('qt-edit-item-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveQuotationItemEdit('${qtId}',${itemIdx})">Save Changes</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function saveQuotationItemEdit(qtId,itemIdx){
+  const quo=_quotations.find(q=>q.id===qtId); if(!quo)return;
+  const it=quo.items[itemIdx]; if(!it)return;
+  const eqName=el('qte-eqname').value.trim();
+  if(!eqName){alert('Please enter the Equipment Name.');return;}
+  it.eqName=eqName;
+  it.brand=el('qte-brand').value.trim();
+  it.model=el('qte-model').value.trim();
+  it.calType=el('qte-caltype').value;
+  it.price=parseFloat(el('qte-price').value)||0;
+  it.transportCost=it.calType==='Onsite'?(parseFloat(el('qte-transport').value)||0):0;
+  it.offeredService=el('qte-offered').checked;
+  it.lastUpdated=new Date().toISOString(); // also resets the 30-day auto-expiry clock, since this is a genuine update
+  await saveQuotations();
+  document.getElementById('qt-edit-item-overlay').style.display='none';
+  renderQuotationsPage();
+  showToast('✅ Quotation item updated','success',2500);
+  addAudit('📋',`Quotation item edited for ${quo.custName} — ${eqName}`);
+}
+
+function openNewQuotationModal(){
+  if(!canLogQuotation(currentUser)){alert('You do not have access to log quotations.');return;}
+  _qtDraftItems=[];
+  let ov=document.getElementById('qt-new-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='qt-new-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📋 New Quotation</span>
+      <button onclick="document.getElementById('qt-new-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-group">
+        <label class="form-label">Company Name <span class="req">*</span></label>
+        <input class="form-control" id="qt-cust-name" placeholder="Search existing or type a new company name…" oninput="qtSearchCustomer(this.value)" autocomplete="off"/>
+        <div id="qt-cust-suggestions" style="display:none;position:relative;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:50;max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+      </div>
+      <div id="qt-cust-existing-note" style="display:none;font-size:11px;color:var(--green);margin-bottom:8px;">✅ Matched existing customer — details auto-filled.</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="qt-attention"/></div>
+        <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="qt-mobile"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="qt-address" rows="2"></textarea></div>
+      <div class="form-group">
+        <label class="form-label">Customer Type <span class="req">*</span></label>
+        <div style="display:flex;gap:14px;">
+          <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="qt-type-dealer"/> Dealer</label>
+          <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="qt-type-direct"/> Direct</label>
+          <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="qt-type-enduser-only"/> End User Only</label>
+        </div>
+      </div>
+      <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">End User Info (optional — fill in later if not yet known)</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">End User Name</label><input class="form-control" id="qt-eu-name"/></div>
+          <div class="form-group"><label class="form-label">End User Mobile</label><input class="form-control" id="qt-eu-mobile"/></div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Items Quoted</div>
+      <div id="qt-items-list"></div>
+      <button class="btn btn-outline btn-sm" onclick="addQuotationItemRow()">+ Add Item</button>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+        <button class="btn btn-outline" onclick="document.getElementById('qt-new-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitQuotation()">Save Quotation</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  addQuotationItemRow();
+}
+function qtSearchCustomer(query){
+  const box=el('qt-cust-suggestions'); if(!box)return;
+  if(!query||query.length<2){box.style.display='none';return;}
+  const q=query.toLowerCase();
+  const matches=_customers.filter(c=>(c.company||'').toLowerCase().includes(q)).slice(0,6);
+  if(!matches.length){box.style.display='none';return;}
+  box.innerHTML=matches.map(c=>`<div onclick="qtSelectCustomer('${c.id}')" style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);">${c.company}</div>`).join('');
+  box.style.display='block';
+}
+function qtSelectCustomer(custId){
+  const c=_customers.find(x=>x.id===custId); if(!c)return;
+  el('qt-cust-name').value=c.company;
+  el('qt-attention').value=c.attention||'';
+  el('qt-mobile').value=c.mobile||'';
+  el('qt-address').value=c.address||'';
+  el('qt-type-dealer').checked=(c.custTypes||[]).includes('Dealer');
+  el('qt-type-direct').checked=(c.custTypes||[]).includes('Direct');
+  el('qt-type-enduser-only').checked=(c.custTypes||[]).includes('EndUserOnly');
+  el('qt-cust-existing-note').style.display='block';
+  el('qt-cust-suggestions').style.display='none';
+  el('qt-cust-name').dataset.matchedId=custId;
+}
+function addQuotationItemRow(){
+  const idx=_qtDraftItems.length;
+  _qtDraftItems.push({eqName:'',brand:'',model:'',calType:'Lab',transportCost:0,offeredService:true,price:0});
+  renderQtItemsList();
+}
+function removeQuotationItemRow(idx){
+  _qtDraftItems.splice(idx,1);
+  renderQtItemsList();
+}
+function updateQtItemField(idx,field,val){
+  _qtDraftItems[idx][field]=val;
+  if(field==='calType') renderQtItemsList();
+}
+function renderQtItemsList(){
+  const box=el('qt-items-list'); if(!box)return;
+  box.innerHTML=_qtDraftItems.map((it,idx)=>`
+    <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <strong style="font-size:12px;">Item ${idx+1}</strong>
+        <button onclick="removeQuotationItemRow(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
+      </div>
+      <div class="form-group" style="position:relative;margin-bottom:6px;">
+        <label class="form-label">Equipment Name</label>
+        <input class="form-control" id="qt-item-eqname-${idx}" value="${it.eqName}" autocomplete="off"
+          oninput="updateQtItemField(${idx},'eqName',this.value);suggestQtPastItems(${idx},this.value);"
+          onfocus="suggestQtPastItems(${idx},this.value)"/>
+        <div id="qt-item-suggestions-${idx}" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:220px;overflow-y:auto;margin-top:2px;"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Brand</label><input class="form-control" id="qt-item-brand-${idx}" value="${it.brand||''}" oninput="updateQtItemField(${idx},'brand',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="qt-item-model-${idx}" value="${it.model}" oninput="updateQtItemField(${idx},'model',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Calibration Type</label>
+          <select class="form-control" onchange="updateQtItemField(${idx},'calType',this.value)">
+            <option value="Lab" ${it.calType==='Lab'?'selected':''}>Lab</option>
+            <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Quoted Price (RM)</label><input class="form-control" id="qt-item-price-${idx}" type="number" min="0" step="0.01" value="${it.price}" oninput="updateQtItemField(${idx},'price',parseFloat(this.value)||0)"/></div>
+      </div>
+      ${it.calType==='Onsite'?`<div class="form-group"><label class="form-label">Transportation/Accommodation Quoted (RM)</label><input class="form-control" type="number" min="0" step="0.01" value="${it.transportCost||0}" oninput="updateQtItemField(${idx},'transportCost',parseFloat(this.value)||0)"/></div>`:''}
+      <label style="font-weight:normal;display:flex;align-items:center;gap:6px;font-size:12px;">
+        <input type="checkbox" ${it.offeredService?'checked':''} onchange="updateQtItemField(${idx},'offeredService',this.checked)"/> We currently offer this service
+      </label>
+    </div>`).join('');
+}
+// Live, automatic suggestions from past quoted items as the Equipment Name is typed —
+// this customer's own past items first (most relevant), then other customers' items.
+function suggestQtPastItems(idx,query){
+  const box=el(`qt-item-suggestions-${idx}`); if(!box)return;
+  const q=(query||'').trim().toLowerCase();
+  if(q.length<2){box.style.display='none';return;}
+  const currentCustName=(el('qt-cust-name')?.value||'').trim().toLowerCase();
+  const allPastItems=[];
+  _quotations.forEach(quo=>{
+    quo.items.forEach(it=>{
+      if((it.eqName||'').toLowerCase().includes(q)){
+        allPastItems.push({...it,custName:quo.custName,quotedAt:quo.quotedAt,sameCustomer:quo.custName.trim().toLowerCase()===currentCustName});
+      }
+    });
+  });
+  // This customer's own items first, most recent first within each group
+  allPastItems.sort((a,b)=>(b.sameCustomer-a.sameCustomer)||(b.quotedAt||'').localeCompare(a.quotedAt||''));
+  const limited=allPastItems.slice(0,6);
+  if(!limited.length){box.style.display='none';return;}
+  box.innerHTML=limited.map(it=>`
+    <div onclick="applyQtSuggestion(${idx},'${it.eqName.replace(/'/g,"\\'")}','${(it.brand||'').replace(/'/g,"\\'")}','${(it.model||'').replace(/'/g,"\\'")}',${it.price||0},'${it.calType||'Lab'}')"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+      <div style="font-weight:700;">${it.eqName} ${it.sameCustomer?'<span style="color:var(--blue);font-weight:400;">(this customer)</span>':''}</div>
+      <div style="color:var(--text-muted);margin-top:2px;">${it.brand||''} ${it.model||''} — RM${(it.price||0).toFixed(2)} · ${it.custName} · ${fmtDateShort(it.quotedAt)}</div>
+    </div>`).join('');
+  box.style.display='block';
+}
+function applyQtSuggestion(idx,eqName,brand,model,price,calType){
+  _qtDraftItems[idx].eqName=eqName;
+  _qtDraftItems[idx].brand=brand;
+  _qtDraftItems[idx].model=model;
+  _qtDraftItems[idx].price=price;
+  _qtDraftItems[idx].calType=calType;
+  renderQtItemsList();
+}
+document.addEventListener('click',e=>{
+  document.querySelectorAll('[id^="qt-item-suggestions-"]').forEach(box=>{
+    const idx=box.id.replace('qt-item-suggestions-','');
+    if(!e.target.closest(`#qt-item-eqname-${idx}`)&&!e.target.closest(`#qt-item-suggestions-${idx}`)) box.style.display='none';
+  });
+});
+async function submitQuotation(){
+  const custName=el('qt-cust-name').value.trim();
+  if(!custName){alert('Please enter a company name.');return;}
+  const types=[];
+  if(el('qt-type-dealer').checked) types.push('Dealer');
+  if(el('qt-type-direct').checked) types.push('Direct');
+  if(el('qt-type-enduser-only').checked) types.push('EndUserOnly');
+  if(!types.length){alert('Please tick at least one Customer Type.');return;}
+  if(!_qtDraftItems.length||_qtDraftItems.some(it=>!it.eqName.trim())){alert('Please add at least one item, with an Equipment Name filled in.');return;}
+
+  const matchedId=el('qt-cust-name').dataset.matchedId;
+  let custId=matchedId||'';
+  if(!matchedId){
+    // Possible near-duplicate check
+    const similar=_customers.find(c=>c.company.toLowerCase().trim()===custName.toLowerCase().trim());
+    if(similar){
+      if(!confirm(`Did you mean the existing customer "${similar.company}"? Click OK to use that record, or Cancel to create a new one anyway.`)){
+        // proceed to create new below
+      } else {
+        custId=similar.id; 
+      }
+    }
+    if(!custId){
+      if(!confirm(`This will also create a new Customer Database record for "${custName}". Continue?`))return;
+      custId='CUST-'+Date.now();
+      const newCust={
+        id:custId, company:custName, custTypes:types,
+        type:types.includes('Dealer')?'Dealer':'Direct', // legacy field, matches saveCustomer()
+        approvedDealers:[], alwaysDirect:false,
+        attention:el('qt-attention').value.trim(), address:el('qt-address').value.trim(),
+        tel:'', mobile:el('qt-mobile').value.trim(), fax:'', email:'',
+        paymentTerms:'credit', notes:'',
+        createdAt:new Date().toISOString()
+      };
+      _customers.unshift(newCust);
+      await SB.upsert(CUST_TABLE,custId,newCust);
+    }
+  }
+
+  const now=new Date().toISOString();
+  const quotation={
+    id:'QT-'+Date.now(), custId, custName, custTypes:types,
+    attention:el('qt-attention').value.trim(), mobile:el('qt-mobile').value.trim(), address:el('qt-address').value.trim(),
+    endUserName:el('qt-eu-name').value.trim(), endUserMobile:el('qt-eu-mobile').value.trim(),
+    quotedBy:currentUser, quotedAt:toLocalDateStr(new Date()),
+    items:_qtDraftItems.map(it=>({...it,status:'Pending',lastUpdated:now,wonJobNo:'',decidedAt:null}))
+  };
+  _quotations.push(quotation);
+  await saveQuotations();
+  document.getElementById('qt-new-overlay').style.display='none';
+  renderQuotationsPage();
+  showToast('✅ Quotation logged','success',3000);
+  addAudit('📋',`New quotation logged for ${custName} — ${_qtDraftItems.length} item(s)`);
+}
+async function markQuotationItemStatus(qtId,itemIdx,status){
+  const quo=_quotations.find(q=>q.id===qtId); if(!quo)return;
+  const it=quo.items[itemIdx]; if(!it)return;
+  it.status=status; it.lastUpdated=new Date().toISOString(); it.decidedAt=toLocalDateStr(new Date());
+  await saveQuotations();
+  renderQuotationsPage();
+  showToast(`Marked ${status}`,'success',2500);
+}
+async function reactivateQuotationItem(qtId,itemIdx){
+  const quo=_quotations.find(q=>q.id===qtId); if(!quo)return;
+  const it=quo.items[itemIdx]; if(!it)return;
+  if(!confirm('Reactivate this item back to Pending?'))return;
+  it.status='Pending'; it.lastUpdated=new Date().toISOString(); it.decidedAt=null;
+  if(!it.reactivatedLog) it.reactivatedLog=[];
+  it.reactivatedLog.push({date:new Date().toISOString(),by:currentUser});
+  await saveQuotations();
+  renderQuotationsPage();
+  showToast('↩️ Reactivated — back to Pending','success',2500);
+  addAudit('↩️',`Quotation item reactivated for ${quo.custName}`);
+}
+async function autoExpireQuotations(){
+  let changed=false;
+  const now=new Date();
+  _quotations.forEach(quo=>{
+    quo.items.forEach(it=>{
+      if(it.status==='Pending'){
+        const daysSince=Math.floor((now-new Date(it.lastUpdated||quo.quotedAt))/86400000);
+        if(daysSince>=30){
+          it.status='Lost'; it.decidedAt=toLocalDateStr(now); it.autoExpired=true;
+          changed=true;
+        }
+      }
+    });
+  });
+  if(changed){ await saveQuotations(); if(typeof renderQuotationsPage==='function'&&el('view-quotations')?.classList.contains('active')) renderQuotationsPage(); }
+}
+
+let _startingFromQuotationId=null;
+async function openStartJobFromQuotation(qtId){
+  const quo=_quotations.find(q=>q.id===qtId); if(!quo)return;
+  const wonItems=quo.items.filter(it=>it.status==='Won'&&!it.wonJobNo);
+  if(!wonItems.length){alert('No Won items available to convert into a job (they may already be linked to a job).');return;}
+  if(!confirm(`Create a new job for ${quo.custName} with ${wonItems.length} Won item(s)? Company info and pricing will be pre-filled — you'll just need to fill in physical details (Serial No., etc.) once the item arrives.`))return;
+
+  _startingFromQuotationId=qtId;
+  await openNewJobModal();
+
+  el('eq-company').value=quo.custName;
+  el('eq-attention').value=quo.attention||'';
+  el('eq-mobile').value=quo.mobile||'';
+  el('eq-address').value=quo.address||'';
+  if(quo.endUserName){ const eu=el('eq-end-user'); if(eu) eu.value=quo.endUserName; }
+
+  const fillItemFields=(prefix,it)=>{
+    const nameEl=el(prefix+'-name'); if(nameEl) nameEl.value=it.eqName;
+    const brandEl=el(prefix+'-brand'); if(brandEl) brandEl.value=it.brand||'';
+    const modelEl=el(prefix+'-model'); if(modelEl) modelEl.value=it.model||'';
+  };
+  fillItemFields('eq',wonItems[0]);
+  const typeEl=el('eq-item-type'); if(typeEl){ typeEl.value=wonItems[0].calType; }
+  if(canViewPrice(currentUser)){ const priceEl=el('eq-price'); if(priceEl) priceEl.value=wonItems[0].price||''; }
+  if(wonItems[0].calType==='Onsite'){
+    updateSiteFieldsVisibility();
+    if(wonItems[0].transportCost) showToast(`ℹ️ Remember: RM${wonItems[0].transportCost.toFixed(2)} transport/accommodation was quoted for this item — factor it into billing separately.`,'success',6000);
+  }
+
+  wonItems.slice(1).forEach(it=>{
+    addExtraEquipment();
+    const i=_extraEquipment.length-1;
+    _extraEquipment[i].eqName=it.eqName;
+    _extraEquipment[i].brand=it.brand||'';
+    _extraEquipment[i].model=it.model||'';
+    _extraEquipment[i].calType=it.calType;
+    if(canViewPrice(currentUser)) _extraEquipment[i].price=it.price||0;
+  });
+  renderExtraEquipment();
+  updateSiteFieldsVisibility();
+  document.getElementById('qt-new-overlay')&&(document.getElementById('qt-new-overlay').style.display='none');
+  showToast('✅ Job form pre-filled from quotation — please review and fill in physical details','success',5000);
+}
+
+function openQuotationDashboard(){
+  if(!canViewQuotationDashboard(currentUser)){alert('You do not have access to this dashboard.');return;}
+  let ov=document.getElementById('qt-dashboard-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='qt-dashboard-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:900px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📊 Quotation Performance Dashboard</span>
+      <button onclick="document.getElementById('qt-dashboard-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-primary" id="qtd-tab-overall" onclick="setQtDashboardTab('overall')">Overall</button>
+          <button class="btn btn-sm btn-outline" id="qtd-tab-lab" onclick="setQtDashboardTab('lab')">Lab Only</button>
+          <button class="btn btn-sm btn-outline" id="qtd-tab-onsite" onclick="setQtDashboardTab('onsite')">Onsite Only</button>
+        </div>
+        <select class="form-control" id="qtd-period-select" onchange="renderQtDashboardContent()" style="width:auto;font-size:12px;padding:6px 10px;">
+          <option value="all">All Time</option>
+          <option value="month">This Month</option>
+          <option value="quarter">This Quarter</option>
+          <option value="half">This Half-Year</option>
+          <option value="year">This Year</option>
+        </select>
+      </div>
+      <div id="qt-dashboard-content"></div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  setQtDashboardTab('overall');
+}
+let _qtDashTab='overall';
+function setQtDashboardTab(tab){
+  _qtDashTab=tab;
+  ['overall','lab','onsite'].forEach(t=>{
+    const btn=el(`qtd-tab-${t}`);
+    if(btn) btn.className=t===tab?'btn btn-sm btn-primary':'btn btn-sm btn-outline';
+  });
+  renderQtDashboardContent();
+}
+function renderQtDashboardContent(){
+  const box=el('qt-dashboard-content'); if(!box)return;
+  const filterType=it=>_qtDashTab==='overall'?true:(_qtDashTab==='lab'?it.calType==='Lab':it.calType==='Onsite');
+
+  // Period filter — based on when the quotation was originally logged
+  const period=el('qtd-period-select')?.value||'all';
+  const now=new Date();
+  const periodFilter=quo=>{
+    if(period==='all')return true;
+    const qd=new Date(quo.quotedAt+'T00:00:00');
+    if(period==='month') return qd.getFullYear()===now.getFullYear()&&qd.getMonth()===now.getMonth();
+    if(period==='quarter') return qd.getFullYear()===now.getFullYear()&&Math.floor(qd.getMonth()/3)===Math.floor(now.getMonth()/3);
+    if(period==='half') return qd.getFullYear()===now.getFullYear()&&Math.floor(qd.getMonth()/6)===Math.floor(now.getMonth()/6);
+    if(period==='year') return qd.getFullYear()===now.getFullYear();
+    return true;
+  };
+  const allItems=_quotations.filter(periodFilter).flatMap(q=>q.items.filter(filterType).map(it=>({...it,custName:q.custName})));
+
+  const wonItems=allItems.filter(it=>it.status==='Won');
+  const totalWonValue=wonItems.reduce((s,it)=>s+(it.price||0)+(it.transportCost||0),0);
+  const totalTransport=_qtDashTab!=='lab'?allItems.filter(it=>it.status==='Won'&&it.calType==='Onsite').reduce((s,it)=>s+(it.transportCost||0),0):0;
+
+  // Confirmed Revenue — cross-reference each Won item's linked job to see if it actually
+  // reached Completed, vs still in progress, vs came back Returned - Abnormal (no real revenue yet)
+  let confirmedRevenue=0, atRiskValue=0, atRiskCount=0;
+  wonItems.forEach(it=>{
+    const itemValue=(it.price||0)+(it.transportCost||0);
+    if(!it.wonJobNo){ atRiskValue+=itemValue; atRiskCount++; return; }
+    const linkedJob=getJob(it.wonJobNo);
+    const linkedItem=it.wonJobItemIdx!=null
+      ?linkedJob?.items?.[it.wonJobItemIdx]
+      :linkedJob?.items?.find(ji=>ji.eqName===it.eqName&&(ji.price||0)===(it.price||0));
+    if(linkedItem?.status==='Completed'){ confirmedRevenue+=itemValue; }
+    else { atRiskValue+=itemValue; atRiskCount++; }
+  });
+
+  // Per-equipment breakdown (offered items only)
+  const byEq={};
+  allItems.filter(it=>it.offeredService).forEach(it=>{
+    const key=(it.eqName||'').trim().toLowerCase();
+    if(!byEq[key]) byEq[key]={eqName:it.eqName,quoted:0,won:0,lost:0,wonPrices:[],lostPrices:[]};
+    byEq[key].quoted++;
+    if(it.status==='Won'){ byEq[key].won++; byEq[key].wonPrices.push(it.price||0); }
+    if(it.status==='Lost'){ byEq[key].lost++; byEq[key].lostPrices.push(it.price||0); }
+  });
+  const eqRows=Object.values(byEq).sort((a,b)=>b.quoted-a.quoted);
+
+  // Top 10 by count (table shows both Won count and Value together)
+  const top10ByCount=[...eqRows].filter(r=>r.won>0).sort((a,b)=>b.won-a.won).slice(0,10);
+
+  // Capability gap
+  const byGap={};
+  allItems.filter(it=>!it.offeredService).forEach(it=>{
+    const key=(it.eqName||'').trim().toLowerCase();
+    if(!byGap[key]) byGap[key]={eqName:it.eqName,count:0,value:0,customers:new Set()};
+    byGap[key].count++; byGap[key].value+=(it.price||0); byGap[key].customers.add(it.custName);
+  });
+  const gapRows=Object.values(byGap).sort((a,b)=>b.count-a.count);
+
+  box.innerHTML=`
+    <div class="kpi-row" style="margin-bottom:16px;">
+      <div class="kpi-mini"><div class="kpi-val" style="color:var(--green)">RM${totalWonValue.toFixed(0)}</div><div class="kpi-lbl">Won (Job Created)</div></div>
+      <div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)">RM${confirmedRevenue.toFixed(0)}</div><div class="kpi-lbl">Confirmed Revenue (Completed)</div></div>
+      <div class="kpi-mini"><div class="kpi-val" style="color:${atRiskValue>0?'#c84b00':'var(--text-muted)'}">RM${atRiskValue.toFixed(0)}</div><div class="kpi-lbl">At Risk / Incomplete (${atRiskCount})</div></div>
+      ${_qtDashTab!=='lab'?`<div class="kpi-mini"><div class="kpi-val">RM${totalTransport.toFixed(0)}</div><div class="kpi-lbl">Transport/Accom. (Won)</div></div>`:''}
+      <div class="kpi-mini"><div class="kpi-val">${allItems.length}</div><div class="kpi-lbl">Total Items Quoted</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;margin-top:-10px;">💡 "Confirmed Revenue" only counts Won items whose linked job has actually reached Completed status. "At Risk / Incomplete" is the gap — jobs still in progress, or returned as Abnormal without being calibrated.</div>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">🏆 Top 10 — By Times Won</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 8px;text-align:left;">Equipment</th><th style="padding:5px 8px;">Won</th><th style="padding:5px 8px;">Value Won (RM)</th></tr></thead>
+      <tbody>${top10ByCount.map(r=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:5px 8px;">${r.eqName}</td><td style="padding:5px 8px;text-align:center;">${r.won}</td><td style="padding:5px 8px;text-align:center;">${r.wonPrices.reduce((s,p)=>s+p,0).toFixed(0)}</td></tr>`).join('')||'<tr><td colspan="3" style="padding:8px;text-align:center;color:var(--text-muted);">No won quotes yet.</td></tr>'}</tbody>
+    </table>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">📈 Win/Loss Breakdown by Equipment</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 6px;text-align:left;">Equipment</th><th style="padding:5px 6px;">Quoted</th><th style="padding:5px 6px;">Won</th><th style="padding:5px 6px;">Lost</th><th style="padding:5px 6px;">Win Rate</th><th style="padding:5px 6px;">Avg Won (RM)</th><th style="padding:5px 6px;">Avg Lost (RM)</th><th style="padding:5px 6px;">Price Gap</th></tr></thead>
+      <tbody>${eqRows.map(r=>{
+        const winRate=r.quoted?Math.round((r.won/r.quoted)*100):0;
+        const avgWon=r.wonPrices.length?r.wonPrices.reduce((s,p)=>s+p,0)/r.wonPrices.length:0;
+        const avgLost=r.lostPrices.length?r.lostPrices.reduce((s,p)=>s+p,0)/r.lostPrices.length:0;
+        const gap=avgWon>0&&avgLost>0?Math.round(((avgLost-avgWon)/avgWon)*100):null;
+        return `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:5px 6px;">${r.eqName}</td>
+          <td style="padding:5px 6px;text-align:center;">${r.quoted}</td>
+          <td style="padding:5px 6px;text-align:center;">${r.won}</td>
+          <td style="padding:5px 6px;text-align:center;">${r.lost}</td>
+          <td style="padding:5px 6px;text-align:center;color:${winRate>=60?'var(--green)':winRate>=30?'#c84b00':'var(--red)'};font-weight:700;">${winRate}%</td>
+          <td style="padding:5px 6px;text-align:center;">${avgWon?avgWon.toFixed(0):'—'}</td>
+          <td style="padding:5px 6px;text-align:center;">${avgLost?avgLost.toFixed(0):'—'}</td>
+          <td style="padding:5px 6px;text-align:center;${gap!==null&&gap>10?'color:var(--red);font-weight:700;':''}">${gap!==null?(gap>0?'+':'')+gap+'%':'—'}</td>
+        </tr>`;
+      }).join('')||'<tr><td colspan="8" style="padding:8px;text-align:center;color:var(--text-muted);">No data yet.</td></tr>'}</tbody>
+    </table>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">🔍 Capability Gaps — Requested But Not Currently Offered</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 6px;text-align:left;">Requested Service</th><th style="padding:5px 6px;">Times Asked</th><th style="padding:5px 6px;">Potential Value (RM)</th><th style="padding:5px 6px;text-align:left;">Customers</th></tr></thead>
+      <tbody>${gapRows.map(r=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:5px 6px;">${r.eqName}</td>
+        <td style="padding:5px 6px;text-align:center;">${r.count}</td>
+        <td style="padding:5px 6px;text-align:center;">${r.value.toFixed(0)}</td>
+        <td style="padding:5px 6px;font-size:10.5px;color:var(--text-muted);">${[...r.customers].join(', ')}</td>
+      </tr>`).join('')||'<tr><td colspan="4" style="padding:8px;text-align:center;color:var(--text-muted);">No capability gaps recorded yet.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
 function renderMyRequests(){
   try{
   const myCheckouts=_refCheckoutRequests.filter(r=>r.requestedBy===currentUser).sort((a,b)=>(b.requestedAt||'').localeCompare(a.requestedAt||''));
@@ -11284,7 +11971,7 @@ function renderMyRequests(){
 }
 
 function openPriceReferenceModal(){
-  if(!canViewPrice(currentUser)){alert('You do not have access to pricing information.');return;}
+  if(!canViewPriceReference(currentUser)){alert('You do not have access to the Price Reference List.');return;}
   let ov=document.getElementById('price-ref-overlay');
   if(!ov){
     ov=document.createElement('div');
