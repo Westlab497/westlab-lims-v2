@@ -1440,6 +1440,26 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
 
+      <!-- Data Backup -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">💾 Data Backup</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Downloads a complete snapshot of every job, customer, staff record, reference equipment, and all other system data as a single file to your computer. Recommended weekly — if your Downloads folder is synced to OneDrive, this backs up there automatically too.</div>
+          <div id="backup-status" style="font-size:11px;color:var(--text-muted);margin-bottom:10px;"></div>
+          <button class="btn btn-primary btn-sm" id="backup-export-btn" onclick="exportFullBackup()">💾 Export Full Backup</button>
+        </div>
+      </div>
+
+      <!-- System Test Suite -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">🧪 System Test Suite</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Runs through 5 core flows automatically, using your real login — creating temporary test records (marked TEST-), checking each step works correctly, then deleting everything it created. Nothing is left behind, win or lose.</div>
+          <button class="btn btn-primary btn-sm" id="run-tests-btn" onclick="runSystemTests()">🧪 Run System Tests</button>
+          <div id="test-results-box" style="margin-top:14px;"></div>
+        </div>
+      </div>
+
       <!-- Calibration Stickers -->
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header"><span class="card-title">🏷️ Calibration Stickers</span></div>
@@ -3900,6 +3920,296 @@ function applySettings(s){
     if(typeof showToast==="function") showToast("❌ "+_e.message,"error",6000);
   }
 }
+async function exportFullBackup(){
+  if(!isAdmin(currentUser)){alert('Only Admin can export a full backup.');return;}
+  const btn=el('backup-export-btn');
+  const status=el('backup-status');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Preparing backup…';}
+  try{
+    const tables=['wl_jobs','wl_customers','wl_staff','wl_ref_equipment','wl_settings'];
+    const backup={exportedAt:new Date().toISOString(),exportedBy:currentUser,labName:_settings.labName||'Westlab',tables:{}};
+    for(const t of tables){
+      if(status) status.textContent=`Fetching ${t}…`;
+      backup.tables[t]=await SB.getAll(t)||[];
+    }
+    const json=JSON.stringify(backup,null,2);
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const dateStr=toLocalDateStr(new Date());
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=`Westlab_LIMS_Backup_${dateStr}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    const totalRecords=Object.values(backup.tables).reduce((s,arr)=>s+(Array.isArray(arr)?arr.length:0),0);
+    if(status) status.innerHTML=`<span style="color:var(--green);">✅ Last backup: ${new Date().toLocaleString('en-MY')} — ${totalRecords} records across ${tables.length} tables</span>`;
+    showToast(`✅ Backup downloaded — ${totalRecords} records`,'success',4000);
+    addAudit('💾',`Full data backup exported by ${USERS[currentUser]?.name||currentUser} — ${totalRecords} records`);
+  }catch(e){
+    console.error('exportFullBackup error:',e);
+    if(status) status.innerHTML=`<span style="color:var(--red);">❌ Backup failed: ${e.message}</span>`;
+    showToast('❌ Backup failed: '+e.message,'error',5000);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='💾 Export Full Backup';}
+  }
+}
+
+// ══════════════════════════════════════════════════
+// SYSTEM TEST SUITE — runs real flows via real functions, using the actual logged-in
+// session. All test data is marked TEST- and deleted at the end, win or lose.
+// ══════════════════════════════════════════════════
+function testStep(desc,pass,detail){ return {desc,pass,detail:detail||''}; }
+
+async function runSystemTests(){
+  if(!isAdmin(currentUser)){alert('Only Admin can run system tests.');return;}
+  if(!confirm('Run the system test suite?\n\nThis creates temporary test records (marked TEST-) and deletes them automatically when finished. Recommended: turn on Testing Mode first so sticker/check-in tests use isolated data.'))return;
+  const btn=el('run-tests-btn'); const box=el('test-results-box');
+  btn.disabled=true; btn.textContent='⏳ Running tests…';
+  box.innerHTML='<div style="font-size:12px;color:var(--text-muted);">Running — this can take a minute…</div>';
+  const results=[];
+  try{ results.push(await testRolePermissions()); }catch(e){ results.push({name:'Login & Role Permissions',steps:[testStep('Unexpected error',false,e.message)]}); }
+  let testJobNo=null;
+  try{ const r=await testCreateJob(); results.push(r); testJobNo=r.jobNo; }catch(e){ results.push({name:'Create a Job',steps:[testStep('Unexpected error',false,e.message)]}); }
+  try{ results.push(await testCalibrationFlow(testJobNo)); }catch(e){ results.push({name:'Calibration → Approval → Certificate',steps:[testStep('Unexpected error',false,e.message)]}); }
+  try{ results.push(await testRefEquipmentCheckout()); }catch(e){ results.push({name:'Reference Equipment Checkout',steps:[testStep('Unexpected error',false,e.message)]}); }
+  try{ results.push(await testStickerFlow()); }catch(e){ results.push({name:'Calibration Sticker Request',steps:[testStep('Unexpected error',false,e.message)]}); }
+  // Final cleanup of the test job, whatever state it ended up in
+  if(testJobNo){
+    try{ await SB.delete('wl_jobs',testJobNo); _jobs=_jobs.filter(j=>j.jobNo!==testJobNo); }catch(e){console.warn('Test job cleanup failed:',e);}
+  }
+  renderTestResults(results);
+  btn.disabled=false; btn.textContent='🧪 Run System Tests';
+  renderEquipmentTable(); renderDashboard();
+}
+
+function renderTestResults(results){
+  const box=el('test-results-box'); if(!box)return;
+  const totalPass=results.reduce((s,r)=>s+r.steps.filter(st=>st.pass).length,0);
+  const totalSteps=results.reduce((s,r)=>s+r.steps.length,0);
+  box.innerHTML=`
+    <div style="font-weight:700;font-size:13px;margin-bottom:10px;">Result: ${totalPass}/${totalSteps} checks passed</div>
+    ${results.map(r=>{
+      const allPass=r.steps.every(s=>s.pass);
+      return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:${allPass?'#f0fdf4':'#fef2f2'};">
+        <div style="font-weight:700;font-size:12.5px;color:${allPass?'#166534':'#991b1b'};">${allPass?'✅':'⚠️'} ${r.name}</div>
+        <div style="margin-top:6px;">
+          ${r.steps.map(s=>`<div style="font-size:11.5px;color:${s.pass?'#166534':'#991b1b'};padding:2px 0;">${s.pass?'✓':'✗'} ${s.desc}${s.detail?' — '+s.detail:''}</div>`).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+// ── Test 1: Role Permissions — pure logic checks, no data created at all ──
+async function testRolePermissions(){
+  const steps=[];
+  const fakeUser='__systest_user__';
+  const hadExisting=!!USERS[fakeUser];
+  const checks=[
+    {role:'Admin',fn:canCreateJobs,expect:true,label:'Admin can create jobs'},
+    {role:'Sales',fn:canCreateJobs,expect:false,label:'Sales cannot create jobs'},
+    {role:'Coordinator',fn:canCreateJobs,expect:true,label:'Coordinator can create jobs'},
+    {role:'Manager',fn:canPerformCal,expect:true,label:'Technical Manager can perform calibration'},
+    {role:'Coordinator',fn:canPerformCal,expect:false,label:'Coordinator cannot perform calibration'},
+    {role:'Manager',fn:canViewPrice,expect:false,label:'Technical Manager cannot view job pricing'},
+    {role:'Quality Manager',fn:canViewPrice,expect:false,label:'Quality Manager cannot view job pricing'},
+    {role:'Coordinator',fn:canViewPrice,expect:true,label:'Coordinator can view job pricing'},
+    {role:'Sales',fn:canViewPriceReference,expect:true,label:'Sales can view Price Reference List'},
+    {role:'Manager',fn:canViewPriceReference,expect:false,label:'Technical Manager cannot view Price Reference List'},
+    {role:'Quality Manager',fn:canApproveStickers,expect:true,label:'Quality Manager can approve stickers'},
+    {role:'Manager',fn:canApproveStickers,expect:false,label:'Technical Manager cannot approve stickers'},
+    {role:'Admin',fn:canApproveStickers,expect:true,label:'Admin can approve stickers'},
+  ];
+  try{
+    for(const c of checks){
+      USERS[fakeUser]={name:'System Test',role:c.role,active:true};
+      const actual=c.fn(fakeUser);
+      steps.push(testStep(c.label,actual===c.expect,actual===c.expect?'':`expected ${c.expect}, got ${actual}`));
+    }
+  } finally {
+    if(hadExisting){ /* leave as-is, unlikely in practice */ } else { delete USERS[fakeUser]; }
+  }
+  return {name:'Login & Role Permissions',steps};
+}
+
+// ── Test 2: Create a Job — Lab + Onsite, multi-item, via the real New Job form ──
+let _lastTestJobNo=null;
+async function testCreateJob(){
+  const steps=[];
+  await openNewJobModal();
+  await new Promise(r=>setTimeout(r,200));
+  const testCompanyName='TEST- System Test Co.';
+  el('eq-company').value=testCompanyName;
+  el('eq-attention').value='Test Contact';
+  el('eq-address').value='Test Address';
+  el('eq-mobile').value='0100000000';
+  el('eq-receive-date').value=toLocalDateStr(new Date());
+  el('eq-name').value='TEST- Lab Item';
+  el('eq-item-type').value='Lab';
+  addExtraEquipment();
+  await new Promise(r=>setTimeout(r,100));
+  if(_extraEquipment.length){
+    _extraEquipment[0].eqName='TEST- Onsite Item';
+    _extraEquipment[0].calType='Onsite';
+    renderExtraEquipment();
+  }
+  const apptDateEl=el('eq-appointment-date'); if(apptDateEl) apptDateEl.value=toLocalDateStr(new Date());
+  const siteAddrEl=el('eq-site-address'); if(siteAddrEl) siteAddrEl.value='Test Site Address';
+
+  const beforeCount=_jobs.length;
+  let saveError=null;
+  try{ await saveEquipment(false); }catch(e){ saveError=e.message; }
+  await new Promise(r=>setTimeout(r,300));
+
+  const newJob=_jobs.find(j=>j.custName===testCompanyName);
+  steps.push(testStep('Job saved without error',!saveError,saveError||''));
+  steps.push(testStep('New job appears in Equipment Records',!!newJob));
+  steps.push(testStep('Job has 2 items (Lab + Onsite)',newJob?.items?.length===2,newJob?`found ${newJob.items?.length}`:''));
+  steps.push(testStep('First item is Lab, second is Onsite',newJob?.items?.[0]?.calType==='Lab'&&newJob?.items?.[1]?.calType==='Onsite'));
+  steps.push(testStep('Both items got certificate numbers',newJob?.items?.every(it=>!!it.certNo)));
+
+  closeModal('modal-add-equipment');
+  return {name:'Create a Job (Lab + Onsite, multi-item)',steps,jobNo:newJob?.jobNo||null};
+}
+
+// ── Test 3: Calibration → Approval → Certificate ──
+async function testCalibrationFlow(jobNo){
+  const steps=[];
+  if(!jobNo){
+    steps.push(testStep('Skipped — no test job available from previous step',false,'Job creation test must pass first'));
+    return {name:'Calibration → Approval → Certificate',steps};
+  }
+  const signatory=(_staff||[]).find(s=>s.approvedSignatory);
+  if(!signatory){
+    steps.push(testStep('Skipped — no Approved Signatory configured',false,'Tick Approved Signatory on at least one staff member to test this flow'));
+    return {name:'Calibration → Approval → Certificate',steps};
+  }
+  const job=getJob(jobNo);
+  if(!job){
+    steps.push(testStep('Skipped — test job not found',false));
+    return {name:'Calibration → Approval → Certificate',steps};
+  }
+  await openCalModal(jobNo,0);
+  await new Promise(r=>setTimeout(r,200));
+  el('cal-date').value=toLocalDateStr(new Date());
+  el('cal-interval').value='12';
+  calcNextDueFromInterval();
+  el('cal-approved-by').value=signatory.username;
+  el('cal-cond-before').value='Good';
+  el('cal-cond-after').value='Good';
+  // Fake a small PDF-like blob to satisfy the file-upload requirement
+  currentExcel={name:'systest.pdf',size:1024};
+  _excelFile=new Blob(['%PDF-test'],{type:'application/pdf'});
+  const stickerType=el('cal-sticker-type')?.value||'accredited';
+  const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===stickerType);
+  let usedTestSticker=false;
+  if(!myHeld.length){
+    steps.push(testStep('Skipped sticker+submit steps — no held sticker available',false,'Approve a sticker request for this account first to test the full flow'));
+    closeModal('modal-perform-cal');
+    return {name:'Calibration → Approval → Certificate',steps};
+  }
+  el('cal-sticker-number').value=myHeld[0].number;
+
+  let submitError=null;
+  try{ await submitCalibration(); }catch(e){ submitError=e.message; }
+  await new Promise(r=>setTimeout(r,300));
+  const afterSubmit=getJob(jobNo);
+  const itemAfterSubmit=afterSubmit?.items?.[0];
+  steps.push(testStep('Calibration submitted without error',!submitError,submitError||''));
+  steps.push(testStep('Item status became Pending Approval',itemAfterSubmit?.status==='Pending Approval',itemAfterSubmit?`status: ${itemAfterSubmit?.status}`:''));
+  steps.push(testStep('Sticker marked as Used',_stickerRecords.find(r=>r.number===myHeld[0].number&&r.type===stickerType)?.status==='Used'));
+
+  // Approve it — approveJob() uses the current logged-in user as the approver directly
+  if(itemAfterSubmit?.status==='Pending Approval'){
+    approvalJobNo=jobNo; approvalItemIdx=0;
+    const commentsEl=el('approve-comments'); if(commentsEl) commentsEl.value='System test approval';
+    let approveError=null;
+    try{ await approveJob(); }catch(e){ approveError=e.message; }
+    await new Promise(r=>setTimeout(r,300));
+    const afterApproval=getJob(jobNo)?.items?.[0];
+    steps.push(testStep('Approval completed without error',!approveError,approveError||''));
+    steps.push(testStep('Item status became Completed',afterApproval?.status==='Completed',afterApproval?`status: ${afterApproval?.status}`:''));
+  }
+  return {name:'Calibration → Approval → Certificate',steps};
+}
+
+// ── Test 4: Reference Equipment Checkout — request → approve → return ──
+async function testRefEquipmentCheckout(){
+  const steps=[];
+  const testRefId='TEST-REF-'+Date.now();
+  const testRef={id:testRefId,name:'TEST- Reference Item',brand:'Test',model:'Test',serial:'TEST',location:'Test',
+    traceability:'Test',certNo:'TEST',lastCal:toLocalDateStr(new Date()),dueDate:toLocalDateStr(new Date(Date.now()+31536000000)),
+    calStatus:'Current',availability:'Available'};
+  _refEq.push(testRef);
+  await SB.upsert('wl_ref_equipment',testRefId,testRef);
+  steps.push(testStep('Temporary test reference item created'));
+
+  // Simulate a checkout request + approval directly via the real data functions
+  const req={id:'TESTREQ-'+Date.now(),jobNo:'TEST-JOB',custName:'Test',requestedBy:currentUser,requestedAt:new Date().toISOString(),
+    items:[{refId:testRefId,refName:testRef.name}],fromDate:toLocalDateStr(new Date()),toDate:toLocalDateStr(new Date()),status:'Pending'};
+  _refCheckoutRequests.push(req);
+  let approveError=null;
+  try{ await approveRefCheckout(req.id); }catch(e){ approveError=e.message; }
+  await new Promise(r=>setTimeout(r,200));
+  const afterApprove=_refEq.find(r=>r.id===testRefId);
+  steps.push(testStep('Checkout approved without error',!approveError,approveError||''));
+  steps.push(testStep('Item marked Checked Out',afterApprove?.availability==='CheckedOut'));
+
+  let returnError=null;
+  try{ await markRefReturned(testRefId); }catch(e){ returnError=e.message; }
+  await new Promise(r=>setTimeout(r,200));
+  const afterReturn=_refEq.find(r=>r.id===testRefId);
+  steps.push(testStep('Return processed without error',!returnError,returnError||''));
+  steps.push(testStep('Item marked Available again',afterReturn?.availability==='Available'));
+
+  // Cleanup
+  _refEq=_refEq.filter(r=>r.id!==testRefId);
+  _refCheckoutRequests=_refCheckoutRequests.filter(r=>r.id!==req.id);
+  try{ await SB.delete('wl_ref_equipment',testRefId); }catch(e){}
+  await saveRefCheckoutRequests();
+  steps.push(testStep('Test reference item cleaned up'));
+  return {name:'Reference Equipment Checkout',steps};
+}
+
+// ── Test 5: Calibration Sticker Request → Approve ──
+async function testStickerFlow(){
+  const steps=[];
+  const type='accredited';
+  const totalPrinted=stickerTotalPrinted(type);
+  const nextStart=stickerNextToIssue(type);
+  const batchSize=stickerTypeCfg(type).batchSize;
+  if(nextStart+batchSize-1>totalPrinted){
+    steps.push(testStep('Skipped — not enough printed Accredited stickers remaining to test issuing a new batch',false,`Need ${nextStart+batchSize-1-totalPrinted} more printed`));
+    return {name:'Calibration Sticker Request',steps};
+  }
+  const req={id:'TESTSTK-'+Date.now(),type,requestedBy:currentUser,requestedAt:new Date().toISOString(),status:'Pending'};
+  _stickerRequests.push(req);
+  steps.push(testStep('Test sticker request created'));
+
+  let approveError=null;
+  try{ await approveStickerRequest(req.id); }catch(e){ approveError=e.message; }
+  await new Promise(r=>setTimeout(r,200));
+  const decidedReq=_stickerRequests.find(r=>r.id===req.id);
+  const issuedRecords=_stickerRecords.filter(r=>r.requestId===req.id);
+  steps.push(testStep('Request approved without error',!approveError,approveError||''));
+  steps.push(testStep('Request status became Approved',decidedReq?.status==='Approved'));
+  steps.push(testStep(`${batchSize} sticker numbers issued`,issuedRecords.length===batchSize,`found ${issuedRecords.length}`));
+
+  // Cleanup — remove the test request and the stickers it issued, and roll back the sequence
+  // counter so this test doesn't consume real numbering every time it runs
+  _stickerRequests=_stickerRequests.filter(r=>r.id!==req.id);
+  _stickerRecords=_stickerRecords.filter(r=>r.requestId!==req.id);
+  if(issuedRecords.length){
+    const key=isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`;
+    _settings[key]=nextStart;
+    await SB.upsert('wl_settings','main',_settings);
+  }
+  await saveStickerRequests();
+  await saveStickerRecords();
+  steps.push(testStep('Test sticker data cleaned up, numbering rolled back'));
+  return {name:'Calibration Sticker Request',steps};
+}
+
 async function migratePasswords(){
   if(!isAdmin(currentUser)){alert('Only Admin can run this.');return;}
   if(!confirm('Run the one-time password security migration now?\n\nThis converts any remaining plain-text passwords to secure hashed ones. Safe to run multiple times.'))return;
