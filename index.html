@@ -461,6 +461,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Lab Reference Equipment</span></button>
     <button class="nav-item hidden-nav" id="nav-price-ref" onclick="openPriceReferenceModal()" data-label="Price Reference"><span class="nav-icon"><i class="ti ti-tag"></i></span><span class="nav-label">Price Reference</span></button>
     <button class="nav-item hidden-nav" id="nav-quotations" onclick="showView('quotations')" data-label="Quotations"><span class="nav-icon"><i class="ti ti-file-invoice"></i></span><span class="nav-label">Quotations</span></button>
+    <button class="nav-item hidden-nav" id="nav-sales-tracker" onclick="showView('sales-tracker')" data-label="Sales Tracker"><span class="nav-icon"><i class="ti ti-timeline"></i></span><span class="nav-label">Sales Tracker</span></button>
+    <button class="nav-item hidden-nav" id="nav-purchasing-tracker" onclick="showView('purchasing-tracker')" data-label="Purchasing Tracker"><span class="nav-icon"><i class="ti ti-shopping-cart"></i></span><span class="nav-label">Purchasing Tracker</span></button>
+    <button class="nav-item hidden-nav" id="nav-receiving-log" onclick="showView('receiving-log')" data-label="Receiving Logbook"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-label">Receiving Logbook</span></button>
+    <button class="nav-item hidden-nav" id="nav-sticker-log" onclick="showView('sticker-log')" data-label="Sticker Log"><span class="nav-icon"><i class="ti ti-list-details"></i></span><span class="nav-label">Sticker Log</span></button>
 
     <div class="nav-section-label">Quality System</div>
     <button class="nav-item" id="nav-tests" onclick="showView('tests')" data-label="Test Requests &amp; Results"><span class="nav-icon"><i class="ti ti-test-pipe"></i></span><span class="nav-label">Test Requests &amp; Results</span></button>
@@ -916,6 +920,101 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </select>
       </div>
       <div id="quotations-list"></div>
+    </div>
+
+    <!-- ════ SALES TRACKER ════ -->
+    <div class="view" id="view-sales-tracker">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📈 Sales Tracker</div>
+          <div class="page-sub">Enquiry-to-collection status pipeline</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="exportTrackerExcel('sales')">📊 Excel</button>
+          <button class="btn btn-outline" onclick="exportTrackerPdf('sales')">📄 PDF</button>
+          <button class="btn btn-primary" onclick="openTrackerEntryModal('sales')">+ New Entry</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <select class="form-control" id="st-filter-month" onchange="renderSalesTrackerPage()" style="width:auto;">
+          <option value="">All Months</option>
+        </select>
+        <select class="form-control" id="st-filter-status" onchange="renderSalesTrackerPage()" style="width:auto;">
+          <option value="">All Statuses</option>
+        </select>
+        <input class="form-control" id="st-search" placeholder="Search customer…" oninput="renderSalesTrackerPage()" style="width:200px;"/>
+      </div>
+      <div id="sales-tracker-list"></div>
+    </div>
+
+    <!-- ════ PURCHASING TRACKER ════ -->
+    <div class="view" id="view-purchasing-tracker">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🛒 Purchasing Tracker</div>
+          <div class="page-sub">External vendor/service procurement pipeline</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="exportTrackerExcel('purchasing')">📊 Excel</button>
+          <button class="btn btn-outline" onclick="exportTrackerPdf('purchasing')">📄 PDF</button>
+          <button class="btn btn-primary" onclick="openTrackerEntryModal('purchasing')">+ New Entry</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <select class="form-control" id="pt-filter-month" onchange="renderPurchasingTrackerPage()" style="width:auto;">
+          <option value="">All Months</option>
+        </select>
+        <select class="form-control" id="pt-filter-status" onchange="renderPurchasingTrackerPage()" style="width:auto;">
+          <option value="">All Statuses</option>
+        </select>
+        <input class="form-control" id="pt-search" placeholder="Search vendor…" oninput="renderPurchasingTrackerPage()" style="width:200px;"/>
+      </div>
+      <div id="purchasing-tracker-list"></div>
+    </div>
+
+    <!-- ════ RECEIVING LOGBOOK ════ -->
+    <div class="view" id="view-receiving-log">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📋 Receiving Logbook</div>
+          <div class="page-sub">Every item ever received, in one running log</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="exportReceivingLogExcel()">📊 Excel</button>
+          <button class="btn btn-outline" onclick="exportReceivingLogPdf()">📄 PDF</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <input class="form-control" id="rl-filter-from" type="date" onchange="renderReceivingLogPage()" style="width:auto;"/>
+        <input class="form-control" id="rl-filter-to" type="date" onchange="renderReceivingLogPage()" style="width:auto;"/>
+        <input class="form-control" id="rl-search" placeholder="Search company/equipment/serial…" oninput="renderReceivingLogPage()" style="width:240px;"/>
+      </div>
+      <div id="receiving-log-list"></div>
+    </div>
+
+    <!-- ════ STICKER LOG ════ -->
+    <div class="view" id="view-sticker-log">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🏷️ Sticker Log</div>
+          <div class="page-sub">Every sticker issued and used, in one running log</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="exportStickerLogExcel()">📊 Excel</button>
+          <button class="btn btn-outline" onclick="exportStickerLogPdf()">📄 PDF</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <select class="form-control" id="sl-filter-type" onchange="renderStickerLogPage()" style="width:auto;">
+          <option value="">All Types</option>
+          <option value="accredited">Accredited</option>
+          <option value="nonAccredited">Non-Accredited</option>
+          <option value="voidSticker">Void</option>
+          <option value="abnormal">Abnormal</option>
+        </select>
+        <input class="form-control" id="sl-search" placeholder="Search staff/job…" oninput="renderStickerLogPage()" style="width:200px;"/>
+      </div>
+      <div id="sticker-log-list"></div>
     </div>
 
     <!-- ════ ATTENDANCE ════ -->
@@ -3287,6 +3386,8 @@ async function loadAll(){
     await loadStickerData();
     await loadAbnormalReports();
     await loadQuotations();
+    await loadSalesTracker();
+    await loadPurchasingTracker();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
     await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
@@ -3593,6 +3694,8 @@ function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin'
 function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator'].includes(r); }
 function canViewPriceReference(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
 function canLogQuotation(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
+function canUseSalesTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
+function canUsePurchasingTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
 function canViewQuotationDashboard(u){ const r=getUserRole(u||currentUser); return ['Admin','Sales'].includes(r); }
 function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','HR'].includes(r); }
 
@@ -3616,6 +3719,10 @@ function applyRoleUI(){
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
   el('nav-price-ref').classList.toggle('hidden-nav', !canViewPriceReference(currentUser));
   el('nav-quotations').classList.toggle('hidden-nav', !canLogQuotation(currentUser));
+  el('nav-sales-tracker').classList.toggle('hidden-nav', !canUseSalesTracker(currentUser));
+  el('nav-purchasing-tracker').classList.toggle('hidden-nav', !canUsePurchasingTracker(currentUser));
+  el('nav-receiving-log').classList.toggle('hidden-nav', !canCreateJobs(currentUser));
+  el('nav-sticker-log').classList.toggle('hidden-nav', !canCreateJobs(currentUser)&&!canApproveStickers(currentUser));
   el('nav-calendar').classList.toggle('hidden-nav', hr);
   el('nav-stickers').classList.toggle('hidden-nav', sales||hr||coordinator);
   el('nav-claims').classList.toggle('hidden-nav', false); // all can see own claims
@@ -3692,6 +3799,10 @@ function showView(name){
   if(name==='my-requests') renderMyRequests();
   if(name==='stickers') renderStickerPage();
   if(name==='quotations') renderQuotationsPage();
+  if(name==='sales-tracker') renderSalesTrackerPage();
+  if(name==='purchasing-tracker') renderPurchasingTrackerPage();
+  if(name==='receiving-log') renderReceivingLogPage();
+  if(name==='sticker-log') renderStickerLogPage();
 }
 
 // ── MODALS ──
@@ -5644,6 +5755,299 @@ function printJobReceipt(jobs){
 }
 
 // Generate the job receipt as a base64 PDF (for email attachment) — reuses the same HTML as print/preview
+// ══════════════════════════════════════════════════
+// WORK ORDER — auto-populated from real job data, matching the official template layout
+// ══════════════════════════════════════════════════
+function buildWorkOrderHTML(job){
+  const s=_settings;
+  const labName=s.labName||'Westlab (M) Sdn. Bhd.';
+  const fmtDate=d=>{
+    if(!d)return'—';
+    const dt=new Date(d+'T00:00:00');
+    if(isNaN(dt))return d;
+    return dt.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+  };
+  const preparedBy=USERS[job.createdBy]?.name||job.createdBy||'—';
+  const rows=(job.items||[]).map((it,i)=>{
+    const descLines=[
+      `<strong>${it.eqName||'—'}</strong>`,
+      `Brand: ${it.brand||'—'}, Model: ${it.model||'—'}, S/N: ${it.serial||'—'}`,
+      `Range: ${it.range||'—'}, Specification: ${it.spec||'—'}, Cal points: ${it.calPoints||'—'}`,
+      `Condition: ${it.condition||'—'}, Accessories: ${it.accessories||'—'}`,
+      it.remarks?`Remark: ${it.remarks}`:''
+    ].filter(Boolean).join('<br/>');
+    const calDate=it.calData?.date?fmtDate(it.calData.date):'';
+    const calBy=it.calData?.calibratedByUsername?(USERS[it.calData.calibratedByUsername]?.name||''):'';
+    const stickerNo=it.calData?.sticker_no||'';
+    return `<tr>
+      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${i+1}</td>
+      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;font-size:9pt;vertical-align:top;">${descLines}</td>
+      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${it.priority||'Normal'}</td>
+      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calDate}</td>
+      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calBy}</td>
+      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${stickerNo}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="width:1000px;padding:24px;font-family:Arial,sans-serif;background:#fff;color:#111;">
+    <table style="width:100%;margin-bottom:16px;">
+      <tr>
+        <td style="vertical-align:top;">
+          <div style="font-size:15px;font-weight:800;">${labName}${s.regNo?' ('+s.regNo+')':''}</div>
+          <div style="font-size:10px;color:#444;">${s.address||''}</div>
+          <div style="font-size:10px;color:#444;">${s.tel?'Phone: '+s.tel+' ':''}${s.email?'email: '+s.email:''}</div>
+        </td>
+      </tr>
+    </table>
+    <div style="border-top:1pt solid #111;margin-bottom:14px;"></div>
+    <table style="width:100%;font-size:11px;margin-bottom:16px;">
+      <tr>
+        <td style="width:55%;vertical-align:top;">
+          <strong>${job.custName||'—'}</strong><br/>
+          ${(job.address||'').replace(/\n/g,'<br/>')}<br/>
+          Attn: ${job.attention||'—'}&nbsp;&nbsp;Tel: ${job.tel||job.mobile||'—'}<br/>
+          Email: ${job.email||'—'}&nbsp;&nbsp;Fax: ${job.fax||'--'}
+        </td>
+        <td style="vertical-align:top;">
+          <strong>WORK ORDER: ${job.jobNo}</strong><br/>
+          Receiving Date: ${fmtDate(job.receiveDate)}<br/>
+          Issue Date: ${fmtDate(toLocalDateStr(new Date()))}<br/>
+          Prepared By: ${preparedBy}<br/>
+          PO Number: ${job.po||'—'}<br/>
+          Location: ${(job.items||[]).some(it=>it.calType==='Onsite')?'Onsite':'Lab'}
+        </td>
+      </tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:10px;">
+      <thead><tr style="background:#0f1f3d;color:#fff;">
+        <th style="padding:6px 8px;">No.</th><th style="padding:6px 8px;text-align:left;">Description</th>
+        <th style="padding:6px 8px;">Priority</th><th style="padding:6px 8px;">Calibration Date</th>
+        <th style="padding:6px 8px;">Calibrated By</th><th style="padding:6px 8px;">Sticker No.</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+async function printWorkOrder(jobNo){
+  const job=getJob(jobNo); if(!job){alert('Job not found.');return;}
+  try{
+    const html=buildWorkOrderHTML(job);
+    const frame=el('receipt-print-frame');
+    frame.innerHTML=html;
+    frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
+    await new Promise(res=>setTimeout(res,150));
+    const target=frame.firstElementChild||frame;
+    const canvas=await html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    frame.style.display='none'; frame.style.position=''; frame.style.left='';
+    const imgData=canvas.toDataURL('image/jpeg',0.92);
+    const imgBytes=await fetch(imgData).then(x=>x.arrayBuffer());
+    const {PDFDocument}=PDFLib;
+    const pdf=await PDFDocument.create();
+    const jpgImage=await pdf.embedJpg(imgBytes);
+    const pageWidth=842;
+    const pageHeight=pageWidth*(canvas.height/canvas.width);
+    const page=pdf.addPage([pageWidth,pageHeight]);
+    page.drawImage(jpgImage,{x:0,y:0,width:pageWidth,height:pageHeight});
+    const bytes=await pdf.save();
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url; link.download=`WorkOrder_${jobNo}.pdf`; link.click();
+    URL.revokeObjectURL(url);
+    addAudit('🖨️',`Work Order printed for job ${jobNo}`);
+  }catch(e){
+    console.error('printWorkOrder error:',e);
+    showToast('❌ Work Order generation failed: '+e.message,'error',4000);
+  }
+}
+
+// ══════════════════════════════════════════════════
+// RECEIVING LOGBOOK — every item ever received, one running log
+// ══════════════════════════════════════════════════
+function getReceivingLogRows(){
+  const from=el('rl-filter-from')?.value||'';
+  const to=el('rl-filter-to')?.value||'';
+  const search=(el('rl-search')?.value||'').toLowerCase();
+  const rows=[];
+  _jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal).forEach(j=>{
+    (j.items||[]).forEach(it=>{
+      if(from&&(j.receiveDate||'')<from)return;
+      if(to&&(j.receiveDate||'')>to)return;
+      if(search){
+        const hay=`${j.custName||''} ${it.eqName||''} ${it.serial||''}`.toLowerCase();
+        if(!hay.includes(search))return;
+      }
+      rows.push({company:j.custName,receiveDate:j.receiveDate,jobNo:j.jobNo,eqName:it.eqName,brand:it.brand,model:it.model,serial:it.serial,certNo:it.certNo});
+    });
+  });
+  return rows.sort((a,b)=>(a.receiveDate||'').localeCompare(b.receiveDate||''));
+}
+function renderReceivingLogPage(){
+  const rows=getReceivingLogRows();
+  const box=el('receiving-log-list'); if(!box)return;
+  if(!rows.length){ box.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><p>No items match the current filters.</p></div>`; return; }
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>No.</th><th>Company Name</th><th>Receiving Date</th><th>Job Number</th><th>Equipment Name</th><th>Brand</th><th>Model</th><th>Serial No.</th><th>Cert/Report No.</th></tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr>
+      <td>${i+1}</td><td>${r.company||'—'}</td><td>${fmtDateShort(r.receiveDate)}</td><td>${r.jobNo}</td>
+      <td>${r.eqName||'—'}</td><td>${r.brand||'—'}</td><td>${r.model||'—'}</td><td>${r.serial||'—'}</td><td>${r.certNo||'—'}</td>
+    </tr>`).join('')}</tbody>
+  </table></div></div>`;
+}
+function exportReceivingLogExcel(){
+  if(typeof XLSX==='undefined'){alert('Excel export library failed to load.');return;}
+  const rows=getReceivingLogRows().map((r,i)=>({
+    'No.':i+1,'Company Name':r.company||'',' Receiving Date':fmtDateShort(r.receiveDate),'Job Number':r.jobNo,
+    'Equipment Name':r.eqName||'','Brand':r.brand||'','Model':r.model||'','Serial No.':r.serial||'','Cert/Report No.':r.certNo||''
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:6},{wch:24},{wch:16},{wch:16},{wch:22},{wch:16},{wch:16},{wch:16},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Receiving Log');
+  XLSX.writeFile(wb,`Westlab_Receiving_Log_${toLocalDateStr(new Date())}.xlsx`);
+  addAudit('📊',`Receiving Logbook exported to Excel — ${rows.length} rows`);
+}
+async function exportReceivingLogPdf(){
+  const rows=getReceivingLogRows();
+  if(!rows.length){alert('No entries to export with the current filters.');return;}
+  const html=`<div style="width:1100px;padding:24px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — Receiving Logbook</div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:10px;">
+      <thead><tr style="background:#0f1f3d;color:#fff;">
+        <th style="padding:6px 8px;">No.</th><th style="padding:6px 8px;">Company</th><th style="padding:6px 8px;">Receiving Date</th>
+        <th style="padding:6px 8px;">Job No.</th><th style="padding:6px 8px;">Equipment</th><th style="padding:6px 8px;">Brand</th>
+        <th style="padding:6px 8px;">Model</th><th style="padding:6px 8px;">Serial No.</th><th style="padding:6px 8px;">Cert/Report No.</th>
+      </tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${i+1}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.company||''}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${fmtDateShort(r.receiveDate)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.jobNo}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.eqName||''}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.brand||''}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.model||''}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.serial||''}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.certNo||''}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+  await exportHtmlAsPdf(html,`Westlab_Receiving_Log_${toLocalDateStr(new Date())}.pdf`,'Receiving Logbook',rows.length);
+}
+
+// ══════════════════════════════════════════════════
+// STICKER LOG — every sticker issued/used/wasted, one running log
+// ══════════════════════════════════════════════════
+function getStickerLogRows(){
+  const typeFilter=el('sl-filter-type')?.value||'';
+  const search=(el('sl-search')?.value||'').toLowerCase();
+  const rows=[];
+  // Numbered types — real per-number records
+  _stickerRecords.forEach(r=>{
+    if(typeFilter&&r.type!==typeFilter)return;
+    const staffName=USERS[r.issuedTo]?.name||r.issuedTo||'';
+    if(search&&!`${staffName} ${r.usedJobNo||''}`.toLowerCase().includes(search))return;
+    if(r.status==='Used'){
+      rows.push({date:r.usedAt,type:r.type,number:stickerFmt(r.type,r.number),staff:staffName,action:'Used',jobNo:r.usedJobNo||'',remark:''});
+    } else if(r.status==='Wasted'){
+      rows.push({date:r.wastedAt,type:r.type,number:stickerFmt(r.type,r.number),staff:staffName,action:'Wasted',jobNo:'',remark:r.wastedReason||''});
+    }
+  });
+  // Count-based types — waste log only (no per-unit usage tracking exists for these)
+  _stickerCounts.forEach(rec=>{
+    if(typeFilter&&rec.type!==typeFilter)return;
+    const staffName=USERS[rec.username]?.name||rec.username||'';
+    if(search&&!staffName.toLowerCase().includes(search))return;
+    (rec.wasteLog||[]).forEach(w=>{
+      rows.push({date:w.date,type:rec.type,number:'—',staff:staffName,action:'Wasted',jobNo:'',remark:w.reason||''});
+    });
+  });
+  return rows.filter(r=>r.date).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+function renderStickerLogPage(){
+  const rows=getStickerLogRows();
+  const box=el('sticker-log-list'); if(!box)return;
+  if(!rows.length){ box.innerHTML=`<div class="empty-state"><div class="empty-icon">🏷️</div><p>No sticker activity matches the current filters.</p></div>`; return; }
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>No.</th><th>Date</th><th>Type</th><th>Sticker No.</th><th>Staff</th><th>Action</th><th>Job No.</th><th>Remark</th></tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr>
+      <td>${i+1}</td><td>${fmtDateShort(r.date)}</td><td>${STICKER_TYPES[r.type]?.label||r.type}</td><td>${r.number}</td>
+      <td>${r.staff}</td><td><span class="badge ${r.action==='Wasted'?'badge-red':'badge-green'}">${r.action}</span></td>
+      <td>${r.jobNo||'—'}</td><td>${r.remark||'—'}</td>
+    </tr>`).join('')}</tbody>
+  </table></div></div>`;
+}
+function exportStickerLogExcel(){
+  if(typeof XLSX==='undefined'){alert('Excel export library failed to load.');return;}
+  const rows=getStickerLogRows().map((r,i)=>({
+    'No.':i+1,'Date':fmtDateShort(r.date),'Type':STICKER_TYPES[r.type]?.label||r.type,'Sticker No.':r.number,
+    'Staff':r.staff,'Action':r.action,'Job No.':r.jobNo||'','Remark':r.remark||''
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:6},{wch:14},{wch:16},{wch:14},{wch:20},{wch:10},{wch:16},{wch:28}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Sticker Log');
+  XLSX.writeFile(wb,`Westlab_Sticker_Log_${toLocalDateStr(new Date())}.xlsx`);
+  addAudit('📊',`Sticker Log exported to Excel — ${rows.length} rows`);
+}
+async function exportStickerLogPdf(){
+  const rows=getStickerLogRows();
+  if(!rows.length){alert('No entries to export with the current filters.');return;}
+  const html=`<div style="width:1000px;padding:24px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — Sticker Log</div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:10px;">
+      <thead><tr style="background:#0f1f3d;color:#fff;">
+        <th style="padding:6px 8px;">No.</th><th style="padding:6px 8px;">Date</th><th style="padding:6px 8px;">Type</th>
+        <th style="padding:6px 8px;">Sticker No.</th><th style="padding:6px 8px;">Staff</th><th style="padding:6px 8px;">Action</th>
+        <th style="padding:6px 8px;">Job No.</th><th style="padding:6px 8px;">Remark</th>
+      </tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${i+1}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${fmtDateShort(r.date)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${STICKER_TYPES[r.type]?.label||r.type}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.number}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.staff}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.action}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.jobNo||''}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.remark||''}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+  await exportHtmlAsPdf(html,`Westlab_Sticker_Log_${toLocalDateStr(new Date())}.pdf`,'Sticker Log',rows.length);
+}
+
+// Shared helper — renders an HTML block to a landscape PDF and downloads it
+async function exportHtmlAsPdf(html,filename,auditLabel,rowCount){
+  try{
+    const frame=el('receipt-print-frame');
+    frame.innerHTML=html;
+    frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
+    await new Promise(res=>setTimeout(res,150));
+    const target=frame.firstElementChild||frame;
+    const canvas=await html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    frame.style.display='none'; frame.style.position=''; frame.style.left='';
+    const imgData=canvas.toDataURL('image/jpeg',0.92);
+    const imgBytes=await fetch(imgData).then(x=>x.arrayBuffer());
+    const {PDFDocument}=PDFLib;
+    const pdf=await PDFDocument.create();
+    const jpgImage=await pdf.embedJpg(imgBytes);
+    const pageWidth=842;
+    const pageHeight=pageWidth*(canvas.height/canvas.width);
+    const page=pdf.addPage([pageWidth,pageHeight]);
+    page.drawImage(jpgImage,{x:0,y:0,width:pageWidth,height:pageHeight});
+    const bytes=await pdf.save();
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url; link.download=filename; link.click();
+    URL.revokeObjectURL(url);
+    addAudit('📄',`${auditLabel} exported to PDF — ${rowCount} rows`);
+  }catch(e){
+    console.error('exportHtmlAsPdf error:',e);
+    showToast('❌ PDF export failed: '+e.message,'error',4000);
+  }
+}
+
 async function generateReceiptPdfBase64(jobs){
   try{
     if(typeof html2canvas==='undefined'||typeof PDFLib==='undefined'){
@@ -6830,6 +7234,7 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;font-size:12px;">${j.promisedDate?`<span style="color:${overdue?'#fca5a5':'#86efac'};font-size:11px;">${j.promisedDate}</span>`:'<span style="opacity:.5;font-size:11px;">—</span>'}</td>
         <td style="padding:6px 10px;white-space:nowrap;text-align:right;">
           ${canCreateJobs(currentUser)?`<button onclick="reissueJobReceipt('${j.jobNo}')" title="Reissue Receipt" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🧾</button>`:''}
+          ${canCreateJobs(currentUser)?`<button onclick="printWorkOrder('${j.jobNo}')" title="Print Work Order" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🖨️</button>`:''}
           ${role==='Admin'&&j.status!=='Completed'?`<button onclick="deleteJob('${j.jobNo}')" title="Delete Job" style="background:rgba(220,38,38,.85);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑</button>`:''}
           ${role==='Admin'&&j.status==='Completed'?`<button onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (Admin override — irreversible)" style="background:rgba(153,27,27,.9);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑️⚠️</button>`:''}
         </td>
@@ -7087,6 +7492,10 @@ let _stickerRecons=[]; // reconciliation log
 const ABNORMAL_REPORTS_KEY='wl_abnormal_reports';
 const QUOTATIONS_KEY='wl_quotations';
 let _quotations=[];
+const SALES_TRACKER_KEY='wl_sales_tracker';
+let _salesTracker=[];
+const PURCHASING_TRACKER_KEY='wl_purchasing_tracker';
+let _purchasingTracker=[];
 const TEST_CHECKINS_KEY='wl_test_checkins';
 let _testCheckins=[]; // isolated Check-In/Check-Out data used only while Testing Mode is on
 let _abnormalReports=[];
@@ -7158,6 +7567,304 @@ async function loadQuotations(){
   }catch(e){_quotations=[];}
 }
 async function saveQuotations(){ await SB.upsert('wl_settings',QUOTATIONS_KEY,_quotations); }
+
+// ══════════════════════════════════════════════════
+// SALES TRACKER & PURCHASING TRACKER
+// ══════════════════════════════════════════════════
+const SALES_STAGES=['Enquiry Received','Quotation Generated','Pending PO','PO Received','Job In Progress','Job Completed','Invoice Generated','Payment Pending','Closed'];
+const PURCHASING_STAGES=['Requirement Identified','Quotation Received','PO Sent','PO Confirmed','Item/Service Delivered','Invoice Received','Payment Made','Closed'];
+
+function trackerArr(type){ return type==='sales'?_salesTracker:_purchasingTracker; }
+function trackerStages(type){ return type==='sales'?SALES_STAGES:PURCHASING_STAGES; }
+function trackerSave(type){ return type==='sales'?saveSalesTracker():savePurchasingTracker(); }
+function trackerCanUse(type){ return type==='sales'?canUseSalesTracker(currentUser):canUsePurchasingTracker(currentUser); }
+
+function populateTrackerFilters(type){
+  const prefix=type==='sales'?'st':'pt';
+  const monthSel=el(`${prefix}-filter-month`);
+  const statusSel=el(`${prefix}-filter-status`);
+  if(monthSel&&!monthSel.dataset.populated){
+    const months=[...new Set(trackerArr(type).map(e=>e.month).filter(Boolean))].sort().reverse();
+    monthSel.innerHTML='<option value="">All Months</option>'+months.map(m=>`<option value="${m}">${m}</option>`).join('');
+    monthSel.dataset.populated='1';
+  }
+  if(statusSel&&!statusSel.dataset.populated){
+    statusSel.innerHTML='<option value="">All Statuses</option>'+trackerStages(type).map(s=>`<option value="${s}">${s}</option>`).join('');
+    statusSel.dataset.populated='1';
+  }
+}
+
+function renderSalesTrackerPage(){ renderTrackerPage('sales'); }
+function renderPurchasingTrackerPage(){ renderTrackerPage('purchasing'); }
+function renderTrackerPage(type){
+  if(!trackerCanUse(type)){ el(`${type}-tracker-list`).innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  populateTrackerFilters(type);
+  const prefix=type==='sales'?'st':'pt';
+  const monthFilter=el(`${prefix}-filter-month`)?.value||'';
+  const statusFilter=el(`${prefix}-filter-status`)?.value||'';
+  const search=(el(`${prefix}-search`)?.value||'').toLowerCase();
+  const nameLabel=type==='sales'?'Customer':'Vendor';
+  const list=trackerArr(type).filter(e=>{
+    if(monthFilter&&e.month!==monthFilter)return false;
+    if(statusFilter&&e.status!==statusFilter)return false;
+    if(search&&!(e.name||'').toLowerCase().includes(search))return false;
+    return true;
+  }).sort((a,b)=>(b.month||'').localeCompare(a.month||'')||(b.createdAt||'').localeCompare(a.createdAt||''));
+
+  const box=el(`${type}-tracker-list`); if(!box)return;
+  if(!list.length){
+    box.innerHTML=`<div class="empty-state"><div class="empty-icon">${type==='sales'?'📈':'🛒'}</div><p>No entries yet. Click "+ New Entry" to add one.</p></div>`;
+    return;
+  }
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>Month</th><th>${nameLabel}</th><th>Status</th><th>Remark</th><th>Linked</th><th></th></tr></thead>
+    <tbody>
+    ${list.map(e=>{
+      const stages=trackerStages(type);
+      const linkedHtml=type==='sales'
+        ?(e.jobNo?`<a href="#" onclick="event.preventDefault();showView('equipment');el('equipment-search').value='${e.jobNo}';renderEquipmentTable();">🔧 ${e.jobNo}</a>`:e.custId?'👤 Linked customer':'—')
+        :(e.refEqId?`<a href="#" onclick="event.preventDefault();showView('ref-eq');">🔩 Ref Equipment</a>`:'—');
+      return `<tr>
+        <td>${e.month||'—'}</td>
+        <td><strong>${e.name}</strong></td>
+        <td>
+          <select class="form-control" style="font-size:11px;padding:4px 8px;" onchange="updateTrackerStatus('${type}','${e.id}',this.value)">
+            ${stages.map((s,i)=>`<option value="${s}" ${s===e.status?'selected':''}>${i+1}. ${s}</option>`).join('')}
+          </select>
+        </td>
+        <td style="max-width:220px;font-size:12px;">${e.remark||'—'}</td>
+        <td style="font-size:12px;">${linkedHtml}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-outline btn-sm" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
+          <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div></div>`;
+}
+
+function openTrackerEntryModal(type,entryId){
+  if(!trackerCanUse(type)){alert('You do not have access to this tracker.');return;}
+  const existing=entryId?trackerArr(type).find(e=>e.id===entryId):null;
+  const nameLabel=type==='sales'?'Customer':'Vendor';
+  const stages=trackerStages(type);
+  let ov=document.getElementById('tracker-entry-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='tracker-entry-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:460px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} ${type==='sales'?'Sales':'Purchasing'} Entry</span>
+      <button onclick="document.getElementById('tracker-entry-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Month <span class="req">*</span></label><input class="form-control" type="month" id="tk-month" value="${existing?.month||toLocalDateStr(new Date()).slice(0,7)}"/></div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select class="form-control" id="tk-status">${stages.map(s=>`<option value="${s}" ${existing?.status===s?'selected':''}>${s}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="form-group" style="position:relative;">
+        <label class="form-label">${nameLabel} <span class="req">*</span></label>
+        <input class="form-control" id="tk-name" value="${existing?.name||''}" autocomplete="off"
+          oninput="suggestTrackerName('${type}',this.value)" onfocus="suggestTrackerName('${type}',this.value)"/>
+        <div id="tk-name-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:180px;overflow-y:auto;margin-top:2px;"></div>
+        <input type="hidden" id="tk-cust-id" value="${existing?.custId||''}"/>
+        <input type="hidden" id="tk-ref-id" value="${existing?.refEqId||''}"/>
+      </div>
+      ${type==='sales'?`
+      <div class="form-group"><label class="form-label">Linked Job No. (optional)</label><input class="form-control" id="tk-jobno" value="${existing?.jobNo||''}" placeholder="e.g. WL26-00123"/></div>
+      `:''}
+      <div class="form-group"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${existing?.remark||''}</textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('tracker-entry-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTrackerEntry('${type}','${entryId||''}')">${existing?'Save Changes':'Add Entry'}</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+
+function suggestTrackerName(type,query){
+  const box=el('tk-name-suggestions'); if(!box)return;
+  const q=(query||'').trim().toLowerCase();
+  if(q.length<2){box.style.display='none';return;}
+  if(type==='sales'){
+    const matches=_customers.filter(c=>c&&c.company&&c.company.toLowerCase().includes(q)).slice(0,6);
+    if(!matches.length){box.style.display='none';return;}
+    box.innerHTML=matches.map(c=>`<div onclick="selectTrackerCustomer('${c.id}','${c.company.replace(/'/g,"\\'")}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">${c.company}</div>`).join('');
+  } else {
+    const matches=(_refEq||[]).filter(r=>r&&r.name&&r.name.toLowerCase().includes(q)).slice(0,6);
+    if(!matches.length){box.style.display='none';return;}
+    box.innerHTML=matches.map(r=>`<div onclick="selectTrackerRefEq('${r.id}','${r.name.replace(/'/g,"\\'")}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">🔩 ${r.name}</div>`).join('');
+  }
+  box.style.display='block';
+}
+function selectTrackerCustomer(custId,name){
+  el('tk-name').value=name; el('tk-cust-id').value=custId; el('tk-name-suggestions').style.display='none';
+}
+function selectTrackerRefEq(refId,name){
+  el('tk-name').value=name; el('tk-ref-id').value=refId; el('tk-name-suggestions').style.display='none';
+}
+document.addEventListener('click',e=>{
+  const box=el('tk-name-suggestions');
+  if(box&&!e.target.closest('#tk-name')&&!e.target.closest('#tk-name-suggestions')) box.style.display='none';
+});
+
+async function saveTrackerEntry(type,entryId){
+  const name=el('tk-name').value.trim();
+  if(!name){alert(`Please enter the ${type==='sales'?'customer':'vendor'} name.`);return;}
+  const month=el('tk-month').value;
+  if(!month){alert('Please select a month.');return;}
+  const arr=trackerArr(type);
+  let entry=entryId?arr.find(e=>e.id===entryId):null;
+  const isNew=!entry;
+  if(isNew){ entry={id:'TRK-'+Date.now(),type,createdAt:new Date().toISOString(),createdBy:currentUser,statusHistory:[]}; arr.push(entry); }
+  const oldStatus=entry.status;
+  entry.month=month;
+  entry.name=name;
+  entry.custId=el('tk-cust-id')?.value||null;
+  entry.refEqId=el('tk-ref-id')?.value||null;
+  entry.status=el('tk-status').value;
+  entry.remark=el('tk-remark').value.trim();
+  if(type==='sales') entry.jobNo=el('tk-jobno')?.value.trim()||null;
+  if(isNew||oldStatus!==entry.status) entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser});
+  await trackerSave(type);
+  document.getElementById('tracker-entry-overlay').style.display='none';
+  renderTrackerPage(type);
+  showToast(`✅ ${isNew?'Entry added':'Entry updated'}`,'success',2500);
+  addAudit(type==='sales'?'📈':'🛒',`${type==='sales'?'Sales':'Purchasing'} Tracker — ${isNew?'added':'updated'} entry for ${name}`);
+}
+
+async function updateTrackerStatus(type,entryId,newStatus){
+  const entry=trackerArr(type).find(e=>e.id===entryId); if(!entry)return;
+  entry.status=newStatus;
+  if(!entry.statusHistory) entry.statusHistory=[];
+  entry.statusHistory.push({status:newStatus,date:new Date().toISOString(),by:currentUser});
+  await trackerSave(type);
+  showToast(`Status updated to "${newStatus}"`,'success',2000);
+  addAudit(type==='sales'?'📈':'🛒',`${type==='sales'?'Sales':'Purchasing'} Tracker — ${entry.name} moved to "${newStatus}"`);
+}
+
+async function deleteTrackerEntry(type,entryId){
+  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  const arr=trackerArr(type);
+  const entry=arr.find(e=>e.id===entryId);
+  if(type==='sales') _salesTracker=arr.filter(e=>e.id!==entryId);
+  else _purchasingTracker=arr.filter(e=>e.id!==entryId);
+  await trackerSave(type);
+  renderTrackerPage(type);
+  showToast('🗑️ Entry deleted','success',2000);
+  addAudit(type==='sales'?'📈':'🛒',`${type==='sales'?'Sales':'Purchasing'} Tracker — deleted entry for ${entry?.name||'—'}`);
+}
+
+function exportTrackerExcel(type){
+  if(typeof XLSX==='undefined'){alert('Excel export library failed to load — please check your connection and refresh.');return;}
+  const prefix=type==='sales'?'st':'pt';
+  const monthFilter=el(`${prefix}-filter-month`)?.value||'';
+  const statusFilter=el(`${prefix}-filter-status`)?.value||'';
+  const search=(el(`${prefix}-search`)?.value||'').toLowerCase();
+  const nameLabel=type==='sales'?'Customer':'Vendor';
+  const list=trackerArr(type).filter(e=>{
+    if(monthFilter&&e.month!==monthFilter)return false;
+    if(statusFilter&&e.status!==statusFilter)return false;
+    if(search&&!(e.name||'').toLowerCase().includes(search))return false;
+    return true;
+  }).sort((a,b)=>(a.month||'').localeCompare(b.month||''));
+  const rows=list.map(e=>({
+    Month:e.month||'',[nameLabel]:e.name||'',Status:e.status||'',Remark:e.remark||'',
+    ...(type==='sales'?{'Linked Job':e.jobNo||''}:{}),
+    'Created By':USERS[e.createdBy]?.name||e.createdBy||'',
+    'Created At':e.createdAt?e.createdAt.split('T')[0]:''
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:24},{wch:20},{wch:34},{wch:16},{wch:16},{wch:12}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,type==='sales'?'Sales Tracker':'Purchasing Tracker');
+  const dateStr=toLocalDateStr(new Date());
+  XLSX.writeFile(wb,`Westlab_${type==='sales'?'Sales':'Purchasing'}_Tracker_${dateStr}.xlsx`);
+  addAudit('📊',`${type==='sales'?'Sales':'Purchasing'} Tracker exported to Excel — ${rows.length} rows`);
+}
+
+async function exportTrackerPdf(type){
+  const prefix=type==='sales'?'st':'pt';
+  const monthFilter=el(`${prefix}-filter-month`)?.value||'';
+  const statusFilter=el(`${prefix}-filter-status`)?.value||'';
+  const search=(el(`${prefix}-search`)?.value||'').toLowerCase();
+  const nameLabel=type==='sales'?'Customer':'Vendor';
+  const list=trackerArr(type).filter(e=>{
+    if(monthFilter&&e.month!==monthFilter)return false;
+    if(statusFilter&&e.status!==statusFilter)return false;
+    if(search&&!(e.name||'').toLowerCase().includes(search))return false;
+    return true;
+  }).sort((a,b)=>(a.month||'').localeCompare(b.month||''));
+  if(!list.length){alert('No entries to export with the current filters.');return;}
+  try{
+    const html=`<div style="width:1000px;padding:24px;font-family:Arial,sans-serif;background:#fff;">
+      <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — ${type==='sales'?'Sales':'Purchasing'} Tracker</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')} ${monthFilter?'· Month: '+monthFilter:''} ${statusFilter?'· Status: '+statusFilter:''}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="background:#0f1f3d;color:#fff;">
+          <th style="padding:6px 8px;text-align:left;">Month</th><th style="padding:6px 8px;text-align:left;">${nameLabel}</th>
+          <th style="padding:6px 8px;text-align:left;">Status</th><th style="padding:6px 8px;text-align:left;">Remark</th>
+          ${type==='sales'?'<th style="padding:6px 8px;text-align:left;">Linked Job</th>':''}
+        </tr></thead>
+        <tbody>
+          ${list.map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.month||''}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.name||''}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.status||''}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.remark||''}</td>
+            ${type==='sales'?`<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.jobNo||''}</td>`:''}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+    const frame=el('receipt-print-frame');
+    frame.innerHTML=html;
+    frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
+    await new Promise(res=>setTimeout(res,150));
+    const target=frame.firstElementChild||frame;
+    const canvas=await html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    frame.style.display='none'; frame.style.position=''; frame.style.left='';
+    const imgData=canvas.toDataURL('image/jpeg',0.92);
+    const imgBytes=await fetch(imgData).then(x=>x.arrayBuffer());
+    const {PDFDocument}=PDFLib;
+    const pdf=await PDFDocument.create();
+    const jpgImage=await pdf.embedJpg(imgBytes);
+    const pageWidth=842;
+    const pageHeight=pageWidth*(canvas.height/canvas.width);
+    const page=pdf.addPage([pageWidth,pageHeight]);
+    page.drawImage(jpgImage,{x:0,y:0,width:pageWidth,height:pageHeight});
+    const bytes=await pdf.save();
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=`Westlab_${type==='sales'?'Sales':'Purchasing'}_Tracker_${toLocalDateStr(new Date())}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+    addAudit('📄',`${type==='sales'?'Sales':'Purchasing'} Tracker exported to PDF — ${list.length} rows`);
+  }catch(e){
+    console.error('exportTrackerPdf error:',e);
+    showToast('❌ PDF export failed: '+e.message,'error',4000);
+  }
+}
+
+async function loadSalesTracker(){
+  try{
+    const s=await SB.get('wl_settings',SALES_TRACKER_KEY);
+    _salesTracker=Array.isArray(s)?s:[];
+  }catch(e){_salesTracker=[];}
+}
+async function saveSalesTracker(){ await SB.upsert('wl_settings',SALES_TRACKER_KEY,_salesTracker); }
+
+async function loadPurchasingTracker(){
+  try{
+    const p=await SB.get('wl_settings',PURCHASING_TRACKER_KEY);
+    _purchasingTracker=Array.isArray(p)?p:[];
+  }catch(e){_purchasingTracker=[];}
+}
+async function savePurchasingTracker(){ await SB.upsert('wl_settings',PURCHASING_TRACKER_KEY,_purchasingTracker); }
 
 async function loadAbnormalReports(){
   try{
@@ -10193,8 +10900,7 @@ function buildCertPage1HTML(cd,s){
     <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
     ${R('Date of Receipt',fmtDate(cd.receipt_date))}
     ${R('Date of Calibration',fmtDate(cd.date))}
-    ${R('Calibration Interval',cd.calInterval?getIntervalLabel(cd.calInterval):'—')}
-    ${R('Next Calibration Due',cd.calInterval==='open'?'— (Open Date)':fmtDate(cd.next_due))}
+    ${R('Requested Recalibration Date',cd.calInterval==='open'?'— (Open Date)':fmtDate(cd.next_due))}
   </table>
   <div style="font-size:8pt;color:#444;font-style:italic;margin-bottom:2.5mm;">(Remark: Recalibration date specified by customer)</div>
 
@@ -10221,7 +10927,7 @@ function buildCertPage1HTML(cd,s){
     <colgroup><col style="width:62mm;"/><col style="width:6mm;"/><col style="width:auto;"/></colgroup>
     ${R('Temperature',cd.temp?`${cd.temp} °C`:'N/A')}
     ${R('Relative Humidity',cd.humidity?`${cd.humidity} %RH`:'N/A')}
-    ${R('Ambient Pressure',cd.pressure?`${cd.pressure} hPa`:'N/A')}
+    ${R('Atmospheric Pressure',cd.pressure?`${cd.pressure} hPa`:'N/A')}
   </table>
 
   <!-- TRACEABILITY -->
@@ -10434,6 +11140,8 @@ function renderRefEqTable(){
     } else {
       availBadge=`<span class="badge badge-green">✅ Available</span>`;
     }
+    const linkedPurchase=(_purchasingTracker||[]).find(e=>e.refEqId===r.id&&e.status!=='Closed');
+    if(linkedPurchase) availBadge+=`<br/><span class="badge badge-blue" style="margin-top:3px;cursor:pointer;" onclick="showView('purchasing-tracker')" title="${linkedPurchase.status}">🛒 Tracked in Purchasing Tracker</span>`;
     let actions=`<button class="btn btn-outline btn-sm" onclick="viewRefEq('${r.id}')">View</button>`;
     if(isAdmin(currentUser)){
       actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditRefEqModal('${r.id}')">✏️</button>`;
@@ -12507,14 +13215,16 @@ function viewCustomerDetail(custId){
         ${c.address?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Address:</span> ${c.address}</div>`:''}
         ${c.notes?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Notes:</span> ${c.notes}</div>`:''}
       </div>`;
-  // Customer Timeline — quotations and jobs merged chronologically, most recent first
+  // Customer Timeline — quotations, jobs, and Sales Tracker entries merged chronologically
   const custQuotations=(_quotations||[]).filter(q=>q.custName===c.company);
+  const custSalesEntries=(_salesTracker||[]).filter(e=>e.custId===c.id||e.name===c.company);
   const timelineEvents=[];
   jobs.forEach(j=>timelineEvents.push({date:j.receiveDate||'',type:'job',data:j}));
   custQuotations.forEach(q=>timelineEvents.push({date:q.quotedAt||'',type:'quotation',data:q}));
+  custSalesEntries.forEach(e=>timelineEvents.push({date:e.createdAt||'',type:'sales',data:e}));
   timelineEvents.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
-  html+=`<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy);">📋 Timeline (${jobs.length} job${jobs.length!==1?'s':''}, ${custQuotations.length} quotation${custQuotations.length!==1?'s':''})</div>`;
+  html+=`<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy);">📋 Timeline (${jobs.length} job${jobs.length!==1?'s':''}, ${custQuotations.length} quotation${custQuotations.length!==1?'s':''}${custSalesEntries.length?`, ${custSalesEntries.length} sales entr${custSalesEntries.length!==1?'ies':'y'}`:''})</div>`;
   if(timelineEvents.length){
     html+=`<div style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;">
       ${timelineEvents.map(ev=>{
@@ -12524,6 +13234,12 @@ function viewCustomerDetail(custId){
           return `<div style="background:var(--bg);border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
             <span>🔧 <strong>${j.jobNo}</strong> · ${itemSummary} <span style="color:var(--text-muted);">· ${fmtDateShort(j.receiveDate)}</span></span>
             <span class="badge ${STATUS_BADGE[j.status]||'badge-slate'}">${j.status}</span>
+          </div>`;
+        } else if(ev.type==='sales'){
+          const e=ev.data;
+          return `<div style="background:#eff6ff;border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+            <span>📈 Sales Tracker <span style="color:var(--text-muted);">· ${e.month||''}</span>${e.remark?` — ${e.remark}`:''}</span>
+            <span class="badge badge-blue">${e.status}</span>
           </div>`;
         } else {
           const q=ev.data;
@@ -14441,6 +15157,7 @@ el('dash-date').textContent='Week of '+new Date().toLocaleDateString('en-MY',{da
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- ══ JOB STATUS LOOKUP (public, no login) ══ -->
 <div id="status-lookup-screen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0f1f3d,#1a3260);z-index:9998;display:none;align-items:center;justify-content:center;padding:20px;">
