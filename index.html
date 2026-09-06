@@ -542,6 +542,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="stat-card purple"><div class="stat-icon">🔬</div><div class="stat-label">In Progress</div><div class="stat-value" id="dash-inprogress">0</div><div class="stat-sub">calibration ongoing</div></div>
         <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-label">Completed</div><div class="stat-value" id="dash-completed">0</div><div class="stat-sub">approved &amp; closed</div></div>
       </div>
+      <!-- Needs Attention (consolidated) -->
+      <div id="needs-attention-box" style="margin-bottom:16px;"></div>
       <!-- Overdue / SLA breach alert -->
       <div id="dash-overdue-banner" style="display:none;margin-bottom:16px;">
         <div class="alert-item" style="background:var(--red-bg);border:1px solid var(--red);border-radius:10px;cursor:pointer;" onclick="showView('equipment')">
@@ -1195,6 +1197,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Revenue Quoted (Year)</div>
         </div>
       </div>
+
+      <div class="form-section-title" style="margin-top:0;">👷 Engineer Workload</div>
+      <div id="rep-workload-box" class="card"><div style="padding:16px;"></div></div>
 
       <!-- Row 1: Jobs/month + Status pie -->
       <div class="grid-2" style="margin-bottom:16px;">
@@ -9619,8 +9624,61 @@ function allItemsCompleted(job){
   return job.items.filter(i=>i.status!=='Deleted').every(i=>i.status==='Completed');
 }
 
+function renderNeedsAttention(){
+  const box=el('needs-attention-box'); if(!box)return;
+  const items=[]; // {icon, text, view}
+  const today=new Date(); today.setHours(0,0,0,0);
+
+  // 1. Overdue jobs (Lab or Onsite, promised date passed, not yet done)
+  const overdueCount=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal).flatMap(j=>j.items||[])
+    .filter(it=>it.promisedDate&&new Date(it.promisedDate+'T00:00:00')<today&&it.status!=='Completed'&&it.status!=='KIV'&&it.status!=='Returned - Abnormal').length;
+  if(overdueCount) items.push({icon:'🚨',text:`${overdueCount} job item(s) overdue`,view:'equipment'});
+
+  // 2. Sticker low stock (all 4 types)
+  if(typeof STICKER_TYPES!=='undefined'){
+    Object.keys(STICKER_TYPES).forEach(type=>{
+      const c=stickerCounts(type);
+      if(c.totalPrinted>0){
+        const pct=c.available/c.totalPrinted*100;
+        if(pct<=stickerTypeCfg(type).lowPct) items.push({icon:'🏷️',text:`${STICKER_TYPES[type].label} stickers running low (${c.available} left)`,view:'stickers'});
+      }
+    });
+  }
+
+  // 3. Reference equipment due/overdue
+  if(typeof _refEq!=='undefined'){
+    const overdueRef=_refEq.filter(r=>getRefStatus(r.dueDate)==='Overdue').length;
+    const dueSoonRef=_refEq.filter(r=>getRefStatus(r.dueDate)==='Due Soon').length;
+    if(overdueRef) items.push({icon:'🔧',text:`${overdueRef} reference instrument(s) calibration OVERDUE`,view:'ref-eq'});
+    if(dueSoonRef) items.push({icon:'🔧',text:`${dueSoonRef} reference instrument(s) due within 3 months`,view:'ref-eq'});
+  }
+
+  // 4. Quotations closing soon (25-29 days since last update, about to auto-expire)
+  if(typeof _quotations!=='undefined'){
+    const closingSoon=_quotations.flatMap(q=>q.items.map(it=>({...it,q}))).filter(it=>{
+      if(it.status!=='Pending')return false;
+      const daysSince=Math.floor((today-new Date(it.lastUpdated||it.q.quotedAt))/86400000);
+      return daysSince>=25&&daysSince<30;
+    }).length;
+    if(closingSoon&&canViewQuotationDashboard(currentUser)) items.push({icon:'⏰',text:`${closingSoon} quotation item(s) closing soon`,view:'quotations'});
+  }
+
+  // 5. Deposits due (onsite jobs, required but not collected)
+  const depositsDue=_jobs.filter(j=>j.status!=='Deleted'&&j.depositRequired&&!j.depositCollected).length;
+  if(depositsDue&&canViewPrice(currentUser)) items.push({icon:'💰',text:`${depositsDue} job(s) with deposit due`,view:'equipment'});
+
+  if(!items.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 16px;">
+    <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:8px;">⚠️ Needs Attention</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      ${items.map(i=>`<span onclick="showView('${i.view}')" style="cursor:pointer;background:#fff;border:1px solid #fdba74;border-radius:20px;padding:5px 12px;font-size:12px;color:#9a3412;">${i.icon} ${i.text}</span>`).join('')}
+    </div>
+  </div>`;
+}
+
 function renderDashboard(){
   try{
+  if(typeof renderNeedsAttention==='function') renderNeedsAttention();
   const list=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal);
   const allItems=list.flatMap(j=>j.items||[]).filter(i=>i.status!=='Deleted');
   const today=new Date(); today.setHours(0,0,0,0);
@@ -12449,17 +12507,39 @@ function viewCustomerDetail(custId){
         ${c.address?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Address:</span> ${c.address}</div>`:''}
         ${c.notes?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Notes:</span> ${c.notes}</div>`:''}
       </div>`;
-  // Job history
-  if(jobs.length>0){
-    html+=`<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy);">🔧 Job History (${jobs.length})</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${jobs.map(j=>`<div style="background:var(--bg);border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;">
-          <span><strong>${j.jobNo}</strong> · ${j.eqName}</span>
-          <span class="badge ${STATUS_BADGE[j.status]||'badge-slate'}">${j.status}</span>
-        </div>`).join('')}
-      </div>`;
+  // Customer Timeline — quotations and jobs merged chronologically, most recent first
+  const custQuotations=(_quotations||[]).filter(q=>q.custName===c.company);
+  const timelineEvents=[];
+  jobs.forEach(j=>timelineEvents.push({date:j.receiveDate||'',type:'job',data:j}));
+  custQuotations.forEach(q=>timelineEvents.push({date:q.quotedAt||'',type:'quotation',data:q}));
+  timelineEvents.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  html+=`<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--navy);">📋 Timeline (${jobs.length} job${jobs.length!==1?'s':''}, ${custQuotations.length} quotation${custQuotations.length!==1?'s':''})</div>`;
+  if(timelineEvents.length){
+    html+=`<div style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;">
+      ${timelineEvents.map(ev=>{
+        if(ev.type==='job'){
+          const j=ev.data;
+          const itemSummary=(j.items||[]).length>1?`${j.items.length} items`:(j.items?.[0]?.eqName||'—');
+          return `<div style="background:var(--bg);border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+            <span>🔧 <strong>${j.jobNo}</strong> · ${itemSummary} <span style="color:var(--text-muted);">· ${fmtDateShort(j.receiveDate)}</span></span>
+            <span class="badge ${STATUS_BADGE[j.status]||'badge-slate'}">${j.status}</span>
+          </div>`;
+        } else {
+          const q=ev.data;
+          const wonCount=q.items.filter(it=>it.status==='Won').length;
+          const lostCount=q.items.filter(it=>it.status==='Lost').length;
+          const pendingCount=q.items.filter(it=>it.status==='Pending').length;
+          const totalVal=q.items.reduce((s,it)=>s+(it.price||0),0);
+          return `<div style="background:#fefce8;border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+            <span>📋 Quotation · ${q.items.length} item${q.items.length!==1?'s':''}, RM${totalVal.toFixed(0)} <span style="color:var(--text-muted);">· ${fmtDateShort(q.quotedAt)}</span></span>
+            <span style="font-size:11px;">${wonCount?`<span class="badge badge-green">${wonCount} Won</span>`:''}${lostCount?`<span class="badge badge-slate" style="margin-left:3px;">${lostCount} Lost</span>`:''}${pendingCount?`<span class="badge badge-amber" style="margin-left:3px;">${pendingCount} Pending</span>`:''}</span>
+          </div>`;
+        }
+      }).join('')}
+    </div>`;
   } else {
-    html+=`<div style="font-size:13px;color:var(--text-muted);">No jobs on record.</div>`;
+    html+=`<div style="font-size:13px;color:var(--text-muted);">No jobs or quotations on record yet.</div>`;
   }
   // Price History (admin only)
   if(isAdmin(currentUser)){
@@ -13941,8 +14021,51 @@ document.addEventListener('click',e=>{
 
 // ── REPORTS ──
 let _charts={};
+function renderEngineerWorkload(){
+  const box=el('rep-workload-box'); if(!box)return;
+  const engineers=(_staff||[]).filter(s=>s.active!==false&&['Engineer','Manager','Quality Manager','Admin'].includes(s.role));
+  const today=new Date(); today.setHours(0,0,0,0);
+  const weekEnd=new Date(today); weekEnd.setDate(weekEnd.getDate()+7);
+  const allItems=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal).flatMap(j=>(j.items||[]).map(it=>({...it,job:j})));
+
+  const rows=engineers.map(eng=>{
+    const mine=allItems.filter(it=>it.assignedTo===eng.username);
+    const active=mine.filter(it=>it.status==='Assigned'||it.status==='In Progress'||it.status==='On-Site').length;
+    const overdue=mine.filter(it=>it.promisedDate&&new Date(it.promisedDate+'T00:00:00')<today&&it.status!=='Completed'&&it.status!=='KIV'&&it.status!=='Returned - Abnormal').length;
+    const onsiteThisWeek=mine.filter(it=>{
+      if(it.calType!=='Onsite'||!it.job.appointmentDate)return false;
+      const d=new Date(it.job.appointmentDate+'T00:00:00');
+      return d>=today&&d<=weekEnd&&it.status!=='Completed'&&it.status!=='Returned - Abnormal';
+    }).length;
+    return {name:eng.certName||eng.name||eng.username,active,overdue,onsiteThisWeek};
+  }).sort((a,b)=>b.active-a.active);
+
+  if(!rows.length){
+    box.innerHTML=`<div style="padding:16px;color:var(--text-muted);font-size:12px;">No engineers on record yet.</div>`;
+    return;
+  }
+  const maxActive=Math.max(...rows.map(r=>r.active),1);
+  box.innerHTML=`<div style="padding:16px;">
+    ${rows.map(r=>{
+      const barPct=Math.round((r.active/maxActive)*100);
+      const barColor=r.active===0?'var(--border)':r.overdue>0?'var(--red)':r.active>=maxActive?'#c84b00':'var(--blue)';
+      return `<div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;">
+          <strong>${r.name}</strong>
+          <span style="color:var(--text-muted);">${r.active} active${r.overdue>0?` · <span style="color:var(--red);font-weight:700;">${r.overdue} overdue</span>`:''}${r.onsiteThisWeek>0?` · ${r.onsiteThisWeek} onsite this week`:''}</span>
+        </div>
+        <div style="background:var(--bg);border-radius:6px;height:8px;overflow:hidden;">
+          <div style="width:${barPct}%;height:100%;background:${barColor};border-radius:6px;"></div>
+        </div>
+      </div>`;
+    }).join('')}
+    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">"Active" = Assigned + In Progress + On-Site items currently on their plate. Useful for balancing new job assignments.</div>
+  </div>`;
+}
+
 function renderReports(){
   try{
+  if(typeof renderEngineerWorkload==='function') renderEngineerWorkload();
   // Year filter setup
   const yearSel=el('rep-year-filter');
   if(yearSel&&yearSel.options.length===0){
