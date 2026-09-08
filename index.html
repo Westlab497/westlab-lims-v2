@@ -436,6 +436,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <select class="form-control" id="testing-mode-role-select" onchange="setSimulatedRole(this.value)" style="font-size:11px;padding:4px 8px;">
       <option value="">Testing as: (my real role)</option>
       <option value="Admin">Testing as: Admin</option>
+      <option value="Managing Director">Testing as: Managing Director</option>
       <option value="Manager">Testing as: Technical Manager</option>
       <option value="Quality Manager">Testing as: Quality Manager</option>
       <option value="Engineer">Testing as: Engineer</option>
@@ -944,6 +945,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </select>
         <input class="form-control" id="st-search" placeholder="Search customer…" oninput="renderSalesTrackerPage()" style="width:200px;"/>
       </div>
+      <div id="capability-review-queue" style="margin-bottom:16px;"></div>
       <div id="sales-tracker-list"></div>
     </div>
 
@@ -2929,6 +2931,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <option value="Sales">Sales (Lead capture only)</option>
           <option value="HR">HR / Accounts (Leave, claims, attendance only)</option>
           <option value="Admin">Admin (Full access)</option>
+          <option value="Managing Director">Managing Director (Full access, same as Admin)</option>
         </select>
         <div id="staff-role-desc" style="font-size:11px;color:var(--text-muted);margin-top:4px;"></div>
       </div>
@@ -3025,9 +3028,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Serial Number <span class="req">*</span></label><input class="form-control" id="ref-eq-serial" placeholder="Serial / Lot no."/></div>
         <div class="form-group"><label class="form-label">Location / Lab</label><input class="form-control" id="ref-eq-location" placeholder="e.g. Lab A"/></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Range / Capacity</label><input class="form-control" id="ref-eq-range" placeholder="e.g. pH 4.00, 0–200°C"/></div>
-        <div class="form-group"><label class="form-label">Resolution</label><input class="form-control" id="ref-eq-resolution" placeholder="e.g. pH 0.01"/></div>
+      <div class="form-group">
+        <label class="form-label">Measured Parameters <span style="font-size:11px;color:var(--text-muted);">(add one row per function — e.g. Temperature, Humidity)</span></label>
+        <div id="ref-eq-params-list"></div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="addRefEqParam()" style="margin-top:6px;">+ Add Parameter</button>
       </div>
       <div class="form-group"><label class="form-label">SAMM Accreditation Scope</label><input class="form-control" id="ref-eq-scope" placeholder="e.g. pH measurement, accredited range pH 2–12, k=2, 95% CL"/></div>
 
@@ -3675,34 +3679,35 @@ function getUserRole(username){
   }
   return USERS[username]?.role||'Engineer';
 }
-function isAdmin(u){ return getUserRole(u||currentUser)==='Admin'; }
-function isManager(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Quality Manager'; }
-function canApproveStickers(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Quality Manager'; }
+function isAdmin(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Managing Director'; }
+function isManager(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Managing Director'||r==='Manager'||r==='Quality Manager'; }
+function canApproveStickers(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Managing Director'||r==='Quality Manager'; }
 function isSignatory(u){
   const uname=u||currentUser;
   const s=_staff.find(x=>x.username===uname);
   return !!(s&&s.approvedSignatory);
 }
 function isEngineer(u){ return getUserRole(u||currentUser)==='Engineer'; }
-function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Quality Manager'||r==='Coordinator'; }
-function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Manager'||r==='Quality Manager'||r==='HR'; }
-function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','Coordinator'].includes(r); }
-function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Engineer','Manager','Quality Manager'].includes(r); }
-function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
-function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','Coordinator'].includes(r); }
-function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
-function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator'].includes(r); }
-function canViewPriceReference(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
-function canLogQuotation(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
-function canUseSalesTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Coordinator','Sales'].includes(r); }
-function canUsePurchasingTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager'].includes(r); }
-function canViewQuotationDashboard(u){ const r=getUserRole(u||currentUser); return ['Admin','Sales'].includes(r); }
-function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Manager','Quality Manager','HR'].includes(r); }
+function isSales(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Managing Director'||r==='Manager'||r==='Quality Manager'||r==='Coordinator'; }
+function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='Managing Director'||r==='Manager'||r==='Quality Manager'||r==='HR'; }
+function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator'].includes(r); }
+function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Engineer','Manager','Quality Manager'].includes(r); }
+function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
+function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator'].includes(r); }
+function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
+function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator'].includes(r); }
+function canViewPriceReference(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator','Sales'].includes(r); }
+function canLogQuotation(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator','Sales'].includes(r); }
+function canUseSalesTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator','Sales'].includes(r); }
+function canReviewCapability(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager'].includes(r); }
+function canUsePurchasingTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
+function canViewQuotationDashboard(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Sales'].includes(r); }
+function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','HR'].includes(r); }
 
 function applyRoleUI(){
   try{
   const role=getUserRole(currentUser);
-  const admin=role==='Admin';
+  const admin=role==='Admin'||role==='Managing Director';
   const manager=role==='Manager'||role==='Quality Manager';
   const engineer=role==='Engineer';
   const coordinator=role==='Coordinator';
@@ -6320,7 +6325,7 @@ function populateUserDropdown(selectId, includeAdmin=false, engineersOnly=false)
   }
   (_staff||[]).filter(s=>{
     if(s.active===false) return false;
-    if(engineersOnly) return s.role==='Engineer'||s.role==='Admin'||s.role==='Manager'||s.role==='Quality Manager';
+    if(engineersOnly) return s.role==='Engineer'||s.role==='Admin'||s.role==='Managing Director'||s.role==='Manager'||s.role==='Quality Manager';
     return true;
   }).forEach(s=>{
     sel.innerHTML+=`<option value="${s.username}">${s.name} (${s.role})</option>`;
@@ -7235,8 +7240,8 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;white-space:nowrap;text-align:right;">
           ${canCreateJobs(currentUser)?`<button onclick="reissueJobReceipt('${j.jobNo}')" title="Reissue Receipt" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🧾</button>`:''}
           ${canCreateJobs(currentUser)?`<button onclick="printWorkOrder('${j.jobNo}')" title="Print Work Order" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🖨️</button>`:''}
-          ${role==='Admin'&&j.status!=='Completed'?`<button onclick="deleteJob('${j.jobNo}')" title="Delete Job" style="background:rgba(220,38,38,.85);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑</button>`:''}
-          ${role==='Admin'&&j.status==='Completed'?`<button onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (Admin override — irreversible)" style="background:rgba(153,27,27,.9);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑️⚠️</button>`:''}
+          ${(role==='Admin'||role==='Managing Director')&&j.status!=='Completed'?`<button onclick="deleteJob('${j.jobNo}')" title="Delete Job" style="background:rgba(220,38,38,.85);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑</button>`:''}
+          ${(role==='Admin'||role==='Managing Director')&&j.status==='Completed'?`<button onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (Admin override — irreversible)" style="background:rgba(153,27,27,.9);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑️⚠️</button>`:''}
         </td>
       </tr>`);
       // ── ITEM ROWS ──
@@ -7571,7 +7576,7 @@ async function saveQuotations(){ await SB.upsert('wl_settings',QUOTATIONS_KEY,_q
 // ══════════════════════════════════════════════════
 // SALES TRACKER & PURCHASING TRACKER
 // ══════════════════════════════════════════════════
-const SALES_STAGES=['Enquiry Received','Quotation Generated','Pending PO','PO Received','Job In Progress','Job Completed','Invoice Generated','Payment Pending','Closed'];
+const SALES_STAGES=['Enquiry Received','Pending Technical Review','Checking External Capability','Quotation Generated','Pending PO','PO Received','Job In Progress','Job Completed','Invoice Generated','Payment Pending','Closed'];
 const PURCHASING_STAGES=['Requirement Identified','Quotation Received','PO Sent','PO Confirmed','Item/Service Delivered','Invoice Received','Payment Made','Closed'];
 
 function trackerArr(type){ return type==='sales'?_salesTracker:_purchasingTracker; }
@@ -7596,8 +7601,81 @@ function populateTrackerFilters(type){
 
 function renderSalesTrackerPage(){ renderTrackerPage('sales'); }
 function renderPurchasingTrackerPage(){ renderTrackerPage('purchasing'); }
+function renderCapabilityReviewQueue(){
+  const box=el('capability-review-queue'); if(!box)return;
+  if(!canReviewCapability(currentUser)){ box.innerHTML=''; return; }
+  const pending=_salesTracker.filter(e=>e.status==='Pending Technical Review'&&!e.capabilityVerdict);
+  if(!pending.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div class="card" style="border:1px solid #fdba74;background:#fff7ed;">
+    <div style="padding:12px 16px;">
+      <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:8px;">🔍 Capability Review Queue (${pending.length})</div>
+      ${pending.map(e=>`<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:13px;">
+            <strong>${e.name}</strong><br/>
+            <span style="color:var(--text-muted);">${e.equipment||'—'}${e.spec?' · Spec: '+e.spec:''}${e.model?' · Model: '+e.model:''}</span>
+            ${e.remark?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${e.remark}</div>`:''}
+          </div>
+          <div style="white-space:nowrap;">
+            <button class="btn btn-primary btn-sm" onclick="setCapabilityVerdict('${e.id}','Can Do')">✅ Can Do</button>
+            <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="setCapabilityVerdict('${e.id}','Cannot Do')">❌ Cannot Do</button>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+async function setCapabilityVerdict(entryId,verdict){
+  if(!canReviewCapability(currentUser)){alert('Only Technical Manager, Admin, or Managing Director can review capability.');return;}
+  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry)return;
+  entry.capabilityVerdict=verdict;
+  entry.capabilityReviewedBy=currentUser;
+  entry.capabilityReviewedAt=new Date().toISOString();
+  // "Can Do" just unlocks progression — status stays put until someone manually moves it forward
+  // once they actually generate the quotation. "Cannot Do" actively moves to the external-check stage.
+  if(verdict==='Cannot Do') entry.status='Checking External Capability';
+  if(!entry.statusHistory) entry.statusHistory=[];
+  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:`Capability review: ${verdict}`});
+  await saveSalesTracker();
+  renderTrackerPage('sales');
+  showToast(`${verdict==='Can Do'?'✅':'❌'} Marked "${verdict}"`,'success',3000);
+  addAudit('📈',`Sales Tracker — ${USERS[currentUser]?.name||currentUser} reviewed ${entry.name} — ${verdict}`);
+}
+async function setExternalCapabilityFound(entryId){
+  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry)return;
+  if(!confirm(`Mark external capability found for "${entry.name}"? This unlocks moving to Quotation Generated.`))return;
+  entry.capabilityVerdict='Can Do (External)';
+  // Status stays at "Checking External Capability" — unlocked now, but still a manual choice to advance
+  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:'External partner found'});
+  await saveSalesTracker();
+  renderTrackerPage('sales');
+  showToast('✅ External capability confirmed — you can now move this to Quotation Generated','success',4000);
+  addAudit('📈',`Sales Tracker — external capability found for ${entry.name}`);
+}
+async function createLinkedPurchasingEntry(salesEntryId){
+  const salesEntry=_salesTracker.find(e=>e.id===salesEntryId); if(!salesEntry)return;
+  if(!canUsePurchasingTracker(currentUser)){alert('Only Admin/Manager can create a Purchasing Tracker entry.');return;}
+  const entry={
+    id:'TRK-'+Date.now(),type:'purchasing',month:toLocalDateStr(new Date()).slice(0,7),
+    name:`External capability check — ${salesEntry.equipment||salesEntry.name}`,
+    status:'Requirement Identified',
+    remark:`Linked to Sales Tracker enquiry for ${salesEntry.name}. Equipment: ${salesEntry.equipment||'—'}, Spec: ${salesEntry.spec||'—'}, Model: ${salesEntry.model||'—'}`,
+    createdAt:new Date().toISOString(),createdBy:currentUser,
+    statusHistory:[{status:'Requirement Identified',date:new Date().toISOString(),by:currentUser}],
+    linkedSalesTrackerId:salesEntryId
+  };
+  _purchasingTracker.push(entry);
+  salesEntry.linkedPurchasingTrackerId=entry.id;
+  await savePurchasingTracker();
+  await saveSalesTracker();
+  renderTrackerPage('sales');
+  showToast('✅ Linked Purchasing Tracker entry created','success',3000);
+  addAudit('🛒',`Purchasing Tracker entry created to check external capability for ${salesEntry.name}`);
+}
+
 function renderTrackerPage(type){
   if(!trackerCanUse(type)){ el(`${type}-tracker-list`).innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  if(type==='sales') renderCapabilityReviewQueue();
   populateTrackerFilters(type);
   const prefix=type==='sales'?'st':'pt';
   const monthFilter=el(`${prefix}-filter-month`)?.value||'';
@@ -7629,13 +7707,21 @@ function renderTrackerPage(type){
         <td><strong>${e.name}</strong></td>
         <td>
           <select class="form-control" style="font-size:11px;padding:4px 8px;" onchange="updateTrackerStatus('${type}','${e.id}',this.value)">
-            ${stages.map((s,i)=>`<option value="${s}" ${s===e.status?'selected':''}>${i+1}. ${s}</option>`).join('')}
+            ${stages.map((s,i)=>{
+              const isGated=type==='sales'&&s==='Quotation Generated'&&!['Can Do','Can Do (External)'].includes(e.capabilityVerdict);
+              return `<option value="${s}" ${s===e.status?'selected':''} ${isGated?'disabled':''}>${i+1}. ${s}${isGated?' 🔒':''}</option>`;
+            }).join('')}
           </select>
+          ${type==='sales'&&e.capabilityVerdict?`<div style="font-size:10px;margin-top:3px;color:${e.capabilityVerdict==='Cannot Do'?'var(--red)':'var(--green)'};">✓ ${e.capabilityVerdict}</div>`:''}
         </td>
         <td style="max-width:220px;font-size:12px;">${e.remark||'—'}</td>
         <td style="font-size:12px;">${linkedHtml}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-outline btn-sm" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
+          ${type==='sales'&&e.status==='Checking External Capability'?`
+            ${e.linkedPurchasingTrackerId?`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="setExternalCapabilityFound('${e.id}')" title="Mark that a vendor was found">✅ Found</button>`
+              :`<button class="btn btn-outline btn-sm" onclick="createLinkedPurchasingEntry('${e.id}')" title="Track checking with external vendors">🛒 Check External</button>`}
+          `:''}
+          <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
           <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>
         </td>
       </tr>`;
@@ -7660,7 +7746,10 @@ function openTrackerEntryModal(type,entryId){
       <div class="form-row">
         <div class="form-group"><label class="form-label">Month <span class="req">*</span></label><input class="form-control" type="month" id="tk-month" value="${existing?.month||toLocalDateStr(new Date()).slice(0,7)}"/></div>
         <div class="form-group"><label class="form-label">Status</label>
-          <select class="form-control" id="tk-status">${stages.map(s=>`<option value="${s}" ${existing?.status===s?'selected':''}>${s}</option>`).join('')}</select>
+          <select class="form-control" id="tk-status">${stages.map(s=>{
+            const isGated=type==='sales'&&s==='Quotation Generated'&&!(existing&&['Can Do','Can Do (External)'].includes(existing.capabilityVerdict));
+            return `<option value="${s}" ${existing?.status===s?'selected':''} ${isGated?'disabled':''}>${s}${isGated?' 🔒 (needs capability review)':''}</option>`;
+          }).join('')}</select>
         </div>
       </div>
       <div class="form-group" style="position:relative;">
@@ -7672,7 +7761,17 @@ function openTrackerEntryModal(type,entryId){
         <input type="hidden" id="tk-ref-id" value="${existing?.refEqId||''}"/>
       </div>
       ${type==='sales'?`
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Equipment / Service Requested</label><input class="form-control" id="tk-equipment" value="${existing?.equipment||''}" placeholder="e.g. Digital Pressure Gauge"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Spec</label><input class="form-control" id="tk-spec" value="${existing?.spec||''}" placeholder="e.g. 0-100 bar"/></div>
+        <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="tk-model" value="${existing?.model||''}" placeholder="e.g. WIKA CPG1500"/></div>
+      </div>
       <div class="form-group"><label class="form-label">Linked Job No. (optional)</label><input class="form-control" id="tk-jobno" value="${existing?.jobNo||''}" placeholder="e.g. WL26-00123"/></div>
+      ${existing&&existing.capabilityVerdict?`<div class="form-group" style="background:${existing.capabilityVerdict==='Cannot Do'?'#fef2f2':'#f0fdf4'};border-radius:8px;padding:10px 14px;font-size:12px;">
+        <strong>Capability Review:</strong> ${existing.capabilityVerdict} — by ${USERS[existing.capabilityReviewedBy]?.name||existing.capabilityReviewedBy||''} (${existing.capabilityReviewedAt?fmtDateShort(existing.capabilityReviewedAt):''})
+      </div>`:''}
       `:''}
       <div class="form-group"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${existing?.remark||''}</textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
@@ -7720,13 +7819,25 @@ async function saveTrackerEntry(type,entryId){
   const isNew=!entry;
   if(isNew){ entry={id:'TRK-'+Date.now(),type,createdAt:new Date().toISOString(),createdBy:currentUser,statusHistory:[]}; arr.push(entry); }
   const oldStatus=entry.status;
+  let newStatus=el('tk-status').value;
+  if(type==='sales'&&newStatus==='Quotation Generated'&&!['Can Do','Can Do (External)'].includes(entry.capabilityVerdict)){
+    alert('This enquiry needs a Technical Manager capability review before a quotation can be generated.');
+    return;
+  }
   entry.month=month;
   entry.name=name;
   entry.custId=el('tk-cust-id')?.value||null;
   entry.refEqId=el('tk-ref-id')?.value||null;
-  entry.status=el('tk-status').value;
   entry.remark=el('tk-remark').value.trim();
-  if(type==='sales') entry.jobNo=el('tk-jobno')?.value.trim()||null;
+  if(type==='sales'){
+    entry.jobNo=el('tk-jobno')?.value.trim()||null;
+    entry.equipment=el('tk-equipment')?.value.trim()||'';
+    entry.spec=el('tk-spec')?.value.trim()||'';
+    entry.model=el('tk-model')?.value.trim()||'';
+    // Every new enquiry goes straight into the capability review queue — no skip path
+    if(isNew&&newStatus==='Enquiry Received') newStatus='Pending Technical Review';
+  }
+  entry.status=newStatus;
   if(isNew||oldStatus!==entry.status) entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser});
   await trackerSave(type);
   document.getElementById('tracker-entry-overlay').style.display='none';
@@ -7737,6 +7848,11 @@ async function saveTrackerEntry(type,entryId){
 
 async function updateTrackerStatus(type,entryId,newStatus){
   const entry=trackerArr(type).find(e=>e.id===entryId); if(!entry)return;
+  if(type==='sales'&&newStatus==='Quotation Generated'&&!['Can Do','Can Do (External)'].includes(entry.capabilityVerdict)){
+    alert('This enquiry needs a Technical Manager capability review before a quotation can be generated.');
+    renderTrackerPage(type); // revert the dropdown to its real current status
+    return;
+  }
   entry.status=newStatus;
   if(!entry.statusHistory) entry.statusHistory=[];
   entry.statusHistory.push({status:newStatus,date:new Date().toISOString(),by:currentUser});
@@ -11002,11 +11118,47 @@ function openAddRefEqModal(){
   const saveBtn=modal.querySelector('.btn-primary');
   if(saveBtn) saveBtn.textContent='💾 Save Reference Equipment';
   ['ref-eq-id','ref-eq-name','ref-eq-brand','ref-eq-model','ref-eq-serial','ref-eq-location',
-   'ref-eq-range','ref-eq-resolution','ref-eq-scope','ref-eq-cert-no','ref-eq-last-cal',
+   'ref-eq-scope','ref-eq-cert-no','ref-eq-last-cal',
    'ref-eq-due-date','ref-eq-cal-by','ref-eq-remarks'].forEach(f=>{const e=el(f);if(e)e.value='';});
+  _refEqParams=[];
+  renderRefEqParams();
   removeRefEqCert();
   openModal('modal-add-ref-eq');
 }
+// ── Multi-Parameter support for Reference Equipment (e.g. thermohygrometer = Temp + Humidity) ──
+let _refEqParams=[];
+function renderRefEqParams(){
+  const box=el('ref-eq-params-list'); if(!box)return;
+  if(!_refEqParams.length){
+    box.innerHTML=`<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">No parameters added yet — click "+ Add Parameter" below.</div>`;
+    return;
+  }
+  box.innerHTML=_refEqParams.map((p,i)=>`
+    <div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:6px;background:var(--bg);border-radius:8px;padding:8px;">
+      <input class="form-control" placeholder="Parameter (e.g. Temperature)" value="${p.parameter||''}" oninput="updateRefEqParam(${i},'parameter',this.value)" style="flex:1.2;"/>
+      <input class="form-control" placeholder="Range (e.g. -10 to 60°C)" value="${p.range||''}" oninput="updateRefEqParam(${i},'range',this.value)" style="flex:1.4;"/>
+      <input class="form-control" placeholder="Resolution (e.g. 0.1°C)" value="${p.resolution||''}" oninput="updateRefEqParam(${i},'resolution',this.value)" style="flex:1.2;"/>
+      <button type="button" onclick="removeRefEqParam(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;">✕</button>
+    </div>`).join('');
+}
+function addRefEqParam(){
+  _refEqParams.push({parameter:'',range:'',resolution:''});
+  renderRefEqParams();
+}
+function updateRefEqParam(idx,field,val){
+  if(_refEqParams[idx]) _refEqParams[idx][field]=val;
+}
+function removeRefEqParam(idx){
+  _refEqParams=_refEqParams.filter((_,i)=>i!==idx);
+  renderRefEqParams();
+}
+// Formats the parameters array into a readable multi-line string, for anywhere still
+// needing a flat display (e.g. copying into a job's item.range when sent for internal cal)
+function formatRefEqParams(params){
+  if(!params||!params.length)return'';
+  return params.map(p=>`${p.parameter?p.parameter+': ':''}${p.range||''}${p.resolution?' (res: '+p.resolution+')':''}`).filter(Boolean).join('; ');
+}
+
 async function saveRefEquipment(){
   const modal=el('modal-add-ref-eq');
   const editId=modal.dataset.editId||'';
@@ -11045,7 +11197,9 @@ async function saveRefEquipment(){
     id, name, brand:el('ref-eq-brand').value.trim(),
     model:el('ref-eq-model').value.trim(), serial,
     location:el('ref-eq-location').value.trim(),
-    range:el('ref-eq-range').value.trim(), resolution:el('ref-eq-resolution').value.trim(),
+    parameters:_refEqParams.filter(p=>p.parameter||p.range||p.resolution),
+    // Legacy flat fields — kept in sync from parameters[0] for any old code path that might still read them directly
+    range:_refEqParams[0]?.range||'', resolution:_refEqParams[0]?.resolution||'',
     scope:el('ref-eq-scope').value.trim(),
     traceability:el('ref-eq-traceability').value,
     certNo:el('ref-eq-cert-no').value.trim(),
@@ -11589,7 +11743,7 @@ async function submitSendForCal(refId){
     const certNo=await commitCertNo();
     const item={
       itemNo:1, certNo, eqName:r.name, brand:r.brand||'', model:r.model||'', serial:r.serial||'',
-      tagNo:r.id, range:r.range||'', resolution:r.resolution||'', calType:'Lab',
+      tagNo:r.id, range:(r.parameters&&r.parameters.length)?formatRefEqParams(r.parameters):(r.range||''), resolution:r.resolution||'', calType:'Lab',
       condition:'Good', accessories:'', remarks:notes,
       status:'Assigned', assignedTo:engineer, assignNote:'Internal reference equipment calibration',
       calData:null, excelFile:null, approvalComments:'', approvedBy:null, approvedAt:null, photos:[],
@@ -11667,7 +11821,11 @@ function viewRefEq(id){
   el('view-ref-eq-title').textContent=`${r.id} — ${r.name}`;
   el('view-ref-eq-body').innerHTML=`
     <div class="form-section-title">🔩 Equipment</div>
-    <table style="width:100%;">${row('ID',r.id)}${row('Name',r.name)}${row('Brand',r.brand)}${row('Model',r.model)}${row('Serial No.',r.serial)}${row('Location',r.location)}${row('Range',r.range)}${row('Resolution',r.resolution)}</table>
+    <table style="width:100%;">${row('ID',r.id)}${row('Name',r.name)}${row('Brand',r.brand)}${row('Model',r.model)}${row('Serial No.',r.serial)}${row('Location',r.location)}${
+      (r.parameters&&r.parameters.length)
+        ?r.parameters.map(p=>row(p.parameter||'Range',`${p.range||'—'}${p.resolution?' &nbsp;(res: '+p.resolution+')':''}`)).join('')
+        :(r.range||r.resolution?row('Range',`${r.range||'—'}${r.resolution?' &nbsp;(res: '+r.resolution+')':''}`):'')
+    }</table>
     ${r.scope?`<div style="margin-top:10px;padding:10px;background:var(--blue-pale);border-radius:8px;font-size:12px;"><strong>SAMM Scope:</strong> ${r.scope}</div>`:''}
     <div class="form-section-title" style="margin-top:14px;">🔗 Traceability & Calibration</div>
     <table style="width:100%;">${row('Traceability',r.traceability)}${row('Certificate No.',r.certNo)}${row('Last Calibration',r.lastCal)}${row('Due Date','<strong style="color:'+(st==='Overdue'?'var(--red)':st==='Due Soon'?'var(--amber)':'var(--green)')+'">'+r.dueDate+'</strong>')}${row('Status','<span class="badge '+SB2[st]+'">'+st+'</span>')}${row('Calibrated By',r.calBy)}</table>
@@ -11693,8 +11851,8 @@ function openEditRefEqModal(id){
   el('ref-eq-model').value=r.model||'';
   el('ref-eq-serial').value=r.serial||'';
   el('ref-eq-location').value=r.location||'';
-  el('ref-eq-range').value=r.range||'';
-  el('ref-eq-resolution').value=r.resolution||'';
+  _refEqParams=(r.parameters&&r.parameters.length)?JSON.parse(JSON.stringify(r.parameters)):(r.range||r.resolution?[{parameter:'',range:r.range||'',resolution:r.resolution||''}]:[]);
+  renderRefEqParams();
   el('ref-eq-scope').value=r.scope||'';
   el('ref-eq-traceability').value=r.traceability||'NMIM, Malaysia';
   el('ref-eq-cert-no').value=r.certNo||'';
@@ -14195,6 +14353,7 @@ async function permanentlyDeleteJob(jobNo){
 // ── PERSONNEL MANAGEMENT ──
 const ROLE_DISPLAY={
   Admin:{label:'Admin',access:'Full access — all modules including Settings and Personnel',badge:'badge-green'},
+  'Managing Director':{label:'Managing Director',access:'Full access — same as Admin, currently identical in every respect',badge:'badge-green'},
   Manager:{label:'Technical Manager',access:'Approve certs, assign jobs, view reports, approve leave/claims/OT, view pricing',badge:'badge-purple'},
   'Quality Manager':{label:'Quality Manager',access:'Same as Technical Manager, plus sole authority (with Admin) to approve calibration sticker requests and reconcile counts',badge:'badge-purple'},
   Engineer:{label:'Engineer',access:'My Jobs, perform calibration, clock in/out, own leave and claims',badge:'badge-blue'},
