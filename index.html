@@ -11134,15 +11134,30 @@ function renderRefEqParams(){
     return;
   }
   box.innerHTML=_refEqParams.map((p,i)=>`
-    <div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:6px;background:var(--bg);border-radius:8px;padding:8px;">
-      <input class="form-control" placeholder="Parameter (e.g. Temperature)" value="${p.parameter||''}" oninput="updateRefEqParam(${i},'parameter',this.value)" style="flex:1.2;"/>
-      <input class="form-control" placeholder="Range (e.g. -10 to 60°C)" value="${p.range||''}" oninput="updateRefEqParam(${i},'range',this.value)" style="flex:1.4;"/>
-      <input class="form-control" placeholder="Resolution (e.g. 0.1°C)" value="${p.resolution||''}" oninput="updateRefEqParam(${i},'resolution',this.value)" style="flex:1.2;"/>
-      <button type="button" onclick="removeRefEqParam(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;">✕</button>
+    <div style="margin-bottom:8px;background:var(--bg);border-radius:8px;padding:8px;">
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <input class="form-control" placeholder="Parameter (e.g. Temperature)" value="${p.parameter||''}" oninput="updateRefEqParam(${i},'parameter',this.value)" style="flex:1.2;"/>
+        <input class="form-control" placeholder="Range (e.g. -10 to 60°C)" value="${p.range||''}" oninput="updateRefEqParam(${i},'range',this.value)" style="flex:1.4;"/>
+        <input class="form-control" placeholder="Resolution (e.g. 0.1°C)" value="${p.resolution||''}" oninput="updateRefEqParam(${i},'resolution',this.value)" style="flex:1.2;"/>
+        <button type="button" onclick="removeRefEqParam(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;">✕</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:normal;margin-top:6px;cursor:pointer;">
+        <input type="checkbox" ${p.ownCert?'checked':''} onchange="updateRefEqParam(${i},'ownCert',this.checked);renderRefEqParams();"/>
+        This parameter has its own separate calibration certificate
+      </label>
+      ${p.ownCert?`
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <input class="form-control" placeholder="Cert No." value="${p.certNo||''}" oninput="updateRefEqParam(${i},'certNo',this.value)" style="flex:1;font-size:12px;"/>
+          <input class="form-control" type="date" title="Last Calibrated" value="${p.lastCal||''}" oninput="updateRefEqParam(${i},'lastCal',this.value)" style="flex:1;font-size:12px;"/>
+          <input class="form-control" type="date" title="Due Date" value="${p.dueDate||''}" oninput="updateRefEqParam(${i},'dueDate',this.value)" style="flex:1;font-size:12px;"/>
+        </div>
+        <input type="file" accept=".pdf" onchange="handleRefEqParamCertSelect(${i},this)" style="margin-top:6px;font-size:11px;"/>
+        ${p.certFileName?`<div style="font-size:11px;color:var(--green);margin-top:2px;">📎 ${p.certFileName}</div>`:''}
+      `:''}
     </div>`).join('');
 }
 function addRefEqParam(){
-  _refEqParams.push({parameter:'',range:'',resolution:''});
+  _refEqParams.push({parameter:'',range:'',resolution:'',ownCert:false});
   renderRefEqParams();
 }
 function updateRefEqParam(idx,field,val){
@@ -11152,11 +11167,25 @@ function removeRefEqParam(idx){
   _refEqParams=_refEqParams.filter((_,i)=>i!==idx);
   renderRefEqParams();
 }
+function handleRefEqParamCertSelect(idx,input){
+  const f=input.files[0]; if(!f)return;
+  if(!_refEqParams[idx])return;
+  _refEqParams[idx]._certFile=f; // temporary, uploaded on save
+  _refEqParams[idx].certFileName=f.name;
+}
 // Formats the parameters array into a readable multi-line string, for anywhere still
 // needing a flat display (e.g. copying into a job's item.range when sent for internal cal)
 function formatRefEqParams(params){
   if(!params||!params.length)return'';
   return params.map(p=>`${p.parameter?p.parameter+': ':''}${p.range||''}${p.resolution?' (res: '+p.resolution+')':''}`).filter(Boolean).join('; ');
+}
+// Overall item status is driven by whichever due date is soonest — the item's own,
+// plus any parameter that has its own separate certificate with its own due date.
+function refEqEarliestDueDate(r){
+  const dates=[r.dueDate].filter(Boolean);
+  (r.parameters||[]).forEach(p=>{ if(p.ownCert&&p.dueDate) dates.push(p.dueDate); });
+  if(!dates.length)return r.dueDate||'';
+  return dates.sort()[0];
 }
 
 async function saveRefEquipment(){
@@ -11193,6 +11222,24 @@ async function saveRefEquipment(){
       }
     }catch(e){console.error('Cert upload failed:',e);}
   }
+  // Upload per-parameter certificate files (for parameters marked "own certificate")
+  for(const p of _refEqParams){
+    if(p.ownCert&&p._certFile){
+      try{
+        const ppath=`ref-equipment/${id}/${(p.parameter||'param').replace(/\s/g,'_')}_${p._certFile.name.replace(/\s/g,'_')}`;
+        const pRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
+          method:'POST',
+          headers:{'X-File-Path':ppath,'Content-Type':p._certFile.type||'application/pdf'},
+          body:p._certFile
+        });
+        if(pRes.ok){
+          const pr2=await pRes.json();
+          p.certFileUrl=pr2.url||`https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/${ppath}`;
+        }
+      }catch(e){console.error('Parameter cert upload failed:',e);}
+      delete p._certFile; // never persist the raw File object
+    }
+  }
   const record={
     id, name, brand:el('ref-eq-brand').value.trim(),
     model:el('ref-eq-model').value.trim(), serial,
@@ -11209,6 +11256,7 @@ async function saveRefEquipment(){
     remarks:el('ref-eq-remarks').value.trim(),
     addedAt:existing?.addedAt||new Date().toISOString()
   };
+  record.dueDate=refEqEarliestDueDate(record); // overall status now reflects the soonest of any certificate, item-level or per-parameter
   // If ID changed, delete the old DB row first (primary key change)
   if(idChanged){
     try{ await SB.delete('wl_ref_equipment',editId); }catch(e){console.warn('Could not delete old ref eq record:',e);}
@@ -11823,7 +11871,7 @@ function viewRefEq(id){
     <div class="form-section-title">🔩 Equipment</div>
     <table style="width:100%;">${row('ID',r.id)}${row('Name',r.name)}${row('Brand',r.brand)}${row('Model',r.model)}${row('Serial No.',r.serial)}${row('Location',r.location)}${
       (r.parameters&&r.parameters.length)
-        ?r.parameters.map(p=>row(p.parameter||'Range',`${p.range||'—'}${p.resolution?' &nbsp;(res: '+p.resolution+')':''}`)).join('')
+        ?r.parameters.map(p=>row(p.parameter||'Range',`${p.range||'—'}${p.resolution?' &nbsp;(res: '+p.resolution+')':''}${p.ownCert?`<br/><span style="font-size:11px;color:var(--text-muted);">Own cert: ${p.certNo||'—'} · Due: ${p.dueDate||'—'}${p.certFileUrl?` · <a href="${p.certFileUrl}" target="_blank">📎 View</a>`:''}</span>`:''}`)).join('')
         :(r.range||r.resolution?row('Range',`${r.range||'—'}${r.resolution?' &nbsp;(res: '+r.resolution+')':''}`):'')
     }</table>
     ${r.scope?`<div style="margin-top:10px;padding:10px;background:var(--blue-pale);border-radius:8px;font-size:12px;"><strong>SAMM Scope:</strong> ${r.scope}</div>`:''}
