@@ -3062,6 +3062,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="file-attached">
           <span style="font-size:20px;">📄</span>
           <span class="file-attached-name" id="ref-eq-cert-filename">—</span>
+          <a href="javascript:void(0)" id="ref-eq-cert-view-link" onclick="openSignedUrl(el('ref-eq-cert-view-link').dataset.url)" style="display:none;color:var(--blue);font-size:12px;margin-left:6px;">View</a>
           <button class="file-attached-remove" onclick="removeRefEqCert()">✕</button>
         </div>
       </div>
@@ -11091,6 +11092,7 @@ function handleRefEqCertSelect(e){
   el('ref-eq-cert-filename').textContent=f.name;
   el('ref-eq-cert-attached').style.display='block';
   el('ref-eq-cert-drop').style.display='none';
+  const viewLink=el('ref-eq-cert-view-link'); if(viewLink) viewLink.style.display='none';
   e.target.value='';
 }
 function handleRefEqCertDrop(e){
@@ -11100,12 +11102,14 @@ function handleRefEqCertDrop(e){
   el('ref-eq-cert-filename').textContent=f.name;
   el('ref-eq-cert-attached').style.display='block';
   el('ref-eq-cert-drop').style.display='none';
+  const viewLink=el('ref-eq-cert-view-link'); if(viewLink) viewLink.style.display='none';
 }
 function removeRefEqCert(){
   _refEqCertFile=null;
   el('ref-eq-cert-filename').textContent='—';
   el('ref-eq-cert-attached').style.display='none';
   el('ref-eq-cert-drop').style.display='block';
+  const viewLink=el('ref-eq-cert-view-link'); if(viewLink){ viewLink.style.display='none'; delete viewLink.dataset.url; }
 }
 
 function openAddRefEqModal(){
@@ -11215,6 +11219,7 @@ async function saveRefEquipment(){
   // Upload external cert PDF to storage if provided
   let certFileUrl=existing?.certFileUrl||'';
   let certFileName=existing?.certFileName||'';
+  const oldCertFileUrl=existing?.certFileUrl||''; // remembered so we can clean it up below if replaced
   if(_refEqCertFile){
     try{
       const path=`ref-equipment/${id}/${_refEqCertFile.name.replace(/\s/g,'_')}`;
@@ -11227,12 +11232,22 @@ async function saveRefEquipment(){
         const r2res=await uploadRes.json();
         certFileUrl=r2res.url||`https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/${path}`;
         certFileName=_refEqCertFile.name;
+        // Clean up the old file if this upload replaced a different one (avoids orphaned files piling up in storage)
+        if(oldCertFileUrl&&oldCertFileUrl!==certFileUrl){
+          const oldPath=extractR2Path(oldCertFileUrl);
+          if(oldPath){
+            try{
+              await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify([oldPath])});
+            }catch(delErr){console.warn('Old cert file cleanup failed (new file still saved fine):',delErr);}
+          }
+        }
       }
     }catch(e){console.error('Cert upload failed:',e);}
   }
   // Upload per-parameter certificate files (for parameters marked "own certificate")
   for(const p of _refEqParams){
     if(p.ownCert&&p._certFile){
+      const oldParamCertUrl=p.certFileUrl||'';
       try{
         const ppath=`ref-equipment/${id}/${(p.parameter||'param').replace(/\s/g,'_')}_${p._certFile.name.replace(/\s/g,'_')}`;
         const pRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
@@ -11243,12 +11258,22 @@ async function saveRefEquipment(){
         if(pRes.ok){
           const pr2=await pRes.json();
           p.certFileUrl=pr2.url||`https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/${ppath}`;
+          if(oldParamCertUrl&&oldParamCertUrl!==p.certFileUrl){
+            const oldPPath=extractR2Path(oldParamCertUrl);
+            if(oldPPath){
+              try{ await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify([oldPPath])}); }
+              catch(delErr){console.warn('Old parameter cert cleanup failed (new file still saved fine):',delErr);}
+            }
+          }
         }
       }catch(e){console.error('Parameter cert upload failed:',e);}
       delete p._certFile; // never persist the raw File object
     }
   }
   const record={
+    // Preserve every field the old record had (availability status, checkout/external-cal tracking, etc.)
+    // that this form doesn't manage directly — editing must never silently wipe these out.
+    ...(existing||{}),
     id, name, brand:el('ref-eq-brand').value.trim(),
     model:el('ref-eq-model').value.trim(), serial,
     location:el('ref-eq-location').value.trim(),
@@ -11922,6 +11947,8 @@ function openEditRefEqModal(id){
     el('ref-eq-cert-filename').textContent=`${r.certFileName} (existing)`;
     el('ref-eq-cert-attached').style.display='block';
     el('ref-eq-cert-drop').style.display='none';
+    const viewLink=el('ref-eq-cert-view-link');
+    if(viewLink&&r.certFileUrl){ viewLink.dataset.url=r.certFileUrl; viewLink.style.display='inline'; }
   } else {
     el('ref-eq-cert-attached').style.display='none';
     el('ref-eq-cert-drop').style.display='block';
