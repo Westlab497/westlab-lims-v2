@@ -11182,30 +11182,46 @@ function calcRefEqIntervalFromDue(){
 }
 function exportMasterlistExcel(){
   if(typeof XLSX==='undefined'){alert('Excel export library failed to load — please check your connection and refresh.');return;}
-  const rows=_refEq.map((r,i)=>({
-    'No.':i+1,
-    'Equipment':r.name||'',
-    'Description for Usage':r.scope||'',
-    'Model':r.model||'',
-    'Brand':r.brand||'',
-    'Supplier':r.supplier||'',
-    'Serial No. / Control No.':r.serial||r.id||'',
-    'Current Location of Equip.':r.location||'',
-    'Metrological Traceability':r.traceability||'',
-    'Last Traceability Date':r.lastCal||'',
-    'Traceable to':r.traceability||'',
-    'Metrological / Calibration Interval':r.calInterval?r.calInterval+' months':'',
-    'Equipment Status':getRefStatus(r.dueDate),
-    'Lifecycle Status':r.lifecycleStatus||'In Use',
-    'Measurement Uncertainty':r.measurementUncertainty||'',
-    'Acceptance Criteria (U≤M)':r.acceptanceCriteria||''
-  }));
-  const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:5},{wch:22},{wch:26},{wch:14},{wch:14},{wch:20},{wch:18},{wch:18},{wch:20},{wch:16},{wch:18},{wch:20},{wch:20},{wch:16},{wch:20},{wch:20}];
+
+  // Build data rows — items with 2+ parameters expand to one row per parameter,
+  // each carrying its OWN Measurement Uncertainty and Acceptance Criteria.
+  const dataRows=[];
+  _refEq.forEach(r=>{
+    const shared=[r.name||'',r.scope||'',r.model||'',r.brand||'',r.supplier||'',r.serial||r.id||'',r.location||'',
+      r.traceability||'',r.lastCal||'',r.traceability||'',r.calInterval?r.calInterval+' months':'',getRefStatus(r.dueDate)];
+    if(r.parameters&&r.parameters.length>1){
+      r.parameters.forEach(p=>{ dataRows.push([...shared,p.measurementUncertainty||'',p.acceptanceCriteria||'']); });
+    } else {
+      dataRows.push([...shared,r.measurementUncertainty||'',r.acceptanceCriteria||'']);
+    }
+  });
+  const numberedRows=dataRows.map((row,i)=>[i+1,...row]);
+
+  // Document header block, matching F024 - Master List of Equipment exactly
+  const aoa=[
+    [],[],[],[],[],[], // rows 1-6 blank, matching the source template
+    ['','','','','','','','','','','','','','','LABORATORY MANAGEMENT FORM'], // row 7
+    ['DOCUMENT TITLE','','','','','','','ISSUE','','REVISION','','EFFECTIVE DATE','','LOCATION',''], // row 8
+    ['F024 - Master List of Equipment','','','','','','','01','','00','','2026-03-10','','SAMM',''], // row 9
+    [], // row 10
+    ['MASTER LIST OF EQUIPMENT'], // row 11
+    [], // row 12
+    ['No.','Equipment','Description for Usage','Model','Brand','Supplier','Serial No. / Control No.','Current Location of Equip.','Metrological Traceability','Last Traceability Date','Traceable to','Metrological / Calibration Interval','Equipment Status','Measurement Uncertainty','Acceptance Criteria (U≤M)'], // row 13
+    ...numberedRows
+  ];
+
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges']=[
+    XLSX.utils.decode_range('A8:G8'),XLSX.utils.decode_range('H8:I8'),XLSX.utils.decode_range('J8:K8'),XLSX.utils.decode_range('L8:M8'),XLSX.utils.decode_range('N8:O8'),
+    XLSX.utils.decode_range('A9:G9'),XLSX.utils.decode_range('H9:I9'),XLSX.utils.decode_range('J9:K9'),XLSX.utils.decode_range('L9:M9'),XLSX.utils.decode_range('N9:O9'),
+    XLSX.utils.decode_range('A10:O10'),
+    XLSX.utils.decode_range('A11:O11'),
+  ];
+  ws['!cols']=[{wch:5},{wch:15},{wch:22},{wch:11},{wch:10},{wch:12},{wch:16},{wch:14},{wch:14},{wch:14},{wch:12},{wch:16},{wch:12},{wch:16},{wch:16}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Masterlist of Equipment');
-  XLSX.writeFile(wb,`Westlab_Masterlist_of_Equipment_${toLocalDateStr(new Date())}.xlsx`);
-  addAudit('📊',`Masterlist of Equipment exported to Excel — ${rows.length} rows`);
+  XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
+  XLSX.writeFile(wb,`F024_Master_List_of_Equipment_${toLocalDateStr(new Date())}.xlsx`);
+  addAudit('📊',`Masterlist of Equipment exported to Excel — ${numberedRows.length} rows`);
 }
 
 function openAddRefEqModal(){
@@ -11239,6 +11255,10 @@ function renderRefEqParams(){
         <input class="form-control" placeholder="Range (e.g. -10 to 60°C)" value="${p.range||''}" oninput="updateRefEqParam(${i},'range',this.value)" style="flex:1.4;"/>
         <input class="form-control" placeholder="Resolution (e.g. 0.1°C)" value="${p.resolution||''}" oninput="updateRefEqParam(${i},'resolution',this.value)" style="flex:1.2;"/>
         <button type="button" onclick="removeRefEqParam(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;">✕</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <input class="form-control" placeholder="Measurement Uncertainty (e.g. ±0.1 °C, k=2)" value="${p.measurementUncertainty||''}" oninput="updateRefEqParam(${i},'measurementUncertainty',this.value)" style="flex:1;font-size:12px;"/>
+        <input class="form-control" placeholder="Acceptance Criteria (e.g. U ≤ 1/3 MPE)" value="${p.acceptanceCriteria||''}" oninput="updateRefEqParam(${i},'acceptanceCriteria',this.value)" style="flex:1;font-size:12px;"/>
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:normal;margin-top:6px;cursor:pointer;">
         <input type="checkbox" ${p.ownCert?'checked':''} onchange="updateRefEqParam(${i},'ownCert',this.checked);renderRefEqParams();"/>
