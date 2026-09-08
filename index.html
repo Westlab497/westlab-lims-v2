@@ -459,7 +459,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
     <div class="nav-section-label">Customers &amp; Equipment</div>
     <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon"><i class="ti ti-building"></i></span><span class="nav-label">Customer Database</span></button>
-    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Lab Reference Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Lab Reference Equipment</span></button>
+    <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Masterlist of Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Masterlist of Equipment</span></button>
     <button class="nav-item hidden-nav" id="nav-price-ref" onclick="openPriceReferenceModal()" data-label="Price Reference"><span class="nav-icon"><i class="ti ti-tag"></i></span><span class="nav-label">Price Reference</span></button>
     <button class="nav-item hidden-nav" id="nav-quotations" onclick="showView('quotations')" data-label="Quotations"><span class="nav-icon"><i class="ti ti-file-invoice"></i></span><span class="nav-label">Quotations</span></button>
     <button class="nav-item hidden-nav" id="nav-sales-tracker" onclick="showView('sales-tracker')" data-label="Sales Tracker"><span class="nav-icon"><i class="ti ti-timeline"></i></span><span class="nav-label">Sales Tracker</span></button>
@@ -829,10 +829,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="view" id="view-ref-eq">
       <div class="page-header">
         <div>
-          <div class="page-title">🏛️ Lab Reference Equipment</div>
+          <div class="page-title">🏛️ Masterlist of Equipment</div>
           <div class="page-sub" id="ref-eq-sub">Westlab's own calibration reference instruments</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="exportMasterlistExcel()">📊 Export Masterlist</button>
           <button class="btn btn-outline" onclick="openRefCheckoutRequestModal()">📤 Request to Take Onsite</button>
           <button class="btn btn-primary" onclick="openAddRefEqModal()">+ Add Reference Equipment</button>
         </div>
@@ -854,9 +855,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <input id="ref-eq-search" class="filter-select" placeholder="Search…" style="width:180px;" oninput="renderRefEqTable()"/>
             <select class="filter-select" id="ref-eq-filter" onchange="renderRefEqTable()">
               <option value="">All Status</option>
-              <option value="Current">Current</option>
-              <option value="Due Soon">Due Soon</option>
-              <option value="Overdue">Overdue</option>
+              <option value="Current">Cal: Current</option>
+              <option value="Due Soon">Cal: Due Soon</option>
+              <option value="Overdue">Cal: Overdue</option>
+              <option value="Awaiting First Calibration">Cal: Awaiting First Calibration</option>
+              <option value="In Use">Lifecycle: In Use</option>
+              <option value="Quarantine">Lifecycle: Quarantine</option>
+              <option value="Under Repair">Lifecycle: Under Repair</option>
             </select>
           </div>
         </div>
@@ -864,7 +869,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <table>
             <thead><tr>
               <th>ID</th><th>Equipment Name</th><th>Brand / Model</th><th>Serial No.</th>
-              <th>Location</th><th>Traceability</th><th>Last Cal.</th><th>Due Date</th><th>Cal Status</th><th>Availability</th><th>Actions</th>
+              <th>Location</th><th>Traceability</th><th>Last Cal.</th><th>Due Date</th><th>Cal Status</th><th>Lifecycle</th><th>Availability</th><th>Actions</th>
             </tr></thead>
             <tbody id="ref-eq-tbody">
               <tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🏛️</div><p>No reference equipment added yet.</p></div></td></tr>
@@ -2125,7 +2130,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
       <!-- SECTION 8: Metrological Traceability -->
       <div class="form-section-title" style="margin-top:4px;">🔗 Metrological Traceability</div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Reference instruments used in this calibration — search from Lab Reference Equipment register:</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Reference instruments used in this calibration — search from Masterlist of Equipment register:</div>
 
       <!-- Search box -->
       <div style="position:relative;margin-bottom:10px;">
@@ -3033,7 +3038,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div id="ref-eq-params-list"></div>
         <button type="button" class="btn btn-outline btn-sm" onclick="addRefEqParam()" style="margin-top:6px;">+ Add Parameter</button>
       </div>
-      <div class="form-group"><label class="form-label">SAMM Accreditation Scope</label><input class="form-control" id="ref-eq-scope" placeholder="e.g. pH measurement, accredited range pH 2–12, k=2, 95% CL"/></div>
+      <div class="form-group"><label class="form-label">Description for Usage</label><input class="form-control" id="ref-eq-scope" placeholder="e.g. Used for volume calibration of pipettes and flasks"/></div>
+      <div class="form-group"><label class="form-label">Supplier</label><input class="form-control" id="ref-eq-supplier" placeholder="e.g. Mettler Toledo (M) Sdn. Bhd."/></div>
 
       <div class="form-section-title" style="margin-top:4px;">🔗 Traceability</div>
       <div class="form-row">
@@ -3045,11 +3051,26 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
       <div class="form-section-title" style="margin-top:4px;">📅 Calibration Schedule</div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Last Calibration Date</label><input class="form-control" id="ref-eq-last-cal" type="date"/></div>
-        <div class="form-group"><label class="form-label">Calibration Due Date</label><input class="form-control" id="ref-eq-due-date" type="date"/></div>
+        <div class="form-group"><label class="form-label">Last Calibration Date</label><input class="form-control" id="ref-eq-last-cal" type="date" onchange="calcRefEqDueFromInterval()"/></div>
+        <div class="form-group"><label class="form-label">Calibration Interval (months)</label><input class="form-control" id="ref-eq-cal-interval" type="number" min="1" placeholder="e.g. 12" oninput="calcRefEqDueFromInterval()"/></div>
       </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:-8px;margin-bottom:10px;">This section describes the item's main/default certificate. If every parameter above has its own separate certificate, this can be left blank.</div>
+      <div class="form-group"><label class="form-label">Calibration Due Date</label><input class="form-control" id="ref-eq-due-date" type="date" onchange="calcRefEqIntervalFromDue()"/>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Fill in either the Interval or the Due Date — the other one calculates itself automatically.</div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:-4px;margin-bottom:10px;">This section describes the item's main/default certificate. If every parameter above has its own separate certificate, this can be left blank.</div>
       <div class="form-group"><label class="form-label">Calibrated By (External Provider)</label><input class="form-control" id="ref-eq-cal-by" placeholder="e.g. Alphion Technology Sdn. Bhd."/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Measurement Uncertainty</label><input class="form-control" id="ref-eq-mu" placeholder="e.g. ±0.02 °C (k=2)"/></div>
+        <div class="form-group"><label class="form-label">Acceptance Criteria (U≤M)</label><input class="form-control" id="ref-eq-acceptance" placeholder="e.g. U ≤ 1/3 MPE"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Equipment Lifecycle Status</label>
+        <select class="form-control" id="ref-eq-lifecycle">
+          <option value="In Use">In Use</option>
+          <option value="Quarantine">Quarantine</option>
+          <option value="Under Repair">Under Repair</option>
+        </select>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Tracked separately from calibration status — shown as its own column, not blended together.</div>
+      </div>
 
       <div class="form-section-title" style="margin-top:4px;">📎 External Calibration Certificate</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Upload the external calibration certificate PDF received from the calibration provider.</div>
@@ -3774,7 +3795,7 @@ function toLocalDateStr(d){
 const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',completed:'Completed Jobs',
   customers:'Customer Database',deleted:'Deleted Jobs',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
-  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Lab Reference Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
+  documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Masterlist of Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
   personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings'};
 
 function showView(name){
@@ -6787,7 +6808,7 @@ async function openCalModal(jobNo, itemIdx=0){
     if(approvedForThisJob){
       approvedForThisJob.items.forEach(reqItem=>{
         const r=_refEq.find(x=>x.id===reqItem.refId);
-        if(r&&!_traceSelected.find(x=>x.id===r.id)){
+        if(r&&!_traceSelected.find(x=>x.id===r.id)&&getRefStatus(r.dueDate)!=='Awaiting First Calibration'&&r.lifecycleStatus!=='Quarantine'&&r.lifecycleStatus!=='Under Repair'){
           _traceSelected.push({id:r.id,name:r.name,serial:r.serial||'',certNo:r.certNo||'',traceability:r.traceability||'',dueDate:r.dueDate||''});
         }
       });
@@ -6816,11 +6837,15 @@ function traceSearchInput(val){
     box.innerHTML=`<div class="trace-suggestion" style="color:var(--text-muted);cursor:default;">No matching reference instruments found.</div>`;
   } else {
     const st=r=>getRefStatus(r.dueDate);
-    box.innerHTML=matches.map((r,i)=>`
-      <div class="trace-suggestion" data-idx="${i}">
-        <div class="ts-name">${r.name} <span style="font-size:11px;color:var(--text-muted);">(${r.id})</span></div>
+    box.innerHTML=matches.map((r,i)=>{
+      const notYetCalibrated=st(r)==='Awaiting First Calibration';
+      const notUsable=r.lifecycleStatus==='Quarantine'||r.lifecycleStatus==='Under Repair';
+      const blocked=notYetCalibrated||notUsable;
+      return `<div class="trace-suggestion" data-idx="${i}" style="${blocked?'opacity:.6;':''}">
+        <div class="ts-name">${r.name} <span style="font-size:11px;color:var(--text-muted);">(${r.id})</span>${notYetCalibrated?' <span style="color:var(--red);font-size:11px;">⚠️ Not yet calibrated</span>':notUsable?` <span style="color:var(--red);font-size:11px;">⚠️ ${r.lifecycleStatus}</span>`:''}</div>
         <div class="ts-detail">S/N: ${r.serial||'—'} · Cert: ${r.certNo||'—'} · ${r.traceability||'—'} · Due: <span class="${st(r)==='Overdue'?'trace-card-status-overdue':st(r)==='Due Soon'?'trace-card-status-soon':'trace-card-status-ok'}">${r.dueDate||'—'}</span></div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     matches.forEach((r,i)=>{
       box.querySelectorAll('.trace-suggestion')[i].onclick=()=>addTraceFromRef(r);
     });
@@ -6832,6 +6857,17 @@ function addTraceFromRef(r){
   // Prevent duplicate
   if(_traceSelected.find(x=>x.id===r.id)){
     alert(`"${r.name}" is already added.`); return;
+  }
+  // Hard block — an instrument with no calibration certificate at all cannot be used as a
+  // traceability reference for real customer work, unlike the softer confirm-and-proceed
+  // warnings below for items that are merely checked out or away for their own calibration.
+  if(getRefStatus(r.dueDate)==='Awaiting First Calibration'){
+    alert(`"${r.name}" has not been calibrated yet and cannot be used for traceability until its first calibration certificate is recorded.`);
+    return;
+  }
+  if(r.lifecycleStatus==='Quarantine'||r.lifecycleStatus==='Under Repair'){
+    alert(`"${r.name}" is marked as ${r.lifecycleStatus} and cannot be used for traceability.`);
+    return;
   }
   // Backup safety net — flag if this item isn't currently marked Available
   // (e.g. checked out to someone else's onsite job, or away for its own calibration)
@@ -11123,6 +11159,55 @@ function removeRefEqCert(){
   const viewLink=el('ref-eq-cert-view-link'); if(viewLink){ viewLink.style.display='none'; delete viewLink.dataset.url; }
 }
 
+// Bidirectional Calibration Interval ↔ Due Date — filling one calculates the other.
+// Each function only ever writes to the OTHER field, never itself, so there's no loop.
+function calcRefEqDueFromInterval(){
+  const lastCal=el('ref-eq-last-cal').value;
+  const interval=parseInt(el('ref-eq-cal-interval').value);
+  if(lastCal&&interval){
+    const d=new Date(lastCal+'T00:00:00');
+    d.setMonth(d.getMonth()+interval);
+    el('ref-eq-due-date').value=toLocalDateStr(d);
+  }
+}
+function calcRefEqIntervalFromDue(){
+  const lastCal=el('ref-eq-last-cal').value;
+  const dueDate=el('ref-eq-due-date').value;
+  if(lastCal&&dueDate){
+    const d1=new Date(lastCal+'T00:00:00');
+    const d2=new Date(dueDate+'T00:00:00');
+    const months=Math.round((d2-d1)/(1000*60*60*24*30.44));
+    if(months>0) el('ref-eq-cal-interval').value=months;
+  }
+}
+function exportMasterlistExcel(){
+  if(typeof XLSX==='undefined'){alert('Excel export library failed to load — please check your connection and refresh.');return;}
+  const rows=_refEq.map((r,i)=>({
+    'No.':i+1,
+    'Equipment':r.name||'',
+    'Description for Usage':r.scope||'',
+    'Model':r.model||'',
+    'Brand':r.brand||'',
+    'Supplier':r.supplier||'',
+    'Serial No. / Control No.':r.serial||r.id||'',
+    'Current Location of Equip.':r.location||'',
+    'Metrological Traceability':r.traceability||'',
+    'Last Traceability Date':r.lastCal||'',
+    'Traceable to':r.traceability||'',
+    'Metrological / Calibration Interval':r.calInterval?r.calInterval+' months':'',
+    'Equipment Status':getRefStatus(r.dueDate),
+    'Lifecycle Status':r.lifecycleStatus||'In Use',
+    'Measurement Uncertainty':r.measurementUncertainty||'',
+    'Acceptance Criteria (U≤M)':r.acceptanceCriteria||''
+  }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:5},{wch:22},{wch:26},{wch:14},{wch:14},{wch:20},{wch:18},{wch:18},{wch:20},{wch:16},{wch:18},{wch:20},{wch:20},{wch:16},{wch:20},{wch:20}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Masterlist of Equipment');
+  XLSX.writeFile(wb,`Westlab_Masterlist_of_Equipment_${toLocalDateStr(new Date())}.xlsx`);
+  addAudit('📊',`Masterlist of Equipment exported to Excel — ${rows.length} rows`);
+}
+
 function openAddRefEqModal(){
   const modal=el('modal-add-ref-eq');
   modal.dataset.editId='';
@@ -11131,8 +11216,9 @@ function openAddRefEqModal(){
   const saveBtn=modal.querySelector('.btn-primary');
   if(saveBtn) saveBtn.textContent='💾 Save Reference Equipment';
   ['ref-eq-id','ref-eq-name','ref-eq-brand','ref-eq-model','ref-eq-serial','ref-eq-location',
-   'ref-eq-scope','ref-eq-cert-no','ref-eq-last-cal',
-   'ref-eq-due-date','ref-eq-cal-by','ref-eq-remarks'].forEach(f=>{const e=el(f);if(e)e.value='';});
+   'ref-eq-scope','ref-eq-supplier','ref-eq-cert-no','ref-eq-last-cal','ref-eq-cal-interval',
+   'ref-eq-due-date','ref-eq-cal-by','ref-eq-mu','ref-eq-acceptance','ref-eq-remarks'].forEach(f=>{const e=el(f);if(e)e.value='';});
+  el('ref-eq-lifecycle').value='In Use';
   _refEqParams=[];
   renderRefEqParams();
   removeRefEqCert();
@@ -11219,11 +11305,11 @@ async function saveRefEquipment(){
   if(!serial){alert('Serial number is required.');return;}
   // The item-level certificate is only required if it still actually applies to something —
   // i.e. there are no parameters yet, or at least one parameter doesn't have its own separate cert.
-  const someParamNeedsItemCert=!_refEqParams.length||_refEqParams.some(p=>!p.ownCert);
-  if(someParamNeedsItemCert&&!dueDate){alert('Calibration due date is required.');return;}
-  for(const p of _refEqParams){
-    if(p.ownCert&&!p.dueDate){alert(`Please enter a Due Date for the "${p.parameter||'parameter'}" certificate, or untick "own certificate" if it should use the main one instead.`);return;}
-  }
+  // No due date at all is allowed — this represents a brand new instrument that hasn't
+  // had its first calibration yet, shown as "Awaiting First Calibration" and blocked from
+  // being selected for real traceability work until it actually gets calibrated.
+  // Parameters with "own certificate" ticked but no due date yet are also allowed —
+  // treated the same as "awaiting first calibration" for that specific function.
   // Check for duplicate ID — only block if it's a NEW id (not the one being edited) and already exists
   if((!isEdit || idChanged) && _refEq.find(r=>r.id===id)){alert('Equipment ID already exists. Please use a unique ID.');return;}
   const existing=isEdit?_refEq.find(r=>r.id===editId):null;
@@ -11292,11 +11378,16 @@ async function saveRefEquipment(){
     // Legacy flat fields — kept in sync from parameters[0] for any old code path that might still read them directly
     range:_refEqParams[0]?.range||'', resolution:_refEqParams[0]?.resolution||'',
     scope:el('ref-eq-scope').value.trim(),
+    supplier:el('ref-eq-supplier').value.trim(),
     traceability:el('ref-eq-traceability').value,
     certNo:el('ref-eq-cert-no').value.trim(),
     certFileUrl, certFileName,
     lastCal:el('ref-eq-last-cal').value, dueDate,
+    calInterval:el('ref-eq-cal-interval').value.trim(),
     calBy:el('ref-eq-cal-by').value.trim(),
+    measurementUncertainty:el('ref-eq-mu').value.trim(),
+    acceptanceCriteria:el('ref-eq-acceptance').value.trim(),
+    lifecycleStatus:el('ref-eq-lifecycle').value||'In Use',
     remarks:el('ref-eq-remarks').value.trim(),
     addedAt:existing?.addedAt||new Date().toISOString()
   };
@@ -11329,7 +11420,7 @@ async function saveRefEquipment(){
   addAudit('🏛️',`Reference equipment <strong>${name}</strong> (${id}) ${isEdit?'updated':'added'}`);
 }
 function getRefStatus(dueDate){
-  if(!dueDate)return'Unknown';
+  if(!dueDate)return'Awaiting First Calibration';
   const today=new Date(); today.setHours(0,0,0,0);
   const due=new Date(dueDate);
   const diffDays=Math.round((due-today)/(1000*60*60*24));
@@ -11337,6 +11428,10 @@ function getRefStatus(dueDate){
   if(diffDays<=90)return'Due Soon';
   return'Current';
 }
+// Lifecycle status (In Use / Quarantine / Under Repair) and calibration validity
+// (Current / Due Soon / Overdue / Awaiting First Calibration) are tracked and shown
+// as two genuinely separate things — blending them into one combined status was tried
+// and found to lose information, so each is now surfaced independently everywhere.
 function renderRefEqTable(){
   try{
   const list=_refEq;
@@ -11344,15 +11439,16 @@ function renderRefEqTable(){
   const sf=el('ref-eq-filter')?.value||'';
   const tbody=el('ref-eq-tbody'); if(!tbody)return;
   const today=new Date(); today.setHours(0,0,0,0);
-  const withStatus=list.map(r=>({...r,calStatus:getRefStatus(r.dueDate)}));
+  const withStatus=list.map(r=>({...r,rawCalStatus:getRefStatus(r.dueDate)}));
   const filtered=withStatus.filter(r=>{
     const ms=!q||r.id.toLowerCase().includes(q)||(r.name||'').toLowerCase().includes(q)||(r.serial||'').toLowerCase().includes(q);
-    return ms&&(!sf||r.calStatus===sf);
+    const matchesStatus=!sf||r.rawCalStatus===sf||(r.lifecycleStatus||'In Use')===sf;
+    return ms&&matchesStatus;
   });
   const total=list.length;
-  const overdue=withStatus.filter(r=>r.calStatus==='Overdue').length;
-  const dueSoon=withStatus.filter(r=>r.calStatus==='Due Soon').length;
-  const current=withStatus.filter(r=>r.calStatus==='Current').length;
+  const overdue=withStatus.filter(r=>r.rawCalStatus==='Overdue').length;
+  const dueSoon=withStatus.filter(r=>r.rawCalStatus==='Due Soon').length;
+  const current=withStatus.filter(r=>r.rawCalStatus==='Current').length;
   el('ref-kpi-total').textContent=total;
   el('ref-kpi-overdue').textContent=overdue;
   el('ref-kpi-due-soon').textContent=dueSoon;
@@ -11369,7 +11465,7 @@ function renderRefEqTable(){
         <span>Review the table below and arrange external calibration.</span>
       </div></div>`;
   } else { alertEl.style.display='none'; }
-  const SB2={Current:'badge-green','Due Soon':'badge-amber',Overdue:'badge-red',Unknown:'badge-slate'};
+  const SB2={Current:'badge-green','Due Soon':'badge-amber',Overdue:'badge-red','Awaiting First Calibration':'badge-slate',Quarantine:'badge-slate','Under Repair':'badge-amber'};
   if(!filtered.length){
     tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🏛️</div><p>${list.length?'No matching records.':'No reference equipment added yet.'}</p></div></td></tr>`;
     return;
@@ -11409,8 +11505,9 @@ function renderRefEqTable(){
     <td>${r.location||'—'}</td>
     <td>${r.traceability||'—'}</td>
     <td>${r.lastCal||'—'}</td>
-    <td><strong style="color:${r.calStatus==='Overdue'?'var(--red)':r.calStatus==='Due Soon'?'var(--amber)':'var(--green)'}">${r.dueDate||'—'}</strong></td>
-    <td><span class="badge ${SB2[r.calStatus]||'badge-slate'}">${r.calStatus}</span></td>
+    <td><strong style="color:${r.rawCalStatus==='Overdue'?'var(--red)':r.rawCalStatus==='Due Soon'?'var(--amber)':'var(--green)'}">${r.dueDate||'—'}</strong></td>
+    <td><span class="badge ${SB2[r.rawCalStatus]||'badge-slate'}">${r.rawCalStatus}</span></td>
+    <td><span class="badge ${r.lifecycleStatus==='Quarantine'?'badge-red':r.lifecycleStatus==='Under Repair'?'badge-amber':'badge-green'}">${r.lifecycleStatus||'In Use'}</span></td>
     <td>${availBadge}</td>
     <td style="white-space:nowrap;">${actions}</td>
   </tr>`;
@@ -11908,19 +12005,20 @@ async function confirmCalReceived(refId){
 function viewRefEq(id){
   const r=_refEq.find(x=>x.id===id); if(!r)return;
   const st=getRefStatus(r.dueDate);
-  const SB2={Current:'badge-green','Due Soon':'badge-amber',Overdue:'badge-red',Unknown:'badge-slate'};
+  const lifecycle=r.lifecycleStatus||'In Use';
+  const SB2={Current:'badge-green','Due Soon':'badge-amber',Overdue:'badge-red','Awaiting First Calibration':'badge-slate',Quarantine:'badge-red','Under Repair':'badge-amber','In Use':'badge-green'};
   const row=(l,v)=>`<tr><td style="color:var(--text-muted);padding:4px 0;width:150px;font-size:12px;">${l}</td><td style="padding:4px 0;font-size:13px;font-weight:500;">${v||'—'}</td></tr>`;
   el('view-ref-eq-title').textContent=`${r.id} — ${r.name}`;
   el('view-ref-eq-body').innerHTML=`
     <div class="form-section-title">🔩 Equipment</div>
-    <table style="width:100%;">${row('ID',r.id)}${row('Name',r.name)}${row('Brand',r.brand)}${row('Model',r.model)}${row('Serial No.',r.serial)}${row('Location',r.location)}${
+    <table style="width:100%;">${row('ID',r.id)}${row('Name',r.name)}${row('Brand',r.brand)}${row('Model',r.model)}${row('Supplier',r.supplier)}${row('Serial No.',r.serial)}${row('Location',r.location)}${
       (r.parameters&&r.parameters.length)
         ?r.parameters.map(p=>row(p.parameter||'Range',`${p.range||'—'}${p.resolution?' &nbsp;(res: '+p.resolution+')':''}${p.ownCert?`<br/><span style="font-size:11px;color:var(--text-muted);">Own cert: ${p.certNo||'—'} · ${p.traceability||'—'} · Due: ${p.dueDate||'—'}${p.calBy?' · By: '+p.calBy:''}${p.certFileUrl?` · <a href="${p.certFileUrl}" target="_blank">📎 View</a>`:''}</span>`:''}`)).join('')
         :(r.range||r.resolution?row('Range',`${r.range||'—'}${r.resolution?' &nbsp;(res: '+r.resolution+')':''}`):'')
     }</table>
-    ${r.scope?`<div style="margin-top:10px;padding:10px;background:var(--blue-pale);border-radius:8px;font-size:12px;"><strong>SAMM Scope:</strong> ${r.scope}</div>`:''}
+    ${r.scope?`<div style="margin-top:10px;padding:10px;background:var(--blue-pale);border-radius:8px;font-size:12px;"><strong>Description for Usage:</strong> ${r.scope}</div>`:''}
     <div class="form-section-title" style="margin-top:14px;">🔗 Traceability & Calibration</div>
-    <table style="width:100%;">${row('Traceability',r.traceability)}${row('Certificate No.',r.certNo)}${row('Last Calibration',r.lastCal)}${row('Due Date','<strong style="color:'+(st==='Overdue'?'var(--red)':st==='Due Soon'?'var(--amber)':'var(--green)')+'">'+r.dueDate+'</strong>')}${row('Status','<span class="badge '+SB2[st]+'">'+st+'</span>')}${row('Calibrated By',r.calBy)}</table>
+    <table style="width:100%;">${row('Traceability',r.traceability)}${row('Certificate No.',r.certNo)}${row('Last Calibration',r.lastCal)}${row('Calibration Interval',r.calInterval?r.calInterval+' months':'')}${row('Due Date','<strong style="color:'+(st==='Overdue'?'var(--red)':st==='Due Soon'?'var(--amber)':'var(--green)')+'">'+(r.dueDate||'—')+'</strong>')}${row('Calibration Status','<span class="badge '+(SB2[st]||'badge-slate')+'">'+st+'</span>')}${row('Lifecycle Status','<span class="badge '+(SB2[lifecycle]||'badge-green')+'">'+lifecycle+'</span>')}${row('Calibrated By',r.calBy)}${row('Measurement Uncertainty',r.measurementUncertainty)}${row('Acceptance Criteria',r.acceptanceCriteria)}</table>
     ${r.certFileUrl?`<div style="margin-top:10px;"><button onclick="openSignedUrl('${r.certFileUrl}')" class="btn btn-outline btn-sm">📄 View External Cal. Certificate</button></div>`:''}
     ${r.remarks?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Remarks:</strong> ${r.remarks}</div>`:''}
   `;  el('del-ref-eq-btn').onclick=()=>{closeModal('modal-view-ref-eq');deleteRefEq(id);};
@@ -11946,11 +12044,16 @@ function openEditRefEqModal(id){
   _refEqParams=(r.parameters&&r.parameters.length)?JSON.parse(JSON.stringify(r.parameters)):(r.range||r.resolution?[{parameter:'',range:r.range||'',resolution:r.resolution||''}]:[]);
   renderRefEqParams();
   el('ref-eq-scope').value=r.scope||'';
+  el('ref-eq-supplier').value=r.supplier||'';
   el('ref-eq-traceability').value=r.traceability||'NMIM, Malaysia';
   el('ref-eq-cert-no').value=r.certNo||'';
   el('ref-eq-last-cal').value=r.lastCal||'';
+  el('ref-eq-cal-interval').value=r.calInterval||'';
   el('ref-eq-due-date').value=r.dueDate||'';
   el('ref-eq-cal-by').value=r.calBy||'';
+  el('ref-eq-mu').value=r.measurementUncertainty||'';
+  el('ref-eq-acceptance').value=r.acceptanceCriteria||'';
+  el('ref-eq-lifecycle').value=r.lifecycleStatus||'In Use';
   el('ref-eq-remarks').value=r.remarks||'';
   // Show existing cert file if any
   _refEqCertFile=null;
