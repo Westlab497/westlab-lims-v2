@@ -14697,15 +14697,12 @@ async function submitPasswordReset(){
 }
 
 // ── SECURE FILE OPEN — uses signed URL ──
-async function openSignedUrl(storedUrl){
-  try{
-    showToast('Opening file…','info',1500);
-    const signedUrl=await SB.getSignedUrl('westlab-files',storedUrl,120);
-    window.open(signedUrl,'_blank');
-  }catch(e){
-    // Fallback to direct URL if signed URL fails
-    window.open(storedUrl,'_blank');
-  }
+function openSignedUrl(storedUrl){
+  // These are direct public R2 URLs — no signing step actually exists on the backend.
+  // Opening synchronously (no await beforehand) keeps this tied to the user's click,
+  // so browsers don't silently block it as an unrequested popup.
+  if(!storedUrl){showToast('No file available.','error',2500);return;}
+  window.open(storedUrl,'_blank');
 }
 
 function buildEmailReminderTable(items, showLastCalDate=false){
