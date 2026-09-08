@@ -3034,35 +3034,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Location / Lab</label><input class="form-control" id="ref-eq-location" placeholder="e.g. Lab A"/></div>
       </div>
       <div class="form-group">
-        <label class="form-label">Measured Parameters <span style="font-size:11px;color:var(--text-muted);">(add one row per function — e.g. Temperature, Humidity)</span></label>
+        <label class="form-label">Measured Parameters <span class="req">*</span> <span style="font-size:11px;color:var(--text-muted);">(every instrument has at least one — add more rows for instruments with multiple functions, e.g. Temperature + Humidity)</span></label>
         <div id="ref-eq-params-list"></div>
         <button type="button" class="btn btn-outline btn-sm" onclick="addRefEqParam()" style="margin-top:6px;">+ Add Parameter</button>
       </div>
       <div class="form-group"><label class="form-label">Description for Usage</label><input class="form-control" id="ref-eq-scope" placeholder="e.g. Used for volume calibration of pipettes and flasks"/></div>
       <div class="form-group"><label class="form-label">Supplier</label><input class="form-control" id="ref-eq-supplier" placeholder="e.g. Mettler Toledo (M) Sdn. Bhd."/></div>
-
-      <div class="form-section-title" style="margin-top:4px;">🔗 Traceability</div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Source of Traceability</label>
-          <input class="form-control" id="ref-eq-traceability" placeholder="e.g. NMIM, Malaysia"/>
-        </div>
-        <div class="form-group"><label class="form-label">Current Certificate No.</label><input class="form-control" id="ref-eq-cert-no" placeholder="e.g. NMIM 36738261"/></div>
-      </div>
-
-      <div class="form-section-title" style="margin-top:4px;">📅 Calibration Schedule</div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Last Calibration Date</label><input class="form-control" id="ref-eq-last-cal" type="date" onchange="calcRefEqDueFromInterval()"/></div>
-        <div class="form-group"><label class="form-label">Calibration Interval (months)</label><input class="form-control" id="ref-eq-cal-interval" type="number" min="1" placeholder="e.g. 12" oninput="calcRefEqDueFromInterval()"/></div>
-      </div>
-      <div class="form-group"><label class="form-label">Calibration Due Date</label><input class="form-control" id="ref-eq-due-date" type="date" onchange="calcRefEqIntervalFromDue()"/>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Fill in either the Interval or the Due Date — the other one calculates itself automatically.</div>
-      </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:-4px;margin-bottom:10px;">This section describes the item's main/default certificate. If every parameter above has its own separate certificate, this can be left blank.</div>
-      <div class="form-group"><label class="form-label">Calibrated By (External Provider)</label><input class="form-control" id="ref-eq-cal-by" placeholder="e.g. Alphion Technology Sdn. Bhd."/></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Measurement Uncertainty</label><input class="form-control" id="ref-eq-mu" placeholder="e.g. ±0.02 °C (k=2)"/></div>
-        <div class="form-group"><label class="form-label">Acceptance Criteria (U≤M)</label><input class="form-control" id="ref-eq-acceptance" placeholder="e.g. U ≤ 1/3 MPE"/></div>
-      </div>
       <div class="form-group"><label class="form-label">Equipment Lifecycle Status</label>
         <select class="form-control" id="ref-eq-lifecycle">
           <option value="In Use">In Use</option>
@@ -3071,23 +3048,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </select>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Tracked separately from calibration status — shown as its own column, not blended together.</div>
       </div>
-
-      <div class="form-section-title" style="margin-top:4px;">📎 External Calibration Certificate</div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Upload the external calibration certificate PDF received from the calibration provider.</div>
-      <div class="file-upload-area" id="ref-eq-cert-drop" onclick="document.getElementById('ref-eq-cert-input').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleRefEqCertDrop(event)" style="padding:16px;cursor:pointer;">
-        <div style="font-size:24px;margin-bottom:4px;">📄</div>
-        <div class="photo-upload-text"><strong>Click to upload</strong> external cert PDF<br/><span style="font-size:12px;">PDF only</span></div>
-      </div>
-      <input type="file" id="ref-eq-cert-input" accept=".pdf" style="display:none;" onchange="handleRefEqCertSelect(event)"/>
-      <div id="ref-eq-cert-attached" style="display:none;margin-top:8px;">
-        <div class="file-attached">
-          <span style="font-size:20px;">📄</span>
-          <span class="file-attached-name" id="ref-eq-cert-filename">—</span>
-          <a href="javascript:void(0)" id="ref-eq-cert-view-link" onclick="openSignedUrl(el('ref-eq-cert-view-link').dataset.url)" style="display:none;color:var(--blue);font-size:12px;margin-left:6px;">View</a>
-          <button class="file-attached-remove" onclick="removeRefEqCert()">✕</button>
-        </div>
-      </div>
-
       <div class="form-group" style="margin-top:12px;"><label class="form-label">Remarks / Notes</label><textarea class="form-control" id="ref-eq-remarks" placeholder="Additional notes…"></textarea></div>
     </div>
     <div class="modal-footer">
@@ -3317,7 +3277,7 @@ let approvalJobNo=null, approvalItemIdx=null;
 let _assignItemJobNo=null, _assignItemIdx=null;
 let _custSuggestIdx=-1;
 let _staffSigData='';
-let _refEqCertFile=null;
+// (certificates are now tracked exclusively per-parameter, see _refEqParams)
 let currentUser=null;
 
 // ══════════════════════════════════════════════════
@@ -11133,53 +11093,6 @@ function buildCertPage1HTML(cd,s){
 
 // ── UPDATED APPROVAL MODAL ──
 // (replaces openApproveModal to show cert page 1 details + download link)
-function handleRefEqCertSelect(e){
-  const f=e.target.files[0]; if(!f)return;
-  _refEqCertFile=f;
-  el('ref-eq-cert-filename').textContent=f.name;
-  el('ref-eq-cert-attached').style.display='block';
-  el('ref-eq-cert-drop').style.display='none';
-  const viewLink=el('ref-eq-cert-view-link'); if(viewLink) viewLink.style.display='none';
-  e.target.value='';
-}
-function handleRefEqCertDrop(e){
-  e.preventDefault(); el('ref-eq-cert-drop').classList.remove('dragover');
-  const f=e.dataTransfer.files[0]; if(!f)return;
-  _refEqCertFile=f;
-  el('ref-eq-cert-filename').textContent=f.name;
-  el('ref-eq-cert-attached').style.display='block';
-  el('ref-eq-cert-drop').style.display='none';
-  const viewLink=el('ref-eq-cert-view-link'); if(viewLink) viewLink.style.display='none';
-}
-function removeRefEqCert(){
-  _refEqCertFile=null;
-  el('ref-eq-cert-filename').textContent='—';
-  el('ref-eq-cert-attached').style.display='none';
-  el('ref-eq-cert-drop').style.display='block';
-  const viewLink=el('ref-eq-cert-view-link'); if(viewLink){ viewLink.style.display='none'; delete viewLink.dataset.url; }
-}
-
-// Bidirectional Calibration Interval ↔ Due Date — filling one calculates the other.
-// Each function only ever writes to the OTHER field, never itself, so there's no loop.
-function calcRefEqDueFromInterval(){
-  const lastCal=el('ref-eq-last-cal').value;
-  const interval=parseInt(el('ref-eq-cal-interval').value);
-  if(lastCal&&interval){
-    const d=new Date(lastCal+'T00:00:00');
-    d.setMonth(d.getMonth()+interval);
-    el('ref-eq-due-date').value=toLocalDateStr(d);
-  }
-}
-function calcRefEqIntervalFromDue(){
-  const lastCal=el('ref-eq-last-cal').value;
-  const dueDate=el('ref-eq-due-date').value;
-  if(lastCal&&dueDate){
-    const d1=new Date(lastCal+'T00:00:00');
-    const d2=new Date(dueDate+'T00:00:00');
-    const months=Math.round((d2-d1)/(1000*60*60*24*30.44));
-    if(months>0) el('ref-eq-cal-interval').value=months;
-  }
-}
 function exportMasterlistExcel(){
   if(typeof XLSX==='undefined'){alert('Excel export library failed to load — please check your connection and refresh.');return;}
 
@@ -11232,12 +11145,10 @@ function openAddRefEqModal(){
   const saveBtn=modal.querySelector('.btn-primary');
   if(saveBtn) saveBtn.textContent='💾 Save Reference Equipment';
   ['ref-eq-id','ref-eq-name','ref-eq-brand','ref-eq-model','ref-eq-serial','ref-eq-location',
-   'ref-eq-scope','ref-eq-supplier','ref-eq-cert-no','ref-eq-last-cal','ref-eq-cal-interval',
-   'ref-eq-due-date','ref-eq-cal-by','ref-eq-mu','ref-eq-acceptance','ref-eq-remarks'].forEach(f=>{const e=el(f);if(e)e.value='';});
+   'ref-eq-scope','ref-eq-supplier','ref-eq-remarks'].forEach(f=>{const e=el(f);if(e)e.value='';});
   el('ref-eq-lifecycle').value='In Use';
-  _refEqParams=[];
+  _refEqParams=[{parameter:'',range:'',resolution:''}]; // every instrument starts with at least one parameter row
   renderRefEqParams();
-  removeRefEqCert();
   openModal('modal-add-ref-eq');
 }
 // ── Multi-Parameter support for Reference Equipment (e.g. thermohygrometer = Temp + Humidity) ──
@@ -11249,38 +11160,52 @@ function renderRefEqParams(){
     return;
   }
   box.innerHTML=_refEqParams.map((p,i)=>`
-    <div style="margin-bottom:8px;background:var(--bg);border-radius:8px;padding:8px;">
-      <div style="display:flex;gap:6px;align-items:flex-start;">
+    <div style="margin-bottom:10px;background:var(--bg);border-radius:8px;padding:10px;border:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <strong style="font-size:12px;color:var(--navy);">Parameter ${i+1}</strong>
+        <button type="button" onclick="removeRefEqParam(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0;">✕</button>
+      </div>
+      <div style="display:flex;gap:6px;">
         <input class="form-control" placeholder="Parameter (e.g. Temperature)" value="${p.parameter||''}" oninput="updateRefEqParam(${i},'parameter',this.value)" style="flex:1.2;"/>
         <input class="form-control" placeholder="Range (e.g. -10 to 60°C)" value="${p.range||''}" oninput="updateRefEqParam(${i},'range',this.value)" style="flex:1.4;"/>
         <input class="form-control" placeholder="Resolution (e.g. 0.1°C)" value="${p.resolution||''}" oninput="updateRefEqParam(${i},'resolution',this.value)" style="flex:1.2;"/>
-        <button type="button" onclick="removeRefEqParam(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px;">✕</button>
       </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <input class="form-control" placeholder="Source of Traceability (e.g. NMIM, Malaysia)" value="${p.traceability||''}" oninput="updateRefEqParam(${i},'traceability',this.value)" style="flex:1;font-size:12px;"/>
+        <input class="form-control" placeholder="Cert No." value="${p.certNo||''}" oninput="updateRefEqParam(${i},'certNo',this.value)" style="flex:1;font-size:12px;"/>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <input class="form-control" type="date" title="Last Calibrated" value="${p.lastCal||''}" oninput="updateRefEqParam(${i},'lastCal',this.value);calcRefEqParamDueFromInterval(${i})" style="flex:1;font-size:12px;"/>
+        <input class="form-control" type="number" min="1" placeholder="Interval (months)" value="${p.calInterval||''}" oninput="updateRefEqParam(${i},'calInterval',this.value);calcRefEqParamDueFromInterval(${i})" style="flex:1;font-size:12px;"/>
+        <input class="form-control" type="date" title="Due Date" value="${p.dueDate||''}" oninput="updateRefEqParam(${i},'dueDate',this.value);calcRefEqParamIntervalFromDue(${i})" style="flex:1;font-size:12px;"/>
+      </div>
+      <input class="form-control" placeholder="Calibrated By (External Provider)" value="${p.calBy||''}" oninput="updateRefEqParam(${i},'calBy',this.value)" style="margin-top:6px;font-size:12px;"/>
       <div style="display:flex;gap:6px;margin-top:6px;">
         <input class="form-control" placeholder="Measurement Uncertainty (e.g. ±0.1 °C, k=2)" value="${p.measurementUncertainty||''}" oninput="updateRefEqParam(${i},'measurementUncertainty',this.value)" style="flex:1;font-size:12px;"/>
         <input class="form-control" placeholder="Acceptance Criteria (e.g. U ≤ 1/3 MPE)" value="${p.acceptanceCriteria||''}" oninput="updateRefEqParam(${i},'acceptanceCriteria',this.value)" style="flex:1;font-size:12px;"/>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:normal;margin-top:6px;cursor:pointer;">
-        <input type="checkbox" ${p.ownCert?'checked':''} onchange="updateRefEqParam(${i},'ownCert',this.checked);renderRefEqParams();"/>
-        This parameter has its own separate calibration certificate
-      </label>
-      ${p.ownCert?`
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <input class="form-control" placeholder="Source of Traceability (e.g. NMIM, Malaysia)" value="${p.traceability||''}" oninput="updateRefEqParam(${i},'traceability',this.value)" style="flex:1;font-size:12px;"/>
-          <input class="form-control" placeholder="Cert No." value="${p.certNo||''}" oninput="updateRefEqParam(${i},'certNo',this.value)" style="flex:1;font-size:12px;"/>
-        </div>
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <input class="form-control" type="date" title="Last Calibrated" value="${p.lastCal||''}" oninput="updateRefEqParam(${i},'lastCal',this.value)" style="flex:1;font-size:12px;"/>
-          <input class="form-control" type="date" title="Due Date" value="${p.dueDate||''}" oninput="updateRefEqParam(${i},'dueDate',this.value)" style="flex:1;font-size:12px;"/>
-        </div>
-        <input class="form-control" placeholder="Calibrated By (External Provider)" value="${p.calBy||''}" oninput="updateRefEqParam(${i},'calBy',this.value)" style="margin-top:6px;font-size:12px;"/>
-        <input type="file" accept=".pdf" onchange="handleRefEqParamCertSelect(${i},this)" style="margin-top:6px;font-size:11px;"/>
-        ${p.certFileName?`<div style="font-size:11px;color:var(--green);margin-top:2px;">📎 ${p.certFileName}</div>`:''}
-      `:''}
+      <div style="margin-top:6px;">
+        <input type="file" accept=".pdf" onchange="handleRefEqParamCertSelect(${i},this)" style="font-size:11px;"/>
+        ${p.certFileName?`<div style="font-size:11px;color:var(--green);margin-top:2px;">📎 ${p.certFileName}${p.certFileUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${p.certFileUrl}')">View</a>`:''}</div>`:''}
+      </div>
     </div>`).join('');
 }
+// Bidirectional Interval ↔ Due Date, scoped to one specific parameter row
+function calcRefEqParamDueFromInterval(idx){
+  const p=_refEqParams[idx]; if(!p||!p.lastCal||!p.calInterval)return;
+  const d=new Date(p.lastCal+'T00:00:00');
+  d.setMonth(d.getMonth()+parseInt(p.calInterval));
+  p.dueDate=toLocalDateStr(d);
+  renderRefEqParams();
+}
+function calcRefEqParamIntervalFromDue(idx){
+  const p=_refEqParams[idx]; if(!p||!p.lastCal||!p.dueDate)return;
+  const d1=new Date(p.lastCal+'T00:00:00'), d2=new Date(p.dueDate+'T00:00:00');
+  const months=Math.round((d2-d1)/(1000*60*60*24*30.44));
+  if(months>0){ p.calInterval=months; renderRefEqParams(); }
+}
 function addRefEqParam(){
-  _refEqParams.push({parameter:'',range:'',resolution:'',ownCert:false});
+  _refEqParams.push({parameter:'',range:'',resolution:''});
   renderRefEqParams();
 }
 function updateRefEqParam(idx,field,val){
@@ -11305,9 +11230,8 @@ function formatRefEqParams(params){
 // Overall item status is driven by whichever due date is soonest — the item's own,
 // plus any parameter that has its own separate certificate with its own due date.
 function refEqEarliestDueDate(r){
-  const dates=[r.dueDate].filter(Boolean);
-  (r.parameters||[]).forEach(p=>{ if(p.ownCert&&p.dueDate) dates.push(p.dueDate); });
-  if(!dates.length)return r.dueDate||'';
+  const dates=(r.parameters||[]).map(p=>p.dueDate).filter(Boolean);
+  if(!dates.length)return'';
   return dates.sort()[0];
 }
 
@@ -11319,51 +11243,21 @@ async function saveRefEquipment(){
   const id=el('ref-eq-id').value.trim();
   const name=el('ref-eq-name').value.trim();
   const serial=el('ref-eq-serial').value.trim();
-  const dueDate=el('ref-eq-due-date').value;
   if(!id){alert('Equipment ID is required.');return;}
   if(!name){alert('Equipment name is required.');return;}
   if(!serial){alert('Serial number is required.');return;}
-  // The item-level certificate is only required if it still actually applies to something —
-  // i.e. there are no parameters yet, or at least one parameter doesn't have its own separate cert.
-  // No due date at all is allowed — this represents a brand new instrument that hasn't
-  // had its first calibration yet, shown as "Awaiting First Calibration" and blocked from
-  // being selected for real traceability work until it actually gets calibrated.
-  // Parameters with "own certificate" ticked but no due date yet are also allowed —
-  // treated the same as "awaiting first calibration" for that specific function.
+  const validParams=_refEqParams.filter(p=>p.parameter||p.range||p.resolution);
+  if(!validParams.length){alert('Please add at least one Measured Parameter — every instrument needs at least one.');return;}
+  // No due date at all is allowed on a parameter — this represents a brand new instrument
+  // that hasn't had its first calibration yet, shown as "Awaiting First Calibration" and
+  // blocked from being selected for real traceability work until it actually gets calibrated.
   // Check for duplicate ID — only block if it's a NEW id (not the one being edited) and already exists
   if((!isEdit || idChanged) && _refEq.find(r=>r.id===id)){alert('Equipment ID already exists. Please use a unique ID.');return;}
   const existing=isEdit?_refEq.find(r=>r.id===editId):null;
-  // Upload external cert PDF to storage if provided
-  let certFileUrl=existing?.certFileUrl||'';
-  let certFileName=existing?.certFileName||'';
-  const oldCertFileUrl=existing?.certFileUrl||''; // remembered so we can clean it up below if replaced
-  if(_refEqCertFile){
-    try{
-      const path=`ref-equipment/${id}/${sanitizeFilenameForPath(_refEqCertFile.name)}`;
-      const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
-        method:'POST',
-        headers:{'X-File-Path':path,'Content-Type':_refEqCertFile.type||'application/pdf'},
-        body:_refEqCertFile
-      });
-      if(uploadRes.ok){
-        const r2res=await uploadRes.json();
-        certFileUrl=r2res.url||`https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/${path}`;
-        certFileName=_refEqCertFile.name;
-        // Clean up the old file if this upload replaced a different one (avoids orphaned files piling up in storage)
-        if(oldCertFileUrl&&oldCertFileUrl!==certFileUrl){
-          const oldPath=extractR2Path(oldCertFileUrl);
-          if(oldPath){
-            try{
-              await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify([oldPath])});
-            }catch(delErr){console.warn('Old cert file cleanup failed (new file still saved fine):',delErr);}
-          }
-        }
-      }
-    }catch(e){console.error('Cert upload failed:',e);}
-  }
-  // Upload per-parameter certificate files (for parameters marked "own certificate")
+
+  // Upload each parameter's own certificate file, if a new one was selected
   for(const p of _refEqParams){
-    if(p.ownCert&&p._certFile){
+    if(p._certFile){
       const oldParamCertUrl=p.certFileUrl||'';
       try{
         const ppath=`ref-equipment/${id}/${sanitizeFilenameForPath(p.parameter||'param')}_${sanitizeFilenameForPath(p._certFile.name)}`;
@@ -11394,24 +11288,24 @@ async function saveRefEquipment(){
     id, name, brand:el('ref-eq-brand').value.trim(),
     model:el('ref-eq-model').value.trim(), serial,
     location:el('ref-eq-location').value.trim(),
-    parameters:_refEqParams.filter(p=>p.parameter||p.range||p.resolution),
-    // Legacy flat fields — kept in sync from parameters[0] for any old code path that might still read them directly
-    range:_refEqParams[0]?.range||'', resolution:_refEqParams[0]?.resolution||'',
+    parameters:validParams,
+    // Legacy flat fields — every value below is now sourced from Parameter 1, kept in sync
+    // purely for any old code path that might still read the item-level field directly.
+    range:validParams[0]?.range||'', resolution:validParams[0]?.resolution||'',
+    traceability:validParams[0]?.traceability||'',
+    certNo:validParams[0]?.certNo||'',
+    certFileUrl:validParams[0]?.certFileUrl||'', certFileName:validParams[0]?.certFileName||'',
+    lastCal:validParams[0]?.lastCal||'', calInterval:validParams[0]?.calInterval||'',
+    calBy:validParams[0]?.calBy||'',
+    measurementUncertainty:validParams[0]?.measurementUncertainty||'',
+    acceptanceCriteria:validParams[0]?.acceptanceCriteria||'',
     scope:el('ref-eq-scope').value.trim(),
     supplier:el('ref-eq-supplier').value.trim(),
-    traceability:el('ref-eq-traceability').value,
-    certNo:el('ref-eq-cert-no').value.trim(),
-    certFileUrl, certFileName,
-    lastCal:el('ref-eq-last-cal').value, dueDate,
-    calInterval:el('ref-eq-cal-interval').value.trim(),
-    calBy:el('ref-eq-cal-by').value.trim(),
-    measurementUncertainty:el('ref-eq-mu').value.trim(),
-    acceptanceCriteria:el('ref-eq-acceptance').value.trim(),
     lifecycleStatus:el('ref-eq-lifecycle').value||'In Use',
     remarks:el('ref-eq-remarks').value.trim(),
     addedAt:existing?.addedAt||new Date().toISOString()
   };
-  record.dueDate=refEqEarliestDueDate(record); // overall status now reflects the soonest of any certificate, item-level or per-parameter
+  record.dueDate=refEqEarliestDueDate(record); // overall status reflects whichever parameter's certificate expires soonest
   // If ID changed, delete the old DB row first (primary key change)
   if(idChanged){
     try{ await SB.delete('wl_ref_equipment',editId); }catch(e){console.warn('Could not delete old ref eq record:',e);}
@@ -12024,22 +11918,24 @@ async function confirmCalReceived(refId){
 
 function viewRefEq(id){
   const r=_refEq.find(x=>x.id===id); if(!r)return;
-  const st=getRefStatus(r.dueDate);
   const lifecycle=r.lifecycleStatus||'In Use';
   const SB2={Current:'badge-green','Due Soon':'badge-amber',Overdue:'badge-red','Awaiting First Calibration':'badge-slate',Quarantine:'badge-red','Under Repair':'badge-amber','In Use':'badge-green'};
   const row=(l,v)=>`<tr><td style="color:var(--text-muted);padding:4px 0;width:150px;font-size:12px;">${l}</td><td style="padding:4px 0;font-size:13px;font-weight:500;">${v||'—'}</td></tr>`;
   el('view-ref-eq-title').textContent=`${r.id} — ${r.name}`;
   el('view-ref-eq-body').innerHTML=`
     <div class="form-section-title">🔩 Equipment</div>
-    <table style="width:100%;">${row('ID',r.id)}${row('Name',r.name)}${row('Brand',r.brand)}${row('Model',r.model)}${row('Supplier',r.supplier)}${row('Serial No.',r.serial)}${row('Location',r.location)}${
-      (r.parameters&&r.parameters.length)
-        ?r.parameters.map(p=>row(p.parameter||'Range',`${p.range||'—'}${p.resolution?' &nbsp;(res: '+p.resolution+')':''}${p.ownCert?`<br/><span style="font-size:11px;color:var(--text-muted);">Own cert: ${p.certNo||'—'} · ${p.traceability||'—'} · Due: ${p.dueDate||'—'}${p.calBy?' · By: '+p.calBy:''}${p.certFileUrl?` · <a href="${p.certFileUrl}" target="_blank">📎 View</a>`:''}</span>`:''}`)).join('')
-        :(r.range||r.resolution?row('Range',`${r.range||'—'}${r.resolution?' &nbsp;(res: '+r.resolution+')':''}`):'')
-    }</table>
+    <table style="width:100%;">${row('ID',r.id)}${row('Name',r.name)}${row('Brand',r.brand)}${row('Model',r.model)}${row('Supplier',r.supplier)}${row('Serial No.',r.serial)}${row('Location',r.location)}${row('Lifecycle Status','<span class="badge '+(SB2[lifecycle]||'badge-green')+'">'+lifecycle+'</span>')}</table>
     ${r.scope?`<div style="margin-top:10px;padding:10px;background:var(--blue-pale);border-radius:8px;font-size:12px;"><strong>Description for Usage:</strong> ${r.scope}</div>`:''}
-    <div class="form-section-title" style="margin-top:14px;">🔗 Traceability & Calibration</div>
-    <table style="width:100%;">${row('Traceability',r.traceability)}${row('Certificate No.',r.certNo)}${row('Last Calibration',r.lastCal)}${row('Calibration Interval',r.calInterval?r.calInterval+' months':'')}${row('Due Date','<strong style="color:'+(st==='Overdue'?'var(--red)':st==='Due Soon'?'var(--amber)':'var(--green)')+'">'+(r.dueDate||'—')+'</strong>')}${row('Calibration Status','<span class="badge '+(SB2[st]||'badge-slate')+'">'+st+'</span>')}${row('Lifecycle Status','<span class="badge '+(SB2[lifecycle]||'badge-green')+'">'+lifecycle+'</span>')}${row('Calibrated By',r.calBy)}${row('Measurement Uncertainty',r.measurementUncertainty)}${row('Acceptance Criteria',r.acceptanceCriteria)}</table>
-    ${r.certFileUrl?`<div style="margin-top:10px;"><button onclick="openSignedUrl('${r.certFileUrl}')" class="btn btn-outline btn-sm">📄 View External Cal. Certificate</button></div>`:''}
+    <div class="form-section-title" style="margin-top:14px;">🔗 Measured Parameters &amp; Certificates</div>
+    ${(r.parameters&&r.parameters.length)?r.parameters.map(p=>{
+      const pst=getRefStatus(p.dueDate);
+      return `<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:4px;">${p.parameter||'—'}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Range: ${p.range||'—'}${p.resolution?' · Resolution: '+p.resolution:''}</div>
+        <table style="width:100%;">${row('Traceability',p.traceability)}${row('Certificate No.',p.certNo)}${row('Last Calibration',p.lastCal)}${row('Interval',p.calInterval?p.calInterval+' months':'')}${row('Due Date','<strong style="color:'+(pst==='Overdue'?'var(--red)':pst==='Due Soon'?'var(--amber)':'var(--green)')+'">'+(p.dueDate||'—')+'</strong> <span class="badge '+(SB2[pst]||'badge-slate')+'" style="margin-left:6px;">'+pst+'</span>')}${row('Calibrated By',p.calBy)}${row('Measurement Uncertainty',p.measurementUncertainty)}${row('Acceptance Criteria',p.acceptanceCriteria)}</table>
+        ${p.certFileUrl?`<button onclick="openSignedUrl('${p.certFileUrl}')" class="btn btn-outline btn-sm" style="margin-top:6px;">📄 View Certificate</button>`:''}
+      </div>`;
+    }).join(''):'<div style="font-size:12px;color:var(--text-muted);">No parameters recorded.</div>'}
     ${r.remarks?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Remarks:</strong> ${r.remarks}</div>`:''}
   `;  el('del-ref-eq-btn').onclick=()=>{closeModal('modal-view-ref-eq');deleteRefEq(id);};
   el('del-ref-eq-btn').style.display=isAdmin(currentUser)?'':'none';
@@ -12061,32 +11957,12 @@ function openEditRefEqModal(id){
   el('ref-eq-model').value=r.model||'';
   el('ref-eq-serial').value=r.serial||'';
   el('ref-eq-location').value=r.location||'';
-  _refEqParams=(r.parameters&&r.parameters.length)?JSON.parse(JSON.stringify(r.parameters)):(r.range||r.resolution?[{parameter:'',range:r.range||'',resolution:r.resolution||''}]:[]);
+  _refEqParams=(r.parameters&&r.parameters.length)?JSON.parse(JSON.stringify(r.parameters)):[{parameter:'',range:r.range||'',resolution:r.resolution||'',traceability:r.traceability||'',certNo:r.certNo||'',lastCal:r.lastCal||'',calInterval:r.calInterval||'',dueDate:r.dueDate||'',calBy:r.calBy||'',measurementUncertainty:r.measurementUncertainty||'',acceptanceCriteria:r.acceptanceCriteria||'',certFileUrl:r.certFileUrl||'',certFileName:r.certFileName||''}];
   renderRefEqParams();
   el('ref-eq-scope').value=r.scope||'';
   el('ref-eq-supplier').value=r.supplier||'';
-  el('ref-eq-traceability').value=r.traceability||'NMIM, Malaysia';
-  el('ref-eq-cert-no').value=r.certNo||'';
-  el('ref-eq-last-cal').value=r.lastCal||'';
-  el('ref-eq-cal-interval').value=r.calInterval||'';
-  el('ref-eq-due-date').value=r.dueDate||'';
-  el('ref-eq-cal-by').value=r.calBy||'';
-  el('ref-eq-mu').value=r.measurementUncertainty||'';
-  el('ref-eq-acceptance').value=r.acceptanceCriteria||'';
   el('ref-eq-lifecycle').value=r.lifecycleStatus||'In Use';
   el('ref-eq-remarks').value=r.remarks||'';
-  // Show existing cert file if any
-  _refEqCertFile=null;
-  if(r.certFileName){
-    el('ref-eq-cert-filename').textContent=`${r.certFileName} (existing)`;
-    el('ref-eq-cert-attached').style.display='block';
-    el('ref-eq-cert-drop').style.display='none';
-    const viewLink=el('ref-eq-cert-view-link');
-    if(viewLink&&r.certFileUrl){ viewLink.dataset.url=r.certFileUrl; viewLink.style.display='inline'; }
-  } else {
-    el('ref-eq-cert-attached').style.display='none';
-    el('ref-eq-cert-drop').style.display='block';
-  }
   const saveBtn=el('modal-add-ref-eq').querySelector('.btn-primary');
   if(saveBtn) saveBtn.textContent='💾 Update Equipment';
   openModal('modal-add-ref-eq');
