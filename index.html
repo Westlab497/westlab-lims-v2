@@ -3751,6 +3751,17 @@ function applyRoleUI(){
 }
 
 function el(id){return document.getElementById(id);}
+// Strips anything that isn't safe in a URL/storage path — special characters like & # % etc.
+// have been confirmed to cause 500 errors on the upload worker for certain filenames.
+function sanitizeFilenameForPath(name){
+  if(!name)return'file';
+  const lastDot=name.lastIndexOf('.');
+  const base=lastDot>0?name.slice(0,lastDot):name;
+  const ext=lastDot>0?name.slice(lastDot):'';
+  const cleanBase=base.replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+  const cleanExt=ext.replace(/[^a-zA-Z0-9.]+/g,'');
+  return (cleanBase||'file')+cleanExt;
+}
 // Correct local-date string (YYYY-MM-DD) — never use .toISOString() for "today"/date-only values,
 // since that converts to UTC first and can roll the date back a full day in timezones ahead of UTC
 // (e.g. Malaysia UTC+8, any time before 8am local becomes "yesterday" in UTC).
@@ -4572,7 +4583,7 @@ async function uploadPhotosToStorage(jobNo){
     if(p.url){uploaded.push({name:p.name,url:p.url});continue;}
     if(p._file){
       try{
-        const path=`jobs/${jobNo}/photos/${Date.now()}_${p.name.replace(/\s/g,'_')}`;
+        const path=`jobs/${jobNo}/photos/${Date.now()}_${sanitizeFilenameForPath(p.name)}`;
         const url=await SB.uploadFile('westlab-files',path,p._file);
         uploaded.push({name:p.name,url});
       }catch(e){
@@ -8734,7 +8745,7 @@ async function submitLeave(){
     // Upload MC if provided
     let mcUrl='', mcName='';
     if(_mcFile){
-      const path=`leave/mc_${currentUser}_${Date.now()}_${_mcFile.name.replace(/\s/g,'_')}`;
+      const path=`leave/mc_${currentUser}_${Date.now()}_${sanitizeFilenameForPath(_mcFile.name)}`;
       const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
         method:'POST',headers:{'X-File-Path':path,'Content-Type':_mcFile.type},body:_mcFile
       });
@@ -9028,7 +9039,7 @@ async function saveClaim(){
     // Upload receipt if provided
     let receiptUrl='', receiptName='';
     if(_claimReceiptFile){
-      const path=`claims/${currentUser}_${Date.now()}_${_claimReceiptFile.name.replace(/\s/g,'_')}`;
+      const path=`claims/${currentUser}_${Date.now()}_${sanitizeFilenameForPath(_claimReceiptFile.name)}`;
       const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
         method:'POST',
         headers:{'X-File-Path':path,'Content-Type':_claimReceiptFile.type},
@@ -11222,7 +11233,7 @@ async function saveRefEquipment(){
   const oldCertFileUrl=existing?.certFileUrl||''; // remembered so we can clean it up below if replaced
   if(_refEqCertFile){
     try{
-      const path=`ref-equipment/${id}/${_refEqCertFile.name.replace(/\s/g,'_')}`;
+      const path=`ref-equipment/${id}/${sanitizeFilenameForPath(_refEqCertFile.name)}`;
       const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
         method:'POST',
         headers:{'X-File-Path':path,'Content-Type':_refEqCertFile.type||'application/pdf'},
@@ -11249,7 +11260,7 @@ async function saveRefEquipment(){
     if(p.ownCert&&p._certFile){
       const oldParamCertUrl=p.certFileUrl||'';
       try{
-        const ppath=`ref-equipment/${id}/${(p.parameter||'param').replace(/\s/g,'_')}_${p._certFile.name.replace(/\s/g,'_')}`;
+        const ppath=`ref-equipment/${id}/${sanitizeFilenameForPath(p.parameter||'param')}_${sanitizeFilenameForPath(p._certFile.name)}`;
         const pRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
           method:'POST',
           headers:{'X-File-Path':ppath,'Content-Type':p._certFile.type||'application/pdf'},
