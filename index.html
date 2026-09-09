@@ -850,9 +850,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div id="ref-checkout-queue" style="display:none;margin-bottom:16px;"></div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Reference Instrument Register</span>
+          <span class="card-title">Masterlist of Equipment</span>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <input id="ref-eq-search" class="filter-select" placeholder="Search…" style="width:180px;" oninput="renderRefEqTable()"/>
+            <input id="ref-eq-search" class="filter-select" placeholder="Search name, brand, model, location, supplier…" style="width:260px;" oninput="renderRefEqTable()"/>
+            <select class="filter-select" id="ref-eq-location-filter" onchange="renderRefEqTable()">
+              <option value="">All Locations</option>
+            </select>
             <select class="filter-select" id="ref-eq-filter" onchange="renderRefEqTable()">
               <option value="">All Status</option>
               <option value="Current">Cal: Current</option>
@@ -868,8 +871,18 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>ID</th><th>Equipment Name</th><th>Brand / Model</th><th>Serial No.</th>
-              <th>Location</th><th>Traceability</th><th>Last Cal.</th><th>Due Date</th><th>Cal Status</th><th>Lifecycle</th><th>Availability</th><th>Actions</th>
+              <th onclick="sortRefEqTable('id')" style="cursor:pointer;">ID <span id="sort-arrow-id"></span></th>
+              <th onclick="sortRefEqTable('name')" style="cursor:pointer;">Equipment Name <span id="sort-arrow-name"></span></th>
+              <th onclick="sortRefEqTable('brand')" style="cursor:pointer;">Brand / Model <span id="sort-arrow-brand"></span></th>
+              <th>Serial No.</th>
+              <th onclick="sortRefEqTable('location')" style="cursor:pointer;">Location <span id="sort-arrow-location"></span></th>
+              <th>Traceability</th>
+              <th onclick="sortRefEqTable('lastCal')" style="cursor:pointer;">Last Cal. <span id="sort-arrow-lastCal"></span></th>
+              <th onclick="sortRefEqTable('dueDate')" style="cursor:pointer;">Due Date <span id="sort-arrow-dueDate"></span></th>
+              <th onclick="sortRefEqTable('calStatus')" style="cursor:pointer;">Cal Status <span id="sort-arrow-calStatus"></span></th>
+              <th onclick="sortRefEqTable('lifecycleStatus')" style="cursor:pointer;">Lifecycle <span id="sort-arrow-lifecycleStatus"></span></th>
+              <th onclick="sortRefEqTable('availability')" style="cursor:pointer;">Availability <span id="sort-arrow-availability"></span></th>
+              <th>Actions</th>
             </tr></thead>
             <tbody id="ref-eq-tbody">
               <tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🏛️</div><p>No reference equipment added yet.</p></div></td></tr>
@@ -11346,18 +11359,51 @@ function getRefStatus(dueDate){
 // (Current / Due Soon / Overdue / Awaiting First Calibration) are tracked and shown
 // as two genuinely separate things — blending them into one combined status was tried
 // and found to lose information, so each is now surfaced independently everywhere.
+let _refEqSortField=null, _refEqSortDir='asc';
+function sortRefEqTable(field){
+  if(_refEqSortField===field){ _refEqSortDir=_refEqSortDir==='asc'?'desc':'asc'; }
+  else { _refEqSortField=field; _refEqSortDir='asc'; }
+  renderRefEqTable();
+}
+function populateRefEqLocationFilter(){
+  const sel=el('ref-eq-location-filter'); if(!sel)return;
+  const current=sel.value;
+  const locations=[...new Set(_refEq.map(r=>r.location).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">All Locations</option>'+locations.map(l=>`<option value="${l}">${l}</option>`).join('');
+  sel.value=current;
+}
 function renderRefEqTable(){
   try{
+  populateRefEqLocationFilter();
   const list=_refEq;
   const q=(el('ref-eq-search')?.value||'').toLowerCase();
   const sf=el('ref-eq-filter')?.value||'';
+  const lf=el('ref-eq-location-filter')?.value||'';
   const tbody=el('ref-eq-tbody'); if(!tbody)return;
   const today=new Date(); today.setHours(0,0,0,0);
   const withStatus=list.map(r=>({...r,rawCalStatus:getRefStatus(r.dueDate)}));
-  const filtered=withStatus.filter(r=>{
-    const ms=!q||r.id.toLowerCase().includes(q)||(r.name||'').toLowerCase().includes(q)||(r.serial||'').toLowerCase().includes(q);
+  let filtered=withStatus.filter(r=>{
+    const ms=!q||[r.id,r.name,r.serial,r.brand,r.model,r.location,r.supplier,r.scope].some(f=>(f||'').toLowerCase().includes(q));
     const matchesStatus=!sf||r.rawCalStatus===sf||(r.lifecycleStatus||'In Use')===sf;
-    return ms&&matchesStatus;
+    const matchesLocation=!lf||r.location===lf;
+    return ms&&matchesStatus&&matchesLocation;
+  });
+  if(_refEqSortField){
+    const dir=_refEqSortDir==='asc'?1:-1;
+    const CAL_URGENCY={'Overdue':0,'Due Soon':1,'Awaiting First Calibration':2,'Current':3};
+    filtered=[...filtered].sort((a,b)=>{
+      let av,bv;
+      if(_refEqSortField==='calStatus'){ av=CAL_URGENCY[a.rawCalStatus]??9; bv=CAL_URGENCY[b.rawCalStatus]??9; }
+      else if(_refEqSortField==='brand'){ av=[a.brand,a.model].filter(Boolean).join(' '); bv=[b.brand,b.model].filter(Boolean).join(' '); }
+      else if(_refEqSortField==='lifecycleStatus'){ av=a.lifecycleStatus||'In Use'; bv=b.lifecycleStatus||'In Use'; }
+      else if(_refEqSortField==='availability'){ av=a.availability||'Available'; bv=b.availability||'Available'; }
+      else { av=a[_refEqSortField]||''; bv=b[_refEqSortField]||''; }
+      if(av<bv)return -1*dir; if(av>bv)return 1*dir; return 0;
+    });
+  }
+  ['id','name','brand','location','lastCal','dueDate','calStatus','lifecycleStatus','availability'].forEach(f=>{
+    const arrow=el(`sort-arrow-${f}`);
+    if(arrow) arrow.textContent=_refEqSortField===f?(_refEqSortDir==='asc'?'▲':'▼'):'';
   });
   const total=list.length;
   const overdue=withStatus.filter(r=>r.rawCalStatus==='Overdue').length;
