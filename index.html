@@ -5903,10 +5903,10 @@ function buildWorkOrderHTML(job){
       </tr>
     </table>
     <table style="width:100%;border-collapse:collapse;font-size:8.5px;">
-      <thead><tr style="background:#0f1f3d;color:#fff;">
-        <th style="padding:5px 4px;width:5%;">No.</th><th style="padding:5px 4px;text-align:left;width:40%;">Description</th>
-        <th style="padding:5px 4px;width:12%;">Priority</th><th style="padding:5px 4px;width:16%;">Cal. Date</th>
-        <th style="padding:5px 4px;width:16%;">Calibrated By</th><th style="padding:5px 4px;width:11%;">Sticker No.</th>
+      <thead><tr>
+        <th style="padding:5px 4px;width:5%;background:#0f1f3d;color:#fff;">No.</th><th style="padding:5px 4px;text-align:left;width:40%;background:#0f1f3d;color:#fff;">Description</th>
+        <th style="padding:5px 4px;width:12%;background:#0f1f3d;color:#fff;">Priority</th><th style="padding:5px 4px;width:16%;background:#0f1f3d;color:#fff;">Cal. Date</th>
+        <th style="padding:5px 4px;width:16%;background:#0f1f3d;color:#fff;">Calibrated By</th><th style="padding:5px 4px;width:11%;background:#0f1f3d;color:#fff;">Sticker No.</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -6011,10 +6011,10 @@ async function exportReceivingLogPdf(){
     <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — Receiving Logbook</div>
     <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')}</div>
     <table style="width:100%;border-collapse:collapse;font-size:10px;">
-      <thead><tr style="background:#0f1f3d;color:#fff;">
-        <th style="padding:6px 8px;">No.</th><th style="padding:6px 8px;">Company</th><th style="padding:6px 8px;">Receiving Date</th>
-        <th style="padding:6px 8px;">Job No.</th><th style="padding:6px 8px;">Equipment</th><th style="padding:6px 8px;">Brand</th>
-        <th style="padding:6px 8px;">Model</th><th style="padding:6px 8px;">Serial No.</th><th style="padding:6px 8px;">Cert/Report No.</th>
+      <thead><tr>
+        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Company</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Receiving Date</th>
+        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Job No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Equipment</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Brand</th>
+        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Model</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Serial No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Cert/Report No.</th>
       </tr></thead>
       <tbody>${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${i+1}</td>
@@ -6094,10 +6094,10 @@ async function exportStickerLogPdf(){
     <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — Sticker Log</div>
     <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')}</div>
     <table style="width:100%;border-collapse:collapse;font-size:10px;">
-      <thead><tr style="background:#0f1f3d;color:#fff;">
-        <th style="padding:6px 8px;">No.</th><th style="padding:6px 8px;">Date</th><th style="padding:6px 8px;">Type</th>
-        <th style="padding:6px 8px;">Sticker No.</th><th style="padding:6px 8px;">Staff</th><th style="padding:6px 8px;">Action</th>
-        <th style="padding:6px 8px;">Job No.</th><th style="padding:6px 8px;">Remark</th>
+      <thead><tr>
+        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Date</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Type</th>
+        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Sticker No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Staff</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Action</th>
+        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Job No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Remark</th>
       </tr></thead>
       <tbody>${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${i+1}</td>
@@ -8028,10 +8028,10 @@ async function exportTrackerPdf(type){
       <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — ${type==='sales'?'Sales':'Purchasing'} Tracker</div>
       <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')} ${monthFilter?'· Month: '+monthFilter:''} ${statusFilter?'· Status: '+statusFilter:''}</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
-        <thead><tr style="background:#0f1f3d;color:#fff;">
-          <th style="padding:6px 8px;text-align:left;">Month</th><th style="padding:6px 8px;text-align:left;">${nameLabel}</th>
-          <th style="padding:6px 8px;text-align:left;">Status</th><th style="padding:6px 8px;text-align:left;">Remark</th>
-          ${type==='sales'?'<th style="padding:6px 8px;text-align:left;">Linked Job</th>':''}
+        <thead><tr>
+          <th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Month</th><th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">${nameLabel}</th>
+          <th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Status</th><th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Remark</th>
+          ${type==='sales'?'<th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Linked Job</th>':''}
         </tr></thead>
         <tbody>
           ${list.map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
