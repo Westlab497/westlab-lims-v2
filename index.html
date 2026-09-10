@@ -1467,6 +1467,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="card-body">
           <div class="form-row">
             <div class="form-group"><label class="form-label">Laboratory / Company Name</label><input id="set-lab-name" class="form-control" placeholder="e.g. Westlab (M) Sdn. Bhd."/></div>
+            <div class="form-group"><label class="form-label">Public Status Lookup URL</label><input id="set-public-status-url" class="form-control" placeholder="e.g. https://status.westlab.com.my"/>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">The standalone job-status page's own domain — QR codes on receipts will link here instead of the internal system. Leave blank to keep using this system's own URL for now.</div>
+            </div>
             <div class="form-group"><label class="form-label">Company Registration No.</label><input id="set-reg-no" class="form-control" placeholder="e.g. 1234567-A"/></div>
           </div>
           <div class="form-row">
@@ -4012,7 +4015,8 @@ function applySettings(s){
     username:'set-username',
     
     slaUrgent:'set-sla-urgent', slaExpress:'set-sla-express',
-    slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine'
+    slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine',
+    publicStatusUrl:'set-public-status-url'
   };
   Object.entries(map).forEach(([k,id])=>{const e=document.getElementById(id);if(e&&s[k]!==undefined)e.value=s[k];});
   if(typeof renderStickerSettingsBody==='function') renderStickerSettingsBody();
@@ -4354,6 +4358,7 @@ async function saveSettings(){
   try{
   const s=Object.assign({},_settings);
   s.labName=el('set-lab-name').value.trim()||'Westlab';
+  s.publicStatusUrl=el('set-public-status-url')?.value.trim()||'';
   s.regNo=el('set-reg-no').value.trim();
   s.branch=el('set-branch').value.trim();
   s.address=el('set-address').value.trim();
@@ -4957,11 +4962,62 @@ async function saveEquipment(printReceipt=false){
   const recip=resolveEmailRecipient(job);
   if(recip.email){
     const dearName=recip.attention||recip.name;
-    const textItemLines=items.map((it,i)=>
+    const labItemsForEmail=items.filter(it=>it.calType!=='Onsite');
+    const onsiteItemsForEmail=items.filter(it=>it.calType==='Onsite');
+    const visitDateStrEmail=job.visitEndDate&&job.visitEndDate!==job.appointmentDate
+      ?`${fmtDateShort(job.appointmentDate)} - ${fmtDateShort(job.visitEndDate)}`
+      :fmtDateShort(job.appointmentDate||receiveDate);
+    const textItemLinesFor=arr=>arr.map((it,i)=>
       `Item ${i+1}: ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''}\n         Cert No.: ${it.certNo}  |  S/N: ${it.serial||'N/A'}`
     ).join('\n');
-    const textBody=`Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.: ${jobNo}\nReceive Date: ${fmtDateShort(receiveDate)}\nPriority: ${custInfo.priority}${recip.isDealer?'\nEnd User / Client: '+recip.endUserName:''}\n\nEQUIPMENT RECEIVED\n${textItemLines}\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\nEmail: sales@westlab.com.my\nContact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
-    const htmlBody=`<p>Dear ${dearName},</p>
+
+    let textBody, htmlBody, emailSubjectVerb;
+    if(onsiteItemsForEmail.length&&!labItemsForEmail.length){
+      // Pure Onsite — nothing physically received, this is a visit confirmation
+      emailSubjectVerb='Onsite Visit Confirmed';
+      textBody=`Dear ${dearName},\n\nWe confirm your onsite calibration visit has been scheduled:\n\nJob No.: ${jobNo}\nVisit Date: ${visitDateStrEmail}\nSite Address: ${job.address||'—'}${recip.isDealer?'\nEnd User / Client: '+recip.endUserName:''}\n\nITEMS FOR ONSITE CALIBRATION\n${textItemLinesFor(onsiteItemsForEmail)}\n\nOur engineer will arrive as scheduled.\n\nShould you have any enquiries, please contact us at:\nEmail: sales@westlab.com.my\nContact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
+      htmlBody=`<p>Dear ${dearName},</p>
+      <p>We confirm your onsite calibration visit has been scheduled:</p>
+      ${buildEmailInfoTable([
+        ['Job No.', jobNo],
+        ['Visit Date', visitDateStrEmail],
+        ['Site Address', job.address||'—'],
+        ...(recip.isDealer?[['End User / Client', recip.endUserName]]:[])
+      ])}
+      <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Items for Onsite Calibration</p>
+      ${buildEmailItemsTable(onsiteItemsForEmail)}
+      <p>Our engineer will arrive as scheduled.</p>
+      <p>Should you have any enquiries, please contact us at:<br/>
+      Email: <a href="mailto:sales@westlab.com.my" style="color:#378ADD;">sales@westlab.com.my</a><br/>
+      Contact No.: +6011-3508 9986</p>
+      <p>Best regards,<br/>${_settings.labName||'Westlab (M) Sdn. Bhd.'}</p>`;
+    } else if(onsiteItemsForEmail.length&&labItemsForEmail.length){
+      // Mixed — some items physically received, some are a scheduled visit
+      emailSubjectVerb='Job Confirmed';
+      textBody=`Dear ${dearName},\n\nWe confirm the following for your job:\n\nJob No.: ${jobNo}\nReceive Date: ${fmtDateShort(receiveDate)}\nPriority: ${custInfo.priority}${recip.isDealer?'\nEnd User / Client: '+recip.endUserName:''}\n\nITEMS RECEIVED AT OUR LAB\n${textItemLinesFor(labItemsForEmail)}\n\nITEMS FOR ONSITE CALIBRATION (Visit Date: ${visitDateStrEmail})\n${textItemLinesFor(onsiteItemsForEmail)}\n\nWe will notify you once the lab items are ready for collection.\n\nShould you have any enquiries, please contact us at:\nEmail: sales@westlab.com.my\nContact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
+      htmlBody=`<p>Dear ${dearName},</p>
+      <p>We confirm the following for your job:</p>
+      ${buildEmailInfoTable([
+        ['Job No.', jobNo],
+        ['Receive Date', fmtDateShort(receiveDate)],
+        ['Priority', custInfo.priority],
+        ...(recip.isDealer?[['End User / Client', recip.endUserName]]:[])
+      ])}
+      <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Items Received at Our Lab</p>
+      ${buildEmailItemsTable(labItemsForEmail)}
+      <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Items for Onsite Calibration (Visit Date: ${visitDateStrEmail})</p>
+      ${buildEmailItemsTable(onsiteItemsForEmail)}
+      <p>We will notify you once the lab items are ready for collection.</p>
+      <p>Should you have any enquiries, please contact us at:<br/>
+      Email: <a href="mailto:sales@westlab.com.my" style="color:#378ADD;">sales@westlab.com.my</a><br/>
+      Contact No.: +6011-3508 9986</p>
+      <p>Best regards,<br/>${_settings.labName||'Westlab (M) Sdn. Bhd.'}</p>`;
+    } else {
+      // Pure Lab — original receipt-confirmation wording
+      emailSubjectVerb='Job Receipt';
+      const textItemLines=textItemLinesFor(labItemsForEmail);
+      textBody=`Dear ${dearName},\n\nThank you for sending your equipment to us. We confirm receipt of the following:\n\nJob No.: ${jobNo}\nReceive Date: ${fmtDateShort(receiveDate)}\nPriority: ${custInfo.priority}${recip.isDealer?'\nEnd User / Client: '+recip.endUserName:''}\n\nEQUIPMENT RECEIVED\n${textItemLines}\n\nWe will notify you once all instruments are ready for collection.\n\nShould you have any enquiries, please contact us at:\nEmail: sales@westlab.com.my\nContact No.: +6011-3508 9986\n\nBest regards,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
+      htmlBody=`<p>Dear ${dearName},</p>
       <p>Thank you for sending your equipment to us. We confirm receipt of the following:</p>
       ${buildEmailInfoTable([
         ['Job No.', jobNo],
@@ -4970,19 +5026,20 @@ async function saveEquipment(printReceipt=false){
         ...(recip.isDealer?[['End User / Client', recip.endUserName]]:[])
       ])}
       <p style="font-weight:700;color:#0f1f3d;margin-top:18px;margin-bottom:6px;">Equipment Received</p>
-      ${buildEmailItemsTable(items)}
+      ${buildEmailItemsTable(labItemsForEmail)}
       <p>We will notify you once all instruments are ready for collection.</p>
       <p>Should you have any enquiries, please contact us at:<br/>
       Email: <a href="mailto:sales@westlab.com.my" style="color:#378ADD;">sales@westlab.com.my</a><br/>
       Contact No.: +6011-3508 9986</p>
       <p>Best regards,<br/>${_settings.labName||'Westlab (M) Sdn. Bhd.'}</p>`;
+    }
     // Generate PDF receipt first (best-effort — email still sends even if PDF generation fails)
     generateReceiptPdfBase64([job]).then(pdfBase64=>{
       const attachments=pdfBase64?[{filename:`${jobNo}_Receipt.pdf`,content:pdfBase64}]:undefined;
       sendEmail(recip.email, recip.name,
-        `Job Receipt — ${jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,
+        `${emailSubjectVerb} — ${jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,
         textBody, htmlBody, attachments
-      ).then(ok=>{ if(ok) addAudit('📧',`Job received email${attachments?' (with PDF receipt)':''} sent to ${recip.email} for ${jobNo}`); });
+      ).then(ok=>recordReceiptEmailResult(jobNo, recip.email, ok, attachments));
     });
   }
 
@@ -5091,6 +5148,25 @@ async function sendEmail(toEmail, toName, subject, textBody, htmlBody, attachmen
   }catch(e){
     console.error('sendEmail error:',e);
     return false;
+  }
+}
+// Persists whether the job-received email actually sent, directly onto the job record —
+// so anyone can open that job later and see for certain, not just catch a one-time toast.
+async function recordReceiptEmailResult(jobNo, toEmail, ok, attachments){
+  const j=getJob(jobNo);
+  if(j){
+    j.receiptEmailStatus=ok?'sent':'failed';
+    j.receiptEmailTo=toEmail;
+    j.receiptEmailSentAt=new Date().toISOString();
+    try{ await SB.upsert('wl_jobs',jobNo,j); }catch(e){console.warn('Could not persist receipt email status:',e);}
+    renderEquipmentTable(); // refresh so the badge shows immediately if this page is open
+  }
+  if(ok){
+    showToast(`✅ Job receipt emailed to ${toEmail}`,'success',3500);
+    addAudit('📧',`Job received email${attachments?' (with PDF receipt)':''} sent to ${toEmail} for ${jobNo}`);
+  } else {
+    showToast(`❌ Could not send job receipt to ${toEmail} — please resend manually`,'error',6000);
+    addAudit('⚠️',`Job received email FAILED to send to ${toEmail} for ${jobNo}`);
   }
 }
 // Build a clean HTML key-value table for email bodies (replaces manual colon-alignment)
@@ -5631,7 +5707,9 @@ function buildReceiptHtml(jobs){
   // Flatten all items across all jobs for the table
   const allItems=jobs.flatMap(j=>(j.items||[]).map(it=>({...it,jobNo:j.jobNo})));
   // QR code — links directly to the public status lookup page for this job, no login needed
-  const qrTarget=`${window.location.origin}${window.location.pathname}?job=${encodeURIComponent(j0.jobNo)}`;
+  const qrTarget=_settings.publicStatusUrl
+    ?`${_settings.publicStatusUrl.replace(/\/$/,'')}?job=${encodeURIComponent(j0.jobNo)}`
+    :`${window.location.origin}${window.location.pathname}?job=${encodeURIComponent(j0.jobNo)}`;
   const qrImg=generateQRDataUrl(qrTarget,220); // higher res since it's shown small (20mm)
 
   const itemRows=allItems.map((it,i)=>`
@@ -5743,11 +5821,9 @@ async function reissueJobReceipt(jobNo){
     const textBody=`Dear ${dearName},\n\nPlease find attached an updated copy of your job receipt for ${jobNo}, reissued to reflect the latest job details.\n\nBest regards,\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
     const htmlBody=`<p>Dear ${dearName},</p><p>Please find attached an <strong>updated copy</strong> of your job receipt for <strong>${jobNo}</strong>, reissued to reflect the latest job details.</p><p>Best regards,<br/>${_settings.labName||'Westlab (M) Sdn. Bhd.'}</p>`;
     const ok=await sendEmail(recip.email,recip.name,`Updated Job Receipt — ${jobNo} | ${_settings.labName||'Westlab (M) Sdn. Bhd.'}`,textBody,htmlBody,attachments);
+    await recordReceiptEmailResult(jobNo, recip.email, ok, attachments);
     if(ok){
-      showToast(`✅ Updated receipt emailed to ${recip.email}`,'success',4000);
       addAudit('🧾',`Job receipt reissued and emailed for <strong>${jobNo}</strong>`);
-    } else {
-      showToast('❌ Email failed to send — please try again','error',4000);
     }
   }catch(e){
     console.error('reissueJobReceipt error:',e);
@@ -7243,12 +7319,13 @@ function renderEquipmentTable(){
       }
       const overdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
       const depositBadge=(j.depositRequired&&!j.depositCollected&&canViewPrice(currentUser))?`<span style="background:#fca5a5;color:#7f1d1d;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;" title="Deposit of RM${(j.depositAmount||0).toFixed(2)} not yet collected">💰 DEPOSIT DUE</span>`:'';
+      const emailFailBadge=j.receiptEmailStatus==='failed'?`<span style="background:#fca5a5;color:#7f1d1d;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;cursor:pointer;" title="Receipt email to ${j.receiptEmailTo||'customer'} failed — click Reissue Receipt to try again" onclick="reissueJobReceipt('${j.jobNo}')">📧⚠️ EMAIL FAILED</span>`:'';
       // ── JOB GROUP HEADER ROW ──
       rows.push(`<tr style="background:var(--navy);color:#fff;">
         <td colspan="2" style="padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
           ${j.jobNo}
           <span style="font-size:11px;font-weight:400;opacity:.8;margin-left:8px;">${itemCount} item${itemCount>1?'s':''}</span>
-          ${typeBadge}${depositBadge}
+          ${typeBadge}${depositBadge}${emailFailBadge}
         </td>
         <td colspan="2" style="padding:6px 10px;font-size:12px;color:#fff;">
           <strong>${j.custName}</strong>${j.attention?`<span style="opacity:.7;font-size:11px;"> · ${j.attention}</span>`:''}
@@ -14290,9 +14367,61 @@ function sendWhatsAppJobReceived(jobNo){
     return;
   }
   const lab = _settings.labName||'Westlab (M) Sdn. Bhd.';
-  const itemLines = (j.items||[]).map((it,i)=>`${i+1}. ${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')'  :''} | S/N: ${it.serial||'N/A'}`).join('\n');
-  const msg =
-`Dear ${j.attention||j.custName},
+  const items=j.items||[];
+  const labItems=items.filter(it=>it.calType!=='Onsite');
+  const onsiteItems=items.filter(it=>it.calType==='Onsite');
+  const itemLine=it=>`${it.eqName}${it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')':''} | S/N: ${it.serial||'N/A'}`;
+  const visitDateStr=j.visitEndDate&&j.visitEndDate!==j.appointmentDate
+    ?`${fmtDateShort(j.appointmentDate)} - ${fmtDateShort(j.visitEndDate)}`
+    :fmtDateShort(j.appointmentDate||j.receiveDate);
+
+  let msg;
+  if(onsiteItems.length&&!labItems.length){
+    // Pure Onsite job — nothing physically received, this is a visit confirmation
+    const itemLines=onsiteItems.map((it,i)=>`${i+1}. ${itemLine(it)}`).join('\n');
+    msg=`Dear ${j.attention||j.custName},
+
+We confirm your onsite calibration visit has been scheduled:
+
+Job No.: ${jobNo}
+Visit Date: ${visitDateStr}
+Site Address: ${j.address||'—'}
+
+Items:
+${itemLines}
+
+Our engineer will arrive as scheduled.
+
+Thank you,
+${lab}
+Tel: +6011-3508 9986`;
+  } else if(onsiteItems.length&&labItems.length){
+    // Mixed job — some items received at lab, some are a scheduled visit
+    const labLines=labItems.map((it,i)=>`${i+1}. ${itemLine(it)}`).join('\n');
+    const onsiteLines=onsiteItems.map((it,i)=>`${i+1}. ${itemLine(it)}`).join('\n');
+    msg=`Dear ${j.attention||j.custName},
+
+We confirm the following for your job:
+
+Job No.: ${jobNo}
+Received: ${fmtDateShort(j.receiveDate)}
+Priority: ${j.priority}
+
+Items received at our lab:
+${labLines}
+
+Items for onsite calibration (Visit Date: ${visitDateStr}):
+${onsiteLines}
+
+We will notify you when the lab items are ready for collection.
+
+Thank you,
+${lab}
+Tel: +6011-3508 9986`;
+  } else {
+    // Pure Lab job — original receipt-confirmation wording
+    const itemLines=labItems.map((it,i)=>`${i+1}. ${itemLine(it)}`).join('\n');
+    msg=`Dear ${j.attention||j.custName},
 
 We confirm receipt of your equipment:
 
@@ -14308,6 +14437,7 @@ We will notify you when ready for collection.
 Thank you,
 ${lab}
 Tel: +6011-3508 9986`;
+  }
   const url = buildWhatsAppUrl(mobile, msg);
   window.open(url, '_blank');
   addAudit('💬', `WhatsApp job receipt sent for job <strong>${jobNo}</strong> to ${mobile}`);
