@@ -5865,32 +5865,32 @@ function buildWorkOrderHTML(job){
     const calBy=it.calData?.calibratedByUsername?(USERS[it.calData.calibratedByUsername]?.name||''):'';
     const stickerNo=it.calData?.sticker_no||'';
     return `<tr>
-      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${i+1}</td>
-      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;font-size:9pt;vertical-align:top;">${descLines}</td>
-      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${it.priority||'Normal'}</td>
-      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calDate}</td>
-      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calBy}</td>
-      <td style="padding:6px 8px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${stickerNo}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${i+1}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;font-size:8px;vertical-align:top;">${descLines}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${it.priority||'Normal'}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calDate}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calBy}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${stickerNo}</td>
     </tr>`;
   }).join('');
-  return `<div style="width:1000px;padding:24px;font-family:Arial,sans-serif;background:#fff;color:#111;">
-    <table style="width:100%;margin-bottom:16px;">
+  return `<div style="width:760px;padding:20px;font-family:Arial,sans-serif;background:#fff;color:#111;">
+    <table style="width:100%;margin-bottom:14px;">
       <tr>
         <td style="vertical-align:top;">
-          <div style="font-size:15px;font-weight:800;">${labName}${s.regNo?' ('+s.regNo+')':''}</div>
-          <div style="font-size:10px;color:#444;">${s.address||''}</div>
-          <div style="font-size:10px;color:#444;">${s.tel?'Phone: '+s.tel+' ':''}${s.email?'email: '+s.email:''}</div>
+          <div style="font-size:13px;font-weight:800;">${labName}${s.regNo?' ('+s.regNo+')':''}</div>
+          <div style="font-size:9px;color:#444;">${s.address||''}</div>
+          <div style="font-size:9px;color:#444;">${s.tel?'Phone: '+s.tel+' ':''}${s.email?'email: '+s.email:''}</div>
         </td>
       </tr>
     </table>
-    <div style="border-top:1pt solid #111;margin-bottom:14px;"></div>
-    <table style="width:100%;font-size:11px;margin-bottom:16px;">
+    <div style="border-top:1pt solid #111;margin-bottom:12px;"></div>
+    <table style="width:100%;font-size:10px;margin-bottom:14px;">
       <tr>
         <td style="width:55%;vertical-align:top;">
           <strong>${job.custName||'—'}</strong><br/>
           ${(job.address||'').replace(/\n/g,'<br/>')}<br/>
-          Attn: ${job.attention||'—'}&nbsp;&nbsp;Tel: ${job.tel||job.mobile||'—'}<br/>
-          Email: ${job.email||'—'}&nbsp;&nbsp;Fax: ${job.fax||'--'}
+          Attn: ${job.attention||'—'}<br/>Tel: ${job.tel||job.mobile||'—'}<br/>
+          Email: ${job.email||'—'}<br/>Fax: ${job.fax||'--'}
         </td>
         <td style="vertical-align:top;">
           <strong>WORK ORDER: ${job.jobNo}</strong><br/>
@@ -5902,11 +5902,11 @@ function buildWorkOrderHTML(job){
         </td>
       </tr>
     </table>
-    <table style="width:100%;border-collapse:collapse;font-size:10px;">
+    <table style="width:100%;border-collapse:collapse;font-size:8.5px;">
       <thead><tr style="background:#0f1f3d;color:#fff;">
-        <th style="padding:6px 8px;">No.</th><th style="padding:6px 8px;text-align:left;">Description</th>
-        <th style="padding:6px 8px;">Priority</th><th style="padding:6px 8px;">Calibration Date</th>
-        <th style="padding:6px 8px;">Calibrated By</th><th style="padding:6px 8px;">Sticker No.</th>
+        <th style="padding:5px 4px;width:5%;">No.</th><th style="padding:5px 4px;text-align:left;width:40%;">Description</th>
+        <th style="padding:5px 4px;width:12%;">Priority</th><th style="padding:5px 4px;width:16%;">Cal. Date</th>
+        <th style="padding:5px 4px;width:16%;">Calibrated By</th><th style="padding:5px 4px;width:11%;">Sticker No.</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -5923,15 +5923,28 @@ async function printWorkOrder(jobNo){
     const target=frame.firstElementChild||frame;
     const canvas=await html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
     frame.style.display='none'; frame.style.position=''; frame.style.left='';
-    const imgData=canvas.toDataURL('image/jpeg',0.92);
-    const imgBytes=await fetch(imgData).then(x=>x.arrayBuffer());
     const {PDFDocument}=PDFLib;
     const pdf=await PDFDocument.create();
-    const jpgImage=await pdf.embedJpg(imgBytes);
-    const pageWidth=842;
-    const pageHeight=pageWidth*(canvas.height/canvas.width);
-    const page=pdf.addPage([pageWidth,pageHeight]);
-    page.drawImage(jpgImage,{x:0,y:0,width:pageWidth,height:pageHeight});
+    // True A4 portrait — 595 x 842pt. Content taller than one page automatically
+    // continues onto additional A4 pages, so a Work Order with many items never
+    // gets squished onto a single page or cut off.
+    const pageWidthPt=595, pageHeightPt=842;
+    const pxPerPage=Math.round(canvas.width*(pageHeightPt/pageWidthPt));
+    const totalPages=Math.max(1,Math.ceil(canvas.height/pxPerPage));
+    for(let p=0;p<totalPages;p++){
+      const sliceCanvas=document.createElement('canvas');
+      const sliceHeightPx=Math.min(pxPerPage,canvas.height-p*pxPerPage);
+      sliceCanvas.width=canvas.width; sliceCanvas.height=sliceHeightPx;
+      const ctx=sliceCanvas.getContext('2d');
+      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,sliceCanvas.width,sliceCanvas.height);
+      ctx.drawImage(canvas,0,p*pxPerPage,canvas.width,sliceHeightPx,0,0,canvas.width,sliceHeightPx);
+      const imgData=sliceCanvas.toDataURL('image/jpeg',0.92);
+      const imgBytes=await fetch(imgData).then(x=>x.arrayBuffer());
+      const jpgImage=await pdf.embedJpg(imgBytes);
+      const page=pdf.addPage([pageWidthPt,pageHeightPt]);
+      const drawnHeightPt=pageWidthPt*(sliceHeightPx/canvas.width);
+      page.drawImage(jpgImage,{x:0,y:pageHeightPt-drawnHeightPt,width:pageWidthPt,height:drawnHeightPt});
+    }
     const bytes=await pdf.save();
     const blob=new Blob([bytes],{type:'application/pdf'});
     const url=URL.createObjectURL(blob);
