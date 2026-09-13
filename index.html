@@ -951,6 +951,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-outline" onclick="openSalesTrackerDashboard()">📊 Performance Dashboard</button>
+          <button class="btn btn-outline" onclick="exportCapabilityReviewPdf()">📄 Capability Review History</button>
           <button class="btn btn-outline" onclick="exportTrackerExcel('sales')">📊 Excel</button>
           <button class="btn btn-outline" onclick="exportTrackerPdf('sales')">📄 PDF</button>
           <button class="btn btn-primary" id="sales-new-entry-btn" onclick="openTrackerEntryModal('sales')">+ New Entry</button>
@@ -976,6 +977,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div>
           <div class="page-title">🔍 Capability Review</div>
           <div class="page-sub">Review new enquiries for technical capability — no pricing or full Sales Tracker access needed</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="exportCapabilityReviewPdf()">📄 Export Full Review History</button>
         </div>
       </div>
       <div id="capability-review-queue-standalone"></div>
@@ -8396,6 +8400,36 @@ async function deleteTrackerEntry(type,entryId){
   addAudit(type==='sales'?'📈':'🛒',`${type==='sales'?'Sales':'Purchasing'} Tracker — deleted entry for ${entry?.name||'—'}`);
 }
 
+// Expands Sales Tracker entries into one row per item — each item carries its own price,
+// capability verdict, outcome, and requirement, so the export needs this granularity,
+// not just one flattened row per whole enquiry.
+function getSalesTrackerExportRows(list){
+  const rows=[];
+  list.forEach(e=>{
+    const reviewer=e.assignedReviewer?USERS[e.assignedReviewer]?.name||e.assignedReviewer:'';
+    const salesPerson=e.salesPersonnel?USERS[e.salesPersonnel]?.name||e.salesPersonnel:'';
+    if(!e.items||!e.items.length){
+      rows.push({Month:e.month||'',Customer:e.name||'',Status:e.status||'','Sales Personnel':salesPerson,'Assigned Reviewer':reviewer,
+        Equipment:'',Brand:'',Model:'',Spec:'',Range:'','Cal Type':'',Qty:'','Unit Price (RM)':'','Total (RM)':'',
+        'Capability Verdict':'',Outcome:'','Lost Reason':'','Item Remark':'','Linked Job':e.jobNo||'',
+        'Created By':USERS[e.createdBy]?.name||e.createdBy||'','Created At':e.createdAt?e.createdAt.split('T')[0]:''});
+      return;
+    }
+    e.items.forEach(it=>{
+      const qty=parseFloat(it.quantity)||1;
+      rows.push({
+        Month:e.month||'',Customer:e.name||'',Status:e.status||'','Sales Personnel':salesPerson,'Assigned Reviewer':reviewer,
+        Equipment:it.eqName||'',Brand:it.brand||'',Model:it.model||'',Spec:it.spec||'',Range:it.range||'','Cal Type':it.calType||'',
+        Qty:it.quantity||1,'Unit Price (RM)':it.price||0,'Total (RM)':((it.price||0)*qty).toFixed(2),
+        'Capability Verdict':it.capabilityVerdict||'',Outcome:it.outcome&&it.outcome!=='Pending'?it.outcome:'',
+        'Lost Reason':it.lostReason||'','Item Remark':it.remark||'',
+        'Linked Job':it.wonJobNo||e.jobNo||'',
+        'Created By':USERS[e.createdBy]?.name||e.createdBy||'','Created At':e.createdAt?e.createdAt.split('T')[0]:''
+      });
+    });
+  });
+  return rows;
+}
 function exportTrackerExcel(type){
   if(typeof XLSX==='undefined'){alert('Excel export library failed to load — please check your connection and refresh.');return;}
   const prefix=type==='sales'?'st':'pt';
@@ -8409,14 +8443,20 @@ function exportTrackerExcel(type){
     if(search&&!(e.name||'').toLowerCase().includes(search))return false;
     return true;
   }).sort((a,b)=>(a.month||'').localeCompare(b.month||''));
-  const rows=list.map(e=>({
-    Month:e.month||'',[nameLabel]:e.name||'',Status:e.status||'',Remark:e.remark||'',
-    ...(type==='sales'?{'Linked Job':e.jobNo||''}:{}),
-    'Created By':USERS[e.createdBy]?.name||e.createdBy||'',
-    'Created At':e.createdAt?e.createdAt.split('T')[0]:''
-  }));
+  let rows,colWidths;
+  if(type==='sales'){
+    rows=getSalesTrackerExportRows(list);
+    colWidths=[{wch:10},{wch:22},{wch:18},{wch:16},{wch:16},{wch:20},{wch:14},{wch:14},{wch:14},{wch:14},{wch:10},{wch:6},{wch:12},{wch:12},{wch:16},{wch:10},{wch:16},{wch:26},{wch:14},{wch:16},{wch:12}];
+  } else {
+    rows=list.map(e=>({
+      Month:e.month||'',[nameLabel]:e.name||'',Status:e.status||'',Remark:e.remark||'',
+      'Created By':USERS[e.createdBy]?.name||e.createdBy||'',
+      'Created At':e.createdAt?e.createdAt.split('T')[0]:''
+    }));
+    colWidths=[{wch:10},{wch:24},{wch:20},{wch:34},{wch:16},{wch:12}];
+  }
   const ws=XLSX.utils.json_to_sheet(rows);
-  ws['!cols']=[{wch:10},{wch:24},{wch:20},{wch:34},{wch:16},{wch:16},{wch:12}];
+  ws['!cols']=colWidths;
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,type==='sales'?'Sales Tracker':'Purchasing Tracker');
   const dateStr=toLocalDateStr(new Date());
@@ -8438,26 +8478,60 @@ async function exportTrackerPdf(type){
   }).sort((a,b)=>(a.month||'').localeCompare(b.month||''));
   if(!list.length){alert('No entries to export with the current filters.');return;}
   try{
-    const html=`<div style="width:1000px;padding:24px;font-family:Arial,sans-serif;background:#fff;">
-      <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — ${type==='sales'?'Sales':'Purchasing'} Tracker</div>
-      <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')} ${monthFilter?'· Month: '+monthFilter:''} ${statusFilter?'· Status: '+statusFilter:''}</div>
-      <table style="width:100%;border-collapse:collapse;font-size:11px;">
-        <thead><tr>
-          <th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Month</th><th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">${nameLabel}</th>
-          <th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Status</th><th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Remark</th>
-          ${type==='sales'?'<th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Linked Job</th>':''}
-        </tr></thead>
-        <tbody>
-          ${list.map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
-            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.month||''}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.name||''}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.status||''}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.remark||''}</td>
-            ${type==='sales'?`<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.jobNo||''}</td>`:''}
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>`;
+    let html;
+    if(type==='sales'){
+      const rows=getSalesTrackerExportRows(list);
+      html=`<div style="width:1500px;padding:24px;font-family:Arial,sans-serif;background:#fff;">
+        <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — Sales Tracker</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')} ${monthFilter?'· Month: '+monthFilter:''} ${statusFilter?'· Status: '+statusFilter:''}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:8.5px;">
+          <thead><tr>
+            ${['Month','Customer','Status','Sales Person','Reviewer','Equipment','Brand','Model','Spec','Cal Type','Qty','Unit Price','Total','Verdict','Outcome','Lost Reason','Item Remark','Linked Job'].map(h=>`<th style="padding:5px 5px;text-align:left;background:#0f1f3d;color:#fff;">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Month}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Customer}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Status}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Sales Personnel']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Assigned Reviewer']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Equipment}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Brand}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Model}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Spec}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Cal Type']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Qty}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Unit Price (RM)']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Total (RM)']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Capability Verdict']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Outcome}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Lost Reason']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Item Remark']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Linked Job']}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    } else {
+      html=`<div style="width:1000px;padding:24px;font-family:Arial,sans-serif;background:#fff;">
+        <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — Purchasing Tracker</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')} ${monthFilter?'· Month: '+monthFilter:''} ${statusFilter?'· Status: '+statusFilter:''}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead><tr>
+            <th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Month</th><th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">${nameLabel}</th>
+            <th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Status</th><th style="padding:6px 8px;text-align:left;background:#0f1f3d;color:#fff;">Remark</th>
+          </tr></thead>
+          <tbody>
+            ${list.map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+              <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.month||''}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.name||''}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.status||''}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${e.remark||''}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }
     const frame=el('receipt-print-frame');
     frame.innerHTML=html;
     frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
@@ -8470,7 +8544,7 @@ async function exportTrackerPdf(type){
     const {PDFDocument}=PDFLib;
     const pdf=await PDFDocument.create();
     const jpgImage=await pdf.embedJpg(imgBytes);
-    const pageWidth=842;
+    const pageWidth=type==='sales'?1200:842;
     const pageHeight=pageWidth*(canvas.height/canvas.width);
     const page=pdf.addPage([pageWidth,pageHeight]);
     page.drawImage(jpgImage,{x:0,y:0,width:pageWidth,height:pageHeight});
