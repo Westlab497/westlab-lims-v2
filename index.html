@@ -6630,6 +6630,20 @@ async function submitCannotCalibrate(){
       job.history.push({action:`Item ${it.itemNo} (${it.eqName}) returned without calibration — Abnormal Report ${reportNo}`,by:currentUser,time:new Date().toISOString()});
     });
 
+    // If this job's item was previously marked Won on a Sales Tracker enquiry, flip it to
+    // Lost (Capability Failure) automatically — we said we could do it, then genuinely couldn't.
+    // This is the one case where a Won item can still become Lost after the fact.
+    const linkedEntry=_salesTracker.find(e=>e.jobNo===calJobNo);
+    if(linkedEntry){
+      const linkedItem=(linkedEntry.items||[]).find(it=>it.eqName===item.eqName&&it.outcome==='Won');
+      if(linkedItem){
+        linkedItem.outcome='Lost';
+        linkedItem.lostReason='Capability Failure';
+        await saveSalesTracker();
+        addAudit('📈',`Sales Tracker — ${linkedEntry.name} (${linkedItem.eqName}) automatically moved to Lost (Capability Failure) after Abnormal Report`);
+      }
+    }
+
     document.getElementById('cannot-cal-overlay').style.display='none';
     closeModal('modal-perform-cal');
     renderMyJobs(); renderDashboard(); refreshAllBadges();
@@ -7942,10 +7956,20 @@ function openTrackerEntryModal(type,entryId){
       </div>
       ${type==='sales'?`
       <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Prospect Contact (fill in if not yet an existing customer)</div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Prospect Details (fill in if not yet an existing customer)</div>
+        <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="tk-prospect-address" rows="2">${existing?.prospectAddress||''}</textarea></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="tk-prospect-phone" value="${existing?.prospectPhone||''}"/></div>
-          <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="tk-prospect-email" value="${existing?.prospectEmail||''}"/></div>
+          <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="tk-prospect-attention" value="${existing?.prospectAttention||''}"/></div>
+          <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="tk-prospect-phone" value="${existing?.prospectPhone||''}"/></div>
+        </div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="tk-prospect-email" value="${existing?.prospectEmail||''}"/></div>
+        <div class="form-group">
+          <label class="form-label">Customer Type</label>
+          <div style="display:flex;gap:14px;">
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-dealer" ${(existing?.prospectTypes||[]).includes('Dealer')?'checked':''}/> Dealer</label>
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-direct" ${(existing?.prospectTypes||[]).includes('Direct')?'checked':''}/> Direct</label>
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-enduser-only" ${(existing?.prospectTypes||[]).includes('EndUserOnly')?'checked':''}/> End User Only</label>
+          </div>
         </div>
       </div>
       <div class="form-group"><label class="form-label">Assigned Sales Personnel</label>
@@ -7989,7 +8013,12 @@ function updateSalesItemField(idx,field,val){
 function renderSalesItemsList(){
   const box=el('sales-items-list'); if(!box)return;
   const VERDICT_COLOR={'Can Do':'#166534','Cannot Do':'#991b1b','Can Do (External)':'#166534'};
-  box.innerHTML=_salesDraftItems.map((it,idx)=>`
+  const OUTCOME_COLOR={'Won':'#166534',Lost:'#991b1b'};
+  box.innerHTML=_salesDraftItems.map((it,idx)=>{
+    const qty=parseFloat(it.quantity)||1;
+    const total=(it.price||0)*qty;
+    const cleared=['Can Do','Can Do (External)'].includes(it.capabilityVerdict);
+    return `
     <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
         <strong style="font-size:12px;">Item ${idx+1}</strong>
@@ -8014,20 +8043,33 @@ function renderSalesItemsList(){
             <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Quantity <span style="font-weight:normal;color:var(--text-muted);">(or leave blank if listing individually)</span></label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Quantity <span style="font-weight:normal;color:var(--text-muted);">(or leave blank if listing individually)</span></label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);renderSalesItemsList();"/></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Price Quoted (RM)</label><input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0)"/></div>
-        <div class="form-group"><label class="form-label">Outcome</label>
-          <select class="form-control" onchange="updateSalesItemField(${idx},'outcome',this.value)">
-            <option value="Pending" ${(it.outcome||'Pending')==='Pending'?'selected':''}>Pending</option>
-            <option value="Won" ${it.outcome==='Won'?'selected':''}>Won</option>
-            <option value="Lost" ${it.outcome==='Lost'?'selected':''}>Lost</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Unit Price (RM)</label>
+        <input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);renderSalesItemsList();"/>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Total (Unit Price × Qty ${qty}): <strong>RM ${total.toFixed(2)}</strong></div>
       </div>
       ${it.capabilityVerdict?`<div style="font-size:11px;font-weight:700;color:${VERDICT_COLOR[it.capabilityVerdict]||'#64748b'};margin-top:4px;">✓ Capability: ${it.capabilityVerdict}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">⏳ Awaiting capability review</div>`}
-    </div>`).join('');
+      ${cleared?`<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin-top:6px;">
+        <input type="checkbox" ${it.clientAccepted?'checked':''} onchange="updateSalesItemField(${idx},'clientAccepted',this.checked)"/>
+        Client has accepted this item (confirmed in the PO)
+      </label>`:''}
+      ${it.outcome==='Won'?`<div style="font-size:11px;font-weight:700;color:${OUTCOME_COLOR['Won']};margin-top:4px;">🏆 Won <span style="font-weight:normal;color:var(--text-muted);">(set automatically)</span></div>`:''}
+      ${it.outcome==='Lost'?`<div style="margin-top:6px;">
+        <label class="form-label" style="font-size:11px;">❌ Lost — Reason <span style="font-weight:normal;color:var(--text-muted);">(set automatically, refine if you know more detail)</span></label>
+        <select class="form-control" style="font-size:12px;" onchange="updateSalesItemField(${idx},'lostReason',this.value)">
+          <option value="Commercial" ${it.lostReason==='Commercial'?'selected':''}>Commercial (declined / chose competitor)</option>
+          <option value="Capability Failure" ${it.lostReason==='Capability Failure'?'selected':''}>Capability Failure (couldn't deliver)</option>
+          <option value="Client Cancelled (Post-PO)" ${it.lostReason==='Client Cancelled (Post-PO)'?'selected':''}>Client Cancelled (Post-PO)</option>
+          <option value="Price Too High" ${it.lostReason==='Price Too High'?'selected':''}>Price Too High</option>
+          <option value="Lead Time Too Long" ${it.lostReason==='Lead Time Too Long'?'selected':''}>Lead Time Too Long</option>
+          <option value="Client Went Silent" ${it.lostReason==='Client Went Silent'?'selected':''}>Client Went Silent / No Response</option>
+          <option value="Other" ${it.lostReason==='Other'?'selected':''}>Other</option>
+        </select>
+      </div>`:''}
+    </div>`;
+  }).join('');
 }
 function suggestTrackerName(type,query){
   const box=el('tk-name-suggestions'); if(!box)return;
@@ -8081,12 +8123,20 @@ async function saveTrackerEntry(type,entryId){
   entry.remark=el('tk-remark').value.trim();
   if(type==='sales'){
     entry.jobNo=el('tk-jobno')?.value.trim()||null;
+    entry.prospectAddress=el('tk-prospect-address')?.value.trim()||'';
+    entry.prospectAttention=el('tk-prospect-attention')?.value.trim()||'';
     entry.prospectPhone=el('tk-prospect-phone')?.value.trim()||'';
     entry.prospectEmail=el('tk-prospect-email')?.value.trim()||'';
+    entry.prospectTypes=[
+      el('tk-type-dealer')?.checked?'Dealer':null,
+      el('tk-type-direct')?.checked?'Direct':null,
+      el('tk-type-enduser-only')?.checked?'EndUserOnly':null,
+    ].filter(Boolean);
     entry.salesPersonnel=el('tk-sales-personnel')?.value||(isNew?currentUser:entry.salesPersonnel)||'';
     entry.items=_salesDraftItems.filter(it=>it.eqName);
     // Every new enquiry goes straight into the capability review queue — no skip path
     if(isNew&&newStatus==='Enquiry Received') newStatus='Pending Technical Review';
+    applyAutoOutcomes(entry,newStatus);
   }
   entry.status=newStatus;
   if(isNew||oldStatus!==entry.status) entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser});
@@ -8097,6 +8147,26 @@ async function saveTrackerEntry(type,entryId){
   addAudit(type==='sales'?'📈':'🛒',`${type==='sales'?'Sales':'Purchasing'} Tracker — ${isNew?'added':'updated'} entry for ${name}`);
 }
 
+// ── Automatic Won/Lost derivation — no manual outcome field, it's derived purely from
+// real pipeline events: reaching "PO Received" (client actually confirmed), or "Closed"
+// without ever reaching that point (deal died before confirmation).
+function applyAutoOutcomes(entry,newStatus){
+  if(!entry.items)return;
+  const everReachedPO=newStatus==='PO Received'||(entry.statusHistory||[]).some(h=>h.status==='PO Received');
+  if(newStatus==='PO Received'){
+    entry.items.forEach(it=>{
+      if(!['Can Do','Can Do (External)'].includes(it.capabilityVerdict))return; // never quotable, leave alone
+      if(it.outcome==='Won'||it.outcome==='Lost')return; // already decided, don't re-decide
+      if(it.clientAccepted){ it.outcome='Won'; }
+      else { it.outcome='Lost'; it.lostReason='Commercial'; }
+    });
+  } else if(newStatus==='Closed'&&!everReachedPO){
+    entry.items.forEach(it=>{
+      if(it.outcome==='Won'||it.outcome==='Lost')return;
+      it.outcome='Lost'; it.lostReason='Commercial';
+    });
+  }
+}
 async function updateTrackerStatus(type,entryId,newStatus){
   const entry=trackerArr(type).find(e=>e.id===entryId); if(!entry)return;
   if(type==='sales'&&newStatus==='Quotation Generated'&&!(entry.items||[]).some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict))){
@@ -8104,6 +8174,7 @@ async function updateTrackerStatus(type,entryId,newStatus){
     renderTrackerPage(type); // revert the dropdown to its real current status
     return;
   }
+  if(type==='sales') applyAutoOutcomes(entry,newStatus);
   entry.status=newStatus;
   if(!entry.statusHistory) entry.statusHistory=[];
   entry.statusHistory.push({status:newStatus,date:new Date().toISOString(),by:currentUser});
@@ -9938,8 +10009,14 @@ function checkOnsiteCheckInAlerts(){
   const alerts=[];
   _jobs.forEach(j=>{
     if(j.status==='Deleted'||j.jobType!=='Onsite') return;
+    // Check against the actual scheduled visit date range, not the receiving date —
+    // a job can be received today but visited days later, or span multiple days.
+    const visitStart=j.appointmentDate||j.receiveDate;
+    const visitEnd=j.visitEndDate||visitStart;
+    const isVisitDay=visitStart&&visitEnd&&todayStr>=visitStart&&todayStr<=visitEnd;
+    if(!isVisitDay) return;
     (j.items||[]).forEach((item,idx)=>{
-      if(item.status==='Assigned'&&item.calType==='Onsite'&&j.receiveDate===todayStr&&!item.checkinTime){
+      if(item.status==='Assigned'&&item.calType==='Onsite'&&!item.checkinTime){
         const appointHour=9; // default 9am if no specific time
         if(now.getHours()>=appointHour+1){ // 1 hour past appointment time
           alerts.push({jobNo:j.jobNo,itemNo:item.itemNo,custName:j.custName,engineer:item.assignedTo});
@@ -13654,6 +13731,22 @@ function renderStDashboardContent(){
   });
   const gapRows=Object.values(byGap).sort((a,b)=>b.count-a.count);
 
+  // Lost Reasons — why deals were actually lost, to guide real improvement/scope decisions
+  const lostItems=allItems.filter(it=>it.outcome==='Lost');
+  const byLostReason={};
+  lostItems.forEach(it=>{
+    const reason=it.lostReason||'Unspecified';
+    if(!byLostReason[reason]) byLostReason[reason]={reason,count:0,value:0};
+    byLostReason[reason].count++; byLostReason[reason].value+=(it.price||0)*(parseFloat(it.quantity)||1);
+  });
+  const lostReasonRows=Object.values(byLostReason).sort((a,b)=>b.count-a.count);
+  const REASON_HINT={
+    'Commercial':'Client declined the quote or went with a competitor',
+    'Capability Failure':'We accepted the job but genuinely could not deliver — item arrived damaged, or turned out to be outside real capability',
+    'Client Cancelled (Post-PO)':'Client had a confirmed PO but withdrew afterward, for their own reasons',
+    'Unspecified':'No specific reason recorded'
+  };
+
   box.innerHTML=`
     <div class="kpi-row" style="margin-bottom:16px;">
       <div class="kpi-mini"><div class="kpi-val" style="color:var(--green)">RM${totalWonValue.toFixed(0)}</div><div class="kpi-lbl">Won</div></div>
@@ -13688,6 +13781,17 @@ function renderStDashboardContent(){
           <td style="padding:5px 6px;text-align:center;${gap!==null&&gap>10?'color:var(--red);font-weight:700;':''}">${gap!==null?(gap>0?'+':'')+gap+'%':'—'}</td>
         </tr>`;
       }).join('')||'<tr><td colspan="8" style="padding:8px;text-align:center;color:var(--text-muted);">No data yet.</td></tr>'}</tbody>
+    </table>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">❌ Lost Reasons</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 6px;text-align:left;">Reason</th><th style="padding:5px 6px;">Count</th><th style="padding:5px 6px;">Value Lost (RM)</th><th style="padding:5px 6px;text-align:left;">What This Suggests</th></tr></thead>
+      <tbody>${lostReasonRows.map(r=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:5px 6px;font-weight:700;">${r.reason}</td>
+        <td style="padding:5px 6px;text-align:center;">${r.count}</td>
+        <td style="padding:5px 6px;text-align:center;">${r.value.toFixed(0)}</td>
+        <td style="padding:5px 6px;font-size:10.5px;color:var(--text-muted);">${REASON_HINT[r.reason]||''}</td>
+      </tr>`).join('')||'<tr><td colspan="4" style="padding:8px;text-align:center;color:var(--text-muted);">No lost items yet.</td></tr>'}</tbody>
     </table>
 
     <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">🔍 Capability Gaps — Enquired But Marked "Cannot Do"</div>
