@@ -8010,6 +8010,15 @@ function removeSalesItemRow(idx){
 function updateSalesItemField(idx,field,val){
   if(_salesDraftItems[idx]) _salesDraftItems[idx][field]=val;
 }
+// Updates just this one item's Total display in place — never re-renders the whole list,
+// so the input never loses focus or gets interrupted mid-keystroke.
+function updateSalesItemTotal(idx){
+  const it=_salesDraftItems[idx]; if(!it)return;
+  const qty=parseFloat(it.quantity)||1;
+  const total=(it.price||0)*qty;
+  const totalEl=el(`sales-item-total-${idx}`); if(totalEl) totalEl.textContent=`RM ${total.toFixed(2)}`;
+  const qtyEl=el(`sales-item-qty-display-${idx}`); if(qtyEl) qtyEl.textContent=qty;
+}
 function renderSalesItemsList(){
   const box=el('sales-items-list'); if(!box)return;
   const VERDICT_COLOR={'Can Do':'#166534','Cannot Do':'#991b1b','Can Do (External)':'#166534'};
@@ -8043,12 +8052,12 @@ function renderSalesItemsList(){
             <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Quantity <span style="font-weight:normal;color:var(--text-muted);">(or leave blank if listing individually)</span></label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);renderSalesItemsList();"/></div>
+        <div class="form-group"><label class="form-label">Quantity <span style="font-weight:normal;color:var(--text-muted);">(or leave blank if listing individually)</span></label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);updateSalesItemTotal(${idx});"/></div>
       </div>
       <div class="form-group">
         <label class="form-label">Unit Price (RM)</label>
-        <input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);renderSalesItemsList();"/>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Total (Unit Price × Qty ${qty}): <strong>RM ${total.toFixed(2)}</strong></div>
+        <input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});"/>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Total (Unit Price × Qty <span id="sales-item-qty-display-${idx}">${qty}</span>): <strong id="sales-item-total-${idx}">RM ${total.toFixed(2)}</strong></div>
       </div>
       ${it.capabilityVerdict?`<div style="font-size:11px;font-weight:700;color:${VERDICT_COLOR[it.capabilityVerdict]||'#64748b'};margin-top:4px;">✓ Capability: ${it.capabilityVerdict}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">⏳ Awaiting capability review</div>`}
       ${cleared?`<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin-top:6px;">
@@ -8105,6 +8114,27 @@ document.addEventListener('click',e=>{
   if(box&&!e.target.closest('#tk-name')&&!e.target.closest('#tk-name-suggestions')) box.style.display='none';
 });
 
+// Auto-creates a real Customer Database record for a brand-new prospect on a Sales Tracker
+// entry — only when it's genuinely new (no existing custId linked) and at least a company
+// name plus one customer type were actually provided.
+async function autoCreateCustomerFromProspect(entry){
+  if(entry.custId)return; // already linked to an existing customer, nothing to create
+  if(!entry.name||!entry.prospectTypes||!entry.prospectTypes.length)return;
+  const custId='CUST-'+Date.now();
+  const record={
+    id:custId, custTypes:entry.prospectTypes, company:entry.name,
+    type:entry.prospectTypes.includes('Dealer')?'Dealer':'Direct',
+    approvedDealers:[], alwaysDirect:false,
+    attention:entry.prospectAttention||'', address:entry.prospectAddress||'',
+    tel:'', mobile:entry.prospectPhone||'', fax:'', email:entry.prospectEmail||'',
+    paymentTerms:'', notes:'Auto-created from Sales Tracker enquiry',
+    createdAt:new Date().toISOString()
+  };
+  await SB.upsert(CUST_TABLE,custId,record);
+  _customers.unshift(record);
+  entry.custId=custId; // link the enquiry back to the newly-created customer
+  addAudit('🏢',`Customer <strong>${entry.name}</strong> auto-created from Sales Tracker enquiry`);
+}
 async function saveTrackerEntry(type,entryId){
   const name=el('tk-name').value.trim();
   if(!name){alert(`Please enter the ${type==='sales'?'customer/prospect':'vendor'} name.`);return;}
@@ -8142,6 +8172,7 @@ async function saveTrackerEntry(type,entryId){
     ].filter(Boolean);
     entry.salesPersonnel=el('tk-sales-personnel')?.value||(isNew?currentUser:entry.salesPersonnel)||'';
     entry.items=_salesDraftItems.filter(it=>it.eqName);
+    if(isNew) await autoCreateCustomerFromProspect(entry);
     // Every new enquiry goes straight into the capability review queue — no skip path
     if(isNew&&newStatus==='Enquiry Received') newStatus='Pending Technical Review';
     applyAutoOutcomes(entry,newStatus);
