@@ -8088,6 +8088,14 @@ function suggestTrackerName(type,query){
 }
 function selectTrackerCustomer(custId,name){
   el('tk-name').value=name; el('tk-cust-id').value=custId; el('tk-name-suggestions').style.display='none';
+  const c=_customers.find(x=>x.id===custId); if(!c)return;
+  if(el('tk-prospect-address')) el('tk-prospect-address').value=c.address||'';
+  if(el('tk-prospect-attention')) el('tk-prospect-attention').value=c.attention||'';
+  if(el('tk-prospect-phone')) el('tk-prospect-phone').value=c.mobile||'';
+  if(el('tk-prospect-email')) el('tk-prospect-email').value=c.email||'';
+  if(el('tk-type-dealer')) el('tk-type-dealer').checked=(c.custTypes||[]).includes('Dealer');
+  if(el('tk-type-direct')) el('tk-type-direct').checked=(c.custTypes||[]).includes('Direct');
+  if(el('tk-type-enduser-only')) el('tk-type-enduser-only').checked=(c.custTypes||[]).includes('EndUserOnly');
 }
 function selectTrackerRefEq(refId,name){
   el('tk-name').value=name; el('tk-ref-id').value=refId; el('tk-name-suggestions').style.display='none';
