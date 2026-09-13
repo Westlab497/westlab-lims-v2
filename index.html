@@ -7782,9 +7782,16 @@ async function exportEntryCapabilityReviewPdf(entryId){
       </div>
       ${item.remark?`<div style="background:#eff6ff;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:11px;"><strong>Customer's Requirement:</strong> ${item.remark}</div>`:''}
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
-        ${row('Reference Standard/Equipment Available?',ev.refAvailable)}
-        ${row('Trained Personnel Available?',ev.personnelAvailable)}
+        ${row('Within Accredited Scope?',ev.inScope)}
+        ${row('Measurement Range Within Capability?',ev.rangeCapable)}
+        ${row('Accuracy/Uncertainty Achievable (TUR)?',ev.accuracyAchievable)}
+        ${row('Reference Standard Available &amp; Valid?',ev.refAvailable)}
         ${row('Method/Procedure Exists?',ev.methodExists)}
+        ${row('Trained &amp; Authorized Personnel Available?',ev.personnelAvailable)}
+        ${row('Environmental Conditions Suitable?',ev.environmentSuitable)}
+        ${row('Special Handling/Safety Manageable?',ev.specialHandling)}
+        ${item.calType==='Onsite'?row('Onsite Logistics Suitable?',ev.onsiteLogistics):''}
+        ${row('Realistic Turnaround Achievable?',ev.turnaroundRealistic)}
         ${row("Meets Customer's Stated Requirement?",ev.meetsRequirement)}
       </table>
       ${ev.notes?`<div style="font-size:11px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-bottom:8px;"><strong>Notes:</strong> ${ev.notes}</div>`:''}
@@ -7808,15 +7815,20 @@ async function exportCapabilityReviewPdf(){
   });
   if(!rows.length){alert('No capability reviews recorded yet.');return;}
   rows.sort((a,b)=>(b.item.capabilityReviewedAt||'').localeCompare(a.item.capabilityReviewedAt||''));
+  const CHECK_FIELDS=['inScope','rangeCapable','accuracyAchievable','refAvailable','methodExists','personnelAvailable','environmentSuitable','specialHandling','onsiteLogistics','turnaroundRealistic'];
+  const checklistScore=ev=>{
+    const answered=CHECK_FIELDS.filter(f=>ev[f]==='Yes'||ev[f]==='No');
+    const yesCount=answered.filter(f=>ev[f]==='Yes').length;
+    return answered.length?`${yesCount}/${answered.length}`:'—';
+  };
   const html=`<div style="width:1100px;padding:24px;font-family:Arial,sans-serif;background:#fff;">
     <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:4px;">${_settings.labName||'Westlab'} — Capability Review Log</div>
-    <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')}</div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')} · "Checklist" shows Yes answers out of items actually assessed (e.g. Onsite Logistics only applies to onsite items)</div>
     <table style="width:100%;border-collapse:collapse;font-size:9.5px;">
       <thead><tr>
         <th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Date</th><th style="padding:6px 6px;background:#0f1f3d;color:#fff;text-align:left;">Customer</th>
         <th style="padding:6px 6px;background:#0f1f3d;color:#fff;text-align:left;">Item</th><th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Verdict</th>
-        <th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Ref. Std</th><th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Personnel</th>
-        <th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Method</th><th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Meets Req.</th>
+        <th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Checklist</th><th style="padding:6px 6px;background:#0f1f3d;color:#fff;">Meets Req.</th>
         <th style="padding:6px 6px;background:#0f1f3d;color:#fff;text-align:left;">Notes</th><th style="padding:6px 6px;background:#0f1f3d;color:#fff;text-align:left;">Reviewed By</th>
       </tr></thead>
       <tbody>${rows.map(({entry,item},i)=>{
@@ -7826,9 +7838,7 @@ async function exportCapabilityReviewPdf(){
           <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${entry.name}</td>
           <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${item.eqName}</td>
           <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;font-weight:700;">${capabilityVerdictLabel(item.capabilityVerdict)}</td>
-          <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${ev.refAvailable||''}</td>
-          <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${ev.personnelAvailable||''}</td>
-          <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${ev.methodExists||''}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;font-weight:700;">${checklistScore(ev)}</td>
           <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${ev.meetsRequirement||''}</td>
           <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${ev.notes||''}</td>
           <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${USERS[item.capabilityReviewedBy]?.name||item.capabilityReviewedBy||''}</td>
@@ -7891,40 +7901,45 @@ function openCapabilityEvalModal(entryId,itemIdx){
   if(!canReviewCapability(currentUser)){alert('Only Technical Manager, Admin, or Managing Director can review capability.');return;}
   const entry=_salesTracker.find(e=>e.id===entryId); if(!entry||!entry.items||!entry.items[itemIdx])return;
   const item=entry.items[itemIdx];
+  const yn=(id,label)=>`<div class="form-group" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <label class="form-label" style="margin-bottom:0;flex:1;">${label}</label>
+    <select class="form-control" id="${id}" style="width:90px;">
+      <option value="Yes">Yes</option><option value="No">No</option>
+    </select>
+  </div>`;
   let ov=document.getElementById('capability-eval-overlay');
   if(!ov){ov=document.createElement('div');ov.id='capability-eval-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:520px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:560px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
       <span style="font-weight:700;font-size:15px;">📋 Capability Evaluation</span>
       <button onclick="document.getElementById('capability-eval-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
     </div>
-    <div style="padding:16px 20px;">
+    <div style="padding:16px 20px;max-height:70vh;overflow-y:auto;">
       <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
         <strong>${entry.name}</strong> — ${item.eqName}<br/>
-        <span style="font-size:12px;color:var(--text-muted);">${item.brand?'Brand: '+item.brand+' · ':''}${item.model?'Model: '+item.model+' · ':''}${item.spec?'Spec: '+item.spec:''}${item.range?' · Range: '+item.range:''}</span>
+        <span style="font-size:12px;color:var(--text-muted);">${item.brand?'Brand: '+item.brand+' · ':''}${item.model?'Model: '+item.model+' · ':''}${item.spec?'Spec: '+item.spec:''}${item.range?' · Range: '+item.range:''}${item.calType?' · '+item.calType:''}</span>
         ${item.remark?`<div style="font-size:12px;color:#374151;margin-top:6px;"><strong>Customer's requirement:</strong> ${item.remark}</div>`:''}
       </div>
-      <div class="form-group"><label class="form-label">Reference Standard/Equipment Available?</label>
-        <select class="form-control" id="eval-ref-available">
-          <option value="Yes">Yes</option><option value="No">No</option>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Scope &amp; Capability</div>
+      ${yn('eval-in-scope','Within Accredited Scope?')}
+      ${yn('eval-range-capable','Measurement Range Within Capability?')}
+      ${yn('eval-accuracy-achievable','Required Accuracy/Uncertainty Achievable (TUR)?')}
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin:14px 0 6px;">Resources</div>
+      ${yn('eval-ref-available','Reference Standard Available &amp; Valid?')}
+      ${yn('eval-method-exists','Method/Procedure Exists?')}
+      ${yn('eval-personnel-available','Trained &amp; Authorized Personnel Available?')}
+      ${yn('eval-environment-suitable','Environmental Conditions Suitable?')}
+      ${yn('eval-special-handling','Special Handling/Safety Manageable?')}
+      ${item.calType==='Onsite'?yn('eval-onsite-logistics','Onsite Logistics Suitable? (access, travel, permits)'):''}
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin:14px 0 6px;">Delivery &amp; Fit</div>
+      ${yn('eval-turnaround-realistic','Realistic Turnaround Achievable?')}
+      <div class="form-group" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label class="form-label" style="margin-bottom:0;flex:1;">Meets Customer's Stated Requirement?</label>
+        <select class="form-control" id="eval-meets-requirement" style="width:150px;">
+          <option value="Yes">Yes</option><option value="Partially">Partially</option><option value="No">No</option><option value="N/A">N/A</option>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Trained Personnel Available?</label>
-        <select class="form-control" id="eval-personnel-available">
-          <option value="Yes">Yes</option><option value="No">No</option>
-        </select>
-      </div>
-      <div class="form-group"><label class="form-label">Method/Procedure Exists?</label>
-        <select class="form-control" id="eval-method-exists">
-          <option value="Yes">Yes</option><option value="No">No</option>
-        </select>
-      </div>
-      <div class="form-group"><label class="form-label">Can This Meet the Customer's Stated Requirement?</label>
-        <select class="form-control" id="eval-meets-requirement">
-          <option value="Yes">Yes</option><option value="Partially">Partially</option><option value="No">No</option><option value="N/A">N/A — no specific requirement stated</option>
-        </select>
-      </div>
-      <div class="form-group"><label class="form-label">Reviewer's Notes</label><textarea class="form-control" id="eval-notes" rows="3" placeholder="Explain the reasoning behind the verdict…"></textarea></div>
+      <div class="form-group" style="margin-top:10px;"><label class="form-label">Reviewer's Notes</label><textarea class="form-control" id="eval-notes" rows="3" placeholder="Explain the reasoning behind the verdict…"></textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
         <button class="btn btn-outline" style="color:var(--red);" onclick="saveCapabilityEvaluation('${entryId}',${itemIdx},'Cannot Do')">❌ Outside Current Capability</button>
         <button class="btn btn-primary" onclick="saveCapabilityEvaluation('${entryId}',${itemIdx},'Can Do')">✅ Capability Confirmed</button>
@@ -7935,9 +7950,16 @@ function openCapabilityEvalModal(entryId,itemIdx){
 }
 async function saveCapabilityEvaluation(entryId,itemIdx,verdict){
   const evaluation={
+    inScope:el('eval-in-scope').value,
+    rangeCapable:el('eval-range-capable').value,
+    accuracyAchievable:el('eval-accuracy-achievable').value,
     refAvailable:el('eval-ref-available').value,
-    personnelAvailable:el('eval-personnel-available').value,
     methodExists:el('eval-method-exists').value,
+    personnelAvailable:el('eval-personnel-available').value,
+    environmentSuitable:el('eval-environment-suitable').value,
+    specialHandling:el('eval-special-handling').value,
+    onsiteLogistics:el('eval-onsite-logistics')?.value||'',
+    turnaroundRealistic:el('eval-turnaround-realistic').value,
     meetsRequirement:el('eval-meets-requirement').value,
     notes:el('eval-notes').value.trim()
   };
