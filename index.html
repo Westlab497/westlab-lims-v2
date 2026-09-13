@@ -949,6 +949,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-sub">Enquiry-to-collection status pipeline</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openSalesTrackerDashboard()">📊 Performance Dashboard</button>
           <button class="btn btn-outline" onclick="exportTrackerExcel('sales')">📊 Excel</button>
           <button class="btn btn-outline" onclick="exportTrackerPdf('sales')">📄 PDF</button>
           <button class="btn btn-primary" onclick="openTrackerEntryModal('sales')">+ New Entry</button>
@@ -1574,6 +1575,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Downloads a complete snapshot of every job, customer, staff record, reference equipment, and all other system data as a single file to your computer. Recommended weekly — if your Downloads folder is synced to OneDrive, this backs up there automatically too.</div>
           <div id="backup-status" style="font-size:11px;color:var(--text-muted);margin-bottom:10px;"></div>
           <button class="btn btn-primary btn-sm" id="backup-export-btn" onclick="exportFullBackup()">💾 Export Full Backup</button>
+        </div>
+      </div>
+
+      <!-- Quotation Log Migration -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">📈 Migrate Quotation Log to Sales Tracker</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Sales Tracker now covers everything Quotation Log did — multi-item quoting, pricing, and Won/Lost tracking — plus the capability review workflow. Run this once to bring your existing quotation history into Sales Tracker. This cannot be undone, and Quotation Log's own data stays untouched either way.</div>
+          <button class="btn btn-outline btn-sm" onclick="migrateQuotationsToSalesTracker()">📈 Migrate Quotations Now</button>
         </div>
       </div>
 
@@ -3719,7 +3729,7 @@ function applyRoleUI(){
   el('nav-customers').classList.toggle('hidden-nav', hr);
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
   el('nav-price-ref').classList.toggle('hidden-nav', !canViewPriceReference(currentUser));
-  el('nav-quotations').classList.toggle('hidden-nav', !canLogQuotation(currentUser));
+  el('nav-quotations').classList.add('hidden-nav'); // Retired — superseded by Sales Tracker (Chapter 31). Data kept intact for migration/history only.
   el('nav-sales-tracker').classList.toggle('hidden-nav', !canUseSalesTracker(currentUser));
   el('nav-purchasing-tracker').classList.toggle('hidden-nav', !canUsePurchasingTracker(currentUser));
   el('nav-receiving-log').classList.toggle('hidden-nav', !canCreateJobs(currentUser));
@@ -7713,73 +7723,124 @@ function renderPurchasingTrackerPage(){ renderTrackerPage('purchasing'); }
 function renderCapabilityReviewQueue(){
   const box=el('capability-review-queue'); if(!box)return;
   if(!canReviewCapability(currentUser)){ box.innerHTML=''; return; }
-  const pending=_salesTracker.filter(e=>e.status==='Pending Technical Review'&&!e.capabilityVerdict);
-  if(!pending.length){ box.innerHTML=''; return; }
+  // Flatten to one row per unreviewed item, across every entry still in Pending Technical Review
+  const rows=[];
+  _salesTracker.filter(e=>e.status==='Pending Technical Review').forEach(e=>{
+    (e.items||[]).forEach((it,itemIdx)=>{ if(!it.capabilityVerdict) rows.push({entry:e,item:it,itemIdx}); });
+  });
+  if(!rows.length){ box.innerHTML=''; return; }
   box.innerHTML=`<div class="card" style="border:1px solid #fdba74;background:#fff7ed;">
     <div style="padding:12px 16px;">
-      <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:8px;">🔍 Capability Review Queue (${pending.length})</div>
-      ${pending.map(e=>`<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:8px;">🔍 Capability Review Queue (${rows.length} item${rows.length!==1?'s':''})</div>
+      ${rows.map(({entry,item,itemIdx})=>`<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
           <div style="font-size:13px;">
-            <strong>${e.name}</strong><br/>
-            <span style="color:var(--text-muted);">${e.equipment||'—'}${e.spec?' · Spec: '+e.spec:''}${e.model?' · Model: '+e.model:''}</span>
-            ${e.remark?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${e.remark}</div>`:''}
+            <strong>${entry.name}</strong> <span style="font-size:11px;color:var(--text-muted);">— ${item.eqName}</span><br/>
+            <span style="color:var(--text-muted);">${item.brand?'Brand: '+item.brand+' · ':''}${item.model?'Model: '+item.model+' · ':''}${item.spec?'Spec: '+item.spec:''}${item.range?' · Range: '+item.range:''}</span>
+            ${entry.remark?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${entry.remark}</div>`:''}
           </div>
           <div style="white-space:nowrap;">
-            <button class="btn btn-primary btn-sm" onclick="setCapabilityVerdict('${e.id}','Can Do')">✅ Can Do</button>
-            <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="setCapabilityVerdict('${e.id}','Cannot Do')">❌ Cannot Do</button>
+            <button class="btn btn-primary btn-sm" onclick="setCapabilityVerdict('${entry.id}',${itemIdx},'Can Do')">✅ Can Do</button>
+            <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="setCapabilityVerdict('${entry.id}',${itemIdx},'Cannot Do')">❌ Cannot Do</button>
           </div>
         </div>
       </div>`).join('')}
     </div>
   </div>`;
 }
-async function setCapabilityVerdict(entryId,verdict){
+async function setCapabilityVerdict(entryId,itemIdx,verdict){
   if(!canReviewCapability(currentUser)){alert('Only Technical Manager, Admin, or Managing Director can review capability.');return;}
-  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry)return;
-  entry.capabilityVerdict=verdict;
-  entry.capabilityReviewedBy=currentUser;
-  entry.capabilityReviewedAt=new Date().toISOString();
-  // "Can Do" just unlocks progression — status stays put until someone manually moves it forward
-  // once they actually generate the quotation. "Cannot Do" actively moves to the external-check stage.
-  if(verdict==='Cannot Do') entry.status='Checking External Capability';
+  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry||!entry.items||!entry.items[itemIdx])return;
+  const item=entry.items[itemIdx];
+  item.capabilityVerdict=verdict;
+  item.capabilityReviewedBy=currentUser;
+  item.capabilityReviewedAt=new Date().toISOString();
+  // "Can Do" just unlocks progression for this item — the entry's overall status stays put until
+  // someone manually moves it forward. "Cannot Do" moves the WHOLE entry to external-check ONLY if
+  // every item has now been reviewed and none have cleared yet — otherwise other items may still be
+  // usable for a quote, so the entry stays in review.
+  const allReviewed=entry.items.every(it=>it.capabilityVerdict);
+  const anyCleared=entry.items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
+  if(allReviewed&&!anyCleared) entry.status='Checking External Capability';
   if(!entry.statusHistory) entry.statusHistory=[];
-  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:`Capability review: ${verdict}`});
+  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:`Capability review (${item.eqName}): ${verdict}`});
   await saveSalesTracker();
   renderTrackerPage('sales');
-  showToast(`${verdict==='Can Do'?'✅':'❌'} Marked "${verdict}"`,'success',3000);
-  addAudit('📈',`Sales Tracker — ${USERS[currentUser]?.name||currentUser} reviewed ${entry.name} — ${verdict}`);
+  showToast(`${verdict==='Can Do'?'✅':'❌'} "${item.eqName}" marked "${verdict}"`,'success',3000);
+  addAudit('📈',`Sales Tracker — ${USERS[currentUser]?.name||currentUser} reviewed ${entry.name} (${item.eqName}) — ${verdict}`);
 }
-async function setExternalCapabilityFound(entryId){
-  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry)return;
-  if(!confirm(`Mark external capability found for "${entry.name}"? This unlocks moving to Quotation Generated.`))return;
-  entry.capabilityVerdict='Can Do (External)';
-  // Status stays at "Checking External Capability" — unlocked now, but still a manual choice to advance
-  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:'External partner found'});
+async function setExternalCapabilityFound(entryId,itemIdx){
+  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry||!entry.items||!entry.items[itemIdx])return;
+  const item=entry.items[itemIdx];
+  if(!confirm(`Mark external capability found for "${item.eqName}"? This unlocks moving to Quotation Generated.`))return;
+  item.capabilityVerdict='Can Do (External)';
+  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:`External partner found (${item.eqName})`});
   await saveSalesTracker();
   renderTrackerPage('sales');
   showToast('✅ External capability confirmed — you can now move this to Quotation Generated','success',4000);
-  addAudit('📈',`Sales Tracker — external capability found for ${entry.name}`);
+  addAudit('📈',`Sales Tracker — external capability found for ${entry.name} (${item.eqName})`);
 }
-async function createLinkedPurchasingEntry(salesEntryId){
-  const salesEntry=_salesTracker.find(e=>e.id===salesEntryId); if(!salesEntry)return;
+async function createLinkedPurchasingEntry(salesEntryId,itemIdx){
+  const salesEntry=_salesTracker.find(e=>e.id===salesEntryId); if(!salesEntry||!salesEntry.items||!salesEntry.items[itemIdx])return;
+  const item=salesEntry.items[itemIdx];
   if(!canUsePurchasingTracker(currentUser)){alert('Only Admin/Manager can create a Purchasing Tracker entry.');return;}
   const entry={
     id:'TRK-'+Date.now(),type:'purchasing',month:toLocalDateStr(new Date()).slice(0,7),
-    name:`External capability check — ${salesEntry.equipment||salesEntry.name}`,
+    name:`External capability check — ${item.eqName}`,
     status:'Requirement Identified',
-    remark:`Linked to Sales Tracker enquiry for ${salesEntry.name}. Equipment: ${salesEntry.equipment||'—'}, Spec: ${salesEntry.spec||'—'}, Model: ${salesEntry.model||'—'}`,
+    remark:`Linked to Sales Tracker enquiry for ${salesEntry.name}. Equipment: ${item.eqName}, Brand: ${item.brand||'—'}, Model: ${item.model||'—'}, Spec: ${item.spec||'—'}`,
     createdAt:new Date().toISOString(),createdBy:currentUser,
     statusHistory:[{status:'Requirement Identified',date:new Date().toISOString(),by:currentUser}],
-    linkedSalesTrackerId:salesEntryId
+    linkedSalesTrackerId:salesEntryId, linkedSalesItemIdx:itemIdx
   };
   _purchasingTracker.push(entry);
-  salesEntry.linkedPurchasingTrackerId=entry.id;
+  item.linkedPurchasingTrackerId=entry.id;
   await savePurchasingTracker();
   await saveSalesTracker();
   renderTrackerPage('sales');
   showToast('✅ Linked Purchasing Tracker entry created','success',3000);
-  addAudit('🛒',`Purchasing Tracker entry created to check external capability for ${salesEntry.name}`);
+  addAudit('🛒',`Purchasing Tracker entry created to check external capability for ${salesEntry.name} (${item.eqName})`);
+}
+
+// ── One-time migration: convert every Quotation Log entry into a Sales Tracker entry ──
+// Historical Won/Lost outcomes map directly (same field names); capability is marked
+// "Can Do" retroactively since these were already real, actioned quotations at the time.
+async function migrateQuotationsToSalesTracker(){
+  if(!isAdmin(currentUser)){alert('Only Admin can run this migration.');return;}
+  if(!_quotations.length){alert('No quotations found to migrate.');return;}
+  if(!confirm(`This will convert all ${_quotations.length} Quotation Log entries into Sales Tracker entries. This cannot be undone. Continue?`))return;
+  let migrated=0;
+  _quotations.forEach(q=>{
+    const items=(q.items||[]).map(it=>({
+      id:'SI-'+Date.now()+'-'+Math.floor(Math.random()*10000),
+      eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',spec:'',range:'',
+      calType:it.calType||'Lab',quantity:'',price:it.price||0,
+      capabilityVerdict:'Can Do',capabilityReviewedBy:'(migrated)',capabilityReviewedAt:q.quotedAt||new Date().toISOString(),
+      outcome:it.status||'Pending',
+      wonJobNo:it.wonJobNo||null
+    }));
+    const allDecided=items.length>0&&items.every(it=>it.outcome!=='Pending');
+    const wonItem=items.find(it=>it.wonJobNo);
+    const entry={
+      id:'TRK-MIG-'+Date.now()+'-'+Math.floor(Math.random()*10000),
+      type:'sales', month:(q.quotedAt||'').slice(0,7)||toLocalDateStr(new Date()).slice(0,7),
+      name:q.custName||'', custId:q.custId||null,
+      salesPersonnel:q.quotedBy||'',
+      status:allDecided?'Closed':'Quotation Generated',
+      remark:'Migrated from Quotation Log',
+      jobNo:wonItem?wonItem.wonJobNo:null,
+      items,
+      createdAt:q.quotedAt||new Date().toISOString(),createdBy:q.quotedBy||currentUser,
+      statusHistory:[{status:allDecided?'Closed':'Quotation Generated',date:new Date().toISOString(),by:currentUser,note:'Migrated from Quotation Log'}],
+      migratedFromQuotationId:q.id
+    };
+    _salesTracker.push(entry);
+    migrated++;
+  });
+  await saveSalesTracker();
+  renderTrackerPage('sales');
+  showToast(`✅ Migrated ${migrated} quotation(s) into Sales Tracker`,'success',4000);
+  addAudit('📈',`Admin migrated ${migrated} Quotation Log entries into Sales Tracker`);
 }
 
 function renderTrackerPage(type){
@@ -7804,33 +7865,40 @@ function renderTrackerPage(type){
     return;
   }
   box.innerHTML=`<div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>Month</th><th>${nameLabel}</th><th>Status</th><th>Remark</th><th>Linked</th><th></th></tr></thead>
+    <thead><tr><th>Month</th><th>${nameLabel}</th>${type==='sales'?'<th>Sales Person</th><th>Items</th>':''}<th>Status</th><th>Remark</th><th>Linked</th><th></th></tr></thead>
     <tbody>
     ${list.map(e=>{
       const stages=trackerStages(type);
+      const items=e.items||[];
+      const anyCleared=items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
       const linkedHtml=type==='sales'
         ?(e.jobNo?`<a href="#" onclick="event.preventDefault();showView('equipment');el('equipment-search').value='${e.jobNo}';renderEquipmentTable();">🔧 ${e.jobNo}</a>`:e.custId?'👤 Linked customer':'—')
         :(e.refEqId?`<a href="#" onclick="event.preventDefault();showView('ref-eq');">🔩 Ref Equipment</a>`:'—');
+      const totalPrice=items.reduce((s,it)=>s+(it.price||0),0);
+      const externalCheckButtons=type==='sales'?items.map((it,idx)=>{
+        if(it.capabilityVerdict!=='Cannot Do'||['Can Do (External)'].includes(it.capabilityVerdict))return'';
+        return it.linkedPurchasingTrackerId
+          ?`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;margin-bottom:2px;" onclick="setExternalCapabilityFound('${e.id}',${idx})" title="Mark vendor found for ${it.eqName}">✅ ${it.eqName} Found</button>`
+          :`<button class="btn btn-outline btn-sm" style="margin-bottom:2px;" onclick="createLinkedPurchasingEntry('${e.id}',${idx})" title="Track checking external vendors for ${it.eqName}">🛒 Check: ${it.eqName}</button>`;
+      }).filter(Boolean).join('<br/>'):'';
       return `<tr>
         <td>${e.month||'—'}</td>
         <td><strong>${e.name}</strong></td>
+        ${type==='sales'?`<td style="font-size:12px;">${USERS[e.salesPersonnel]?.name||e.salesPersonnel||'—'}</td>
+        <td style="font-size:11px;">${items.map(it=>`${it.eqName}${it.capabilityVerdict?` <span style="color:${it.capabilityVerdict==='Cannot Do'?'var(--red)':'var(--green)'};">(${it.capabilityVerdict})</span>`:' <span style="color:var(--text-muted);">(pending review)</span>'}${it.outcome&&it.outcome!=='Pending'?` <span style="font-weight:700;color:${it.outcome==='Won'?'var(--green)':'var(--red)'};">· ${it.outcome}</span>`:''}`).join('<br/>')}${totalPrice?`<div style="margin-top:3px;font-weight:700;">RM ${totalPrice.toFixed(2)}</div>`:''}</td>`:''}
         <td>
           <select class="form-control" style="font-size:11px;padding:4px 8px;" onchange="updateTrackerStatus('${type}','${e.id}',this.value)">
             ${stages.map((s,i)=>{
-              const isGated=type==='sales'&&s==='Quotation Generated'&&!['Can Do','Can Do (External)'].includes(e.capabilityVerdict);
+              const isGated=type==='sales'&&s==='Quotation Generated'&&!anyCleared;
               return `<option value="${s}" ${s===e.status?'selected':''} ${isGated?'disabled':''}>${i+1}. ${s}${isGated?' 🔒':''}</option>`;
             }).join('')}
           </select>
-          ${type==='sales'&&e.capabilityVerdict?`<div style="font-size:10px;margin-top:3px;color:${e.capabilityVerdict==='Cannot Do'?'var(--red)':'var(--green)'};">✓ ${e.capabilityVerdict}</div>`:''}
         </td>
         <td style="max-width:220px;font-size:12px;">${e.remark||'—'}</td>
         <td style="font-size:12px;">${linkedHtml}</td>
         <td style="white-space:nowrap;">
-          ${type==='sales'&&e.status==='Checking External Capability'?`
-            ${e.linkedPurchasingTrackerId?`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="setExternalCapabilityFound('${e.id}')" title="Mark that a vendor was found">✅ Found</button>`
-              :`<button class="btn btn-outline btn-sm" onclick="createLinkedPurchasingEntry('${e.id}')" title="Track checking with external vendors">🛒 Check External</button>`}
-          `:''}
-          <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
+          ${externalCheckButtons?`<div style="margin-bottom:4px;">${externalCheckButtons}</div>`:''}
+          <button class="btn btn-outline btn-sm" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
           <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>
         </td>
       </tr>`;
@@ -7842,11 +7910,13 @@ function renderTrackerPage(type){
 function openTrackerEntryModal(type,entryId){
   if(!trackerCanUse(type)){alert('You do not have access to this tracker.');return;}
   const existing=entryId?trackerArr(type).find(e=>e.id===entryId):null;
-  const nameLabel=type==='sales'?'Customer':'Vendor';
+  const nameLabel=type==='sales'?'Customer / Prospect':'Vendor';
   const stages=trackerStages(type);
+  _salesDraftItems=(existing&&existing.items)?JSON.parse(JSON.stringify(existing.items)):[];
+  const salesStaff=(_staff||[]).filter(s=>s.active!==false&&['Sales','Coordinator','Admin','Managing Director'].includes(s.role));
   let ov=document.getElementById('tracker-entry-overlay');
   if(!ov){ov=document.createElement('div');ov.id='tracker-entry-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:460px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
       <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} ${type==='sales'?'Sales':'Purchasing'} Entry</span>
       <button onclick="document.getElementById('tracker-entry-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
@@ -7856,7 +7926,8 @@ function openTrackerEntryModal(type,entryId){
         <div class="form-group"><label class="form-label">Month <span class="req">*</span></label><input class="form-control" type="month" id="tk-month" value="${existing?.month||toLocalDateStr(new Date()).slice(0,7)}"/></div>
         <div class="form-group"><label class="form-label">Status</label>
           <select class="form-control" id="tk-status">${stages.map(s=>{
-            const isGated=type==='sales'&&s==='Quotation Generated'&&!(existing&&['Can Do','Can Do (External)'].includes(existing.capabilityVerdict));
+            const anyCleared=type==='sales'&&existing&&(existing.items||[]).some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
+            const isGated=type==='sales'&&s==='Quotation Generated'&&!anyCleared;
             return `<option value="${s}" ${existing?.status===s?'selected':''} ${isGated?'disabled':''}>${s}${isGated?' 🔒 (needs capability review)':''}</option>`;
           }).join('')}</select>
         </div>
@@ -7870,19 +7941,26 @@ function openTrackerEntryModal(type,entryId){
         <input type="hidden" id="tk-ref-id" value="${existing?.refEqId||''}"/>
       </div>
       ${type==='sales'?`
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Equipment / Service Requested</label><input class="form-control" id="tk-equipment" value="${existing?.equipment||''}" placeholder="e.g. Digital Pressure Gauge"/></div>
+      <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Prospect Contact (fill in if not yet an existing customer)</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="tk-prospect-phone" value="${existing?.prospectPhone||''}"/></div>
+          <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="tk-prospect-email" value="${existing?.prospectEmail||''}"/></div>
+        </div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Spec</label><input class="form-control" id="tk-spec" value="${existing?.spec||''}" placeholder="e.g. 0-100 bar"/></div>
-        <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="tk-model" value="${existing?.model||''}" placeholder="e.g. WIKA CPG1500"/></div>
+      <div class="form-group"><label class="form-label">Assigned Sales Personnel</label>
+        <select class="form-control" id="tk-sales-personnel">
+          <option value="">— Unassigned —</option>
+          ${salesStaff.map(s=>`<option value="${s.username}" ${(existing?.salesPersonnel||currentUser)===s.username?'selected':''}>${s.name||s.username}</option>`).join('')}
+        </select>
       </div>
       <div class="form-group"><label class="form-label">Linked Job No. (optional)</label><input class="form-control" id="tk-jobno" value="${existing?.jobNo||''}" placeholder="e.g. WL26-00123"/></div>
-      ${existing&&existing.capabilityVerdict?`<div class="form-group" style="background:${existing.capabilityVerdict==='Cannot Do'?'#fef2f2':'#f0fdf4'};border-radius:8px;padding:10px 14px;font-size:12px;">
-        <strong>Capability Review:</strong> ${existing.capabilityVerdict} — by ${USERS[existing.capabilityReviewedBy]?.name||existing.capabilityReviewedBy||''} (${existing.capabilityReviewedAt?fmtDateShort(existing.capabilityReviewedAt):''})
-      </div>`:''}
+      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Items Enquired</div>
+      <div id="sales-items-list"></div>
+      <button class="btn btn-outline btn-sm" onclick="addSalesItemRow()">+ Add Item</button>
       `:''}
-      <div class="form-group"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${existing?.remark||''}</textarea></div>
+      <div class="form-group" style="margin-top:12px;"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${existing?.remark||''}</textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('tracker-entry-overlay').style.display='none'">Cancel</button>
         <button class="btn btn-primary" onclick="saveTrackerEntry('${type}','${entryId||''}')">${existing?'Save Changes':'Add Entry'}</button>
@@ -7890,8 +7968,67 @@ function openTrackerEntryModal(type,entryId){
     </div>
   </div>`;
   ov.style.display='flex';
+  if(type==='sales'){
+    if(!_salesDraftItems.length) addSalesItemRow();
+    else renderSalesItemsList();
+  }
 }
 
+// ── Multi-item support for Sales Tracker enquiries ──
+function addSalesItemRow(){
+  _salesDraftItems.push({id:'SI-'+Date.now()+'-'+Math.floor(Math.random()*1000),eqName:'',brand:'',model:'',spec:'',range:'',calType:'Lab',quantity:'',price:0,capabilityVerdict:null,outcome:'Pending'});
+  renderSalesItemsList();
+}
+function removeSalesItemRow(idx){
+  _salesDraftItems.splice(idx,1);
+  renderSalesItemsList();
+}
+function updateSalesItemField(idx,field,val){
+  if(_salesDraftItems[idx]) _salesDraftItems[idx][field]=val;
+}
+function renderSalesItemsList(){
+  const box=el('sales-items-list'); if(!box)return;
+  const VERDICT_COLOR={'Can Do':'#166534','Cannot Do':'#991b1b','Can Do (External)':'#166534'};
+  box.innerHTML=_salesDraftItems.map((it,idx)=>`
+    <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <strong style="font-size:12px;">Item ${idx+1}</strong>
+        <button onclick="removeSalesItemRow(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
+      </div>
+      <div class="form-group" style="margin-bottom:6px;">
+        <label class="form-label">Equipment Name</label>
+        <input class="form-control" value="${it.eqName||''}" oninput="updateSalesItemField(${idx},'eqName',this.value)"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Brand</label><input class="form-control" value="${it.brand||''}" oninput="updateSalesItemField(${idx},'brand',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Model</label><input class="form-control" value="${it.model||''}" oninput="updateSalesItemField(${idx},'model',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Spec</label><input class="form-control" value="${it.spec||''}" oninput="updateSalesItemField(${idx},'spec',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Range</label><input class="form-control" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Calibration Type</label>
+          <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value)">
+            <option value="Lab" ${it.calType==='Lab'?'selected':''}>Lab</option>
+            <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Quantity <span style="font-weight:normal;color:var(--text-muted);">(or leave blank if listing individually)</span></label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Price Quoted (RM)</label><input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0)"/></div>
+        <div class="form-group"><label class="form-label">Outcome</label>
+          <select class="form-control" onchange="updateSalesItemField(${idx},'outcome',this.value)">
+            <option value="Pending" ${(it.outcome||'Pending')==='Pending'?'selected':''}>Pending</option>
+            <option value="Won" ${it.outcome==='Won'?'selected':''}>Won</option>
+            <option value="Lost" ${it.outcome==='Lost'?'selected':''}>Lost</option>
+          </select>
+        </div>
+      </div>
+      ${it.capabilityVerdict?`<div style="font-size:11px;font-weight:700;color:${VERDICT_COLOR[it.capabilityVerdict]||'#64748b'};margin-top:4px;">✓ Capability: ${it.capabilityVerdict}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">⏳ Awaiting capability review</div>`}
+    </div>`).join('');
+}
 function suggestTrackerName(type,query){
   const box=el('tk-name-suggestions'); if(!box)return;
   const q=(query||'').trim().toLowerCase();
@@ -7920,18 +8057,22 @@ document.addEventListener('click',e=>{
 
 async function saveTrackerEntry(type,entryId){
   const name=el('tk-name').value.trim();
-  if(!name){alert(`Please enter the ${type==='sales'?'customer':'vendor'} name.`);return;}
+  if(!name){alert(`Please enter the ${type==='sales'?'customer/prospect':'vendor'} name.`);return;}
   const month=el('tk-month').value;
   if(!month){alert('Please select a month.');return;}
+  if(type==='sales'&&!_salesDraftItems.some(it=>it.eqName)){alert('Please add at least one item with an Equipment Name.');return;}
   const arr=trackerArr(type);
   let entry=entryId?arr.find(e=>e.id===entryId):null;
   const isNew=!entry;
   if(isNew){ entry={id:'TRK-'+Date.now(),type,createdAt:new Date().toISOString(),createdBy:currentUser,statusHistory:[]}; arr.push(entry); }
   const oldStatus=entry.status;
   let newStatus=el('tk-status').value;
-  if(type==='sales'&&newStatus==='Quotation Generated'&&!['Can Do','Can Do (External)'].includes(entry.capabilityVerdict)){
-    alert('This enquiry needs a Technical Manager capability review before a quotation can be generated.');
-    return;
+  if(type==='sales'){
+    const anyCleared=_salesDraftItems.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
+    if(newStatus==='Quotation Generated'&&!anyCleared){
+      alert('At least one item needs a cleared capability review before a quotation can be generated.');
+      return;
+    }
   }
   entry.month=month;
   entry.name=name;
@@ -7940,9 +8081,10 @@ async function saveTrackerEntry(type,entryId){
   entry.remark=el('tk-remark').value.trim();
   if(type==='sales'){
     entry.jobNo=el('tk-jobno')?.value.trim()||null;
-    entry.equipment=el('tk-equipment')?.value.trim()||'';
-    entry.spec=el('tk-spec')?.value.trim()||'';
-    entry.model=el('tk-model')?.value.trim()||'';
+    entry.prospectPhone=el('tk-prospect-phone')?.value.trim()||'';
+    entry.prospectEmail=el('tk-prospect-email')?.value.trim()||'';
+    entry.salesPersonnel=el('tk-sales-personnel')?.value||(isNew?currentUser:entry.salesPersonnel)||'';
+    entry.items=_salesDraftItems.filter(it=>it.eqName);
     // Every new enquiry goes straight into the capability review queue — no skip path
     if(isNew&&newStatus==='Enquiry Received') newStatus='Pending Technical Review';
   }
@@ -7957,8 +8099,8 @@ async function saveTrackerEntry(type,entryId){
 
 async function updateTrackerStatus(type,entryId,newStatus){
   const entry=trackerArr(type).find(e=>e.id===entryId); if(!entry)return;
-  if(type==='sales'&&newStatus==='Quotation Generated'&&!['Can Do','Can Do (External)'].includes(entry.capabilityVerdict)){
-    alert('This enquiry needs a Technical Manager capability review before a quotation can be generated.');
+  if(type==='sales'&&newStatus==='Quotation Generated'&&!(entry.items||[]).some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict))){
+    alert('At least one item needs a cleared capability review before a quotation can be generated.');
     renderTrackerPage(type); // revert the dropdown to its real current status
     return;
   }
@@ -11450,6 +11592,7 @@ function getRefStatus(dueDate){
 // as two genuinely separate things — blending them into one combined status was tried
 // and found to lose information, so each is now surfaced independently everywhere.
 let _refEqSortField=null, _refEqSortDir='asc';
+let _salesDraftItems=[]; // multi-item state for the Sales Tracker entry modal, mirrors Quotation Log's _qtDraftItems
 function sortRefEqTable(field){
   if(_refEqSortField===field){ _refEqSortDir=_refEqSortDir==='asc'?'desc':'asc'; }
   else { _refEqSortField=field; _refEqSortDir='asc'; }
@@ -13401,6 +13544,153 @@ function renderQtDashboardContent(){
     </table>
 
     <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">🔍 Capability Gaps — Requested But Not Currently Offered</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 6px;text-align:left;">Requested Service</th><th style="padding:5px 6px;">Times Asked</th><th style="padding:5px 6px;">Potential Value (RM)</th><th style="padding:5px 6px;text-align:left;">Customers</th></tr></thead>
+      <tbody>${gapRows.map(r=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:5px 6px;">${r.eqName}</td>
+        <td style="padding:5px 6px;text-align:center;">${r.count}</td>
+        <td style="padding:5px 6px;text-align:center;">${r.value.toFixed(0)}</td>
+        <td style="padding:5px 6px;font-size:10.5px;color:var(--text-muted);">${[...r.customers].join(', ')}</td>
+      </tr>`).join('')||'<tr><td colspan="4" style="padding:8px;text-align:center;color:var(--text-muted);">No capability gaps recorded yet.</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+// ── Sales Tracker Performance Dashboard — replaces the old Quotation Dashboard,
+// pulling the same metrics from Sales Tracker's item-level data instead. ──
+function openSalesTrackerDashboard(){
+  if(!canViewQuotationDashboard(currentUser)){alert('You do not have access to this dashboard.');return;}
+  let ov=document.getElementById('st-dashboard-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='st-dashboard-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:900px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📊 Sales Performance Dashboard</span>
+      <button onclick="document.getElementById('st-dashboard-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-primary" id="std-tab-overall" onclick="setStDashboardTab('overall')">Overall</button>
+          <button class="btn btn-sm btn-outline" id="std-tab-lab" onclick="setStDashboardTab('lab')">Lab Only</button>
+          <button class="btn btn-sm btn-outline" id="std-tab-onsite" onclick="setStDashboardTab('onsite')">Onsite Only</button>
+        </div>
+        <select class="form-control" id="std-period-select" onchange="renderStDashboardContent()" style="width:auto;font-size:12px;padding:6px 10px;">
+          <option value="all">All Time</option>
+          <option value="month">This Month</option>
+          <option value="quarter">This Quarter</option>
+          <option value="half">This Half-Year</option>
+          <option value="year">This Year</option>
+        </select>
+      </div>
+      <div id="st-dashboard-content"></div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  setStDashboardTab('overall');
+}
+let _stDashTab='overall';
+function setStDashboardTab(tab){
+  _stDashTab=tab;
+  ['overall','lab','onsite'].forEach(t=>{
+    const btn=el(`std-tab-${t}`);
+    if(btn) btn.className=t===tab?'btn btn-sm btn-primary':'btn btn-sm btn-outline';
+  });
+  renderStDashboardContent();
+}
+function renderStDashboardContent(){
+  const box=el('st-dashboard-content'); if(!box)return;
+  const filterType=it=>_stDashTab==='overall'?true:(_stDashTab==='lab'?it.calType==='Lab':it.calType==='Onsite');
+
+  // Period filter — based on when the enquiry was originally logged
+  const period=el('std-period-select')?.value||'all';
+  const now=new Date();
+  const periodFilter=e=>{
+    if(period==='all')return true;
+    const ed=new Date((e.createdAt||'').slice(0,10)+'T00:00:00');
+    if(isNaN(ed))return true;
+    if(period==='month') return ed.getFullYear()===now.getFullYear()&&ed.getMonth()===now.getMonth();
+    if(period==='quarter') return ed.getFullYear()===now.getFullYear()&&Math.floor(ed.getMonth()/3)===Math.floor(now.getMonth()/3);
+    if(period==='half') return ed.getFullYear()===now.getFullYear()&&Math.floor(ed.getMonth()/6)===Math.floor(now.getMonth()/6);
+    if(period==='year') return ed.getFullYear()===now.getFullYear();
+    return true;
+  };
+  const allItems=_salesTracker.filter(periodFilter).flatMap(e=>(e.items||[]).filter(filterType).map(it=>({...it,custName:e.name,entryJobNo:e.jobNo})));
+
+  const wonItems=allItems.filter(it=>it.outcome==='Won');
+  const totalWonValue=wonItems.reduce((s,it)=>s+(it.price||0),0);
+
+  // Confirmed Revenue — cross-reference each Won item's linked job (via the enquiry's jobNo,
+  // since Sales Tracker links one job per enquiry rather than per individual item) to see if
+  // it actually reached Completed, vs still in progress, vs came back Returned - Abnormal.
+  let confirmedRevenue=0, atRiskValue=0, atRiskCount=0;
+  wonItems.forEach(it=>{
+    const itemValue=it.price||0;
+    const jobNo=it.wonJobNo||it.entryJobNo;
+    if(!jobNo){ atRiskValue+=itemValue; atRiskCount++; return; }
+    const linkedJob=getJob(jobNo);
+    const linkedItem=linkedJob?.items?.find(ji=>ji.eqName===it.eqName)||linkedJob?.items?.[0];
+    if(linkedItem?.status==='Completed'){ confirmedRevenue+=itemValue; }
+    else { atRiskValue+=itemValue; atRiskCount++; }
+  });
+
+  // Per-equipment breakdown (items that were actually cleared as capable, i.e. "offered")
+  const byEq={};
+  allItems.filter(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict)).forEach(it=>{
+    const key=(it.eqName||'').trim().toLowerCase();
+    if(!byEq[key]) byEq[key]={eqName:it.eqName,quoted:0,won:0,lost:0,wonPrices:[],lostPrices:[]};
+    byEq[key].quoted++;
+    if(it.outcome==='Won'){ byEq[key].won++; byEq[key].wonPrices.push(it.price||0); }
+    if(it.outcome==='Lost'){ byEq[key].lost++; byEq[key].lostPrices.push(it.price||0); }
+  });
+  const eqRows=Object.values(byEq).sort((a,b)=>b.quoted-a.quoted);
+  const top10ByCount=[...eqRows].filter(r=>r.won>0).sort((a,b)=>b.won-a.won).slice(0,10);
+
+  // Capability gaps — items marked Cannot Do (couldn't offer this, unless external capability was found)
+  const byGap={};
+  allItems.filter(it=>it.capabilityVerdict==='Cannot Do').forEach(it=>{
+    const key=(it.eqName||'').trim().toLowerCase();
+    if(!byGap[key]) byGap[key]={eqName:it.eqName,count:0,value:0,customers:new Set()};
+    byGap[key].count++; byGap[key].value+=(it.price||0); byGap[key].customers.add(it.custName);
+  });
+  const gapRows=Object.values(byGap).sort((a,b)=>b.count-a.count);
+
+  box.innerHTML=`
+    <div class="kpi-row" style="margin-bottom:16px;">
+      <div class="kpi-mini"><div class="kpi-val" style="color:var(--green)">RM${totalWonValue.toFixed(0)}</div><div class="kpi-lbl">Won</div></div>
+      <div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)">RM${confirmedRevenue.toFixed(0)}</div><div class="kpi-lbl">Confirmed Revenue (Completed)</div></div>
+      <div class="kpi-mini"><div class="kpi-val" style="color:${atRiskValue>0?'#c84b00':'var(--text-muted)'}">RM${atRiskValue.toFixed(0)}</div><div class="kpi-lbl">At Risk / Incomplete (${atRiskCount})</div></div>
+      <div class="kpi-mini"><div class="kpi-val">${allItems.length}</div><div class="kpi-lbl">Total Items Enquired</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;margin-top:-10px;">💡 "Confirmed Revenue" only counts Won items whose linked job has actually reached Completed status. "At Risk / Incomplete" is the gap — jobs still in progress, or returned as Abnormal without being calibrated.</div>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">🏆 Top 10 — By Times Won</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 8px;text-align:left;">Equipment</th><th style="padding:5px 8px;">Won</th><th style="padding:5px 8px;">Value Won (RM)</th></tr></thead>
+      <tbody>${top10ByCount.map(r=>`<tr style="border-bottom:1px solid var(--border);"><td style="padding:5px 8px;">${r.eqName}</td><td style="padding:5px 8px;text-align:center;">${r.won}</td><td style="padding:5px 8px;text-align:center;">${r.wonPrices.reduce((s,p)=>s+p,0).toFixed(0)}</td></tr>`).join('')||'<tr><td colspan="3" style="padding:8px;text-align:center;color:var(--text-muted);">No won items yet.</td></tr>'}</tbody>
+    </table>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">📈 Win/Loss Breakdown by Equipment</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 6px;text-align:left;">Equipment</th><th style="padding:5px 6px;">Quoted</th><th style="padding:5px 6px;">Won</th><th style="padding:5px 6px;">Lost</th><th style="padding:5px 6px;">Win Rate</th><th style="padding:5px 6px;">Avg Won (RM)</th><th style="padding:5px 6px;">Avg Lost (RM)</th><th style="padding:5px 6px;">Price Gap</th></tr></thead>
+      <tbody>${eqRows.map(r=>{
+        const winRate=r.quoted?Math.round((r.won/r.quoted)*100):0;
+        const avgWon=r.wonPrices.length?r.wonPrices.reduce((s,p)=>s+p,0)/r.wonPrices.length:0;
+        const avgLost=r.lostPrices.length?r.lostPrices.reduce((s,p)=>s+p,0)/r.lostPrices.length:0;
+        const gap=avgWon>0&&avgLost>0?Math.round(((avgLost-avgWon)/avgWon)*100):null;
+        return `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:5px 6px;">${r.eqName}</td>
+          <td style="padding:5px 6px;text-align:center;">${r.quoted}</td>
+          <td style="padding:5px 6px;text-align:center;">${r.won}</td>
+          <td style="padding:5px 6px;text-align:center;">${r.lost}</td>
+          <td style="padding:5px 6px;text-align:center;color:${winRate>=60?'var(--green)':winRate>=30?'#c84b00':'var(--red)'};font-weight:700;">${winRate}%</td>
+          <td style="padding:5px 6px;text-align:center;">${avgWon?avgWon.toFixed(0):'—'}</td>
+          <td style="padding:5px 6px;text-align:center;">${avgLost?avgLost.toFixed(0):'—'}</td>
+          <td style="padding:5px 6px;text-align:center;${gap!==null&&gap>10?'color:var(--red);font-weight:700;':''}">${gap!==null?(gap>0?'+':'')+gap+'%':'—'}</td>
+        </tr>`;
+      }).join('')||'<tr><td colspan="8" style="padding:8px;text-align:center;color:var(--text-muted);">No data yet.</td></tr>'}</tbody>
+    </table>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">🔍 Capability Gaps — Enquired But Marked "Cannot Do"</div>
     <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
       <thead><tr style="background:var(--bg);"><th style="padding:5px 6px;text-align:left;">Requested Service</th><th style="padding:5px 6px;">Times Asked</th><th style="padding:5px 6px;">Potential Value (RM)</th><th style="padding:5px 6px;text-align:left;">Customers</th></tr></thead>
       <tbody>${gapRows.map(r=>`<tr style="border-bottom:1px solid var(--border);">
