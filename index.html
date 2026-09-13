@@ -7755,6 +7755,42 @@ function populateTrackerFilters(type){
 
 function renderSalesTrackerPage(){ renderTrackerPage('sales'); }
 function renderPurchasingTrackerPage(){ renderTrackerPage('purchasing'); }
+async function exportSingleCapabilityReviewPdf(entryId,itemIdx){
+  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry||!entry.items||!entry.items[itemIdx]){alert('Item not found.');return;}
+  const item=entry.items[itemIdx];
+  if(!item.capabilityVerdict){alert('This item has not been reviewed yet.');return;}
+  const ev=item.capabilityEvaluation||{};
+  const VERDICT_COLOR={'Can Do':'#166534','Cannot Do':'#991b1b','Can Do (External)':'#166534'};
+  const row=(l,v)=>`<tr><td style="padding:6px 8px;color:#64748b;width:180px;font-size:11px;vertical-align:top;">${l}</td><td style="padding:6px 8px;font-size:12px;font-weight:600;">${v||'—'}</td></tr>`;
+  const html=`<div style="width:800px;padding:28px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:2px;">${_settings.labName||'Westlab'}</div>
+    <div style="font-size:14px;font-weight:700;color:#374151;margin-bottom:16px;">Capability Review — Individual Evaluation</div>
+    <div style="background:#f8fafc;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:700;">${entry.name}</div>
+      <div style="font-size:12px;color:#64748b;">${item.eqName}${item.brand?' · Brand: '+item.brand:''}${item.model?' · Model: '+item.model:''}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+      ${row('Spec',item.spec)}${row('Range',item.range)}${row('Calibration Type',item.calType)}${row('Quantity',item.quantity||1)}
+    </table>
+    ${item.remark?`<div style="background:#eff6ff;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;"><strong>Customer's Requirement:</strong> ${item.remark}</div>`:''}
+    <div style="text-align:center;background:${item.capabilityVerdict==='Cannot Do'?'#fef2f2':'#f0fdf4'};border-radius:8px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:11px;color:#64748b;">VERDICT</div>
+      <div style="font-size:22px;font-weight:800;color:${VERDICT_COLOR[item.capabilityVerdict]||'#374151'};">${item.capabilityVerdict}</div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:#0f1f3d;margin-bottom:8px;">Evaluation Checklist</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+      ${row('Reference Standard/Equipment Available?',ev.refAvailable)}
+      ${row('Trained Personnel Available?',ev.personnelAvailable)}
+      ${row('Method/Procedure Exists?',ev.methodExists)}
+      ${row("Meets Customer's Stated Requirement?",ev.meetsRequirement)}
+    </table>
+    ${ev.notes?`<div style="margin-bottom:16px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">Reviewer's Notes</div><div style="font-size:12px;background:#f8fafc;border-radius:8px;padding:10px 14px;">${ev.notes}</div></div>`:''}
+    <div style="border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#64748b;">
+      Reviewed by ${USERS[item.capabilityReviewedBy]?.name||item.capabilityReviewedBy||'—'} on ${item.capabilityReviewedAt?fmtDateShort(item.capabilityReviewedAt):'—'}
+    </div>
+  </div>`;
+  await exportHtmlAsPdf(html,`Westlab_Capability_Review_${entry.name.replace(/[^a-zA-Z0-9]+/g,'_')}_${item.eqName.replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`,'Individual Capability Review',1);
+}
 async function exportCapabilityReviewPdf(){
   const rows=[];
   _salesTracker.forEach(e=>{
@@ -8069,6 +8105,7 @@ function openTrackerEntryModal(type,entryId){
   if(!trackerCanUse(type)){alert('You do not have access to this tracker.');return;}
   if(type==='sales'&&!canUseSalesTracker(currentUser)){alert('Quality Manager has view-only access to Sales Tracker.');return;}
   const existing=entryId?trackerArr(type).find(e=>e.id===entryId):null;
+  _currentTrackerEditId=entryId||''; // so per-item actions (like exporting one evaluation) know which saved entry this is
   const nameLabel=type==='sales'?'Customer / Prospect':'Vendor';
   const stages=trackerStages(type);
   _salesDraftItems=(existing&&existing.items)?JSON.parse(JSON.stringify(existing.items)):[];
@@ -8221,7 +8258,7 @@ function renderSalesItemsList(){
         <input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});"/>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Total (Unit Price × Qty <span id="sales-item-qty-display-${idx}">${qty}</span>): <strong id="sales-item-total-${idx}">RM ${total.toFixed(2)}</strong></div>
       </div>
-      ${it.capabilityVerdict?`<div style="font-size:11px;font-weight:700;color:${VERDICT_COLOR[it.capabilityVerdict]||'#64748b'};margin-top:4px;">✓ Capability: ${it.capabilityVerdict}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">⏳ Awaiting capability review</div>`}
+      ${it.capabilityVerdict?`<div style="font-size:11px;font-weight:700;color:${VERDICT_COLOR[it.capabilityVerdict]||'#64748b'};margin-top:4px;">✓ Capability: ${it.capabilityVerdict} ${_currentTrackerEditId?`<a href="javascript:void(0)" onclick="exportSingleCapabilityReviewPdf('${_currentTrackerEditId}',${idx})" style="font-weight:normal;color:var(--blue);margin-left:6px;">📄 Export this evaluation</a>`:''}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">⏳ Awaiting capability review</div>`}
       ${cleared?`<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin-top:6px;">
         <input type="checkbox" ${it.clientAccepted?'checked':''} onchange="updateSalesItemField(${idx},'clientAccepted',this.checked)"/>
         Client has accepted this item (confirmed in the PO)
@@ -11945,6 +11982,7 @@ function getRefStatus(dueDate){
 // and found to lose information, so each is now surfaced independently everywhere.
 let _refEqSortField=null, _refEqSortDir='asc';
 let _salesDraftItems=[]; // multi-item state for the Sales Tracker entry modal, mirrors Quotation Log's _qtDraftItems
+let _currentTrackerEditId=''; // the saved entry ID currently being edited, if any (empty for a brand new entry)
 function sortRefEqTable(field){
   if(_refEqSortField===field){ _refEqSortDir=_refEqSortDir==='asc'?'desc':'asc'; }
   else { _refEqSortField=field; _refEqSortDir='asc'; }
