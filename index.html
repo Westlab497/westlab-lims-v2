@@ -1827,6 +1827,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <label class="form-label">Assignment Note</label>
         <input class="form-control" id="eq-assign-note" placeholder="Instructions for the engineer…"/>
       </div>
+      <div class="form-group" id="eq-soc-section"></div>
 
       <div class="form-group" id="eq-price-group" style="display:none;background:#fff7ed;border-radius:8px;padding:12px 14px;border:1px solid #fdba74;">
         <label class="form-label">💰 Price Quoted (RM)</label>
@@ -2443,6 +2444,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Accessories</label><input class="form-control" id="edit-eq-accessories" placeholder="e.g. power adapter, manual"/></div>
       </div>
       <div class="form-group"><label class="form-label">Remarks</label><textarea class="form-control" id="edit-eq-remarks" placeholder="Special instructions…"></textarea></div>
+      <div class="form-group" id="edit-eq-soc-section"></div>
       <!-- Price Reference (Admin only - hidden via JS) -->
       <div class="form-group" id="edit-price-group" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
         <label class="form-label" style="color:#c84b00;">💰 Price Quoted (RM) <span style="font-size:11px;font-weight:400;">— Admin only, not visible to staff</span></label>
@@ -3304,6 +3306,7 @@ let _custSelected=false;
 let _custModalContext='main'; // 'main' or 'endUser' — tracks which field triggered "+ Add new customer"
 const CUST_TABLE='wl_customers';
 let _extraEquipment=[];
+let _item1Soc={socRequested:false,socParameters:[]};
 let _jobsCache={};
 let _certPreviewJobNo=null;
 let _certPreviewItemIdx=0;
@@ -4736,6 +4739,8 @@ async function openNewJobModal(){
     calcPromisedDate();
     _extraEquipment=[];
     renderExtraEquipment();
+    _item1Soc={socRequested:false,socParameters:[]};
+    renderSocSection('eq-soc-section',_item1Soc);
 
     // If starting from a Quotation, pre-fill customer + all Won items now, on top of the clean reset above
     if(_startingFromQuotationId){
@@ -4915,6 +4920,8 @@ async function saveEquipment(printReceipt=false){
     assignTo:el('eq-assign-to').value||null,
     promisedDate:el('eq-promised-date')?.value||'',
     assignNote:el('eq-assign-note')?.value.trim()||'',
+    socRequested:_item1Soc.socRequested||false,
+    socParameters:_item1Soc.socParameters||[],
   };
   if(canViewPrice(currentUser)){
     const priceVal=parseFloat(el('eq-price')?.value)||0;
@@ -5557,6 +5564,88 @@ document.addEventListener('click',e=>{
 });
 
 // ── MULTI-ITEM EQUIPMENT ──
+// ══════════════════════════════════════════════════
+// STATEMENT OF CONFORMITY — captured per item, per parameter. Reusable across New Job
+// Creation (Item 1 + extra items) and Edit Job, since it operates directly on whichever
+// item object is passed in (mutations persist naturally since JS objects are by reference).
+// ══════════════════════════════════════════════════
+const SOC_SPEC_TYPES=["Manufacturer's Specification","Standard/Class","Customer's Internal Specification","Other"];
+const SOC_DECISION_RULES=['Guard-Banded Acceptance (Lab Default)','Simple Acceptance','Guard-Banded — Customer-Specified Risk %','No Decision Rule — Measurement Only'];
+const SOC_REPORTING_PREFS=['Individual (Per-Point)','Single Overall Statement','Both'];
+const SOC_BORDERLINE=['Report as Fail','Report as Indeterminate (Lab Default)','Contact Customer First'];
+
+function addSocParameter(containerId,item){
+  if(!item.socParameters) item.socParameters=[];
+  item.socParameters.push({
+    id:'SOC-'+Date.now()+'-'+Math.floor(Math.random()*1000),
+    parameterName:'', specType:SOC_SPEC_TYPES[0], specTypeOther:'', limitValue:'',
+    decisionRule:SOC_DECISION_RULES[0], decisionRuleRisk:'',
+    reportingPreference:SOC_REPORTING_PREFS[0], borderlineHandling:SOC_BORDERLINE[1],
+    socPrice:0, status:'Pending'
+  });
+  renderSocSection(containerId,item);
+}
+function removeSocParameter(containerId,item,idx){
+  item.socParameters.splice(idx,1);
+  renderSocSection(containerId,item);
+}
+function updateSocParamField(item,idx,field,val){
+  if(item.socParameters&&item.socParameters[idx]) item.socParameters[idx][field]=val;
+}
+function toggleSocRequested(containerId,item,checked){
+  item.socRequested=checked;
+  if(checked&&(!item.socParameters||!item.socParameters.length)) addSocParameter(containerId,item);
+  else renderSocSection(containerId,item);
+}
+function renderSocSection(containerId,item){
+  const box=el(containerId); if(!box)return;
+  const params=item.socParameters||[];
+  const opts=(arr,val)=>arr.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('');
+  box.innerHTML=`
+    <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;cursor:pointer;margin-bottom:6px;">
+      <input type="checkbox" ${item.socRequested?'checked':''} onchange="toggleSocRequested('${containerId}',window._socItemRefs['${containerId}'],this.checked)"/>
+      Customer Requests Statement of Conformity?
+    </label>
+    ${item.socRequested?`<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">One Statement of Conformity is issued per parameter — add a row for each one the customer needs (e.g. Temperature, Humidity).</div>
+      ${params.map((p,idx)=>`
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <strong style="font-size:11.5px;">Parameter ${idx+1}</strong>
+            <button type="button" onclick="removeSocParameter('${containerId}',window._socItemRefs['${containerId}'],${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
+          </div>
+          <input class="form-control" placeholder="Parameter Name (e.g. Temperature)" value="${p.parameterName||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'parameterName',this.value)" style="margin-bottom:6px;font-size:12px;"/>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'specType',this.value);renderSocSection('${containerId}',window._socItemRefs['${containerId}'])">
+              ${opts(SOC_SPEC_TYPES,p.specType)}
+            </select>
+            ${p.specType==='Other'?`<input class="form-control" placeholder="Specify…" value="${p.specTypeOther||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'specTypeOther',this.value)" style="font-size:12px;"/>`:''}
+          </div>
+          <input class="form-control" placeholder="Limit Value(s) / Parameter(s) to check" value="${p.limitValue||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'limitValue',this.value)" style="margin-bottom:6px;font-size:12px;"/>
+          <input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Charged (RM)" value="${p.socPrice||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'socPrice',parseFloat(this.value)||0)" style="margin-bottom:6px;font-size:12px;"/>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'decisionRule',this.value);renderSocSection('${containerId}',window._socItemRefs['${containerId}'])">
+              ${opts(SOC_DECISION_RULES,p.decisionRule)}
+            </select>
+            ${p.decisionRule==='Guard-Banded — Customer-Specified Risk %'?`<input class="form-control" placeholder="Risk % / guard-band factor" value="${p.decisionRuleRisk||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'decisionRuleRisk',this.value)" style="font-size:12px;width:140px;"/>`:''}
+          </div>
+          <div style="display:flex;gap:6px;">
+            <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'reportingPreference',this.value)">
+              ${opts(SOC_REPORTING_PREFS,p.reportingPreference)}
+            </select>
+            <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'borderlineHandling',this.value)">
+              ${opts(SOC_BORDERLINE,p.borderlineHandling)}
+            </select>
+          </div>
+          ${p.status&&p.status!=='Pending'?`<div style="font-size:11px;font-weight:700;margin-top:6px;color:${p.status==='Withdrawn'?'var(--text-muted)':'var(--green)'};">${p.status==='Uploaded'?'📎 SoC uploaded':`🚫 Withdrawn${p.withdrawnReason?': '+p.withdrawnReason:''}`}</div>`:''}
+        </div>`).join('')}
+      <button type="button" class="btn btn-outline btn-sm" onclick="addSocParameter('${containerId}',window._socItemRefs['${containerId}'])">+ Add Parameter</button>
+    </div>`:''}
+  `;
+  window._socItemRefs=window._socItemRefs||{};
+  window._socItemRefs[containerId]=item;
+}
+
 function addExtraEquipment(){
   const idx=_extraEquipment.length;
   const defaultType=el('eq-item-type')?.value||'Lab';
@@ -5684,6 +5773,7 @@ function renderExtraEquipment(){
         <label class="form-label">Assignment Note</label>
         <input class="form-control" value="${eq.assignNote||''}" placeholder="Instructions for the engineer…" oninput="updateExtraField(${i},'assignNote',this.value)"/>
       </div>
+      <div class="form-group" id="extra-eq-soc-${i}"></div>
       ${eq.calType==='Onsite'?`<div style="font-size:11px;background:#e0f7fa;color:#006064;border-radius:6px;padding:6px 10px;margin-bottom:8px;">📍 This item will use the Site Address / Contact set above for the whole visit.</div>`:''}
       ${canViewPrice(currentUser)?`
       <div class="form-group" style="background:#fff7ed;border-radius:8px;padding:10px 12px;border:1px solid #fdba74;margin-top:8px;">
@@ -5695,6 +5785,7 @@ function renderExtraEquipment(){
     populateUserDropdown(`extra-eq-assign-${i}`,false,true);
     const sel=el(`extra-eq-assign-${i}`);
     if(sel) sel.value=eq.assignTo||'';
+    renderSocSection(`extra-eq-soc-${i}`,eq);
   });
 }
 
@@ -6303,6 +6394,7 @@ function openEditJobModal(jobNo, itemIdx=0){
   el('edit-eq-condition').value=item.condition||'Good';
   el('edit-eq-accessories').value=item.accessories||'';
   el('edit-eq-remarks').value=item.remarks||'';
+  renderSocSection('edit-eq-soc-section',item);
   // Price Reference — admin only
   const priceGroup=el('edit-price-group');
   const priceInput=el('edit-eq-price');
@@ -7246,6 +7338,13 @@ async function openUploadedFile(){
 
 async function approveJob(){
   if(approvalJobNo===null||approvalItemIdx===null)return;
+  const jForCheck=getJob(approvalJobNo);
+  const itemForCheck=jForCheck?.items?.[approvalItemIdx];
+  const pendingSoc=(itemForCheck?.socParameters||[]).filter(p=>p.status==='Pending');
+  if(pendingSoc.length){
+    alert(`⚠️ Cannot approve — this item has ${pendingSoc.length} Statement of Conformity still pending upload:\n${pendingSoc.map(p=>'• '+(p.parameterName||'Unnamed parameter')).join('\n')}\n\nPlease upload the SoC document(s) first, or withdraw the request if the customer no longer needs it.`);
+    return;
+  }
   const approveBtn=document.querySelector('#modal-approve-job .btn-success');
   const approveBtnText=approveBtn?approveBtn.textContent:'';
   if(approveBtn){approveBtn.disabled=true;approveBtn.textContent='⏳ Approving…';}
@@ -7920,6 +8019,14 @@ function openCapabilityEvalModal(entryId,itemIdx){
         <span style="font-size:12px;color:var(--text-muted);">${item.brand?'Brand: '+item.brand+' · ':''}${item.model?'Model: '+item.model+' · ':''}${item.spec?'Spec: '+item.spec:''}${item.range?' · Range: '+item.range:''}${item.calType?' · '+item.calType:''}</span>
         ${item.remark?`<div style="font-size:12px;color:#374151;margin-top:6px;"><strong>Customer's requirement:</strong> ${item.remark}</div>`:''}
       </div>
+      ${item.capabilityHistory&&item.capabilityHistory.length?`<div style="background:#fefce8;border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:#854d0e;margin-bottom:6px;">📜 Previous Review History</div>
+        ${item.capabilityHistory.map(h=>`<div style="font-size:11px;color:#374151;margin-bottom:4px;">
+          ${h.verdict==='Resubmitted'
+            ?`<strong>🔄 Resubmitted</strong> by ${USERS[h.reviewedBy]?.name||h.reviewedBy} on ${fmtDateShort(h.reviewedAt)} — "${h.resubmitComment}"`
+            :`<strong>${capabilityVerdictLabel(h.verdict)}</strong> by ${USERS[h.reviewedBy]?.name||h.reviewedBy} on ${fmtDateShort(h.reviewedAt)}${h.evaluation?.notes?` — "${h.evaluation.notes}"`:''}`}
+        </div>`).join('')}
+      </div>`:''}
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Scope &amp; Capability</div>
       ${yn('eval-in-scope','Within Accredited Scope?')}
       ${yn('eval-range-capable','Measurement Range Within Capability?')}
@@ -7974,6 +8081,10 @@ async function setCapabilityVerdict(entryId,itemIdx,verdict,evaluation){
   item.capabilityReviewedBy=currentUser;
   item.capabilityReviewedAt=new Date().toISOString();
   if(evaluation) item.capabilityEvaluation=evaluation;
+  // Full history — every review cycle is kept (not just the latest), so a reject → resubmit →
+  // re-review sequence stays fully visible, not overwritten each time.
+  if(!item.capabilityHistory) item.capabilityHistory=[];
+  item.capabilityHistory.push({verdict,reviewedBy:currentUser,reviewedAt:item.capabilityReviewedAt,evaluation:evaluation||null});
   // "Can Do" just unlocks progression for this item — the entry's overall status stays put until
   // someone manually moves it forward. "Cannot Do" moves the WHOLE entry to external-check ONLY if
   // every item has now been reviewed and none have cleared yet — otherwise other items may still be
@@ -7987,6 +8098,25 @@ async function setCapabilityVerdict(entryId,itemIdx,verdict,evaluation){
   renderTrackerPage('sales');
   showToast(`${verdict==='Can Do'?'✅':'❌'} "${item.eqName}" marked "${capabilityVerdictLabel(verdict)}"`,'success',3000);
   addAudit('📈',`Sales Tracker — ${USERS[currentUser]?.name||currentUser} reviewed ${entry.name} (${item.eqName}) — ${verdict}`);
+}
+async function resubmitCapabilityForReview(entryId,itemIdx){
+  if(!canUseSalesTracker(currentUser)){alert('Only Sales, Coordinator, Admin, or Managing Director can resubmit an item for review.');return;}
+  const entry=_salesTracker.find(e=>e.id===entryId); if(!entry||!entry.items||!entry.items[itemIdx])return;
+  const item=entry.items[itemIdx];
+  const comment=prompt(`What changed since Technical Manager's feedback? (e.g. "Customer agreed to ±0.5°C instead of ±0.1°C")\n\nPrevious note: ${item.capabilityEvaluation?.notes||'—'}`);
+  if(comment===null)return; // cancelled
+  if(!comment.trim()){alert('Please explain what changed before resubmitting.');return;}
+  if(!item.capabilityHistory) item.capabilityHistory=[];
+  item.capabilityHistory.push({verdict:'Resubmitted',reviewedBy:currentUser,reviewedAt:new Date().toISOString(),resubmitComment:comment.trim()});
+  item.capabilityVerdict=null; // clears it, sending it back into the review queue
+  item.capabilityEvaluation=null;
+  entry.status='Pending Technical Review'; // back to the review stage so it's visible in the queue again
+  if(!entry.statusHistory) entry.statusHistory=[];
+  entry.statusHistory.push({status:'Pending Technical Review',date:new Date().toISOString(),by:currentUser,note:`Resubmitted (${item.eqName}): ${comment.trim()}`});
+  await saveSalesTracker();
+  renderTrackerPage('sales');
+  showToast(`🔄 "${item.eqName}" resubmitted for review`,'success',3000);
+  addAudit('📈',`Sales Tracker — ${USERS[currentUser]?.name||currentUser} resubmitted ${entry.name} (${item.eqName}) for capability review: ${comment.trim()}`);
 }
 async function setExternalCapabilityFound(entryId,itemIdx){
   const entry=_salesTracker.find(e=>e.id===entryId); if(!entry||!entry.items||!entry.items[itemIdx])return;
@@ -8100,11 +8230,13 @@ function renderTrackerPage(type){
         :(e.refEqId?`<a href="#" onclick="event.preventDefault();showView('ref-eq');">🔩 Ref Equipment</a>`:'—');
       const totalPrice=items.reduce((s,it)=>s+(it.price||0),0);
       const externalCheckButtons=type==='sales'?items.map((it,idx)=>{
-        if(it.capabilityVerdict!=='Cannot Do'||['Can Do (External)'].includes(it.capabilityVerdict))return'';
-        return it.linkedPurchasingTrackerId
-          ?`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;margin-bottom:2px;" onclick="setExternalCapabilityFound('${e.id}',${idx})" title="Mark vendor found for ${it.eqName}">✅ ${it.eqName} Found</button>`
-          :`<button class="btn btn-outline btn-sm" style="margin-bottom:2px;" onclick="createLinkedPurchasingEntry('${e.id}',${idx})" title="Track checking external vendors for ${it.eqName}">🛒 Check: ${it.eqName}</button>`;
-      }).filter(Boolean).join('<br/>'):'';
+        if(it.capabilityVerdict!=='Cannot Do')return'';
+        const foundBtn=it.linkedPurchasingTrackerId
+          ?`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="setExternalCapabilityFound('${e.id}',${idx})" title="Confirm an external vendor can do ${it.eqName}">✅ Vendor Found: ${it.eqName}</button> <a href="#" onclick="event.preventDefault();showView('purchasing-tracker')" style="font-size:10px;">(view tracker)</a>`
+          :`<button class="btn btn-outline btn-sm" onclick="createLinkedPurchasingEntry('${e.id}',${idx})" title="We can't do ${it.eqName} ourselves — start tracking outreach to an external vendor">🛒 Check External Vendor: ${it.eqName}</button>`;
+        const resubmitBtn=`<button class="btn btn-outline btn-sm" onclick="resubmitCapabilityForReview('${e.id}',${idx})" title="Customer agreed to revised terms — send ${it.eqName} back to Technical Manager for another look">🔄 Resubmit: ${it.eqName}</button>`;
+        return `<div style="margin-bottom:4px;">${foundBtn}</div><div style="margin-bottom:4px;">${resubmitBtn}</div>`;
+      }).filter(Boolean).join(''):'';
       return `<tr>
         <td>${e.month||'—'}</td>
         <td><strong>${e.name}</strong></td>
@@ -8274,6 +8406,7 @@ function renderSalesItemsList(){
         <div class="form-group"><label class="form-label">Range</label><input class="form-control" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/></div>
       </div>
       <div class="form-group"><label class="form-label">Remark <span style="font-weight:normal;color:var(--text-muted);">(customer's stated requirement for this item)</span></label><textarea class="form-control" rows="2" oninput="updateSalesItemField(${idx},'remark',this.value)">${it.remark||''}</textarea></div>
+      <div class="form-group" id="sales-item-soc-${idx}"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Calibration Type</label>
           <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value)">
@@ -8308,6 +8441,7 @@ function renderSalesItemsList(){
       </div>`:''}
     </div>`;
   }).join('');
+  _salesDraftItems.forEach((it,idx)=>renderSocSection(`sales-item-soc-${idx}`,it));
 }
 function suggestTrackerName(type,query){
   const box=el('tk-name-suggestions'); if(!box)return;
@@ -10640,6 +10774,17 @@ function renderMyJobs(){
         ${item.approvalComments&&item.status==='Assigned'?`<br/><span style="color:var(--red);">✗ Rejected: <em>"${item.approvalComments}"</em></span>`:''}
         ${item.status==='Customer Not Ready'&&item.customerNotReadyReason?`<br/><span style="color:#c0001a;">⚠️ Not Ready: <em>"${item.customerNotReadyReason}"</em></span>`:''}
       </div>
+      ${item.socRequested&&(item.socParameters||[]).length?`<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:#854d0e;margin-bottom:4px;">📋 Statement of Conformity</div>
+        ${item.socParameters.map((p,pIdx)=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:3px;">
+          <span>${p.parameterName||'Unnamed'} ${p.status==='Uploaded'?'<span style="color:var(--green);font-weight:700;">✓ Uploaded</span>':p.status==='Withdrawn'?`<span style="color:var(--text-muted);">🚫 Withdrawn${p.withdrawnReason?': '+p.withdrawnReason:''}</span>`:'<span style="color:var(--red);font-weight:700;">⏳ Pending</span>'}</span>
+          ${p.status==='Pending'?`<span>
+            <input type="file" accept=".pdf" id="soc-upload-${j.jobNo}-${idx}-${pIdx}" style="display:none;" onchange="uploadSocDocument('${j.jobNo}',${idx},${pIdx},this)"/>
+            <button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 8px;" onclick="document.getElementById('soc-upload-${j.jobNo}-${idx}-${pIdx}').click()">📎 Upload</button>
+            <button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:var(--red);" onclick="withdrawSocParameter('${j.jobNo}',${idx},${pIdx})">🚫 Withdraw</button>
+          </span>`:p.status==='Uploaded'&&p.fileUrl?`<a href="javascript:void(0)" onclick="openSignedUrl('${p.fileUrl}')" style="font-size:10px;">View</a>`:''}
+        </div>`).join('')}
+      </div>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         ${item.status==='KIV'?`
           <span class="badge badge-orange" style="font-size:11px;padding:5px 8px;">🔶 KIV: "${(item.kivReason||'').substring(0,40)}${(item.kivReason||'').length>40?'…':''}"</span>
@@ -11060,6 +11205,58 @@ async function getJobFull(jobNo){
   }
 }
 
+async function uploadSocDocument(jobNo,itemIdx,paramIdx,input){
+  const f=input.files[0]; if(!f)return;
+  if(!canCreateJobs(currentUser)&&!canPerformCal(currentUser)){alert('You do not have permission to upload this.');return;}
+  try{
+    const path=`jobs/${jobNo}/soc/${sanitizeFilenameForPath(f.name)}`;
+    const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
+      method:'POST',
+      headers:{'X-File-Path':path,'Content-Type':f.type||'application/pdf'},
+      body:f
+    });
+    if(!uploadRes.ok){showToast('❌ SoC upload failed — please try again','error',4000);return;}
+    const r2res=await uploadRes.json();
+    const fileUrl=r2res.url||`https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/${path}`;
+    await updateJob(jobNo,j=>{
+      const item=j.items[itemIdx]; if(!item||!item.socParameters||!item.socParameters[paramIdx])return;
+      const p=item.socParameters[paramIdx];
+      p.status='Uploaded'; p.fileUrl=fileUrl; p.fileName=f.name;
+      p.uploadedBy=currentUser; p.uploadedAt=new Date().toISOString();
+      j.history.push({action:`📎 Statement of Conformity uploaded for ${item.eqName} — ${p.parameterName||'parameter'}`,by:currentUser,time:new Date().toISOString()});
+    });
+    renderApprovalQueue();
+    showToast('✅ Statement of Conformity uploaded','success',3000);
+    addAudit('📋',`SoC uploaded for ${jobNo} (${paramIdx})`);
+  }catch(e){
+    console.error('uploadSocDocument error:',e);
+    showToast('❌ SoC upload failed: '+e.message,'error',4000);
+  }
+}
+async function withdrawSocParameter(jobNo,itemIdx,paramIdx){
+  const reason=prompt('Reason the customer withdrew this Statement of Conformity request:');
+  if(reason===null)return;
+  if(!reason.trim()){alert('Please enter a reason before withdrawing.');return;}
+  await updateJob(jobNo,j=>{
+    const item=j.items[itemIdx]; if(!item||!item.socParameters||!item.socParameters[paramIdx])return;
+    const p=item.socParameters[paramIdx];
+    p.status='Withdrawn'; p.withdrawnReason=reason.trim();
+    p.withdrawnBy=currentUser; p.withdrawnAt=new Date().toISOString();
+    j.history.push({action:`🚫 Statement of Conformity withdrawn for ${item.eqName} — ${p.parameterName||'parameter'}: ${reason.trim()}`,by:currentUser,time:new Date().toISOString()});
+    // This is tracked as a distinct lost sale — the calibration itself can still be Won,
+    // but the SoC add-on service specifically was lost revenue, worth its own record.
+    const linkedEntry=_salesTracker.find(e=>e.jobNo===jobNo);
+    if(linkedEntry){
+      if(!linkedEntry.socLostRecords) linkedEntry.socLostRecords=[];
+      linkedEntry.socLostRecords.push({eqName:item.eqName,parameterName:p.parameterName||'',socPrice:p.socPrice||0,reason:reason.trim(),withdrawnAt:p.withdrawnAt,withdrawnBy:currentUser});
+    }
+  });
+  const linkedEntry=_salesTracker.find(e=>e.jobNo===jobNo);
+  if(linkedEntry) await saveSalesTracker();
+  renderApprovalQueue();
+  showToast('🚫 Statement of Conformity withdrawn','success',3000);
+  addAudit('📋',`SoC withdrawn for ${jobNo}: ${reason.trim()}`);
+}
 async function updateJob(jobNo,fn){
   try{
   let j=_jobsCache[jobNo]||_jobs.find(x=>x.jobNo===jobNo);
@@ -14073,6 +14270,14 @@ function renderStDashboardContent(){
   });
   const gapRows=Object.values(byGap).sort((a,b)=>b.count-a.count);
 
+  // Statement of Conformity — lost revenue. A calibration can still be Won even when the
+  // customer later withdraws the SoC request specifically, so this is tracked separately.
+  const socLostAll=[];
+  _salesTracker.filter(periodFilter).forEach(e=>{
+    (e.socLostRecords||[]).forEach(r=>socLostAll.push({...r,custName:e.name}));
+  });
+  const socLostTotal=socLostAll.reduce((s,r)=>s+(r.socPrice||0),0);
+
   // Lost Reasons — why deals were actually lost, to guide real improvement/scope decisions
   const lostItems=allItems.filter(it=>it.outcome==='Lost');
   const byLostReason={};
@@ -14134,6 +14339,17 @@ function renderStDashboardContent(){
         <td style="padding:5px 6px;text-align:center;">${r.value.toFixed(0)}</td>
         <td style="padding:5px 6px;font-size:10.5px;color:var(--text-muted);">${REASON_HINT[r.reason]||''}</td>
       </tr>`).join('')||'<tr><td colspan="4" style="padding:8px;text-align:center;color:var(--text-muted);">No lost items yet.</td></tr>'}</tbody>
+    </table>
+
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">📋 Statement of Conformity — Lost Revenue <span style="font-weight:400;color:var(--text-muted);font-size:11px;">(withdrawn after being requested — calibration itself may still be Won)</span></div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;">
+      <thead><tr style="background:var(--bg);"><th style="padding:5px 6px;text-align:left;">Customer</th><th style="padding:5px 6px;text-align:left;">Equipment</th><th style="padding:5px 6px;text-align:left;">Parameter</th><th style="padding:5px 6px;">Value Lost (RM)</th><th style="padding:5px 6px;text-align:left;">Reason</th></tr></thead>
+      <tbody>${socLostAll.map(r=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:5px 6px;">${r.custName}</td><td style="padding:5px 6px;">${r.eqName}</td><td style="padding:5px 6px;">${r.parameterName}</td>
+        <td style="padding:5px 6px;text-align:center;">${(r.socPrice||0).toFixed(2)}</td><td style="padding:5px 6px;font-size:10.5px;color:var(--text-muted);">${r.reason}</td>
+      </tr>`).join('')||'<tr><td colspan="5" style="padding:8px;text-align:center;color:var(--text-muted);">No withdrawn SoC requests recorded yet.</td></tr>'}
+      ${socLostAll.length?`<tr style="font-weight:700;background:var(--bg);"><td colspan="3" style="padding:5px 6px;">Total</td><td style="padding:5px 6px;text-align:center;">RM ${socLostTotal.toFixed(2)}</td><td></td></tr>`:''}
+      </tbody>
     </table>
 
     <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:8px;">🔍 Capability Gaps — Enquired But Marked "Outside Current Capability"</div>
