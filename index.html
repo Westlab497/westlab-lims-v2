@@ -465,6 +465,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item hidden-nav" id="nav-sales-tracker" onclick="showView('sales-tracker')" data-label="Sales Tracker"><span class="nav-icon"><i class="ti ti-timeline"></i></span><span class="nav-label">Sales Tracker</span></button>
     <button class="nav-item hidden-nav" id="nav-capability-review" onclick="showView('capability-review')" data-label="Capability Review"><span class="nav-icon"><i class="ti ti-clipboard-check"></i></span><span class="nav-label">Capability Review</span></button>
     <button class="nav-item hidden-nav" id="nav-purchasing-tracker" onclick="showView('purchasing-tracker')" data-label="Purchasing Tracker"><span class="nav-icon"><i class="ti ti-shopping-cart"></i></span><span class="nav-label">Purchasing Tracker</span></button>
+    <button class="nav-item hidden-nav" id="nav-outsourcing-queue" onclick="showView('outsourcing-queue')" data-label="Outsourcing Queue"><span class="nav-icon"><i class="ti ti-send"></i></span><span class="nav-label">Outsourcing Queue</span></button>
+    <button class="nav-item hidden-nav" id="nav-external-partners" onclick="showView('external-partners')" data-label="External Partners"><span class="nav-icon"><i class="ti ti-building-factory"></i></span><span class="nav-label">External Partners</span></button>
     <button class="nav-item hidden-nav" id="nav-receiving-log" onclick="showView('receiving-log')" data-label="Receiving Logbook"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-label">Receiving Logbook</span></button>
     <button class="nav-item hidden-nav" id="nav-sticker-log" onclick="showView('sticker-log')" data-label="Sticker Log"><span class="nav-icon"><i class="ti ti-list-details"></i></span><span class="nav-label">Sticker Log</span></button>
 
@@ -1008,6 +1010,37 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <input class="form-control" id="pt-search" placeholder="Search vendor…" oninput="renderPurchasingTrackerPage()" style="width:200px;"/>
       </div>
       <div id="purchasing-tracker-list"></div>
+    </div>
+
+    <!-- ════ OUTSOURCING QUEUE ════ -->
+    <div class="view" id="view-outsourcing-queue">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📤 Outsourcing Queue</div>
+          <div class="page-sub">Every item currently needing external capability, across all enquiries — select several and assign to one vendor at once</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" id="oq-assign-btn" style="display:none;" onclick="openBulkAssignVendorModal()">📤 Assign Selected to Vendor</button>
+        </div>
+      </div>
+      <div id="outsourcing-queue-list"></div>
+    </div>
+
+    <!-- ════ EXTERNAL PARTNERS ════ -->
+    <div class="view" id="view-external-partners">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🏭 External Partners</div>
+          <div class="page-sub">Vendors and labs you outsource to — capabilities and full price history, building up over time</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="openExternalPartnerModal()">+ Add Partner</button>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <input class="form-control" id="ep-search" placeholder="Search name, capability…" oninput="renderExternalPartnersPage()" style="width:280px;"/>
+      </div>
+      <div id="external-partners-list"></div>
     </div>
 
     <!-- ════ RECEIVING LOGBOOK ════ -->
@@ -3418,6 +3451,7 @@ async function loadAll(){
     await loadQuotations();
     await loadSalesTracker();
     await loadPurchasingTracker();
+    await loadExternalPartners();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
     await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
@@ -3729,6 +3763,8 @@ function canViewSalesTrackerReadOnly(u){ const r=getUserRole(u||currentUser); re
 function canSeeSalesTrackerPage(u){ return canUseSalesTracker(u)||canViewSalesTrackerReadOnly(u); }
 function canReviewCapability(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager'].includes(r); }
 function canUsePurchasingTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
+function canUseExternalPartners(u){ return canUsePurchasingTracker(u); }
+function canUseOutsourcingQueue(u){ return canUsePurchasingTracker(u); }
 function canViewQuotationDashboard(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Sales'].includes(r); }
 function canManageLeaveClaims(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','HR'].includes(r); }
 
@@ -3755,6 +3791,8 @@ function applyRoleUI(){
   el('nav-sales-tracker').classList.toggle('hidden-nav', !canSeeSalesTrackerPage(currentUser));
   el('nav-capability-review').classList.toggle('hidden-nav', !canReviewCapability(currentUser)||canUseSalesTracker(currentUser)); // hide for those who already see it inside Sales Tracker itself
   el('nav-purchasing-tracker').classList.toggle('hidden-nav', !canUsePurchasingTracker(currentUser));
+  el('nav-outsourcing-queue').classList.toggle('hidden-nav', !canUseOutsourcingQueue(currentUser));
+  el('nav-external-partners').classList.toggle('hidden-nav', !canUseExternalPartners(currentUser));
   el('nav-receiving-log').classList.toggle('hidden-nav', !canCreateJobs(currentUser));
   el('nav-sticker-log').classList.toggle('hidden-nav', !canCreateJobs(currentUser)&&!canApproveStickers(currentUser));
   el('nav-calendar').classList.toggle('hidden-nav', hr);
@@ -3847,6 +3885,8 @@ function showView(name){
   if(name==='sales-tracker') renderSalesTrackerPage();
   if(name==='capability-review') renderCapabilityReviewQueue();
   if(name==='purchasing-tracker') renderPurchasingTrackerPage();
+  if(name==='outsourcing-queue') renderOutsourcingQueue();
+  if(name==='external-partners') renderExternalPartnersPage();
   if(name==='receiving-log') renderReceivingLogPage();
   if(name==='sticker-log') renderStickerLogPage();
 }
@@ -7754,6 +7794,8 @@ const SALES_TRACKER_KEY='wl_sales_tracker';
 let _salesTracker=[];
 const PURCHASING_TRACKER_KEY='wl_purchasing_tracker';
 let _purchasingTracker=[];
+const EXTERNAL_PARTNERS_KEY='wl_external_partners';
+let _externalPartners=[];
 const TEST_CHECKINS_KEY='wl_test_checkins';
 let _testCheckins=[]; // isolated Check-In/Check-Out data used only while Testing Mode is on
 let _abnormalReports=[];
@@ -8334,7 +8376,8 @@ function openTrackerEntryModal(type,entryId){
       <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Items Enquired</div>
       <div id="sales-items-list"></div>
       <button class="btn btn-outline btn-sm" onclick="addSalesItemRow()">+ Add Item</button>
-      `:`<div class="form-group" style="margin-top:12px;"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${existing?.remark||''}</textarea></div>`}
+      `:`<div class="form-group"><label class="form-label">Quoted Price (RM) <span style="font-weight:normal;color:var(--text-muted);">(optional — records into the vendor's price history)</span></label><input class="form-control" type="number" min="0" step="0.01" id="tk-quoted-price" value="${existing?.quotedPrice||''}"/></div>
+      <div class="form-group"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${existing?.remark||''}</textarea></div>`}
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('tracker-entry-overlay').style.display='none'">Cancel</button>
         <button class="btn btn-primary" onclick="saveTrackerEntry('${type}','${entryId||''}')">${existing?'Save Changes':'Add Entry'}</button>
@@ -8522,7 +8565,15 @@ async function saveTrackerEntry(type,entryId){
   entry.name=name;
   entry.custId=el('tk-cust-id')?.value||null;
   entry.refEqId=el('tk-ref-id')?.value||null;
-  if(type==='purchasing') entry.remark=el('tk-remark')?.value.trim()||'';
+  if(type==='purchasing'){
+    entry.remark=el('tk-remark')?.value.trim()||'';
+    const newPrice=parseFloat(el('tk-quoted-price')?.value)||0;
+    const priceChanged=newPrice>0&&newPrice!==entry.quotedPrice;
+    entry.quotedPrice=newPrice;
+    if(priceChanged&&entry.linkedExternalPartnerId){
+      await recordPartnerPrice(entry.linkedExternalPartnerId,entry.remark||entry.name,'',newPrice,entry.id);
+    }
+  }
   if(type==='sales'){
     entry.jobNo=el('tk-jobno')?.value.trim()||null;
     entry.prospectAddress=el('tk-prospect-address')?.value.trim()||'';
@@ -8779,6 +8830,245 @@ async function loadPurchasingTracker(){
   }catch(e){_purchasingTracker=[];}
 }
 async function savePurchasingTracker(){ await SB.upsert('wl_settings',PURCHASING_TRACKER_KEY,_purchasingTracker); }
+async function loadExternalPartners(){
+  try{
+    const p=await SB.get('wl_settings',EXTERNAL_PARTNERS_KEY);
+    _externalPartners=Array.isArray(p)?p:[];
+  }catch(e){_externalPartners=[];}
+}
+async function saveExternalPartners(){ await SB.upsert('wl_settings',EXTERNAL_PARTNERS_KEY,_externalPartners); }
+
+// ══════════════════════════════════════════════════
+// EXTERNAL PARTNERS DIRECTORY — vendors/labs you outsource to, with capabilities
+// (free-typed, suggested from what's already been used) and a permanent price history
+// that builds up automatically every time a quote gets recorded against them.
+// ══════════════════════════════════════════════════
+function allKnownCapabilities(){
+  const set=new Set();
+  _externalPartners.forEach(p=>(p.capabilities||[]).forEach(c=>set.add(c)));
+  return [...set].sort();
+}
+function renderExternalPartnersPage(){
+  if(!canUseExternalPartners(currentUser)){ el('external-partners-list').innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  const q=(el('ep-search')?.value||'').toLowerCase();
+  const list=_externalPartners.filter(p=>{
+    if(!q)return true;
+    return (p.name||'').toLowerCase().includes(q)||(p.capabilities||[]).some(c=>c.toLowerCase().includes(q));
+  }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const box=el('external-partners-list'); if(!box)return;
+  if(!list.length){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🏭</div><p>No external partners added yet.</p></div>'; return; }
+  box.innerHTML=list.map(p=>{
+    const history=(p.priceHistory||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const avgPrice=history.length?history.reduce((s,h)=>s+(h.price||0),0)/history.length:0;
+    return `<div class="card" style="margin-bottom:12px;">
+      <div style="padding:14px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-weight:700;font-size:14px;">${p.name}</div>
+            <div style="font-size:12px;color:var(--text-muted);">${p.contactPerson?p.contactPerson+' · ':''}${p.phone||''}${p.email?' · '+p.email:''}</div>
+            <div style="margin-top:6px;">${(p.capabilities||[]).map(c=>`<span class="badge badge-blue" style="margin-right:4px;">${c}</span>`).join('')}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;color:var(--text-muted);">${history.length} quote${history.length!==1?'s':''} recorded</div>
+            ${history.length?`<div style="font-size:13px;font-weight:700;">Avg RM ${avgPrice.toFixed(2)}</div>`:''}
+            <button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="openExternalPartnerModal('${p.id}')">✏️ Edit</button>
+          </div>
+        </div>
+        ${history.length?`<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">RECENT PRICE HISTORY</div>
+          ${history.slice(0,5).map(h=>`<div style="font-size:11.5px;display:flex;justify-content:space-between;margin-bottom:2px;">
+            <span>${fmtDateShort(h.date)} — ${h.itemDescription||h.capability||'—'}</span><strong>RM ${(h.price||0).toFixed(2)}</strong>
+          </div>`).join('')}
+        </div>`:''}
+        ${p.notes?`<div style="margin-top:8px;font-size:11.5px;color:var(--text-muted);">📝 ${p.notes}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+function openExternalPartnerModal(partnerId){
+  if(!canUseExternalPartners(currentUser)){alert('You do not have access to this.');return;}
+  const existing=partnerId?_externalPartners.find(p=>p.id===partnerId):null;
+  const knownCaps=allKnownCapabilities();
+  let ov=document.getElementById('ext-partner-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='ext-partner-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:480px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ Add'} External Partner</span>
+      <button onclick="document.getElementById('ext-partner-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-group"><label class="form-label">Name <span class="req">*</span></label><input class="form-control" id="ep-name" value="${existing?.name||''}"/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Contact Person</label><input class="form-control" id="ep-contact" value="${existing?.contactPerson||''}"/></div>
+        <div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="ep-phone" value="${existing?.phone||''}"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="ep-email" value="${existing?.email||''}"/></div>
+      <div class="form-group"><label class="form-label">Capabilities <span style="font-weight:normal;color:var(--text-muted);">(comma-separated — e.g. Pressure Calibration, Flow Calibration)</span></label>
+        <input class="form-control" id="ep-capabilities" value="${(existing?.capabilities||[]).join(', ')}" list="ep-cap-suggestions"/>
+        <datalist id="ep-cap-suggestions">${knownCaps.map(c=>`<option value="${c}"></option>`).join('')}</datalist>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="ep-notes" rows="2">${existing?.notes||''}</textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('ext-partner-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveExternalPartner('${partnerId||''}')">${existing?'Save Changes':'Add Partner'}</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function saveExternalPartner(partnerId){
+  const name=el('ep-name').value.trim();
+  if(!name){alert("Please enter the partner's name.");return;}
+  let partner=partnerId?_externalPartners.find(p=>p.id===partnerId):null;
+  const isNew=!partner;
+  if(isNew){ partner={id:'EXT-'+Date.now(),priceHistory:[],createdAt:new Date().toISOString(),createdBy:currentUser}; _externalPartners.push(partner); }
+  partner.name=name;
+  partner.contactPerson=el('ep-contact').value.trim();
+  partner.phone=el('ep-phone').value.trim();
+  partner.email=el('ep-email').value.trim();
+  partner.capabilities=el('ep-capabilities').value.split(',').map(c=>c.trim()).filter(Boolean);
+  partner.notes=el('ep-notes').value.trim();
+  await saveExternalPartners();
+  document.getElementById('ext-partner-overlay').style.display='none';
+  renderExternalPartnersPage();
+  showToast(`✅ ${isNew?'Partner added':'Partner updated'}`,'success',2500);
+  addAudit('🏭',`External Partner ${isNew?'added':'updated'}: ${name}`);
+}
+// Records a price quote against a partner, building their permanent history
+// ══════════════════════════════════════════════════
+// OUTSOURCING QUEUE — every item across every Sales Tracker enquiry currently needing
+// external capability, gathered in one place. Select several and assign them all to
+// the same vendor in one action, instead of clicking through each individually.
+// ══════════════════════════════════════════════════
+let _outsourceSelected=new Set();
+function getOutsourceQueueRows(){
+  const rows=[];
+  _salesTracker.forEach(e=>{
+    (e.items||[]).forEach((it,idx)=>{
+      if(it.capabilityVerdict==='Cannot Do'&&!['Won','Lost'].includes(it.outcome)){
+        rows.push({entry:e,item:it,idx,key:`${e.id}::${idx}`});
+      }
+    });
+  });
+  return rows;
+}
+function renderOutsourcingQueue(){
+  if(!canUseOutsourcingQueue(currentUser)){ el('outsourcing-queue-list').innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  const rows=getOutsourceQueueRows();
+  const box=el('outsourcing-queue-list'); if(!box)return;
+  const assignBtn=el('oq-assign-btn');
+  if(assignBtn) assignBtn.style.display=_outsourceSelected.size?'inline-block':'none';
+  if(!rows.length){ box.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><p>Nothing currently needs external capability.</p></div>'; return; }
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+    <thead><tr><th style="width:30px;"><input type="checkbox" onchange="toggleAllOutsource(this.checked)"/></th><th>Customer</th><th>Equipment</th><th>Spec</th><th>Already Linked To</th></tr></thead>
+    <tbody>${rows.map(({entry,item,idx,key})=>{
+      const linkedEntry=item.linkedPurchasingTrackerId?_purchasingTracker.find(pt=>pt.id===item.linkedPurchasingTrackerId):null;
+      return `<tr>
+        <td><input type="checkbox" ${_outsourceSelected.has(key)?'checked':''} onchange="toggleOutsourceSelection('${key}',this.checked)"/></td>
+        <td>${entry.name}</td>
+        <td>${item.eqName}${item.brand?' ('+item.brand+')':''}</td>
+        <td style="font-size:12px;">${item.spec||'—'}${item.range?' · '+item.range:''}</td>
+        <td style="font-size:12px;">${linkedEntry?linkedEntry.name:'<span style="color:var(--text-muted);">Not yet assigned</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div></div>`;
+}
+function toggleOutsourceSelection(key,checked){
+  if(checked) _outsourceSelected.add(key); else _outsourceSelected.delete(key);
+  const assignBtn=el('oq-assign-btn'); if(assignBtn) assignBtn.style.display=_outsourceSelected.size?'inline-block':'none';
+}
+function toggleAllOutsource(checked){
+  const rows=getOutsourceQueueRows();
+  _outsourceSelected=new Set(checked?rows.map(r=>r.key):[]);
+  renderOutsourcingQueue();
+}
+function openBulkAssignVendorModal(){
+  if(!_outsourceSelected.size){alert('Select at least one item first.');return;}
+  const rows=getOutsourceQueueRows().filter(r=>_outsourceSelected.has(r.key));
+  const eqNames=rows.map(r=>r.item.eqName.toLowerCase());
+  const suggested=_externalPartners.filter(p=>(p.capabilities||[]).some(c=>eqNames.some(n=>n.includes(c.toLowerCase())||c.toLowerCase().includes(n))));
+  let ov=document.getElementById('bulk-assign-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='bulk-assign-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:480px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📤 Assign ${rows.length} Item${rows.length!==1?'s':''} to Vendor</span>
+      <button onclick="document.getElementById('bulk-assign-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;max-height:120px;overflow-y:auto;">
+        ${rows.map(r=>`${r.entry.name} — ${r.item.eqName}`).join('<br/>')}
+      </div>
+      ${suggested.length?`<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">SUGGESTED (matches these items)</div>
+      <div style="margin-bottom:12px;">${suggested.map(p=>`<button class="btn btn-outline btn-sm" style="margin:2px;" onclick="el('bulk-assign-partner-id').value='${p.id}';el('bulk-assign-partner-name').value='${p.name.replace(/'/g,"\\'")}';">${p.name}</button>`).join('')}</div>`:''}
+      <div class="form-group" style="position:relative;">
+        <label class="form-label">Vendor Name</label>
+        <input class="form-control" id="bulk-assign-partner-name" placeholder="Type an existing or new vendor name…" oninput="suggestBulkAssignPartner(this.value)"/>
+        <div id="bulk-assign-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+        <input type="hidden" id="bulk-assign-partner-id" value=""/>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">If this vendor doesn't exist yet, typing a new name here will create them automatically in External Partners.</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('bulk-assign-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmBulkAssignVendor()">Assign All</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+function suggestBulkAssignPartner(query){
+  const box=el('bulk-assign-suggestions'); if(!box)return;
+  const q=(query||'').trim().toLowerCase();
+  el('bulk-assign-partner-id').value='';
+  if(q.length<2){box.style.display='none';return;}
+  const matches=_externalPartners.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,6);
+  if(!matches.length){box.style.display='none';return;}
+  box.innerHTML=matches.map(p=>`<div onclick="el('bulk-assign-partner-name').value='${p.name.replace(/'/g,"\\'")}';el('bulk-assign-partner-id').value='${p.id}';el('bulk-assign-suggestions').style.display='none';" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">${p.name}</div>`).join('');
+  box.style.display='block';
+}
+async function confirmBulkAssignVendor(){
+  const vendorName=el('bulk-assign-partner-name').value.trim();
+  if(!vendorName){alert('Please enter a vendor name.');return;}
+  let partnerId=el('bulk-assign-partner-id').value||null;
+  if(!partnerId){
+    const existingMatch=_externalPartners.find(p=>p.name.toLowerCase()===vendorName.toLowerCase());
+    if(existingMatch) partnerId=existingMatch.id;
+    else{
+      const newPartner={id:'EXT-'+Date.now(),name:vendorName,capabilities:[],priceHistory:[],createdAt:new Date().toISOString(),createdBy:currentUser};
+      _externalPartners.push(newPartner);
+      await saveExternalPartners();
+      partnerId=newPartner.id;
+    }
+  }
+  const rows=getOutsourceQueueRows().filter(r=>_outsourceSelected.has(r.key));
+  let created=0;
+  for(const {entry,item,idx} of rows){
+    const ptEntry={
+      id:'TRK-'+Date.now()+'-'+Math.floor(Math.random()*1000),type:'purchasing',month:toLocalDateStr(new Date()).slice(0,7),
+      name:vendorName,status:'Requirement Identified',
+      remark:`Bulk-assigned from Outsourcing Queue. Linked to Sales Tracker enquiry for ${entry.name}. Equipment: ${item.eqName}, Brand: ${item.brand||'—'}, Model: ${item.model||'—'}, Spec: ${item.spec||'—'}`,
+      createdAt:new Date().toISOString(),createdBy:currentUser,
+      statusHistory:[{status:'Requirement Identified',date:new Date().toISOString(),by:currentUser}],
+      linkedSalesTrackerId:entry.id,linkedSalesItemIdx:idx,linkedExternalPartnerId:partnerId
+    };
+    _purchasingTracker.push(ptEntry);
+    item.linkedPurchasingTrackerId=ptEntry.id;
+    created++;
+  }
+  await savePurchasingTracker();
+  await saveSalesTracker();
+  _outsourceSelected=new Set();
+  document.getElementById('bulk-assign-overlay').style.display='none';
+  renderOutsourcingQueue();
+  showToast(`✅ ${created} item(s) assigned to ${vendorName}`,'success',3500);
+  addAudit('📤',`${created} item(s) assigned to external partner ${vendorName} via Outsourcing Queue`);
+}
+async function recordPartnerPrice(partnerId,itemDescription,capability,price,jobOrEntryRef){
+  const partner=_externalPartners.find(p=>p.id===partnerId); if(!partner)return;
+  if(!partner.priceHistory) partner.priceHistory=[];
+  partner.priceHistory.push({date:new Date().toISOString(),itemDescription,capability,price,ref:jobOrEntryRef,recordedBy:currentUser});
+  await saveExternalPartners();
+}
+
 
 async function loadAbnormalReports(){
   try{
