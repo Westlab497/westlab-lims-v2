@@ -8171,28 +8171,6 @@ async function setExternalCapabilityFound(entryId,itemIdx){
   showToast('✅ External capability confirmed — you can now move this to Quotation Generated','success',4000);
   addAudit('📈',`Sales Tracker — external capability found for ${entry.name} (${item.eqName})`);
 }
-async function createLinkedPurchasingEntry(salesEntryId,itemIdx){
-  const salesEntry=_salesTracker.find(e=>e.id===salesEntryId); if(!salesEntry||!salesEntry.items||!salesEntry.items[itemIdx])return;
-  const item=salesEntry.items[itemIdx];
-  if(!canUsePurchasingTracker(currentUser)){alert('Only Admin/Manager can create a Purchasing Tracker entry.');return;}
-  const entry={
-    id:'TRK-'+Date.now(),type:'purchasing',month:toLocalDateStr(new Date()).slice(0,7),
-    name:`External capability check — ${item.eqName}`,
-    status:'Requirement Identified',
-    remark:`Linked to Sales Tracker enquiry for ${salesEntry.name}. Equipment: ${item.eqName}, Brand: ${item.brand||'—'}, Model: ${item.model||'—'}, Spec: ${item.spec||'—'}`,
-    createdAt:new Date().toISOString(),createdBy:currentUser,
-    statusHistory:[{status:'Requirement Identified',date:new Date().toISOString(),by:currentUser}],
-    linkedSalesTrackerId:salesEntryId, linkedSalesItemIdx:itemIdx
-  };
-  _purchasingTracker.push(entry);
-  item.linkedPurchasingTrackerId=entry.id;
-  await savePurchasingTracker();
-  await saveSalesTracker();
-  renderTrackerPage('sales');
-  showToast('✅ Linked Purchasing Tracker entry created','success',3000);
-  addAudit('🛒',`Purchasing Tracker entry created to check external capability for ${salesEntry.name} (${item.eqName})`);
-}
-
 // ── One-time migration: convert every Quotation Log entry into a Sales Tracker entry ──
 // Historical Won/Lost outcomes map directly (same field names); capability is marked
 // "Can Do" retroactively since these were already real, actioned quotations at the time.
@@ -8275,7 +8253,7 @@ function renderTrackerPage(type){
         if(it.capabilityVerdict!=='Cannot Do')return'';
         const foundBtn=it.linkedPurchasingTrackerId
           ?`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="setExternalCapabilityFound('${e.id}',${idx})" title="Confirm an external vendor can do ${it.eqName}">✅ Vendor Found: ${it.eqName}</button> <a href="#" onclick="event.preventDefault();showView('purchasing-tracker')" style="font-size:10px;">(view tracker)</a>`
-          :`<button class="btn btn-outline btn-sm" onclick="createLinkedPurchasingEntry('${e.id}',${idx})" title="We can't do ${it.eqName} ourselves — start tracking outreach to an external vendor">🛒 Check External Vendor: ${it.eqName}</button>`;
+          :`<a href="#" onclick="event.preventDefault();showView('outsourcing-queue')" style="font-size:11px;color:var(--text-muted);">📤 Not yet sent for external check — go to Outsourcing Queue</a>`;
         const resubmitBtn=`<button class="btn btn-outline btn-sm" onclick="resubmitCapabilityForReview('${e.id}',${idx})" title="Customer agreed to revised terms — send ${it.eqName} back to Technical Manager for another look">🔄 Resubmit: ${it.eqName}</button>`;
         return `<div style="margin-bottom:4px;">${foundBtn}</div><div style="margin-bottom:4px;">${resubmitBtn}</div>`;
       }).filter(Boolean).join(''):'';
