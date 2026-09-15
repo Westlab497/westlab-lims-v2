@@ -5612,7 +5612,6 @@ document.addEventListener('click',e=>{
 const SOC_SPEC_TYPES=["Manufacturer's Specification","Standard/Class","Customer's Internal Specification","Other"];
 const SOC_DECISION_RULES=['Guard-Banded Acceptance (Lab Default)','Simple Acceptance','Guard-Banded — Customer-Specified Risk %','No Decision Rule — Measurement Only'];
 const SOC_REPORTING_PREFS=['Individual (Per-Point)','Single Overall Statement','Both'];
-const SOC_BORDERLINE=['Report as Fail','Report as Indeterminate (Lab Default)','Contact Customer First'];
 
 function addSocParameter(containerId,item){
   if(!item.socParameters) item.socParameters=[];
@@ -5620,7 +5619,7 @@ function addSocParameter(containerId,item){
     id:'SOC-'+Date.now()+'-'+Math.floor(Math.random()*1000),
     parameterName:'', specType:SOC_SPEC_TYPES[0], specTypeOther:'', limitValue:'',
     decisionRule:SOC_DECISION_RULES[0], decisionRuleRisk:'',
-    reportingPreference:SOC_REPORTING_PREFS[0], borderlineHandling:SOC_BORDERLINE[1],
+    reportingPreference:SOC_REPORTING_PREFS[0],
     socPrice:0, status:'Pending'
   });
   renderSocSection(containerId,item);
@@ -5631,6 +5630,15 @@ function removeSocParameter(containerId,item,idx){
 }
 function updateSocParamField(item,idx,field,val){
   if(item.socParameters&&item.socParameters[idx]) item.socParameters[idx][field]=val;
+}
+// Updates just one parameter's Total display in place, without a full re-render —
+// same fix as the Sales Tracker item price field, so typing isn't interrupted.
+function updateSocParamTotal(containerId,idx){
+  const item=window._socItemRefs?.[containerId]; if(!item||!item.socParameters||!item.socParameters[idx])return;
+  const p=item.socParameters[idx];
+  const units=item.socUnitsNeeded||parseFloat(item.quantity)||1;
+  const totalEl=el(`soc-total-${containerId}-${idx}`);
+  if(totalEl) totalEl.textContent=`Total for ${units} unit(s): RM ${((p.socPrice||0)*units).toFixed(2)}`;
 }
 function toggleSocRequested(containerId,item,checked){
   item.socRequested=checked;
@@ -5648,6 +5656,10 @@ function renderSocSection(containerId,item){
     </label>
     ${item.socRequested?`<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px;">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">One Statement of Conformity is issued per parameter — add a row for each one the customer needs (e.g. Temperature, Humidity).</div>
+      ${(parseFloat(item.quantity)||1)>1?`<div style="background:#fefce8;border-radius:6px;padding:8px 10px;margin-bottom:10px;">
+        <label class="form-label" style="font-size:11.5px;">Of the ${item.quantity} units, how many need this SoC? <span style="font-weight:normal;color:var(--text-muted);">(the specific units will be decided when the job is created)</span></label>
+        <input class="form-control" type="number" min="1" max="${item.quantity}" value="${item.socUnitsNeeded||''}" oninput="window._socItemRefs['${containerId}'].socUnitsNeeded=parseInt(this.value)||1;(window._socItemRefs['${containerId}'].socParameters||[]).forEach((_,i)=>updateSocParamTotal('${containerId}',i))" style="width:100px;font-size:12px;"/>
+      </div>`:''}
       ${params.map((p,idx)=>`
         <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
@@ -5662,19 +5674,17 @@ function renderSocSection(containerId,item){
             ${p.specType==='Other'?`<input class="form-control" placeholder="Specify…" value="${p.specTypeOther||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'specTypeOther',this.value)" style="font-size:12px;"/>`:''}
           </div>
           <input class="form-control" placeholder="Limit Value(s) / Parameter(s) to check" value="${p.limitValue||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'limitValue',this.value)" style="margin-bottom:6px;font-size:12px;"/>
-          <input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Charged (RM)" value="${p.socPrice||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'socPrice',parseFloat(this.value)||0)" style="margin-bottom:6px;font-size:12px;"/>
+          <input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Per Unit (RM)" value="${p.socPrice||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'socPrice',parseFloat(this.value)||0);updateSocParamTotal('${containerId}',${idx})" style="margin-bottom:2px;font-size:12px;"/>
+          <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:6px;" id="soc-total-${containerId}-${idx}">Total for ${item.socUnitsNeeded||item.quantity||1} unit(s): RM ${((p.socPrice||0)*(item.socUnitsNeeded||parseFloat(item.quantity)||1)).toFixed(2)}</div>
           <div style="display:flex;gap:6px;margin-bottom:6px;">
             <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'decisionRule',this.value);renderSocSection('${containerId}',window._socItemRefs['${containerId}'])">
               ${opts(SOC_DECISION_RULES,p.decisionRule)}
             </select>
             ${p.decisionRule==='Guard-Banded — Customer-Specified Risk %'?`<input class="form-control" placeholder="Risk % / guard-band factor" value="${p.decisionRuleRisk||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'decisionRuleRisk',this.value)" style="font-size:12px;width:140px;"/>`:''}
           </div>
-          <div style="display:flex;gap:6px;">
+          <div class="form-group">
             <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'reportingPreference',this.value)">
               ${opts(SOC_REPORTING_PREFS,p.reportingPreference)}
-            </select>
-            <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'borderlineHandling',this.value)">
-              ${opts(SOC_BORDERLINE,p.borderlineHandling)}
             </select>
           </div>
           ${p.status&&p.status!=='Pending'?`<div style="font-size:11px;font-weight:700;margin-top:6px;color:${p.status==='Withdrawn'?'var(--text-muted)':'var(--green)'};">${p.status==='Uploaded'?'📎 SoC uploaded':`🚫 Withdrawn${p.withdrawnReason?': '+p.withdrawnReason:''}`}</div>`:''}
