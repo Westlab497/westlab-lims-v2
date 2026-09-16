@@ -4894,6 +4894,68 @@ function toggleConditionOther(){
 }
 
 // ── SAVE NEW JOB (one job number, multiple items) ──
+// ══════════════════════════════════════════════════
+// RECEIVING LABELS — a physical chain-of-custody label (60mm×40mm) for each Lab item,
+// stuck onto the item's body before handing over to the engineer. Onsite items skip this
+// entirely since they never leave the customer's site. Shown as copyable text blocks
+// rather than a print pipeline, since the lab already has its own label printer software.
+// ══════════════════════════════════════════════════
+function buildReceivingLabelText(job,item,itemNo,totalLabItems){
+  return [
+    `Job No: ${job.jobNo}  (Item ${itemNo} of ${totalLabItems})`,
+    `Customer: ${job.custName||''}`,
+    `Item: ${item.eqName||''}`,
+    `Brand/Model: ${item.brand||'—'} / ${item.model||'—'}`,
+    `S/N: ${item.serial||'N/A'}`,
+    `Accessories: ${item.accessories||'—'}`,
+    `Received: ${fmtDateShort(job.receiveDate)}`
+  ].join('\n');
+}
+function openReceivingLabelsPrompt(job){
+  const labItems=(job.items||[]).filter(it=>it.calType!=='Onsite');
+  if(!labItems.length)return; // Onsite-only job — no labels needed
+  let ov=document.getElementById('receiving-labels-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='receiving-labels-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:520px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🏷️ Receiving Labels — ${job.jobNo}</span>
+      <button onclick="document.getElementById('receiving-labels-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">One label per Lab item (60mm × 40mm) — stick to the item's body before handing over for calibration. Copy each block into your label printer software.</div>
+      ${labItems.map((it,i)=>{
+        const labelText=buildReceivingLabelText(job,it,i+1,labItems.length);
+        const taId=`receiving-label-ta-${i}`;
+        return `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:12px;overflow:hidden;">
+          <div style="background:var(--bg);padding:6px 12px;display:flex;justify-content:space-between;align-items:center;">
+            <strong style="font-size:12px;">Label ${i+1} of ${labItems.length} — ${it.eqName}</strong>
+            <button class="btn btn-outline btn-sm" onclick="copyReceivingLabel('${taId}')">📋 Copy</button>
+          </div>
+          <textarea id="${taId}" readonly onclick="this.select()" style="width:100%;border:none;padding:10px 12px;font-family:'Courier New',monospace;font-size:12.5px;line-height:1.6;resize:none;height:135px;box-sizing:border-box;">${labelText}</textarea>
+        </div>`;
+      }).join('')}
+      <div style="display:flex;justify-content:flex-end;">
+        <button class="btn btn-primary" onclick="document.getElementById('receiving-labels-overlay').style.display='none'">Done</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+function copyReceivingLabel(taId){
+  const ta=el(taId); if(!ta)return;
+  ta.select();
+  navigator.clipboard?.writeText(ta.value).then(()=>{
+    showToast('📋 Label copied — paste into your label printer software','success',2500);
+  }).catch(()=>{
+    document.execCommand('copy');
+    showToast('📋 Label copied','success',2000);
+  });
+}
+// Reprint — for an existing job, e.g. if the original label was damaged or lost
+function reprintReceivingLabels(jobNo){
+  const job=getJob(jobNo); if(!job){alert('Job not found.');return;}
+  openReceivingLabelsPrompt(job);
+}
 async function saveEquipment(printReceipt=false){
   const company=el('eq-company').value.trim();
   const eqName=el('eq-name').value.trim();
@@ -5035,6 +5097,7 @@ async function saveEquipment(printReceipt=false){
   showToast(`✅ Job ${jobNo} created — ${items.length} item${items.length>1?'s':''}, ${items.length} cert${items.length>1?'s':''}${anyAssigned?' · Assigned to '+assignedNames.join(', '):''}`,'success',4000);
   addAudit('🔧',`Job <strong>${jobNo}</strong> created — ${items.length} item(s) for ${company}`);
   currentPhotos=[]; _extraEquipment=[];
+  openReceivingLabelsPrompt(job);
 
   // ── EMAIL: Job Received ──
   const recip=resolveEmailRecipient(job);
@@ -7543,6 +7606,7 @@ function renderEquipmentTable(){
         <td style="padding:6px 10px;white-space:nowrap;text-align:right;">
           ${canCreateJobs(currentUser)?`<button onclick="reissueJobReceipt('${j.jobNo}')" title="Reissue Receipt" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🧾</button>`:''}
           ${canCreateJobs(currentUser)?`<button onclick="printWorkOrder('${j.jobNo}')" title="Print Work Order" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🖨️</button>`:''}
+          ${canCreateJobs(currentUser)&&(j.items||[]).some(it=>it.calType!=='Onsite')?`<button onclick="reprintReceivingLabels('${j.jobNo}')" title="Reprint Receiving Labels" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🏷️</button>`:''}
           ${(role==='Admin'||role==='Managing Director')&&j.status!=='Completed'?`<button onclick="deleteJob('${j.jobNo}')" title="Delete Job" style="background:rgba(220,38,38,.85);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑</button>`:''}
           ${(role==='Admin'||role==='Managing Director')&&j.status==='Completed'?`<button onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (Admin override — irreversible)" style="background:rgba(153,27,27,.9);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑️⚠️</button>`:''}
         </td>
