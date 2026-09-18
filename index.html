@@ -1476,7 +1476,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="card" style="margin-top:16px;">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
           <span class="card-title">📋 Audit Log</span>
-          <input type="text" class="form-control" id="audit-search" placeholder="Search logs…" style="width:200px;font-size:12px;" oninput="filterAuditLog()"/>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline btn-sm" id="audit-email-filter-btn" onclick="toggleAuditEmailFilter()">📧 Emails Only</button>
+            <input type="text" class="form-control" id="audit-search" placeholder="Search logs…" style="width:200px;font-size:12px;" oninput="filterAuditLog()"/>
+          </div>
         </div>
         <div class="card-body" style="padding:0;max-height:400px;overflow-y:auto;" id="audit-log-body">
           <div class="empty-state"><p>No audit records yet.</p></div>
@@ -3753,6 +3756,7 @@ function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='
 function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator'].includes(r); }
 function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Engineer','Manager','Quality Manager'].includes(r); }
 function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
+function canRequestAmendment(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator','Sales'].includes(r); }
 function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator'].includes(r); }
 function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
 function canViewPrice(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator'].includes(r); }
@@ -7449,6 +7453,106 @@ async function openUploadedFile(){
   }catch(e){alert('Could not open file: '+e.message);}
 }
 
+// ══════════════════════════════════════════════════
+// CERTIFICATE AMENDMENTS (ISO/IEC 17025 Clause 7.8.7) — once a certificate is issued,
+// corrections are never silent edits. Each amendment is its own traceable record,
+// referencing the original certificate number, goes through the same approval step
+// as the original, and the full history (original + every amendment) is always kept.
+// ══════════════════════════════════════════════════
+function openAmendmentRequestModal(jobNo,itemIdx){
+  if(!canRequestAmendment(currentUser)){alert('You do not have permission to request a certificate amendment.');return;}
+  const job=getJob(jobNo); const item=job?.items?.[itemIdx]; if(!item)return;
+  let ov=document.getElementById('amendment-request-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='amendment-request-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  const priorCount=(item.amendments||[]).length;
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:480px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📝 Request Certificate Amendment</span>
+      <button onclick="document.getElementById('amendment-request-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;">
+        <strong>Certificate No.: ${item.certNo}</strong> — ${item.eqName}<br/>
+        ${priorCount?`<span style="color:var(--text-muted);">This will be Amendment No. ${priorCount+1} to this certificate.</span>`:'<span style="color:var(--text-muted);">This will be the first amendment to this certificate.</span>'}
+      </div>
+      <div class="form-group"><label class="form-label">What needs to be amended? <span class="req">*</span></label><textarea class="form-control" id="amend-description" rows="3" placeholder="e.g. Customer's company name was misspelled as 'ABC Sdn Bhd' instead of 'ABC Sdn. Bhd.'"></textarea></div>
+      <div class="form-group"><label class="form-label">Reason for amendment <span class="req">*</span></label><textarea class="form-control" id="amend-reason" rows="2" placeholder="e.g. Customer flagged the error after receiving the certificate"></textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('amendment-request-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAmendmentRequest('${jobNo}',${itemIdx})">Submit for Approval</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function submitAmendmentRequest(jobNo,itemIdx){
+  const description=el('amend-description').value.trim();
+  const reason=el('amend-reason').value.trim();
+  if(!description||!reason){alert('Please fill in both what needs to be amended and the reason.');return;}
+  await updateJob(jobNo,j=>{
+    const item=j.items[itemIdx]; if(!item)return;
+    if(!item.amendments) item.amendments=[];
+    const amendmentNo=item.amendments.length+1;
+    item.amendments.push({
+      id:'AMD-'+Date.now(),amendmentNo,description,reason,
+      status:'Pending Approval',
+      requestedBy:currentUser,requestedAt:new Date().toISOString()
+    });
+    j.history.push({action:`📝 Amendment No. ${amendmentNo} requested for Certificate ${item.certNo} (${item.eqName})`,by:currentUser,time:new Date().toISOString(),note:description});
+  });
+  document.getElementById('amendment-request-overlay').style.display='none';
+  renderEquipmentTable();
+  showToast('📝 Amendment request submitted for approval','success',3000);
+  addAudit('📝',`Amendment requested for ${jobNo} — Certificate ${getJob(jobNo)?.items?.[itemIdx]?.certNo}`);
+}
+async function approveAmendment(jobNo,itemIdx,amendmentId){
+  if(!canApprove(currentUser)){alert('Only an Approved Signatory can approve a certificate amendment.');return;}
+  const job=getJob(jobNo); const item=job?.items?.[itemIdx]; const amendment=item?.amendments?.find(a=>a.id===amendmentId);
+  if(!amendment)return;
+  if(!confirm(`Approve Amendment No. ${amendment.amendmentNo} to Certificate ${item.certNo}?\n\n"${amendment.description}"`))return;
+  const staffRec=_staff&&_staff.find(x=>x.username===currentUser);
+  const certName=staffRec?.certName||staffRec?.name||USERS[currentUser]?.name||currentUser;
+  await updateJob(jobNo,j=>{
+    const it=j.items[itemIdx]; const amd=it?.amendments?.find(a=>a.id===amendmentId); if(!amd)return;
+    amd.status='Approved';
+    amd.approvedBy=currentUser;
+    amd.approvedByCertName=certName;
+    amd.approvedAt=new Date().toISOString();
+    j.history.push({action:`✅ Amendment No. ${amd.amendmentNo} to Certificate ${it.certNo} approved`,by:currentUser,time:new Date().toISOString()});
+  });
+  renderEquipmentTable();
+  renderApprovalQueue();
+  showToast('✅ Amendment approved','success',3000);
+  addAudit('📝',`Amendment No. ${amendment.amendmentNo} approved for Certificate ${item.certNo}`);
+}
+async function exportAmendmentPdf(jobNo,itemIdx,amendmentId){
+  const job=getJob(jobNo); const item=job?.items?.[itemIdx]; const amendment=item?.amendments?.find(a=>a.id===amendmentId);
+  if(!amendment||amendment.status!=='Approved'){alert('This amendment has not been approved yet.');return;}
+  const s=_settings;
+  const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
+      <div style="font-size:11px;color:#64748b;">${s.address||''}</div>
+    </div>
+    <div style="text-align:center;font-size:15px;font-weight:800;text-decoration:underline;margin-bottom:6px;">AMENDMENT TO CALIBRATION CERTIFICATE</div>
+    <div style="text-align:center;font-size:13px;margin-bottom:24px;">Amendment No. ${amendment.amendmentNo} to Certificate No. ${item.certNo}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px;">
+      <tr><td style="padding:5px 8px;color:#64748b;width:160px;">Original Certificate No.</td><td style="padding:5px 8px;font-weight:600;">${item.certNo}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Job No.</td><td style="padding:5px 8px;font-weight:600;">${job.jobNo}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Customer</td><td style="padding:5px 8px;font-weight:600;">${job.custName||''}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Item</td><td style="padding:5px 8px;font-weight:600;">${item.eqName} ${item.brand||''} ${item.model||''}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Amendment Date</td><td style="padding:5px 8px;font-weight:600;">${fmtDateShort(amendment.approvedAt)}</td></tr>
+    </table>
+    <div style="margin-bottom:16px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">DESCRIPTION OF AMENDMENT</div><div style="font-size:13px;background:#f8fafc;border-radius:8px;padding:12px 14px;">${amendment.description}</div></div>
+    <div style="margin-bottom:24px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">REASON FOR AMENDMENT</div><div style="font-size:13px;background:#f8fafc;border-radius:8px;padding:12px 14px;">${amendment.reason}</div></div>
+    <div style="border-top:1px solid #e2e8f0;padding-top:14px;font-size:11px;color:#64748b;">
+      Requested by ${USERS[amendment.requestedBy]?.name||amendment.requestedBy} on ${fmtDateShort(amendment.requestedAt)}<br/>
+      Approved by ${amendment.approvedByCertName||USERS[amendment.approvedBy]?.name||amendment.approvedBy} on ${fmtDateShort(amendment.approvedAt)}
+    </div>
+    <div style="margin-top:20px;font-size:10.5px;color:#94a3b8;font-style:italic;">This amendment supersedes the corresponding detail on the original certificate. Both this amendment and the original certificate remain part of the permanent record for this item.</div>
+  </div>`;
+  await exportHtmlAsPdf(html,`Amendment_${amendment.amendmentNo}_to_${item.certNo}.pdf`,'Certificate Amendment',1);
+}
 async function approveJob(){
   if(approvalJobNo===null||approvalItemIdx===null)return;
   const jForCheck=getJob(approvalJobNo);
@@ -11146,6 +11250,12 @@ function renderMyJobs(){
           `<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})">📄 View Certificate</button>`:''}
         ${item.status==='Completed'?
           `<span style="font-size:12px;color:var(--green);font-weight:600;padding:5px;">✅ Completed</span>`:''}
+        ${item.status==='Completed'&&canRequestAmendment(currentUser)&&!(item.amendments||[]).some(a=>a.status==='Pending Approval')?
+          `<button class="btn btn-outline btn-sm" onclick="openAmendmentRequestModal('${j.jobNo}',${idx})">📝 Request Amendment</button>`:''}
+        ${(item.amendments||[]).map(a=>a.status==='Pending Approval'
+          ?`<span style="font-size:11px;background:#fef3c7;color:#92400e;font-weight:600;padding:4px 8px;border-radius:4px;">📝 Amendment ${a.amendmentNo} pending approval${canApprove(currentUser)?` <button class="btn btn-outline btn-sm" style="margin-left:4px;padding:1px 6px;" onclick="approveAmendment('${j.jobNo}',${idx},'${a.id}')">✅ Approve</button>`:''}</span>`
+          :`<span style="font-size:11px;background:#dcfce7;color:#166534;font-weight:600;padding:4px 8px;border-radius:4px;">📝 Amendment ${a.amendmentNo} approved <a href="javascript:void(0)" onclick="exportAmendmentPdf('${j.jobNo}',${idx},'${a.id}')" style="margin-left:4px;">📄 View</a></span>`
+        ).join('')}
         <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="toggleJobHistory('${histId}')">📋 History</button>
       </div>
       <div id="${histId}" style="display:none;margin-top:10px;background:var(--bg);border-radius:6px;padding:8px 12px;">
@@ -11832,12 +11942,23 @@ function refreshAllBadges(){
 
 // ── AUDIT LOG ──
 function addAudit(icon,msg){
-  const logEl=el('audit-log-list'); if(!logEl)return;
+  const logEl=el('audit-log-list');
   const t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  const d=document.createElement('div'); d.className='activity-item';
-  d.innerHTML=`<div class="activity-dot blue">${icon}</div><div><div class="activity-text">${msg}</div><div class="activity-time">Today, ${t}</div></div>`;
-  logEl.prepend(d);
-  const da=el('dash-activity'); if(da){const d2=d.cloneNode(true);da.prepend(d2);while(da.children.length>6)da.removeChild(da.lastChild);}
+  if(logEl){
+    const d=document.createElement('div'); d.className='activity-item';
+    d.innerHTML=`<div class="activity-dot blue">${icon}</div><div><div class="activity-text">${msg}</div><div class="activity-time">Today, ${t}</div></div>`;
+    logEl.prepend(d);
+  }
+  const da=el('dash-activity');
+  if(da&&logEl){const d2=logEl.firstElementChild.cloneNode(true);da.prepend(d2);while(da.children.length>6)da.removeChild(da.lastChild);}
+  // Persist to the actual Audit Log page's data source — this was previously only updating
+  // the live on-screen widget above, never actually saved, so the full log page always
+  // appeared empty on reload regardless of how many events had fired.
+  if(!_settings.auditLog) _settings.auditLog=[];
+  _settings.auditLog.unshift({icon,msg,by:currentUser,ts:new Date().toISOString()});
+  if(_settings.auditLog.length>500) _settings.auditLog.length=500; // cap growth
+  SB.upsert('wl_settings','main',_settings).catch(e=>console.error('Audit log save failed:',e));
+  filterAuditLog();
 }
 
 // ── SIDEBAR COLLAPSE ──
@@ -16385,11 +16506,11 @@ async function checkRefEqDueReminders(){
   }
   body+=`Please arrange for recalibration to maintain ISO/IEC 17025 traceability compliance.\n\nBest regards,\n${lab} LIMS — Automated Reminder`;
 
-  const ok=await sendEmail('sales@westlab.com.my','Westlab Team',
+  const ok=await sendEmail(['sales@westlab.com.my','technical@westlab.com.my'],'Westlab Team',
     `🔧 Reference Equipment Calibration Reminder — ${overdue.length} overdue, ${dueSoon.length} due soon`,
     body
   );
-  if(ok) addAudit('🔧',`Reference equipment reminder sent — ${overdue.length} overdue, ${dueSoon.length} due soon`);
+  if(ok) addAudit('📧',`Reference equipment reminder emailed to sales@westlab.com.my and technical@westlab.com.my — ${overdue.length} overdue, ${dueSoon.length} due soon`);
   sessionStorage.setItem(reminderKey,'1');
   }catch(_err){
     console.error("checkRefEqDueReminders error:",_err);
@@ -16782,10 +16903,18 @@ function renderReports(){
 
 // Update mobile admin drawer items based on role
 // ── AUDIT LOG FILTER ──
+let _auditEmailFilterOn=false;
+function toggleAuditEmailFilter(){
+  _auditEmailFilterOn=!_auditEmailFilterOn;
+  const btn=el('audit-email-filter-btn');
+  if(btn) btn.className=_auditEmailFilterOn?'btn btn-primary btn-sm':'btn btn-outline btn-sm';
+  filterAuditLog();
+}
 function filterAuditLog(){
   const q=(el('audit-search')?.value||'').toLowerCase();
   const body=el('audit-log-body'); if(!body)return;
-  const logs=_settings.auditLog||[];
+  let logs=_settings.auditLog||[];
+  if(_auditEmailFilterOn) logs=logs.filter(l=>l.icon==='📧');
   const filtered=q?logs.filter(l=>(l.msg||'').toLowerCase().includes(q)||(l.by||'').toLowerCase().includes(q)):logs;
   if(!filtered.length){
     body.innerHTML='<div class="empty-state" style="padding:20px;"><p>No audit records found.</p></div>';
