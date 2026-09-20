@@ -1801,7 +1801,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div id="price-hint-box" style="display:none;background:#fff3e0;border-radius:8px;padding:8px 14px;font-size:12px;color:#c84b00;margin-bottom:4px;"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Tag No. <span style="font-size:11px;color:var(--text-muted);">(Customer's asset tag — leave blank if none)</span></label><input class="form-control" id="eq-tag-no" placeholder="e.g. EQ-0012 or leave blank if N/A"/></div>
-        <div class="form-group"><label class="form-label">Specification / Tolerance</label><input class="form-control" id="eq-spec" placeholder="e.g. ±0.5°C"/></div>
+        <div class="form-group"><label class="form-label">Specification / Tolerance</label><input class="form-control" id="eq-spec" placeholder="e.g. ±0.5°C" oninput="autoPlusMinus(this)"/></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Range / Capacity</label><input class="form-control" id="eq-range" placeholder="e.g. 0–200°C"/></div>
@@ -2444,7 +2444,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Tag No. <span style="font-size:11px;color:var(--text-muted);">(Customer's asset tag)</span></label><input class="form-control" id="edit-eq-tag-no" placeholder="e.g. EQ-0012 or leave blank if N/A"/></div>
-        <div class="form-group"><label class="form-label">Specification / Tolerance</label><input class="form-control" id="edit-eq-spec" placeholder="e.g. ±0.5°C"/></div>
+        <div class="form-group"><label class="form-label">Specification / Tolerance</label><input class="form-control" id="edit-eq-spec" placeholder="e.g. ±0.5°C" oninput="autoPlusMinus(this)"/></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Range / Capacity</label><input class="form-control" id="edit-eq-range" placeholder="e.g. 0–200°C"/></div>
@@ -2464,10 +2464,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <option value="open">Open Date (No Due Date)</option>
           </select>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Specification / Tolerance</label><input class="form-control" id="edit-eq-spec" placeholder="e.g. ±0.5°C"/></div>
-        <div class="form-group"></div>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -3776,6 +3772,7 @@ function applyRoleUI(){
   try{
   const role=getUserRole(currentUser);
   const admin=role==='Admin'||role==='Managing Director';
+  const pureAdmin=role==='Admin'; // Admin only, excluding MD — MD also performs hands-on calibration work, so unlike Admin, MD still needs My Jobs
   const manager=role==='Manager'||role==='Quality Manager';
   const engineer=role==='Engineer';
   const coordinator=role==='Coordinator';
@@ -3786,7 +3783,7 @@ function applyRoleUI(){
   // Equipment & Jobs — Admin, Manager, Coordinator see all; Engineer sees My Jobs only; Sales/HR see nothing (Sales is lead-capture only)
   el('nav-equipment').classList.toggle('hidden-nav', sales||hr);
   el('nav-completed').classList.toggle('hidden-nav', engineer||sales||hr);
-  el('nav-my-jobs').classList.toggle('hidden-nav', admin||coordinator||sales||hr); // shown for Engineer and Manager
+  el('nav-my-jobs').classList.toggle('hidden-nav', pureAdmin||coordinator||sales||hr); // shown for Engineer, Manager, and MD (MD also does hands-on calibration)
   el('nav-approval').classList.toggle('hidden-nav', !(admin||manager));
   el('nav-customers').classList.toggle('hidden-nav', hr);
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
@@ -5053,6 +5050,7 @@ async function saveEquipment(printReceipt=false){
       price:cleanPrice>0?cleanPrice:undefined,
       status:itemAssignTo?'Assigned':'Unassigned',
       assignedTo:itemAssignTo,
+      assignedAt:itemAssignTo?new Date().toISOString():null,
       promisedDate:rawItems[i].promisedDate||promisedDate||'',
       assignNote:itemAssignTo?(rawItems[i].assignNote||''):'',
       calData:null,
@@ -5826,7 +5824,7 @@ function renderExtraEquipment(){
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Specification / Tolerance</label>
-          <input class="form-control" value="${eq.spec}" placeholder="e.g. ±0.5°C" oninput="updateExtraField(${i},'spec',this.value)"/></div>
+          <input class="form-control" value="${eq.spec}" placeholder="e.g. ±0.5°C" oninput="autoPlusMinus(this);updateExtraField(${i},'spec',this.value)"/></div>
         <div class="form-group"><label class="form-label">Range / Capacity</label>
           <input class="form-control" value="${eq.range}" placeholder="e.g. 0–200°C" oninput="updateExtraField(${i},'range',this.value)"/></div>
       </div>
@@ -6591,7 +6589,9 @@ async function saveEditJob(){
       // Per-item assignment, promised date, and note
       const newAssignTo=el('edit-eq-assign-to')?.value||null;
       const wasUnassigned=!it.assignedTo;
+      const assigneeChanged=newAssignTo!==it.assignedTo;
       it.assignedTo=newAssignTo;
+      if(assigneeChanged) it.assignedAt=newAssignTo?new Date().toISOString():null; // new assignee joins the FIFO queue now; unchanged assignee keeps their original position
       if(newAssignTo&&(wasUnassigned||it.status==='Unassigned')) it.status='Assigned';
       if(!newAssignTo) it.status='Unassigned';
       it.promisedDate=el('edit-eq-promised-date')?.value||'';
@@ -7781,7 +7781,7 @@ async function confirmAssign(){
       await updateJob(_assignItemJobNo,j=>{
         const item=j.items[_assignItemIdx];
         if(!item)return;
-        item.assignedTo=to; item.status='Assigned'; item.assignNote=note;
+        item.assignedTo=to; item.status='Assigned'; item.assignNote=note; item.assignedAt=new Date().toISOString();
         j.history.push({action:`Item ${item.itemNo} (${item.eqName}) assigned to ${USERS[to]?.name||to}`,by:currentUser,time:new Date().toISOString(),note});
       });
       closeModal('modal-assign-job');
@@ -7793,7 +7793,7 @@ async function confirmAssign(){
     }
     if(assigningJobNo){
       await updateJob(assigningJobNo,j=>{
-        j.items&&j.items.forEach(item=>{item.assignedTo=to;item.status='Assigned';item.assignNote=note;});
+        j.items&&j.items.forEach(item=>{item.assignedTo=to;item.status='Assigned';item.assignNote=note;item.assignedAt=new Date().toISOString();});
         j.history.push({action:`All items assigned to ${USERS[to]?.name||to}`,by:currentUser,time:new Date().toISOString(),note});
       });
       closeModal('modal-assign-job');
@@ -8561,6 +8561,14 @@ function updateSalesItemField(idx,field,val){
 }
 // Auto-prepends ± when the typed spec starts with a number (e.g. "0.5°C" → "±0.5°C"),
 // leaves non-numeric specs (e.g. "Class 1", "Grade A") alone since ± wouldn't make sense there.
+// Generic version for any plain input field (Resolution/Readability, etc.) — same rule:
+// auto-prepend ± only when the value starts with a number, only once (not on every
+// keystroke), so it never fights with normal typing.
+function autoPlusMinus(input){
+  if(/^\d/.test(input.value)&&!input.value.startsWith('±')){
+    input.value='±'+input.value;
+  }
+}
 function updateSalesItemSpec(idx,input){
   let val=input.value;
   if(/^\d/.test(val)&&!val.startsWith('±')){
@@ -10819,6 +10827,7 @@ async function confirmCheckIn(){
     // Upload selfie to R2 — test-mode uploads go to a separate folder, auto-delete after 90 days
     // is enforced by cleanupExpiredCheckinSelfies(), run on app load, using the expiresAt saved below.
     let selfieUrl='';
+    let selfieUploadError='';
     if(_selfieDataUrl){
       try{
         const blob=await fetch(_selfieDataUrl).then(r=>r.blob());
@@ -10831,10 +10840,16 @@ async function confirmCheckIn(){
         if(uploadRes.ok){
           const r2=await uploadRes.json();
           selfieUrl=r2.url||'';
+          if(!selfieUrl) selfieUploadError='Upload succeeded but no file URL was returned.';
+        } else {
+          selfieUploadError=`Upload server responded with an error (status ${uploadRes.status}).`;
         }
-      }catch(e){console.warn('Selfie upload failed:',e);}
+      }catch(e){
+        console.error('Selfie upload failed:',e);
+        selfieUploadError=e.message||'Unknown error while uploading.';
+      }
     }
-    if(!selfieUrl){showToast('❌ Selfie upload failed — please check your connection and try again.','error',4000);if(btn){btn.disabled=false;btn.textContent='📍 Confirm Check In';}return;}
+    if(!selfieUrl){showToast(`❌ Selfie upload failed — ${selfieUploadError||'please check your connection and try again.'}`,'error',6000);if(btn){btn.disabled=false;btn.textContent='📍 Confirm Check In';}return;}
 
     const selfieExpiresAt=new Date(Date.now()+90*86400000).toISOString(); // 90 days from now
 
@@ -11161,12 +11176,16 @@ function renderMyJobs(){
     container.innerHTML=`<div class="empty-state"><div class="empty-icon">🎉</div><p>No jobs assigned to you right now.</p></div>`;
     return;
   }
-  // Sort overdue first
+  // Express/Urgent always float to the top regardless of when assigned; everything else
+  // is pure FIFO — whichever item was assigned to you first, you clear first. Items with
+  // no recorded assignment time (older data, from before this was tracked) are treated as
+  // the oldest, since they've realistically been waiting the longest.
   myItems.sort((a,b)=>{
-    const oa=a.job.promisedDate&&new Date(a.job.promisedDate+'T00:00:00')<today;
-    const ob=b.job.promisedDate&&new Date(b.job.promisedDate+'T00:00:00')<today;
-    if(oa&&!ob)return -1; if(!oa&&ob)return 1;
-    return (a.job.promisedDate||'9')>(b.job.promisedDate||'9')?1:-1;
+    const aUrgent=a.item.priority==='Express'||a.item.priority==='Urgent';
+    const bUrgent=b.item.priority==='Express'||b.item.priority==='Urgent';
+    if(aUrgent&&!bUrgent)return -1; if(!aUrgent&&bUrgent)return 1;
+    const aTime=a.item.assignedAt||'0'; const bTime=b.item.assignedAt||'0';
+    return aTime<bTime?-1:aTime>bTime?1:0;
   });
   container.innerHTML=myItems.map(({job:j,item,idx})=>{
     const cd=getCheckinData(j.jobNo,idx);
@@ -16017,7 +16036,7 @@ async function recoverJob(jobNo){
       job.status='Unassigned';
       job.deletedAt=null;
       job.deletedBy=null;
-      if(job.items) job.items.forEach(i=>{ i.status='Unassigned'; i.assignedTo=null; });
+      if(job.items) job.items.forEach(i=>{ i.status='Unassigned'; i.assignedTo=null; i.assignedAt=null; });
       job.history.push({action:'↩️ Job recovered from Deleted Jobs — items reset to Unassigned',by:currentUser,time:new Date().toISOString()});
     });
     renderDeletedJobs(); renderEquipmentTable(); renderDashboard(); refreshAllBadges();
