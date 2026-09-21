@@ -2534,6 +2534,48 @@ textarea.form-control{resize:vertical;min-height:70px;}
   </div>
 </div>
 
+<!-- CONDITION CAPTURE MODAL — quick, lightweight capture of item condition at the genuine
+     moment of first seeing it on-site, separate from the full Perform Calibration form which
+     may get filled in much later (back at the office). -->
+<div class="modal-overlay" id="modal-condition-capture" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">📷 Record Item Condition</span>
+      <button class="modal-close" onclick="closeModal('modal-condition-capture')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Record this now, while you're actually looking at the item — it'll pre-fill "Before Calibration" later, whenever you get to the full form.</div>
+      <div class="form-group">
+        <label class="form-label">Condition of Item <span class="req">*</span></label>
+        <select class="form-control" id="cond-capture-select" onchange="el('cond-capture-other-group').style.display=this.value==='Others'?'block':'none'">
+          <option value="Good Physical Condition.">Good Physical Condition</option>
+          <option value="Damaged">Damaged</option>
+          <option value="Others">Others (describe)</option>
+        </select>
+      </div>
+      <div class="form-group" id="cond-capture-other-group" style="display:none;">
+        <label class="form-label">Describe condition</label>
+        <input class="form-control" id="cond-capture-other-text" placeholder="e.g. Cracked display, missing battery cover"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Photo <span style="font-size:11px;color:var(--text-muted);">(optional, but recommended)</span></label>
+        <div style="text-align:center;">
+          <video id="cond-capture-video" style="display:none;width:100%;border-radius:8px;max-height:200px;" autoplay playsinline></video>
+          <canvas id="cond-capture-canvas" style="display:none;width:100%;border-radius:8px;"></canvas>
+          <img id="cond-capture-preview" style="display:none;width:100%;border-radius:8px;max-height:200px;object-fit:cover;" alt="Item condition"/>
+          <div id="cond-capture-buttons" style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
+            <button class="btn btn-outline btn-sm" onclick="startConditionCamera()">📷 Take Photo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-condition-capture')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmConditionCapture()">✅ Save Condition</button>
+    </div>
+  </div>
+</div>
+
 <!-- CHECK-OUT MODAL -->
 <div class="modal-overlay" id="modal-checkout" style="display:none;">
   <div class="modal modal-sm">
@@ -7065,7 +7107,8 @@ async function openCalModal(jobNo, itemIdx=0){
     calInterval.value=savedInterval||'12'; // default 1 year
     calcNextDueFromInterval();
   }
-  el('cal-cond-before').value=item&&item.condition?item.condition:'Good Physical Condition.';
+  const capturedCond=getCheckinData(jobNo,itemIdx);
+  el('cal-cond-before').value=capturedCond.onsiteCondition||(item&&item.condition?item.condition:'Good Physical Condition.');
   el('cal-cond-after').value='Calibrated as Requested by Customer.';
   el('cal-cond-remark').value='Without Adjustment.';
   const remarksBox=el('cal-item-remarks-box');
@@ -8040,7 +8083,9 @@ function getCheckinData(jobNo,itemIdx){
     checkinTime:it.checkinTime, checkinLat:it.checkinLat, checkinLng:it.checkinLng,
     checkinAccuracy:it.checkinAccuracy, checkinFlagged:it.checkinFlagged,
     checkinSelfie:it.checkinSelfie, checkinNotes:it.checkinNotes,
-    checkoutTime:it.checkoutTime, checkoutNotes:it.checkoutNotes
+    checkoutTime:it.checkoutTime, checkoutNotes:it.checkoutNotes,
+    onsiteCondition:it.onsiteCondition, onsiteConditionPhotoUrl:it.onsiteConditionPhotoUrl,
+    onsiteConditionAt:it.onsiteConditionAt, onsiteConditionBy:it.onsiteConditionBy
   }:{};
 }
 
@@ -10900,6 +10945,116 @@ async function confirmCheckIn(){
   }
 }
 
+// ══════════════════════════════════════════════════
+// CONDITION CAPTURE — a quick, separate step from the full Perform Calibration form,
+// so the item's actual physical condition gets recorded at the genuine moment of seeing
+// it on-site, not reconstructed from memory whenever the full form eventually gets filled.
+// ══════════════════════════════════════════════════
+let _condCaptureJobNo=null, _condCaptureItemIdx=null, _condCaptureStream=null, _condCaptureDataUrl=null;
+function openConditionCaptureModal(jobNo,itemIdx){
+  _condCaptureJobNo=jobNo; _condCaptureItemIdx=itemIdx; _condCaptureDataUrl=null;
+  el('cond-capture-select').value='Good Physical Condition.';
+  el('cond-capture-other-group').style.display='none';
+  el('cond-capture-other-text').value='';
+  const vid=el('cond-capture-video'); if(vid) vid.style.display='none';
+  const canvas=el('cond-capture-canvas'); if(canvas) canvas.style.display='none';
+  const preview=el('cond-capture-preview'); if(preview){preview.style.display='none';preview.src='';}
+  const btns=el('cond-capture-buttons');
+  if(btns) btns.innerHTML='<button class="btn btn-outline btn-sm" onclick="startConditionCamera()">📷 Take Photo</button>';
+  if(_condCaptureStream){_condCaptureStream.getTracks().forEach(t=>t.stop());_condCaptureStream=null;}
+  openModal('modal-condition-capture');
+}
+function startConditionCamera(){
+  const vid=el('cond-capture-video');
+  const btns=el('cond-capture-buttons');
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}) // rear camera — photographing the item, not a selfie
+    .then(stream=>{
+      _condCaptureStream=stream;
+      vid.srcObject=stream;
+      vid.style.display='block';
+      btns.innerHTML=`
+        <button class="btn btn-primary btn-sm" onclick="captureConditionPhoto()">📸 Capture</button>
+        <button class="btn btn-outline btn-sm" onclick="cancelConditionPhoto()">Cancel</button>`;
+    })
+    .catch(e=>{
+      showToast('Camera not available: '+e.message,'warn',3000);
+    });
+}
+function captureConditionPhoto(){
+  const vid=el('cond-capture-video');
+  const canvas=el('cond-capture-canvas');
+  const preview=el('cond-capture-preview');
+  const btns=el('cond-capture-buttons');
+  canvas.width=vid.videoWidth||320;
+  canvas.height=vid.videoHeight||240;
+  canvas.getContext('2d').drawImage(vid,0,0);
+  _condCaptureDataUrl=canvas.toDataURL('image/jpeg',0.8);
+  preview.src=_condCaptureDataUrl;
+  preview.style.display='block';
+  vid.style.display='none';
+  if(_condCaptureStream){_condCaptureStream.getTracks().forEach(t=>t.stop());_condCaptureStream=null;}
+  btns.innerHTML=`<button class="btn btn-outline btn-sm" onclick="retakeConditionPhoto()">🔄 Retake</button>`;
+}
+function retakeConditionPhoto(){
+  const preview=el('cond-capture-preview');
+  preview.style.display='none'; preview.src='';
+  _condCaptureDataUrl=null;
+  startConditionCamera();
+}
+function cancelConditionPhoto(){
+  if(_condCaptureStream){_condCaptureStream.getTracks().forEach(t=>t.stop());_condCaptureStream=null;}
+  const vid=el('cond-capture-video'); if(vid) vid.style.display='none';
+  const btns=el('cond-capture-buttons');
+  if(btns) btns.innerHTML='<button class="btn btn-outline btn-sm" onclick="startConditionCamera()">📷 Take Photo</button>';
+}
+async function confirmConditionCapture(){
+  const selectVal=el('cond-capture-select').value;
+  const otherText=el('cond-capture-other-text').value.trim();
+  if(selectVal==='Others'&&!otherText){alert('Please describe the condition.');return;}
+  const conditionText=selectVal==='Others'?otherText:selectVal;
+  const btn=document.querySelector('#modal-condition-capture .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    let photoUrl='';
+    if(_condCaptureDataUrl){
+      try{
+        const blob=await fetch(_condCaptureDataUrl).then(r=>r.blob());
+        const path=`${isTestingModeOn()?'condition_test':'condition'}/${_condCaptureJobNo}_item${_condCaptureItemIdx}_${Date.now()}.jpg`;
+        const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':'image/jpeg'},body:blob});
+        if(uploadRes.ok){ const r2=await uploadRes.json(); photoUrl=r2.url||''; }
+      }catch(e){ console.error('Condition photo upload failed:',e); showToast('⚠️ Photo could not be uploaded, but condition was still saved.','warn',4000); }
+    }
+    await (async()=>{
+      if(isTestingModeOn()){
+        const rec=getTestCheckinRec(_condCaptureJobNo,_condCaptureItemIdx);
+        rec.onsiteCondition=conditionText;
+        rec.onsiteConditionPhotoUrl=photoUrl;
+        rec.onsiteConditionAt=new Date().toISOString();
+        rec.onsiteConditionBy=currentUser;
+        await saveTestCheckins();
+      } else {
+        await updateJob(_condCaptureJobNo,j=>{
+          const item=j.items[_condCaptureItemIdx]; if(!item)return;
+          item.onsiteCondition=conditionText;
+          item.onsiteConditionPhotoUrl=photoUrl;
+          item.onsiteConditionAt=new Date().toISOString();
+          item.onsiteConditionBy=currentUser;
+          j.history.push({action:`📷 Condition recorded for ${item.eqName}: ${conditionText}`,by:currentUser,time:new Date().toISOString()});
+        });
+      }
+    })();
+    closeModal('modal-condition-capture');
+    renderMyJobs();
+    showToast('✅ Condition saved — will pre-fill "Before Calibration" automatically','success',3000);
+    addAudit('📷',`Condition recorded for ${_condCaptureJobNo} item ${_condCaptureItemIdx+1}: ${conditionText}`);
+  }catch(e){
+    console.error('confirmConditionCapture error:',e);
+    showToast('❌ Failed to save condition: '+e.message,'error',4000);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='✅ Save Condition';}
+  }
+}
+
 function openCheckoutModal(jobNo, itemIdx){
   _checkinJobNo=jobNo; _checkinItemIdx=itemIdx;
   el('checkout-notes').value='';
@@ -11268,6 +11423,8 @@ function renderMyJobs(){
           ${item.calType==='Onsite'?`
             <button class="btn btn-outline btn-sm" style="background:#ffeaee;color:#c0001a;border-color:#ffb3bc;" onclick="openCustomerNotReadyModal('${j.jobNo}',${idx})">⚠️ Not Ready</button>
             ${!cd.checkinTime?`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${j.jobNo}',${idx})">📍 Check In${isTestingModeOn()?' 🧪':''}</button>`:`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${j.jobNo}',${idx})">🏁 Check Out${isTestingModeOn()?' 🧪':''}</button>`}
+            ${cd.checkinTime&&!cd.onsiteCondition?`<button class="btn btn-outline btn-sm" style="background:#7c2d12;color:#fff;border:none;" onclick="openConditionCaptureModal('${j.jobNo}',${idx})">📷 Record Condition${isTestingModeOn()?' 🧪':''}</button>`:''}
+            ${cd.onsiteCondition?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Condition: ${cd.onsiteCondition}</span>`:''}
           `:`<button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">🔶 KIV</button>`}
         `:''}        ${item.status==='Pending Approval'?
           `<span style="font-size:12px;color:var(--purple);font-weight:600;padding:5px;">📬 Awaiting approval…</span>`:''}
