@@ -1822,7 +1822,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </select>
         </div>
       </div>
-      <div class="form-row">
+      <div class="form-row" id="eq-condition-row">
         <div class="form-group">
           <label class="form-label">Condition of Item <span class="req">*</span></label>
           <select class="form-control" id="eq-condition" onchange="toggleConditionOther()">
@@ -1835,6 +1835,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <input class="form-control" id="eq-condition-other" placeholder="Describe condition…"/>
         </div>
       </div>
+      <div class="form-group" id="eq-condition-onsite-note" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-8px;">📷 Condition will be recorded on-site instead, right after Check-In.</div>
       <div class="form-group"><label class="form-label">Accessories / Included Items</label><input class="form-control" id="eq-accessories" placeholder="e.g. power adapter, manual"/></div>
       <div class="form-group"><label class="form-label">Remarks</label><textarea class="form-control" id="eq-remarks" placeholder="Special instructions…"></textarea></div>
 
@@ -2466,7 +2467,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </select>
         </div>
       </div>
-      <div class="form-row">
+      <div class="form-row" id="edit-eq-condition-row">
         <div class="form-group">
           <label class="form-label">Condition of Item</label>
           <select class="form-control" id="edit-eq-condition">
@@ -2476,6 +2477,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
         <div class="form-group"><label class="form-label">Accessories</label><input class="form-control" id="edit-eq-accessories" placeholder="e.g. power adapter, manual"/></div>
       </div>
+      <div class="form-group" id="edit-eq-condition-onsite-note" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-8px;">📷 Condition will be recorded on-site instead, right after Check-In.</div>
       <div class="form-group"><label class="form-label">Remarks</label><textarea class="form-control" id="edit-eq-remarks" placeholder="Special instructions…"></textarea></div>
       <div class="form-group" id="edit-eq-soc-section"></div>
       <!-- Price Reference (Admin only - hidden via JS) -->
@@ -4925,6 +4927,13 @@ function updateSiteFieldsVisibility(){
   // Show "Use End User Address" quick-fill only when an end-user is actually selected
   const euBtn=el('quick-fill-enduser-btn');
   if(euBtn) euBtn.style.display=el('eq-end-user')?.value.trim()?'inline-flex':'none';
+  // Condition of Item is per-item, specific to Item 1 — hide it when Item 1 itself is Onsite,
+  // since nobody's actually seen the item yet at this point. It gets captured properly later,
+  // on-site right after Check-In, instead of guessed at here.
+  const condRow=el('eq-condition-row');
+  const condNote=el('eq-condition-onsite-note');
+  if(condRow) condRow.style.display=primaryIsOnsite?'none':'flex';
+  if(condNote) condNote.style.display=primaryIsOnsite?'block':'none';
 }
 function syncAppointmentDateDefault(){
   // Only auto-fill if Appointment Date hasn't been manually set yet — never overwrite a deliberate choice
@@ -5890,7 +5899,7 @@ function renderExtraEquipment(){
             <option value="open" ${eq.calInterval=='open'?'selected':''}>Open Date (No Due Date)</option>
           </select>
         </div>
-        <div class="form-group">
+        ${eq.calType!=='Onsite'?`<div class="form-group">
           <label class="form-label">Condition of Item <span class="req">*</span></label>
           <select class="form-control" onchange="updateExtraField(${i},'condition',this.value);renderExtraEquipment();">
             <option value="Good" ${(eq.condition||'Good')==='Good'?'selected':''}>Good</option>
@@ -5898,9 +5907,9 @@ function renderExtraEquipment(){
             <option value="Damaged" ${eq.condition==='Damaged'?'selected':''}>Damaged</option>
             <option value="Others" ${eq.condition==='Others'?'selected':''}>Others (specify)</option>
           </select>
-        </div>
+        </div>`:`<div class="form-group"><label class="form-label" style="color:var(--text-muted);">Condition of Item</label><div style="font-size:11.5px;color:var(--text-muted);padding-top:8px;">📷 Recorded on-site after Check-In</div></div>`}
       </div>
-      ${eq.condition==='Others'?`<div class="form-group"><label class="form-label">Specify Condition <span class="req">*</span></label>
+      ${eq.calType!=='Onsite'&&eq.condition==='Others'?`<div class="form-group"><label class="form-label">Specify Condition <span class="req">*</span></label>
         <input class="form-control" value="${eq.conditionOther||''}" placeholder="Describe condition…" oninput="updateExtraField(${i},'conditionOther',this.value)"/></div>`:''}
       <div class="form-group"><label class="form-label">Accessories / Included Items</label>
         <input class="form-control" value="${eq.accessories||''}" placeholder="e.g. power adapter, manual" oninput="updateExtraField(${i},'accessories',this.value)"/></div>
@@ -6487,6 +6496,10 @@ function onEditItemTypeChange(){
     if(apptEl&&receiveEl&&!apptEl.value) apptEl.value=receiveEl.value;
     syncEditVisitEndDateMin();
   }
+  const condRow=el('edit-eq-condition-row');
+  const condNote=el('edit-eq-condition-onsite-note');
+  if(condRow) condRow.style.display=itemIsOnsite?'none':'flex';
+  if(condNote) condNote.style.display=itemIsOnsite?'block':'none';
 }
 
 function openEditJobModal(jobNo, itemIdx=0){
@@ -6515,6 +6528,10 @@ function openEditJobModal(jobNo, itemIdx=0){
   const itemIsOnsite=item.calType==='Onsite';
   const onsiteGroup=el('edit-onsite-fields');
   if(onsiteGroup) onsiteGroup.style.display=itemIsOnsite?'block':'none';
+  const condRow=el('edit-eq-condition-row');
+  const condNote=el('edit-eq-condition-onsite-note');
+  if(condRow) condRow.style.display=itemIsOnsite?'none':'flex';
+  if(condNote) condNote.style.display=itemIsOnsite?'block':'none';
   const apptDate=el('edit-eq-appointment-date'); if(apptDate) apptDate.value=j.appointmentDate||j.receiveDate||'';
   const visitEndEl=el('edit-eq-visit-end-date'); if(visitEndEl) visitEndEl.value=j.visitEndDate||j.appointmentDate||j.receiveDate||'';
   if(visitEndEl) visitEndEl.min=el('edit-eq-appointment-date')?.value||'';
