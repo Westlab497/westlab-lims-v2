@@ -452,6 +452,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="nav-section-label">Job Management</div>
     <button class="nav-item hidden-nav" id="nav-my-jobs" onclick="showView('my-jobs')"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-text">My Jobs <span class="nav-badge" id="my-jobs-badge" style="display:none;">0</span></span></button>
     <button class="nav-item hidden-nav" id="nav-onsite-schedule" onclick="showView('onsite-schedule')"><span class="nav-icon"><i class="ti ti-calendar"></i></span><span class="nav-text">Onsite Schedule</span></button>
+    <button class="nav-item hidden-nav" id="nav-staff-evaluation" onclick="showView('staff-evaluation')"><span class="nav-icon"><i class="ti ti-chart-dots"></i></span><span class="nav-text">Staff Evaluation</span></button>
     <button class="nav-item hidden-nav" id="nav-approval" onclick="showView('approval')"><span class="nav-icon"><i class="ti ti-circle-check"></i></span><span class="nav-text">Approval Queue <span class="nav-badge" id="approval-badge" style="display:none;">0</span></span></button>
     <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon"><i class="ti ti-tool"></i></span><span class="nav-label">Equipment &amp; Calibration</span></button>
     <button class="nav-item" id="nav-completed" onclick="showView('completed')" data-label="Completed Jobs"><span class="nav-icon"><i class="ti ti-circle-check"></i></span><span class="nav-label">Completed Jobs</span></button>
@@ -683,6 +684,27 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="card" style="padding:16px;">
         <div id="onsite-schedule-calendar"></div>
       </div>
+    </div>
+
+    <!-- ════ STAFF EVALUATION ════ -->
+    <div class="view" id="view-staff-evaluation">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📊 Staff Evaluation</div>
+          <div class="page-sub">Performance by revenue cleared/won, workload, and quality — Admin/MD only</div>
+        </div>
+        <select class="form-control" id="staffeval-period" onchange="renderStaffEvaluationPage()" style="width:auto;font-size:12px;padding:6px 10px;">
+          <option value="month">This Month</option>
+          <option value="quarter">This Quarter</option>
+          <option value="year">This Year</option>
+          <option value="all">All Time</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;">
+        <button class="btn btn-sm btn-primary" id="staffeval-tab-technical" onclick="setStaffEvalTab('technical')">🔧 Technical Staff</button>
+        <button class="btn btn-sm btn-outline" id="staffeval-tab-sales" onclick="setStaffEvalTab('sales')">💼 Sales Team</button>
+      </div>
+      <div id="staff-evaluation-content"></div>
     </div>
 
     <!-- ════ APPROVAL QUEUE (Jay only) ════ -->
@@ -3835,6 +3857,7 @@ function canSeeSalesTrackerPage(u){ return canUseSalesTracker(u)||canViewSalesTr
 function canReviewCapability(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager'].includes(r); }
 function canUsePurchasingTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
 function canViewOnsiteSchedule(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator','Engineer'].includes(r); }
+function canViewStaffEvaluation(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director'].includes(r); }
 
 // ══════════════════════════════════════════════════
 // ONSITE SCHEDULE — one calendar, built once, used both as its own page and as a
@@ -3909,6 +3932,140 @@ function renderOnsiteSchedulePage(){
   _onsiteCalYear=new Date().getFullYear(); _onsiteCalMonth=new Date().getMonth();
   renderOnsiteCalendar('onsite-schedule-calendar',null);
 }
+
+// ══════════════════════════════════════════════════
+// STAFF EVALUATION — Admin/MD only. Revenue cleared is the primary ranking metric (the
+// actual KPI/bonus driver), with mistakes (Abnormal Reports, Certificate Rejections) shown
+// as separate factors for management to weigh, not an invented automatic deduction formula.
+// ══════════════════════════════════════════════════
+let _staffEvalTab='technical';
+function setStaffEvalTab(tab){
+  _staffEvalTab=tab;
+  const techBtn=el('staffeval-tab-technical'), salesBtn=el('staffeval-tab-sales');
+  if(techBtn) techBtn.className=tab==='technical'?'btn btn-sm btn-primary':'btn btn-sm btn-outline';
+  if(salesBtn) salesBtn.className=tab==='sales'?'btn btn-sm btn-primary':'btn btn-sm btn-outline';
+  renderStaffEvaluationPage();
+}
+function getStaffEvalPeriodFilter(){
+  const period=el('staffeval-period')?.value||'month';
+  const now=new Date();
+  return dateStr=>{
+    if(!dateStr||period==='all')return true;
+    const d=new Date(dateStr+(dateStr.length===10?'T00:00:00':''));
+    if(isNaN(d))return true;
+    if(period==='month')return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
+    if(period==='quarter')return d.getFullYear()===now.getFullYear()&&Math.floor(d.getMonth()/3)===Math.floor(now.getMonth()/3);
+    if(period==='year')return d.getFullYear()===now.getFullYear();
+    return true;
+  };
+}
+function renderStaffEvaluationPage(){
+  const box=el('staff-evaluation-content'); if(!box)return;
+  if(!canViewStaffEvaluation(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  if(_staffEvalTab==='sales') return renderStaffEvalSalesTab(box);
+  return renderStaffEvalTechnicalTab(box);
+}
+function renderStaffEvalTechnicalTab(box){
+  const inPeriod=getStaffEvalPeriodFilter();
+  const stats={};
+  const ensure=u=>{ if(!stats[u]) stats[u]={valueCleared:0,itemsCompleted:0,visits:[],abnormalPreExisting:0,abnormalHandling:0,abnormalUnclassified:0,rejectionCount:0}; return stats[u]; };
+  _jobs.forEach(j=>{
+    if(j.status==='Deleted')return;
+    (j.items||[]).forEach(it=>{
+      const doneBy=it.calData?.calibratedByUsername;
+      if(doneBy&&it.status==='Completed'&&inPeriod(it.calData?.date||j.receiveDate)){
+        const s=ensure(doneBy);
+        s.valueCleared+=(it.price||0);
+        s.itemsCompleted+=1;
+      }
+      if(doneBy&&(it.rejectionCount||0)>0&&inPeriod(it.calData?.date||j.receiveDate)){
+        ensure(doneBy).rejectionCount+=it.rejectionCount;
+      }
+      if(it.assignedTo&&it.status==='Returned - Abnormal'&&inPeriod(it.customerNotReadyDate||j.receiveDate)){
+        const s=ensure(it.assignedTo);
+        if(it.abnormalCause==='Occurred During Handling') s.abnormalHandling+=1;
+        else if(it.abnormalCause==='Pre-existing') s.abnormalPreExisting+=1;
+        else s.abnormalUnclassified+=1;
+      }
+      if(it.assignedTo&&it.calType==='Onsite'){
+        const allVisits=[...(it.visitHistory||[])];
+        if(it.checkinTime) allVisits.push({checkinTime:it.checkinTime,checkoutTime:it.checkoutTime});
+        allVisits.forEach(v=>{
+          if(v.checkinTime&&v.checkoutTime&&inPeriod(v.checkinTime)){
+            ensure(it.assignedTo).visits.push(Math.round((new Date(v.checkoutTime)-new Date(v.checkinTime))/60000));
+          }
+        });
+      }
+    });
+  });
+  const rows=Object.entries(stats).map(([username,s])=>({
+    username,name:USERS[username]?.name||username,
+    valueCleared:s.valueCleared,itemsCompleted:s.itemsCompleted,
+    visitCount:s.visits.length,
+    avgDurationMin:s.visits.length?Math.round(s.visits.reduce((a,b)=>a+b,0)/s.visits.length):0,
+    abnormalPreExisting:s.abnormalPreExisting,abnormalHandling:s.abnormalHandling,abnormalUnclassified:s.abnormalUnclassified,
+    rejectionCount:s.rejectionCount
+  })).sort((a,b)=>b.valueCleared-a.valueCleared);
+
+  const fmtDuration=mins=>{ const h=Math.floor(mins/60); return `${h>0?h+'h ':''}${mins%60}min`; };
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+    <thead><tr>
+      <th>Rank</th><th>Staff</th><th>💰 Value Cleared (RM)</th><th>Items Completed</th>
+      <th>Onsite Visits</th><th>Avg Visit Duration</th>
+      <th>🔍 Pre-existing Damage</th><th>⚠️ Occurred During Handling</th><th>✗ Cert. Rejections</th>
+    </tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr>
+      <td style="text-align:center;font-weight:700;">${i+1}${i===0&&r.valueCleared>0?' 🏆':''}</td>
+      <td><strong>${r.name}</strong></td>
+      <td style="text-align:center;font-weight:700;color:var(--green);">${r.valueCleared.toFixed(2)}</td>
+      <td style="text-align:center;">${r.itemsCompleted}</td>
+      <td style="text-align:center;">${r.visitCount}</td>
+      <td style="text-align:center;">${r.visitCount?fmtDuration(r.avgDurationMin):'—'}</td>
+      <td style="text-align:center;color:var(--text-muted);">${r.abnormalPreExisting||'—'}</td>
+      <td style="text-align:center;${r.abnormalHandling?'color:var(--red);font-weight:700;':''}">${r.abnormalHandling||'—'}${r.abnormalUnclassified?` <span style="font-size:9px;color:var(--text-muted);">(+${r.abnormalUnclassified} unclassified)</span>`:''}</td>
+      <td style="text-align:center;${r.rejectionCount?'color:var(--red);font-weight:700;':''}">${r.rejectionCount||'—'}</td>
+    </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--text-muted);">No completed work recorded for this period.</td></tr>'}</tbody>
+  </table></div>
+  <div style="padding:12px 16px;font-size:11px;color:var(--text-muted);">Ranked by Value Cleared — the primary bonus/KPI metric. "Pre-existing Damage" is shown neutrally (not the technician's fault); "Occurred During Handling" is a genuine quality signal, classified independently by a verifier — never by the technician who submitted the report.</div>
+  </div>`;
+}
+function renderStaffEvalSalesTab(box){
+  const inPeriod=getStaffEvalPeriodFilter();
+  const stats={};
+  const ensure=u=>{ if(!stats[u]) stats[u]={valueWon:0,itemsWon:0,itemsReviewed:0}; return stats[u]; };
+  _salesTracker.forEach(e=>{
+    if(!e.salesPersonnel)return;
+    (e.items||[]).forEach(it=>{
+      if(!['Can Do','Can Do (External)'].includes(it.capabilityVerdict))return; // never actually quotable
+      if(!inPeriod(e.createdAt))return;
+      const s=ensure(e.salesPersonnel);
+      s.itemsReviewed+=1;
+      if(it.outcome==='Won'){ s.valueWon+=(it.price||0)*(parseFloat(it.quantity)||1); s.itemsWon+=1; }
+    });
+  });
+  const rows=Object.entries(stats).map(([username,s])=>({
+    username,name:USERS[username]?.name||username,
+    valueWon:s.valueWon,itemsWon:s.itemsWon,itemsReviewed:s.itemsReviewed,
+    winRate:s.itemsReviewed?Math.round((s.itemsWon/s.itemsReviewed)*100):0
+  })).sort((a,b)=>b.valueWon-a.valueWon);
+
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+    <thead><tr>
+      <th>Rank</th><th>Sales Person</th><th>💰 Value Won (RM)</th><th>Items Won</th><th>Win Rate</th>
+    </tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr>
+      <td style="text-align:center;font-weight:700;">${i+1}${i===0&&r.valueWon>0?' 🏆':''}</td>
+      <td><strong>${r.name}</strong></td>
+      <td style="text-align:center;font-weight:700;color:var(--green);">${r.valueWon.toFixed(2)}</td>
+      <td style="text-align:center;">${r.itemsWon}</td>
+      <td style="text-align:center;color:${r.winRate>=60?'var(--green)':r.winRate>=30?'#c84b00':'var(--red)'};font-weight:700;">${r.winRate}%</td>
+    </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-muted);">No sales enquiries recorded for this period.</td></tr>'}</tbody>
+  </table></div>
+  <div style="padding:12px 16px;font-size:11px;color:var(--text-muted);">Ranked by Value Won — using the same real Won/Lost outcome data already tracked in Sales Tracker.</div>
+  </div>`;
+}
+
+
 let _onsiteScheduleTargetField='eq-appointment-date'; // which field gets filled when a date is picked
 function openOnsiteScheduleModal(targetFieldId){
   _onsiteScheduleTargetField=targetFieldId||'eq-appointment-date';
@@ -3960,6 +4117,7 @@ function applyRoleUI(){
   el('nav-completed').classList.toggle('hidden-nav', engineer||sales||hr);
   el('nav-my-jobs').classList.toggle('hidden-nav', pureAdmin||coordinator||sales||hr); // shown for Engineer, Manager, and MD (MD also does hands-on calibration)
   el('nav-onsite-schedule').classList.toggle('hidden-nav', !canViewOnsiteSchedule(currentUser));
+  el('nav-staff-evaluation').classList.toggle('hidden-nav', !canViewStaffEvaluation(currentUser));
   el('nav-approval').classList.toggle('hidden-nav', !(admin||manager));
   el('nav-customers').classList.toggle('hidden-nav', hr);
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr);
@@ -4048,6 +4206,7 @@ function showView(name){
   if(name==='settings') loadCounterPreviews();
   if(name==='my-jobs') renderMyJobs();
   if(name==='onsite-schedule') renderOnsiteSchedulePage();
+  if(name==='staff-evaluation') renderStaffEvaluationPage();
   if(name==='approval'){
     // Refresh jobs from Supabase to get latest status before rendering
     SB.getAll('wl_jobs').then(jobs=>{
@@ -7677,6 +7836,58 @@ async function openUploadedFile(){
 // referencing the original certificate number, goes through the same approval step
 // as the original, and the full history (original + every amendment) is always kept.
 // ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// ABNORMAL REPORT CAUSE CLASSIFICATION — decided independently by a verifier (Admin, MD,
+// Technical Manager, Quality Manager), never by the technician who submitted the report,
+// since that person has an obvious conflict of interest if they may be at fault themselves.
+// ══════════════════════════════════════════════════
+function openAbnormalCauseModal(jobNo,itemIdx){
+  if(!canApprove(currentUser)){alert('Only an Approved Signatory (Admin, Managing Director, Technical Manager, or Quality Manager) can classify this — not the technician who submitted the report.');return;}
+  const job=getJob(jobNo); const item=job?.items?.[itemIdx]; if(!item)return;
+  let ov=document.getElementById('abnormal-cause-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='abnormal-cause-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:460px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🔍 Classify Cause — Abnormal Report</span>
+      <button onclick="document.getElementById('abnormal-cause-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;">
+        <strong>${job.custName}</strong> — ${item.eqName}<br/>
+        <span style="color:var(--text-muted);">Report No.: ${item.abnormalReportNo||'—'} · Handled by: ${USERS[item.assignedTo]?.name||item.assignedTo||'—'}</span>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;margin-bottom:10px;">
+          <input type="radio" name="abnormal-cause" value="Pre-existing" checked style="margin-top:3px;"/>
+          <span><strong>Pre-existing</strong> — item arrived already in this condition, unrelated to our staff's handling</span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="abnormal-cause" value="Occurred During Handling" style="margin-top:3px;"/>
+          <span><strong>Occurred During Handling</strong> — happened while the item was in our care, at the lab or on-site</span>
+        </label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button class="btn btn-outline" onclick="document.getElementById('abnormal-cause-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmAbnormalCause('${jobNo}',${itemIdx})">✅ Confirm Classification</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function confirmAbnormalCause(jobNo,itemIdx){
+  const cause=document.querySelector('input[name="abnormal-cause"]:checked')?.value||'Pre-existing';
+  await updateJob(jobNo,job=>{
+    const item=job.items[itemIdx]; if(!item)return;
+    item.abnormalCause=cause;
+    item.abnormalCauseClassifiedBy=currentUser;
+    item.abnormalCauseClassifiedAt=new Date().toISOString();
+    job.history.push({action:`🔍 Abnormal Report cause classified: ${cause}`,by:currentUser,time:new Date().toISOString()});
+  });
+  document.getElementById('abnormal-cause-overlay').style.display='none';
+  renderEquipmentTable();
+  showToast(`✅ Classified as "${cause}"`,'success',3000);
+  addAudit('🔍',`Abnormal Report cause classified for ${jobNo}: ${cause}`);
+}
 function openAmendmentRequestModal(jobNo,itemIdx){
   if(!canRequestAmendment(currentUser)){alert('You do not have permission to request a certificate amendment.');return;}
   const job=getJob(jobNo); const item=job?.items?.[itemIdx]; if(!item)return;
@@ -7852,6 +8063,7 @@ async function rejectJob(){
     if(!item)return;
     item.status='Assigned';
     item.approvalComments=comments;
+    item.rejectionCount=(item.rejectionCount||0)+1;
     j.history.push({action:`✗ Item ${item.itemNo} (${item.eqName}) rejected — returned to technician`,by:currentUser,time:new Date().toISOString(),note:comments});
   });
   closeModal('modal-approve-job');
@@ -8257,7 +8469,8 @@ function getCheckinData(jobNo,itemIdx){
     checkoutTime:it.checkoutTime, checkoutNotes:it.checkoutNotes,
     onsiteCondition:it.onsiteCondition, onsiteConditionPhotoUrl:it.onsiteConditionPhotoUrl,
     onsiteAccessories:it.onsiteAccessories,
-    onsiteConditionAt:it.onsiteConditionAt, onsiteConditionBy:it.onsiteConditionBy
+    onsiteConditionAt:it.onsiteConditionAt, onsiteConditionBy:it.onsiteConditionBy,
+    visitHistory:it.visitHistory||[]
   }:{};
 }
 
@@ -11077,27 +11290,46 @@ async function confirmCheckIn(){
     const selfieExpiresAt=new Date(Date.now()+90*86400000).toISOString(); // 90 days from now
 
     if(isTestingModeOn()){
-      const rec=getTestCheckinRec(_checkinJobNo,_checkinItemIdx);
-      rec.checkinTime=now; rec.checkinLat=_checkinLat; rec.checkinLng=_checkinLng;
-      rec.checkinAccuracy=_checkinAccuracy; rec.checkinFlagged=_checkinFlagged;
-      rec.checkinSelfie=selfieUrl; rec.checkinSelfiePath=selfieUrl?selfieUrl.split('/').slice(-2).join('/'):'';
-      rec.checkinSelfieExpiresAt=selfieExpiresAt; rec.checkinNotes=notes;
+      const jobForMatch=getJob(_checkinJobNo);
+      const matchingIdxs=(jobForMatch?.items||[]).map((it,i)=>({it,i})).filter(({it})=>it.calType==='Onsite'&&it.assignedTo===currentUser).map(({i})=>i);
+      for(const mi of matchingIdxs){
+        const rec=getTestCheckinRec(_checkinJobNo,mi);
+        if(rec.checkinTime&&rec.checkoutTime){
+          if(!rec.visitHistory) rec.visitHistory=[];
+          rec.visitHistory.push({checkinTime:rec.checkinTime,checkinLat:rec.checkinLat,checkinLng:rec.checkinLng,checkinAccuracy:rec.checkinAccuracy,checkinFlagged:rec.checkinFlagged,checkinSelfie:rec.checkinSelfie,checkinNotes:rec.checkinNotes,checkoutTime:rec.checkoutTime,checkoutNotes:rec.checkoutNotes});
+        }
+        rec.checkinTime=now; rec.checkinLat=_checkinLat; rec.checkinLng=_checkinLng;
+        rec.checkinAccuracy=_checkinAccuracy; rec.checkinFlagged=_checkinFlagged;
+        rec.checkinSelfie=selfieUrl; rec.checkinSelfiePath=selfieUrl?selfieUrl.split('/').slice(-2).join('/'):'';
+        rec.checkinSelfieExpiresAt=selfieExpiresAt; rec.checkinNotes=notes;
+        rec.checkoutTime=null; rec.checkoutNotes='';
+      }
       await saveTestCheckins();
     } else {
       await updateJob(_checkinJobNo,job=>{
-        const it=job.items[_checkinItemIdx];
-        it.checkinTime=now;
-        it.checkinLat=_checkinLat;
-        it.checkinLng=_checkinLng;
-        it.checkinAccuracy=_checkinAccuracy;
-        it.checkinFlagged=_checkinFlagged;
-        it.checkinSelfie=selfieUrl;
-        it.checkinSelfiePath=selfieUrl?selfieUrl.split('/').slice(-2).join('/'):''; // for later deletion
-        it.checkinSelfieExpiresAt=selfieExpiresAt;
-        it.checkinNotes=notes;
-        it.status='On-Site';
+        // One check-in covers every onsite item in this job assigned to the same person —
+        // it's one visit to one site, not a separate check-in per item they happen to be
+        // handling while they're there.
+        const matchingItems=(job.items||[]).filter(it=>it.calType==='Onsite'&&it.assignedTo===currentUser);
+        matchingItems.forEach(it=>{
+          if(it.checkinTime&&it.checkoutTime){
+            if(!it.visitHistory) it.visitHistory=[];
+            it.visitHistory.push({checkinTime:it.checkinTime,checkinLat:it.checkinLat,checkinLng:it.checkinLng,checkinAccuracy:it.checkinAccuracy,checkinFlagged:it.checkinFlagged,checkinSelfie:it.checkinSelfie,checkinNotes:it.checkinNotes,checkoutTime:it.checkoutTime,checkoutNotes:it.checkoutNotes});
+          }
+          it.checkinTime=now;
+          it.checkinLat=_checkinLat;
+          it.checkinLng=_checkinLng;
+          it.checkinAccuracy=_checkinAccuracy;
+          it.checkinFlagged=_checkinFlagged;
+          it.checkinSelfie=selfieUrl;
+          it.checkinSelfiePath=selfieUrl?selfieUrl.split('/').slice(-2).join('/'):''; // for later deletion
+          it.checkinSelfieExpiresAt=selfieExpiresAt;
+          it.checkinNotes=notes;
+          it.checkoutTime=null; it.checkoutNotes=''; // clear, ready for this new visit's own checkout
+          it.status='On-Site';
+        });
         job.history.push({
-          action:`Item ${it.itemNo} Check-In at ${new Date(now).toLocaleTimeString('en-MY')}${_checkinFlagged?' ⚠️ (unusual GPS accuracy reading)':''}`,
+          action:`Check-In at ${new Date(now).toLocaleTimeString('en-MY')} — covers ${matchingItems.length} item${matchingItems.length!==1?'s':''}${_checkinFlagged?' ⚠️ (unusual GPS accuracy reading)':''}`,
           by:currentUser,time:now
         });
       });
@@ -11108,7 +11340,7 @@ async function confirmCheckIn(){
     closeModal('modal-checkin');
     renderMyJobs();
     showToast(`✅ Checked in at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`,'success',4000);
-    addAudit('📍',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked in${_checkinFlagged?' (⚠️ unusual GPS accuracy)':''}`);
+    addAudit('📍',`Job <strong>${_checkinJobNo}</strong> — Engineer checked in${_checkinFlagged?' (⚠️ unusual GPS accuracy)':''}`);
   }catch(e){
     console.error('confirmCheckIn error:',e);
     showToast('❌ Check-in failed: '+e.message,'error',5000);
@@ -11232,6 +11464,40 @@ async function confirmConditionCapture(){
   }
 }
 
+function openVisitHistoryModal(jobNo,itemIdx){
+  const cd=getCheckinData(jobNo,itemIdx);
+  const job=getJob(jobNo); const item=job?.items?.[itemIdx];
+  const allVisits=[...(cd.visitHistory||[])];
+  if(cd.checkinTime) allVisits.push({checkinTime:cd.checkinTime,checkoutTime:cd.checkoutTime,checkinNotes:cd.checkinNotes,checkoutNotes:cd.checkoutNotes}); // include the current/latest visit too
+  let ov=document.getElementById('visit-history-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='visit-history-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:480px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📍 Visit History — ${item?.eqName||''}</span>
+      <button onclick="document.getElementById('visit-history-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      ${allVisits.map((v,i)=>{
+        const inTime=v.checkinTime?new Date(v.checkinTime):null;
+        const outTime=v.checkoutTime?new Date(v.checkoutTime):null;
+        let durationText='In progress';
+        if(inTime&&outTime){
+          const mins=Math.round((outTime-inTime)/60000);
+          const hrs=Math.floor(mins/60);
+          durationText=`${hrs>0?hrs+'h ':''}${mins%60}min`;
+        }
+        return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+          <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Visit ${i+1} — ${inTime?inTime.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):''}</div>
+          <div style="font-size:11.5px;color:var(--text-muted);">
+            In: ${inTime?inTime.toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'}):'—'} · Out: ${outTime?outTime.toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'}):'—'} · <strong>${durationText}</strong>
+          </div>
+          ${v.checkoutNotes?`<div style="font-size:11px;color:#374151;margin-top:4px;">📝 ${v.checkoutNotes}</div>`:''}
+        </div>`;
+      }).join('')||'<div class="empty-state"><p>No visits recorded yet.</p></div>'}
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
 function openCheckoutModal(jobNo, itemIdx){
   _checkinJobNo=jobNo; _checkinItemIdx=itemIdx;
   el('checkout-notes').value='';
@@ -11254,16 +11520,22 @@ async function confirmCheckOut(){
   const notes=el('checkout-notes').value.trim();
   try{
     if(isTestingModeOn()){
-      const rec=getTestCheckinRec(_checkinJobNo,_checkinItemIdx);
-      rec.checkoutTime=now; rec.checkoutNotes=notes;
+      const jobForMatch=getJob(_checkinJobNo);
+      const matchingIdxs=(jobForMatch?.items||[]).map((it,i)=>({it,i})).filter(({it})=>it.calType==='Onsite'&&it.assignedTo===currentUser).map(({i})=>i);
+      for(const mi of matchingIdxs){
+        const rec=getTestCheckinRec(_checkinJobNo,mi);
+        rec.checkoutTime=now; rec.checkoutNotes=notes;
+      }
       await saveTestCheckins();
     } else {
       await updateJob(_checkinJobNo,job=>{
-        const it=job.items[_checkinItemIdx];
-        it.checkoutTime=now;
-        it.checkoutNotes=notes;
+        const matchingItems=(job.items||[]).filter(it=>it.calType==='Onsite'&&it.assignedTo===currentUser);
+        matchingItems.forEach(it=>{
+          it.checkoutTime=now;
+          it.checkoutNotes=notes;
+        });
         job.history.push({
-          action:`Item ${it.itemNo} Check-Out at ${new Date(now).toLocaleTimeString('en-MY')}`,
+          action:`Check-Out at ${new Date(now).toLocaleTimeString('en-MY')} — covers ${matchingItems.length} item${matchingItems.length!==1?'s':''}`,
           by:currentUser,time:now
         });
       });
@@ -11271,7 +11543,7 @@ async function confirmCheckOut(){
     closeModal('modal-checkout');
     renderMyJobs();
     showToast(`🏁 Checked out at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`,'success',3000);
-    addAudit('🏁',`Job <strong>${_checkinJobNo}</strong> Item ${_checkinItemIdx+1} — Engineer checked out${isTestingModeOn()?' (test)':''}`);
+    addAudit('🏁',`Job <strong>${_checkinJobNo}</strong> — Engineer checked out${isTestingModeOn()?' (test)':''}`);
   }catch(e){
     showToast('❌ Check-out failed: '+e.message,'error',5000);
   }
@@ -11291,7 +11563,7 @@ function checkOnsiteCheckInAlerts(){
     const isVisitDay=visitStart&&visitEnd&&todayStr>=visitStart&&todayStr<=visitEnd;
     if(!isVisitDay) return;
     (j.items||[]).forEach((item,idx)=>{
-      if(item.status==='Assigned'&&item.calType==='Onsite'&&!item.checkinTime){
+      if((item.status==='Assigned'||item.status==='On-Site')&&item.calType==='Onsite'&&(!item.checkinTime||item.checkoutTime)){
         const appointHour=9; // default 9am if no specific time
         if(now.getHours()>=appointHour+1){ // 1 hour past appointment time
           alerts.push({jobNo:j.jobNo,itemNo:item.itemNo,custName:j.custName,engineer:item.assignedTo});
@@ -11565,6 +11837,7 @@ function renderMyJobs(){
     const aTime=a.item.assignedAt||'0'; const bTime=b.item.assignedAt||'0';
     return aTime<bTime?-1:aTime>bTime?1:0;
   });
+  const _shownCheckinForJob=new Set(); // one check-in/out button per job, not per item — same visit covers every onsite item assigned to this person in that job
   container.innerHTML=myItems.map(({job:j,item,idx})=>{
     const cd=getCheckinData(j.jobNo,idx);
     // If this job is mixed (has both Lab and Onsite items), flag any sibling item with a
@@ -11640,13 +11913,26 @@ function renderMyJobs(){
           <button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">✅ Remove KIV</button>`:''}
         ${item.status==='Customer Not Ready'?`
           <span class="badge badge-red" style="font-size:11px;padding:5px 8px;">⚠️ Customer Not Ready — awaiting reschedule by the office</span>`:''}
+        ${item.calType==='Onsite'&&item.status!=='Completed'&&item.status!=='Returned - Abnormal'?`
+          ${(()=>{
+            // One check-in/out button per job, not per item — same visit, same person, covers
+            // every onsite item assigned to them in this job. Subsequent items from the same
+            // job just reference it instead of showing a duplicate button.
+            if(_shownCheckinForJob.has(j.jobNo)){
+              return `<div style="font-size:10.5px;color:var(--text-muted);">📍 Check-in for Job ${j.jobNo} shown on another item above — same visit covers this item too.</div>`;
+            }
+            _shownCheckinForJob.add(j.jobNo);
+            return (!cd.checkinTime||cd.checkoutTime?`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${j.jobNo}',${idx})">📍 Check In${isTestingModeOn()?' 🧪':''}</button>`
+              :`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${j.jobNo}',${idx})">🏁 Check Out${isTestingModeOn()?' 🧪':''}</button>`);
+          })()}
+          ${cd.checkinTime&&!cd.onsiteCondition?`<button class="btn btn-outline btn-sm" style="background:#7c2d12;color:#fff;border:none;" onclick="openConditionCaptureModal('${j.jobNo}',${idx})">📋 Record Item Details${isTestingModeOn()?' 🧪':''}</button>`:''}
+          ${cd.onsiteCondition?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Condition: ${cd.onsiteCondition}${cd.onsiteAccessories?' · Accessories: '+cd.onsiteAccessories:''}</span>`:''}
+          ${cd.visitHistory&&cd.visitHistory.length?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;width:100%;">${cd.visitHistory.length} earlier visit${cd.visitHistory.length!==1?'s':''} on this item — <a href="javascript:void(0)" onclick="openVisitHistoryModal('${j.jobNo}',${idx})">view</a></div>`:''}
+        `:''}
         ${item.status!=='Pending Approval'&&item.status!=='Completed'&&item.status!=='KIV'&&item.status!=='Customer Not Ready'&&item.status!=='Returned - Abnormal'?`
           <button class="btn btn-primary btn-sm" onclick="openCalModal('${j.jobNo}',${idx})">🔬 Perform Calibration</button>
           ${item.calType==='Onsite'?`
             <button class="btn btn-outline btn-sm" style="background:#ffeaee;color:#c0001a;border-color:#ffb3bc;" onclick="openCustomerNotReadyModal('${j.jobNo}',${idx})">⚠️ Not Ready</button>
-            ${!cd.checkinTime?`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${j.jobNo}',${idx})">📍 Check In${isTestingModeOn()?' 🧪':''}</button>`:`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${j.jobNo}',${idx})">🏁 Check Out${isTestingModeOn()?' 🧪':''}</button>`}
-            ${cd.checkinTime&&!cd.onsiteCondition?`<button class="btn btn-outline btn-sm" style="background:#7c2d12;color:#fff;border:none;" onclick="openConditionCaptureModal('${j.jobNo}',${idx})">📋 Record Item Details${isTestingModeOn()?' 🧪':''}</button>`:''}
-            ${cd.onsiteCondition?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Condition: ${cd.onsiteCondition}${cd.onsiteAccessories?' · Accessories: '+cd.onsiteAccessories:''}</span>`:''}
           `:`<button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">🔶 KIV</button>`}
         `:''}        ${item.status==='Pending Approval'?
           `<span style="font-size:12px;color:var(--purple);font-weight:600;padding:5px;">📬 Awaiting approval…</span>`:''}
@@ -11654,6 +11940,12 @@ function renderMyJobs(){
           `<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})">📄 View Certificate</button>`:''}
         ${item.status==='Completed'?
           `<span style="font-size:12px;color:var(--green);font-weight:600;padding:5px;">✅ Completed</span>`:''}
+        ${item.status==='Returned - Abnormal'?`
+          <span style="font-size:12px;color:var(--red);font-weight:600;padding:5px;">⚠️ Returned - Abnormal</span>
+          ${item.abnormalCause?`<span style="font-size:11px;background:${item.abnormalCause==='Occurred During Handling'?'#fef2f2':'#f0fdf4'};color:${item.abnormalCause==='Occurred During Handling'?'#991b1b':'#166534'};font-weight:600;padding:4px 8px;border-radius:4px;">${item.abnormalCause==='Occurred During Handling'?'🔍 Occurred During Handling':'🔍 Pre-existing'}</span>`
+            :canApprove(currentUser)?`<button class="btn btn-outline btn-sm" onclick="openAbnormalCauseModal('${j.jobNo}',${idx})">🔍 Classify Cause</button>`
+            :`<span style="font-size:11px;color:var(--text-muted);">Awaiting cause classification by a verifier</span>`}
+        `:''}
         ${item.status==='Completed'&&canRequestAmendment(currentUser)&&!(item.amendments||[]).some(a=>a.status==='Pending Approval')?
           `<button class="btn btn-outline btn-sm" onclick="openAmendmentRequestModal('${j.jobNo}',${idx})">📝 Request Amendment</button>`:''}
         ${(item.amendments||[]).map(a=>a.status==='Pending Approval'
