@@ -7941,6 +7941,8 @@ function renderEquipmentTable(){
           actions+=`<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})" style="font-size:11px;">📄</button> `;
         if(canCreateJobs(currentUser))
           actions+=`<button class="btn btn-outline btn-sm" onclick="openEditJobModal('${j.jobNo}',${idx})" style="font-size:11px;">✏️</button> `;
+        if(item.status==='Customer Not Ready'&&canCreateJobs(currentUser))
+          actions+=`<button class="btn btn-outline btn-sm" style="font-size:11px;color:#c0001a;border-color:#fca5a5;" onclick="openResolveCustomerNotReadyModal('${j.jobNo}',${idx})" title="${item.customerNotReadyReason||''}">✅ Resolve</button> `;
         rows.push(`<tr style="border-left:3px solid var(--border);">
           <td style="padding:5px 10px 5px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
           <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${item.certNo||'—'}</td>
@@ -11345,6 +11347,7 @@ async function confirmCustomerNotReady(){
 
 let _cnrResolveJobNo=null, _cnrResolveItemIdx=null;
 function openResolveCustomerNotReadyModal(jobNo, itemIdx){
+  if(!canCreateJobs(currentUser)){alert('Only Coordinator, Technical Manager, Quality Manager, Admin, or Managing Director can resolve this — the technician on-site records what happened, but rescheduling and any extra charge is handled by the office.');return;}
   _cnrResolveJobNo=jobNo; _cnrResolveItemIdx=itemIdx;
   const job=getJob(jobNo); const item=job?.items?.[itemIdx];
   let ov=document.getElementById('resolve-cnr-overlay');
@@ -11636,8 +11639,7 @@ function renderMyJobs(){
           <span class="badge badge-orange" style="font-size:11px;padding:5px 8px;">🔶 KIV: "${(item.kivReason||'').substring(0,40)}${(item.kivReason||'').length>40?'…':''}"</span>
           <button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">✅ Remove KIV</button>`:''}
         ${item.status==='Customer Not Ready'?`
-          <span class="badge badge-red" style="font-size:11px;padding:5px 8px;">⚠️ Customer Not Ready</span>
-          <button class="btn btn-outline btn-sm" onclick="openResolveCustomerNotReadyModal('${j.jobNo}',${idx})">✅ Resolved — Resume</button>`:''}
+          <span class="badge badge-red" style="font-size:11px;padding:5px 8px;">⚠️ Customer Not Ready — awaiting reschedule by the office</span>`:''}
         ${item.status!=='Pending Approval'&&item.status!=='Completed'&&item.status!=='KIV'&&item.status!=='Customer Not Ready'&&item.status!=='Returned - Abnormal'?`
           <button class="btn btn-primary btn-sm" onclick="openCalModal('${j.jobNo}',${idx})">🔬 Perform Calibration</button>
           ${item.calType==='Onsite'?`
