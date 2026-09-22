@@ -1869,10 +1869,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <option value="">— Assign later —</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="eq-promised-date-group">
           <label class="form-label">Promised Ready Date</label>
           <input class="form-control" id="eq-promised-date" type="date"/>
           <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="eq-promised-hint">Auto-calculated from priority</div>
+        </div>
+        <div class="form-group" id="eq-promised-date-onsite-note" style="display:none;">
+          <label class="form-label" style="color:var(--text-muted);">Promised Ready Date</label>
+          <div style="font-size:11.5px;color:var(--text-muted);padding-top:8px;">📅 Not applicable — the item never leaves the customer's site. See Onsite Start/End Date instead.</div>
         </div>
       </div>
       <div class="form-group">
@@ -2410,10 +2414,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </select>
         </div>
       </div>
-      <div class="form-row">
+      <div class="form-row" id="edit-eq-promised-date-row">
         <div class="form-group"><label class="form-label">Promised Ready Date</label><input class="form-control" id="edit-eq-promised-date" type="date"/></div>
         <div class="form-group"></div>
       </div>
+      <div class="form-group" id="edit-eq-promised-date-onsite-note" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-8px;">📅 Promised Ready Date not applicable for Onsite — see Onsite Start/End Date instead.</div>
       <div class="form-group">
         <label class="form-label">Assignment Note</label>
         <input class="form-control" id="edit-eq-assign-note" placeholder="Instructions for the engineer…"/>
@@ -5060,6 +5065,10 @@ function updateSiteFieldsVisibility(){
   const accNote=el('eq-accessories-onsite-note');
   if(accGroup) accGroup.style.display=primaryIsOnsite?'none':'block';
   if(accNote) accNote.style.display=primaryIsOnsite?'block':'none';
+  const promGroup=el('eq-promised-date-group');
+  const promNote=el('eq-promised-date-onsite-note');
+  if(promGroup) promGroup.style.display=primaryIsOnsite?'none':'block';
+  if(promNote) promNote.style.display=primaryIsOnsite?'block':'none';
 }
 function syncAppointmentDateDefault(){
   // Only auto-fill if Appointment Date hasn't been manually set yet — never overwrite a deliberate choice
@@ -6058,10 +6067,10 @@ function renderExtraEquipment(){
             <option value="">— Assign later —</option>
           </select>
         </div>
-        <div class="form-group">
+        ${eq.calType!=='Onsite'?`<div class="form-group">
           <label class="form-label">Promised Ready Date</label>
           <input class="form-control" type="date" value="${eq.promisedDate||''}" oninput="updateExtraField(${i},'promisedDate',this.value)"/>
-        </div>
+        </div>`:`<div class="form-group"><label class="form-label" style="color:var(--text-muted);">Promised Ready Date</label><div style="font-size:11.5px;color:var(--text-muted);padding-top:8px;">📅 Not applicable — see Onsite Start/End Date instead.</div></div>`}
       </div>
       <div class="form-group">
         <label class="form-label">Assignment Note</label>
@@ -6627,6 +6636,10 @@ function onEditItemTypeChange(){
   const condNote=el('edit-eq-condition-onsite-note');
   if(condRow) condRow.style.display=itemIsOnsite?'none':'flex';
   if(condNote) condNote.style.display=itemIsOnsite?'block':'none';
+  const promRow=el('edit-eq-promised-date-row');
+  const promNote=el('edit-eq-promised-date-onsite-note');
+  if(promRow) promRow.style.display=itemIsOnsite?'none':'flex';
+  if(promNote) promNote.style.display=itemIsOnsite?'block':'none';
 }
 
 function openEditJobModal(jobNo, itemIdx=0){
@@ -6659,6 +6672,10 @@ function openEditJobModal(jobNo, itemIdx=0){
   const condNote=el('edit-eq-condition-onsite-note');
   if(condRow) condRow.style.display=itemIsOnsite?'none':'flex';
   if(condNote) condNote.style.display=itemIsOnsite?'block':'none';
+  const promRow=el('edit-eq-promised-date-row');
+  const promNote=el('edit-eq-promised-date-onsite-note');
+  if(promRow) promRow.style.display=itemIsOnsite?'none':'flex';
+  if(promNote) promNote.style.display=itemIsOnsite?'block':'none';
   const apptDate=el('edit-eq-appointment-date'); if(apptDate) apptDate.value=j.appointmentDate||j.receiveDate||'';
   const visitEndEl=el('edit-eq-visit-end-date'); if(visitEndEl) visitEndEl.value=j.visitEndDate||j.appointmentDate||j.receiveDate||'';
   if(visitEndEl) visitEndEl.min=el('edit-eq-appointment-date')?.value||'';
