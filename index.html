@@ -1902,7 +1902,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-row">
           <div class="form-group"><label class="form-label">📅 Onsite Start Date <span class="req">*</span></label><input class="form-control" id="eq-appointment-date" type="date" onchange="syncVisitEndDateMin()"/>
             <div style="font-size:11px;color:#92610c;margin-top:3px;">Defaults to the Receiving Date above — change it if the site visit is scheduled for a different day.</div>
-            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openOnsiteScheduleModal()">📅 View Onsite Schedule</button>
+            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openOnsiteScheduleModal('eq-appointment-date')">📅 View Onsite Schedule</button>
           </div>
           <div class="form-group"><label class="form-label">📅 Onsite End Date</label><input class="form-control" id="eq-visit-end-date" type="date"/>
             <div style="font-size:11px;color:#92610c;margin-top:3px;">Leave same as Onsite Start Date for a single-day visit, or set later for a multi-day job.</div>
@@ -2427,7 +2427,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group" id="edit-onsite-fields" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:8px;">📍 Onsite Visit Details</div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">📅 Onsite Start Date</label><input class="form-control" id="edit-eq-appointment-date" type="date" onchange="syncEditVisitEndDateMin()"/></div>
+          <div class="form-group"><label class="form-label">📅 Onsite Start Date</label><input class="form-control" id="edit-eq-appointment-date" type="date" onchange="syncEditVisitEndDateMin()"/>
+            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openOnsiteScheduleModal('edit-eq-appointment-date')">📅 View Onsite Schedule</button>
+          </div>
           <div class="form-group"><label class="form-label">📅 Onsite End Date</label><input class="form-control" id="edit-eq-visit-end-date" type="date"/></div>
         </div>
         <div class="form-group"><label class="form-label">Site Address</label><textarea class="form-control" id="edit-eq-site-address" rows="2"></textarea></div>
@@ -3910,9 +3912,11 @@ function renderOnsiteSchedulePage(){
   _onsiteCalYear=new Date().getFullYear(); _onsiteCalMonth=new Date().getMonth();
   renderOnsiteCalendar('onsite-schedule-calendar',null);
 }
-function openOnsiteScheduleModal(){
+let _onsiteScheduleTargetField='eq-appointment-date'; // which field gets filled when a date is picked
+function openOnsiteScheduleModal(targetFieldId){
+  _onsiteScheduleTargetField=targetFieldId||'eq-appointment-date';
   let ov=document.getElementById('onsite-schedule-modal-overlay');
-  if(!ov){ov=document.createElement('div');ov.id='onsite-schedule-modal-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  if(!ov){ov=document.createElement('div');ov.id='onsite-schedule-modal-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:9999999;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:600px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
       <span style="font-weight:700;font-size:15px;">📅 Onsite Schedule</span>
@@ -3928,8 +3932,12 @@ function openOnsiteScheduleModal(){
   renderOnsiteCalendar('onsite-schedule-modal-calendar','pickOnsiteScheduleDate');
 }
 function pickOnsiteScheduleDate(dateStr){
-  const apptEl=el('eq-appointment-date');
-  if(apptEl){ apptEl.value=dateStr; syncVisitEndDateMin(); }
+  const apptEl=el(_onsiteScheduleTargetField);
+  if(apptEl){
+    apptEl.value=dateStr;
+    if(_onsiteScheduleTargetField==='edit-eq-appointment-date') syncEditVisitEndDateMin();
+    else syncVisitEndDateMin();
+  }
   document.getElementById('onsite-schedule-modal-overlay').style.display='none';
   showToast(`📅 Onsite Start Date set to ${dateStr}`,'success',2000);
 }
