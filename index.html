@@ -2957,10 +2957,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <label class="form-label">Notes</label>
         <textarea class="form-control" id="cnr-notes" rows="2" placeholder="Additional details…"></textarea>
       </div>
-      <div class="form-group">
-        <label class="form-label">New Onsite Date <span class="req">*</span></label>
-        <input class="form-control" id="cnr-new-date" type="date"/>
-      </div>
+      <div style="font-size:11.5px;color:var(--text-muted);">This will be flagged for the office to reschedule with the customer — you don't need to set a new date yourself.</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-customer-not-ready')">Cancel</button>
@@ -11322,48 +11319,87 @@ function openCustomerNotReadyModal(jobNo, itemIdx){
   _cnrJobNo=jobNo; _cnrItemIdx=itemIdx;
   el('cnr-reason').value='';
   el('cnr-notes').value='';
-  el('cnr-new-date').value='';
   openModal('modal-customer-not-ready');
 }
 
 async function confirmCustomerNotReady(){
   const reason=el('cnr-reason').value;
   const notes=el('cnr-notes').value.trim();
-  const newDate=el('cnr-new-date').value;
   if(!reason){showToast('Please select a reason','error',3000);return;}
-  if(!newDate){showToast('Please select a new appointment date','error',3000);return;}
   const today=toLocalDateStr(new Date());
   await updateJob(_cnrJobNo,job=>{
     const it=job.items[_cnrItemIdx];
     it.status='Customer Not Ready';
     it.customerNotReadyReason=reason+(notes?' — '+notes:'');
     it.customerNotReadyDate=today;
-    it.customerNotReadyNewDate=newDate;
-    // Update job appointment date
-    job.receiveDate=newDate;
     job.history.push({
-      action:`Item ${it.itemNo} — Customer Not Ready: "${reason}"${notes?' ('+notes+')':''}. Rescheduled to ${fmtDateShort(newDate)}`,
+      action:`Item ${it.itemNo} — Customer Not Ready: "${reason}"${notes?' ('+notes+')':''}. Flagged for office to reschedule.`,
       by:currentUser,time:new Date().toISOString()
     });
   });
   closeModal('modal-customer-not-ready');
   renderMyJobs(); renderEquipmentTable(); renderDashboard();
-  showToast(`⚠️ Marked as Customer Not Ready. Rescheduled to ${fmtDateShort(newDate)}`,'warn',5000);
-  addAudit('⚠️',`Job <strong>${_cnrJobNo}</strong> Item ${_cnrItemIdx+1} — Customer Not Ready: "${reason}". New date: ${fmtDateShort(newDate)}`);
+  showToast(`⚠️ Marked as Customer Not Ready — flagged for the office to reschedule`,'warn',5000);
+  addAudit('⚠️',`Job <strong>${_cnrJobNo}</strong> Item ${_cnrItemIdx+1} — Customer Not Ready: "${reason}". Awaiting reschedule.`);
 }
 
-async function resolveCustomerNotReady(jobNo, itemIdx){
-  if(!confirm('Mark this item as resolved and resume calibration?')) return;
-  await updateJob(jobNo,job=>{
-    const it=job.items[itemIdx];
+let _cnrResolveJobNo=null, _cnrResolveItemIdx=null;
+function openResolveCustomerNotReadyModal(jobNo, itemIdx){
+  _cnrResolveJobNo=jobNo; _cnrResolveItemIdx=itemIdx;
+  const job=getJob(jobNo); const item=job?.items?.[itemIdx];
+  let ov=document.getElementById('resolve-cnr-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='resolve-cnr-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:440px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">✅ Resolve — Customer Not Ready</span>
+      <button onclick="document.getElementById('resolve-cnr-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;">
+        <strong>${job?.custName||''}</strong> — ${item?.eqName||''}<br/>
+        <span style="color:var(--text-muted);">Reason given: "${item?.customerNotReadyReason||''}"</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">⚠️ Make sure you've already set the new Onsite Date in Edit Job before resolving this — resolving here doesn't set the date for you.</div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="cnr-extra-charge-checkbox" onchange="el('cnr-extra-charge-fields').style.display=this.checked?'block':'none'"/>
+          <strong style="font-size:13px;">💰 Extra Charge Applicable?</strong>
+        </label>
+      </div>
+      <div id="cnr-extra-charge-fields" style="display:none;background:#fff7ed;border-radius:8px;padding:10px 12px;">
+        <div class="form-group"><label class="form-label">Amount (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="cnr-extra-charge-amount" placeholder="e.g. 150.00"/></div>
+        <div class="form-group"><label class="form-label">Reason</label><input class="form-control" id="cnr-extra-charge-reason" placeholder="e.g. Late notice — customer not informed in advance"/></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button class="btn btn-outline" onclick="document.getElementById('resolve-cnr-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmResolveCustomerNotReady()">✅ Resolve — Resume</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function confirmResolveCustomerNotReady(){
+  const extraChargeApplicable=el('cnr-extra-charge-checkbox').checked;
+  const extraChargeAmount=extraChargeApplicable?(parseFloat(el('cnr-extra-charge-amount').value)||0):0;
+  const extraChargeReason=extraChargeApplicable?el('cnr-extra-charge-reason').value.trim():'';
+  if(extraChargeApplicable&&(!extraChargeAmount||!extraChargeReason)){alert('Please enter both an amount and a reason for the extra charge.');return;}
+  await updateJob(_cnrResolveJobNo,job=>{
+    const it=job.items[_cnrResolveItemIdx];
     it.status='Assigned';
     it.customerNotReadyReason=null;
     it.customerNotReadyDate=null;
-    job.history.push({action:`Item ${it.itemNo} — Customer Not Ready resolved. Resuming calibration.`,by:currentUser,time:new Date().toISOString()});
+    if(extraChargeApplicable){
+      if(!it.extraCharges) it.extraCharges=[];
+      it.extraCharges.push({amount:extraChargeAmount,reason:extraChargeReason,recordedBy:currentUser,recordedAt:new Date().toISOString(),source:'Customer Not Ready'});
+    }
+    job.history.push({action:`Item ${it.itemNo} — Customer Not Ready resolved. Resuming calibration.${extraChargeApplicable?` Extra charge recorded: RM${extraChargeAmount.toFixed(2)} — ${extraChargeReason}`:''}`,by:currentUser,time:new Date().toISOString()});
   });
-  renderMyJobs(); renderEquipmentTable();
-  showToast('✅ Resolved — item back to Assigned status','success',3000);
+  document.getElementById('resolve-cnr-overlay').style.display='none';
+  renderMyJobs(); renderEquipmentTable(); renderDashboard();
+  showToast(`✅ Resolved — item back to Assigned status${extraChargeApplicable?' · Extra charge recorded (to be billed later)':''}`,'success',4000);
+  addAudit('⚠️',`Customer Not Ready resolved for ${_cnrResolveJobNo}${extraChargeApplicable?` — extra charge RM${extraChargeAmount.toFixed(2)} recorded`:''}`);
 }
+// (resolveCustomerNotReady replaced by openResolveCustomerNotReadyModal / confirmResolveCustomerNotReady above)
 
 // ── KIV (Keep In View) ──
 let _kivJobNo=null, _kivItemIdx=null;
@@ -11601,7 +11637,7 @@ function renderMyJobs(){
           <button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">✅ Remove KIV</button>`:''}
         ${item.status==='Customer Not Ready'?`
           <span class="badge badge-red" style="font-size:11px;padding:5px 8px;">⚠️ Customer Not Ready</span>
-          <button class="btn btn-outline btn-sm" onclick="resolveCustomerNotReady('${j.jobNo}',${idx})">✅ Resolved — Resume</button>`:''}
+          <button class="btn btn-outline btn-sm" onclick="openResolveCustomerNotReadyModal('${j.jobNo}',${idx})">✅ Resolved — Resume</button>`:''}
         ${item.status!=='Pending Approval'&&item.status!=='Completed'&&item.status!=='KIV'&&item.status!=='Customer Not Ready'&&item.status!=='Returned - Abnormal'?`
           <button class="btn btn-primary btn-sm" onclick="openCalModal('${j.jobNo}',${idx})">🔬 Perform Calibration</button>
           ${item.calType==='Onsite'?`
@@ -12174,6 +12210,17 @@ function renderNeedsAttention(){
   // 5. Deposits due (onsite jobs, required but not collected)
   const depositsDue=_jobs.filter(j=>j.status!=='Deleted'&&j.depositRequired&&!j.depositCollected).length;
   if(depositsDue&&canViewPrice(currentUser)) items.push({icon:'💰',text:`${depositsDue} job(s) with deposit due`,view:'equipment'});
+
+  // 6. Customer Not Ready — awaiting reschedule by the office, shown per job with who created it
+  _jobs.forEach(j=>{
+    if(j.status==='Deleted')return;
+    (j.items||[]).forEach(it=>{
+      if(it.status==='Customer Not Ready'){
+        const creatorName=USERS[j.createdBy]?.name||j.createdBy||'Unknown';
+        items.push({icon:'⚠️',text:`${j.custName} — ${it.eqName} awaiting reschedule (created by ${creatorName})`,view:'equipment'});
+      }
+    });
+  });
 
   if(!items.length){ box.innerHTML=''; return; }
   box.innerHTML=`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 16px;">
