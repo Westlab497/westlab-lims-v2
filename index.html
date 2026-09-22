@@ -5912,6 +5912,41 @@ function calcPromisedDate(){
   }
 }
 
+// Same logic as calcPromisedDate() above, parameterized for any extra item (Item 2+),
+// since that function is hardcoded to Item 1's specific field IDs and was never extended
+// to cover extra items — meaning their promised date never auto-calculated at all before.
+function calcExtraPromisedDate(idx){
+  const eq=_extraEquipment[idx]; if(!eq)return;
+  const priority=eq.priority||'Normal';
+  const dateField=el(`extra-eq-promised-${idx}`);
+  const hint=el(`extra-eq-promised-hint-${idx}`);
+  if(!dateField)return; // Onsite item — no promised date field to fill
+
+  if(priority==='Express'){
+    if(dateField.value)return; // don't overwrite a manual edit
+    const now=new Date();
+    const isBeforeNoon=now.getHours()<12;
+    const target=new Date(now);
+    if(!isBeforeNoon) target.setDate(target.getDate()+1);
+    while(target.getDay()===0||target.getDay()===6) target.setDate(target.getDate()+1);
+    dateField.value=toLocalDateStr(target);
+    eq.promisedDate=dateField.value;
+    if(hint) hint.textContent=isBeforeNoon?'⚡ Express — received before 12:00pm, promised back today':'⚡ Express — received after 12:00pm, promised back tomorrow morning';
+    return;
+  }
+
+  const receiveDate=el('eq-receive-date')?.value||toLocalDateStr(new Date());
+  const days=getSLADays(priority);
+  const d=new Date(receiveDate+'T00:00:00');
+  let added=0;
+  while(added<days){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)added++;}
+  const result=toLocalDateStr(d);
+  if(!dateField.value){
+    dateField.value=result;
+    eq.promisedDate=result;
+    if(hint) hint.textContent=`Auto: ${priority} = ${days} working days`;
+  }
+}
 function fmtDateShort(d){
   if(!d)return'';
   const dt=new Date(d+'T00:00:00');
@@ -6121,6 +6156,7 @@ function addExtraEquipment(){
   _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:defaultType,priority:defaultPriority,assignTo:'',promisedDate:defaultPromised,assignNote:''});
   renderExtraEquipment();
   updateSiteFieldsVisibility();
+  if(!defaultPromised) calcExtraPromisedDate(idx); // fill it in immediately if nothing was inherited to start with
   // Focus first field of new item
   setTimeout(()=>el(`extra-eq-name-${idx}`)?.focus(),100);
 }
@@ -6217,7 +6253,7 @@ function renderExtraEquipment(){
         <textarea class="form-control" oninput="updateExtraField(${i},'remarks',this.value)" placeholder="Special instructions…">${eq.remarks||''}</textarea></div>
       <div class="form-group">
         <label class="form-label">Priority</label>
-        <select class="form-control" onchange="updateExtraField(${i},'priority',this.value)">
+        <select class="form-control" onchange="updateExtraField(${i},'priority',this.value);calcExtraPromisedDate(${i});">
           <option value="Normal" ${(eq.priority||'Normal')==='Normal'?'selected':''}>Normal</option>
           <option value="Urgent" ${eq.priority==='Urgent'?'selected':''}>Urgent</option>
           <option value="Express" ${eq.priority==='Express'?'selected':''}>Express</option>
@@ -6233,7 +6269,8 @@ function renderExtraEquipment(){
         </div>
         ${eq.calType!=='Onsite'?`<div class="form-group">
           <label class="form-label">Promised Ready Date</label>
-          <input class="form-control" type="date" value="${eq.promisedDate||''}" oninput="updateExtraField(${i},'promisedDate',this.value)"/>
+          <input class="form-control" type="date" id="extra-eq-promised-${i}" value="${eq.promisedDate||''}" oninput="updateExtraField(${i},'promisedDate',this.value)"/>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="extra-eq-promised-hint-${i}">${eq.promisedDate?'':'Auto-calculated from priority'}</div>
         </div>`:`<div class="form-group"><label class="form-label" style="color:var(--text-muted);">Promised Ready Date</label><div style="font-size:11.5px;color:var(--text-muted);padding-top:8px;">📅 Not applicable — see Onsite Start/End Date instead.</div></div>`}
       </div>
       <div class="form-group">
