@@ -1836,7 +1836,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
       <div class="form-group" id="eq-condition-onsite-note" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-8px;">📷 Condition will be recorded on-site instead, right after Check-In.</div>
-      <div class="form-group"><label class="form-label">Accessories / Included Items</label><input class="form-control" id="eq-accessories" placeholder="e.g. power adapter, manual"/></div>
+      <div class="form-group" id="eq-accessories-group"><label class="form-label">Accessories / Included Items</label><input class="form-control" id="eq-accessories" placeholder="e.g. power adapter, manual"/></div>
+      <div class="form-group" id="eq-accessories-onsite-note" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-8px;">📋 Accessories will be recorded on-site instead, right after Check-In.</div>
       <div class="form-group"><label class="form-label">Remarks</label><textarea class="form-control" id="eq-remarks" placeholder="Special instructions…"></textarea></div>
 
       <div class="form-group">
@@ -2475,9 +2476,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <option value="Damaged">Damaged</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Accessories</label><input class="form-control" id="edit-eq-accessories" placeholder="e.g. power adapter, manual"/></div>
+        <div class="form-group" id="edit-eq-accessories-group"><label class="form-label">Accessories</label><input class="form-control" id="edit-eq-accessories" placeholder="e.g. power adapter, manual"/></div>
       </div>
-      <div class="form-group" id="edit-eq-condition-onsite-note" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-8px;">📷 Condition will be recorded on-site instead, right after Check-In.</div>
+      <div class="form-group" id="edit-eq-condition-onsite-note" style="display:none;font-size:11.5px;color:var(--text-muted);margin-top:-8px;">📋 Condition and Accessories will be recorded on-site instead, right after Check-In.</div>
       <div class="form-group"><label class="form-label">Remarks</label><textarea class="form-control" id="edit-eq-remarks" placeholder="Special instructions…"></textarea></div>
       <div class="form-group" id="edit-eq-soc-section"></div>
       <!-- Price Reference (Admin only - hidden via JS) -->
@@ -2542,11 +2543,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
 <div class="modal-overlay" id="modal-condition-capture" style="display:none;">
   <div class="modal modal-sm">
     <div class="modal-header">
-      <span class="modal-title">📷 Record Item Condition</span>
+      <span class="modal-title">📋 Record Item Details</span>
       <button class="modal-close" onclick="closeModal('modal-condition-capture')">✕</button>
     </div>
     <div class="modal-body">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Record this now, while you're actually looking at the item — it'll pre-fill "Before Calibration" later, whenever you get to the full form.</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Record this now, while you're actually looking at the item — it'll pre-fill "Before Calibration" and Accessories later, whenever you get to the full form.</div>
       <div class="form-group">
         <label class="form-label">Condition of Item <span class="req">*</span></label>
         <select class="form-control" id="cond-capture-select" onchange="el('cond-capture-other-group').style.display=this.value==='Others'?'block':'none'">
@@ -2558,6 +2559,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group" id="cond-capture-other-group" style="display:none;">
         <label class="form-label">Describe condition</label>
         <input class="form-control" id="cond-capture-other-text" placeholder="e.g. Cracked display, missing battery cover"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Accessories / Included Items <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+        <input class="form-control" id="cond-capture-accessories" placeholder="e.g. power adapter, carrying case, manual"/>
       </div>
       <div class="form-group">
         <label class="form-label">Photo <span style="font-size:11px;color:var(--text-muted);">(optional, but recommended)</span></label>
@@ -2573,7 +2578,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-condition-capture')">Cancel</button>
-      <button class="btn btn-primary" onclick="confirmConditionCapture()">✅ Save Condition</button>
+      <button class="btn btn-primary" onclick="confirmConditionCapture()">✅ Save Details</button>
     </div>
   </div>
 </div>
@@ -4934,6 +4939,10 @@ function updateSiteFieldsVisibility(){
   const condNote=el('eq-condition-onsite-note');
   if(condRow) condRow.style.display=primaryIsOnsite?'none':'flex';
   if(condNote) condNote.style.display=primaryIsOnsite?'block':'none';
+  const accGroup=el('eq-accessories-group');
+  const accNote=el('eq-accessories-onsite-note');
+  if(accGroup) accGroup.style.display=primaryIsOnsite?'none':'block';
+  if(accNote) accNote.style.display=primaryIsOnsite?'block':'none';
 }
 function syncAppointmentDateDefault(){
   // Only auto-fill if Appointment Date hasn't been manually set yet — never overwrite a deliberate choice
@@ -5911,8 +5920,8 @@ function renderExtraEquipment(){
       </div>
       ${eq.calType!=='Onsite'&&eq.condition==='Others'?`<div class="form-group"><label class="form-label">Specify Condition <span class="req">*</span></label>
         <input class="form-control" value="${eq.conditionOther||''}" placeholder="Describe condition…" oninput="updateExtraField(${i},'conditionOther',this.value)"/></div>`:''}
-      <div class="form-group"><label class="form-label">Accessories / Included Items</label>
-        <input class="form-control" value="${eq.accessories||''}" placeholder="e.g. power adapter, manual" oninput="updateExtraField(${i},'accessories',this.value)"/></div>
+      ${eq.calType!=='Onsite'?`<div class="form-group"><label class="form-label">Accessories / Included Items</label>
+        <input class="form-control" value="${eq.accessories||''}" placeholder="e.g. power adapter, manual" oninput="updateExtraField(${i},'accessories',this.value)"/></div>`:`<div class="form-group"><label class="form-label" style="color:var(--text-muted);">Accessories / Included Items</label><div style="font-size:11.5px;color:var(--text-muted);padding-top:8px;">📋 Recorded on-site after Check-In</div></div>`}
       <div class="form-group"><label class="form-label">Remarks</label>
         <textarea class="form-control" oninput="updateExtraField(${i},'remarks',this.value)" placeholder="Special instructions…">${eq.remarks||''}</textarea></div>
       <div class="form-group">
@@ -8102,6 +8111,7 @@ function getCheckinData(jobNo,itemIdx){
     checkinSelfie:it.checkinSelfie, checkinNotes:it.checkinNotes,
     checkoutTime:it.checkoutTime, checkoutNotes:it.checkoutNotes,
     onsiteCondition:it.onsiteCondition, onsiteConditionPhotoUrl:it.onsiteConditionPhotoUrl,
+    onsiteAccessories:it.onsiteAccessories,
     onsiteConditionAt:it.onsiteConditionAt, onsiteConditionBy:it.onsiteConditionBy
   }:{};
 }
@@ -10973,6 +10983,7 @@ function openConditionCaptureModal(jobNo,itemIdx){
   el('cond-capture-select').value='Good Physical Condition.';
   el('cond-capture-other-group').style.display='none';
   el('cond-capture-other-text').value='';
+  el('cond-capture-accessories').value='';
   const vid=el('cond-capture-video'); if(vid) vid.style.display='none';
   const canvas=el('cond-capture-canvas'); if(canvas) canvas.style.display='none';
   const preview=el('cond-capture-preview'); if(preview){preview.style.display='none';preview.src='';}
@@ -11029,6 +11040,7 @@ async function confirmConditionCapture(){
   const otherText=el('cond-capture-other-text').value.trim();
   if(selectVal==='Others'&&!otherText){alert('Please describe the condition.');return;}
   const conditionText=selectVal==='Others'?otherText:selectVal;
+  const accessoriesText=el('cond-capture-accessories').value.trim();
   const btn=document.querySelector('#modal-condition-capture .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='Saving…';}
   try{
@@ -11046,6 +11058,7 @@ async function confirmConditionCapture(){
         const rec=getTestCheckinRec(_condCaptureJobNo,_condCaptureItemIdx);
         rec.onsiteCondition=conditionText;
         rec.onsiteConditionPhotoUrl=photoUrl;
+        rec.onsiteAccessories=accessoriesText;
         rec.onsiteConditionAt=new Date().toISOString();
         rec.onsiteConditionBy=currentUser;
         await saveTestCheckins();
@@ -11054,15 +11067,17 @@ async function confirmConditionCapture(){
           const item=j.items[_condCaptureItemIdx]; if(!item)return;
           item.onsiteCondition=conditionText;
           item.onsiteConditionPhotoUrl=photoUrl;
+          item.onsiteAccessories=accessoriesText;
+          if(accessoriesText) item.accessories=accessoriesText; // completes the real record now that it's actually known — this is what Work Order/Edit Job/Receiving Labels use
           item.onsiteConditionAt=new Date().toISOString();
           item.onsiteConditionBy=currentUser;
-          j.history.push({action:`📷 Condition recorded for ${item.eqName}: ${conditionText}`,by:currentUser,time:new Date().toISOString()});
+          j.history.push({action:`📋 Item details recorded for ${item.eqName}: ${conditionText}${accessoriesText?' · Accessories: '+accessoriesText:''}`,by:currentUser,time:new Date().toISOString()});
         });
       }
     })();
     closeModal('modal-condition-capture');
     renderMyJobs();
-    showToast('✅ Condition saved — will pre-fill "Before Calibration" automatically','success',3000);
+    showToast('✅ Details saved — will pre-fill "Before Calibration" and Accessories automatically','success',3000);
     addAudit('📷',`Condition recorded for ${_condCaptureJobNo} item ${_condCaptureItemIdx+1}: ${conditionText}`);
   }catch(e){
     console.error('confirmConditionCapture error:',e);
@@ -11440,8 +11455,8 @@ function renderMyJobs(){
           ${item.calType==='Onsite'?`
             <button class="btn btn-outline btn-sm" style="background:#ffeaee;color:#c0001a;border-color:#ffb3bc;" onclick="openCustomerNotReadyModal('${j.jobNo}',${idx})">⚠️ Not Ready</button>
             ${!cd.checkinTime?`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${j.jobNo}',${idx})">📍 Check In${isTestingModeOn()?' 🧪':''}</button>`:`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${j.jobNo}',${idx})">🏁 Check Out${isTestingModeOn()?' 🧪':''}</button>`}
-            ${cd.checkinTime&&!cd.onsiteCondition?`<button class="btn btn-outline btn-sm" style="background:#7c2d12;color:#fff;border:none;" onclick="openConditionCaptureModal('${j.jobNo}',${idx})">📷 Record Condition${isTestingModeOn()?' 🧪':''}</button>`:''}
-            ${cd.onsiteCondition?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Condition: ${cd.onsiteCondition}</span>`:''}
+            ${cd.checkinTime&&!cd.onsiteCondition?`<button class="btn btn-outline btn-sm" style="background:#7c2d12;color:#fff;border:none;" onclick="openConditionCaptureModal('${j.jobNo}',${idx})">📋 Record Item Details${isTestingModeOn()?' 🧪':''}</button>`:''}
+            ${cd.onsiteCondition?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Condition: ${cd.onsiteCondition}${cd.onsiteAccessories?' · Accessories: '+cd.onsiteAccessories:''}</span>`:''}
           `:`<button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">🔶 KIV</button>`}
         `:''}        ${item.status==='Pending Approval'?
           `<span style="font-size:12px;color:var(--purple);font-weight:600;padding:5px;">📬 Awaiting approval…</span>`:''}
