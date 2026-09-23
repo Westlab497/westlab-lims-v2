@@ -1563,6 +1563,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <div class="form-group"><label class="form-label">Company Registration No.</label><input id="set-reg-no" class="form-control" placeholder="e.g. 1234567-A"/></div>
           </div>
           <div class="form-row">
+            <div class="form-group"><label class="form-label">Customer Feedback Form URL <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(F012)</span></label><input id="set-feedback-form-url" class="form-control" placeholder="https://forms.cloud.microsoft/..."/></div>
+            <div class="form-group"><label class="form-label">Customer Complaint Form URL <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(F019)</span></label><input id="set-complaint-form-url" class="form-control" placeholder="https://forms.cloud.microsoft/..."/></div>
+          </div>
+          <div class="form-row">
             <div class="form-group"><label class="form-label">Branch / Location</label><input id="set-branch" class="form-control" placeholder="e.g. Shah Alam Branch"/></div>
             <div class="form-group"><label class="form-label">Website</label><input id="set-website" class="form-control" placeholder="www.westlab.com"/></div>
           </div>
@@ -2642,10 +2646,57 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <label class="form-label">Checkout Notes <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
         <input class="form-control" id="checkout-notes" placeholder="e.g. All items calibrated, leaving site"/>
       </div>
+      <div class="form-group">
+        <label class="form-label">Customer Signature <span class="req" id="checkout-sig-required-mark">*</span></label>
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;">
+          <canvas id="checkout-sig-canvas" width="380" height="140" style="width:100%;touch-action:none;cursor:crosshair;display:block;"></canvas>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+          <span style="font-size:11px;color:var(--text-muted);">Hand the phone to the customer to sign above</span>
+          <button type="button" class="btn btn-outline btn-sm" onclick="clearCheckoutSignature()">🔄 Clear</button>
+        </div>
+      </div>
+      <div class="form-group" id="checkout-feedback-qr-group" style="text-align:center;background:var(--bg);border-radius:8px;padding:12px;">
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">Ask the customer to scan whichever applies:</div>
+        <div style="display:flex;justify-content:center;gap:20px;">
+          <div><div id="checkout-feedback-qr"></div><div style="font-size:10.5px;margin-top:4px;">⭐ Rate Our Service</div></div>
+          <div><div id="checkout-complaint-qr"></div><div style="font-size:10.5px;margin-top:4px;">⚠️ Report an Issue</div></div>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-checkout')">Cancel</button>
       <button class="btn btn-primary" onclick="confirmCheckOut()">🏁 Confirm Check Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- MARK COLLECTED MODAL (Lab items) -->
+<div class="modal-overlay" id="modal-mark-collected" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">📦 Mark Collected</span>
+      <button class="modal-close" onclick="closeModal('modal-mark-collected')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="collected-summary" style="background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;"></div>
+      <div class="form-group">
+        <label class="form-label">Collected By <span class="req">*</span></label>
+        <input class="form-control" id="collected-by-name" placeholder="Name of person collecting (may not be the original contact)"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Signature <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;">
+          <canvas id="collected-sig-canvas" width="380" height="140" style="width:100%;touch-action:none;cursor:crosshair;display:block;"></canvas>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="clearSignaturePad('collected-sig-canvas')">🔄 Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-mark-collected')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmMarkCollected()">📦 Confirm Collected</button>
     </div>
   </div>
 </div>
@@ -3423,7 +3474,9 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
   techManager:'Lab Manager',address:'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor Darul Ehsan, Malaysia',
   email:'lab@westlab.com',username:'admin',password:'westlab123',
   logoUrl:'',
-  slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10,testingModeOn:false};
+  slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10,testingModeOn:false,
+  feedbackFormUrl:'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=Us-oYwU870WTARXkWufvjYDemna27MNAtjzAir4JLZxUQkRNOE1GSUtSQ1QzRzk1MzBHRlIxT0NKNC4u',
+  complaintFormUrl:'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=Us-oYwU870WTARXkWufvjYDemna27MNAtjzAir4JLZxUQ0hDTFNPQjMzNkxaWExDVDdSTjE4OFkwQy4u'};
 
 // In-memory cache
 let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[];
@@ -4427,7 +4480,8 @@ function applySettings(s){
     
     slaUrgent:'set-sla-urgent', slaExpress:'set-sla-express',
     slaNormal:'set-sla-normal', slaRoutine:'set-sla-routine',
-    publicStatusUrl:'set-public-status-url'
+    publicStatusUrl:'set-public-status-url',
+    feedbackFormUrl:'set-feedback-form-url', complaintFormUrl:'set-complaint-form-url'
   };
   Object.entries(map).forEach(([k,id])=>{const e=document.getElementById(id);if(e&&s[k]!==undefined)e.value=s[k];});
   if(typeof renderStickerSettingsBody==='function') renderStickerSettingsBody();
@@ -4770,6 +4824,8 @@ async function saveSettings(){
   const s=Object.assign({},_settings);
   s.labName=el('set-lab-name').value.trim()||'Westlab';
   s.publicStatusUrl=el('set-public-status-url')?.value.trim()||'';
+  s.feedbackFormUrl=el('set-feedback-form-url')?.value.trim()||'';
+  s.complaintFormUrl=el('set-complaint-form-url')?.value.trim()||'';
   s.regNo=el('set-reg-no').value.trim();
   s.branch=el('set-branch').value.trim();
   s.address=el('set-address').value.trim();
@@ -11535,6 +11591,64 @@ function openVisitHistoryModal(jobNo,itemIdx){
   </div>`;
   ov.style.display='flex';
 }
+// ══════════════════════════════════════════════════
+// DOCUMENT NUMBERING — Quotation (WQT), Invoice (WIV), Delivery Order (WDO),
+// Purchase Order (WPO). Format: PREFIX-YYMM-0001, resetting every month, following
+// the same proven sequence pattern already used for certificate numbering.
+// ══════════════════════════════════════════════════
+async function getNextDocNumber(prefix){
+  const now=new Date();
+  const yymm=String(now.getFullYear()).slice(-2)+String(now.getMonth()+1).padStart(2,'0');
+  const seqId=`${prefix}_${yymm}`;
+  const d=await apiFetch(`/api/seq/${encodeURIComponent(seqId)}`);
+  const nextVal=(d&&d.val?d.val:0)+1;
+  await apiFetch('/api/seq',{method:'POST',body:JSON.stringify({id:seqId,val:nextVal})});
+  return `${prefix}-${yymm}-${String(nextVal).padStart(4,'0')}`;
+}
+// ══════════════════════════════════════════════════
+// SIGNATURE PAD — generic, reusable canvas-based capture. Used at Onsite Checkout
+// (required) and Lab Collection (optional) — one shared component, two moments.
+// ══════════════════════════════════════════════════
+const _sigPadState={}; // canvasId -> {drawing, lastX, lastY, hasDrawn}
+function initSignaturePad(canvasId){
+  const canvas=el(canvasId); if(!canvas)return;
+  // Match the canvas's internal resolution to its displayed size, so strokes align correctly
+  const rect=canvas.getBoundingClientRect();
+  canvas.width=rect.width; canvas.height=140;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='#0f1f3d'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
+  _sigPadState[canvasId]={drawing:false,lastX:0,lastY:0,hasDrawn:false};
+
+  const getPos=e=>{
+    const r=canvas.getBoundingClientRect();
+    const clientX=e.touches?e.touches[0].clientX:e.clientX;
+    const clientY=e.touches?e.touches[0].clientY:e.clientY;
+    return {x:clientX-r.left,y:clientY-r.top};
+  };
+  const start=e=>{ e.preventDefault(); const p=getPos(e); const s=_sigPadState[canvasId]; s.drawing=true; s.lastX=p.x; s.lastY=p.y; };
+  const move=e=>{
+    const s=_sigPadState[canvasId]; if(!s.drawing)return;
+    e.preventDefault();
+    const p=getPos(e);
+    ctx.beginPath(); ctx.moveTo(s.lastX,s.lastY); ctx.lineTo(p.x,p.y); ctx.stroke();
+    s.lastX=p.x; s.lastY=p.y; s.hasDrawn=true;
+  };
+  const end=()=>{ const s=_sigPadState[canvasId]; if(s) s.drawing=false; };
+
+  canvas.onmousedown=start; canvas.onmousemove=move; canvas.onmouseup=end; canvas.onmouseleave=end;
+  canvas.ontouchstart=start; canvas.ontouchmove=move; canvas.ontouchend=end;
+}
+function clearSignaturePad(canvasId){
+  const canvas=el(canvasId); if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(_sigPadState[canvasId]) _sigPadState[canvasId].hasDrawn=false;
+}
+function isSignaturePadEmpty(canvasId){
+  return !_sigPadState[canvasId]?.hasDrawn;
+}
+function clearCheckoutSignature(){ clearSignaturePad('checkout-sig-canvas'); }
 function openCheckoutModal(jobNo, itemIdx){
   _checkinJobNo=jobNo; _checkinItemIdx=itemIdx;
   el('checkout-notes').value='';
@@ -11550,18 +11664,40 @@ function openCheckoutModal(jobNo, itemIdx){
       <strong>Duration so far:</strong> ${hrs>0?hrs+'h ':''} ${mins}min`;
   }
   openModal('modal-checkout');
+  setTimeout(()=>{
+    initSignaturePad('checkout-sig-canvas');
+    const fbQr=el('checkout-feedback-qr'); const cpQr=el('checkout-complaint-qr');
+    if(fbQr&&_settings.feedbackFormUrl) fbQr.innerHTML=`<img src="${generateQRDataUrl(_settings.feedbackFormUrl,90)}" style="width:90px;height:90px;"/>`;
+    if(cpQr&&_settings.complaintFormUrl) cpQr.innerHTML=`<img src="${generateQRDataUrl(_settings.complaintFormUrl,90)}" style="width:90px;height:90px;"/>`;
+  },100);
 }
 
 async function confirmCheckOut(){
   const now=new Date().toISOString();
   const notes=el('checkout-notes').value.trim();
+  if(isSignaturePadEmpty('checkout-sig-canvas')){
+    showToast('❌ Customer signature is required for Onsite checkout.','error',4000);
+    return;
+  }
+  const btn=document.querySelector('#modal-checkout .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Checking out…';}
   try{
+    // Upload the signature to R2, same pattern as the check-in selfie
+    let sigUrl='';
+    try{
+      const canvas=el('checkout-sig-canvas');
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+      const path=`${isTestingModeOn()?'signatures_test':'signatures'}/${_checkinJobNo}_checkout_${Date.now()}.png`;
+      const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':'image/png'},body:blob});
+      if(uploadRes.ok){ const r2=await uploadRes.json(); sigUrl=r2.url||''; }
+    }catch(e){ console.error('Signature upload failed:',e); }
+
     if(isTestingModeOn()){
       const jobForMatch=getJob(_checkinJobNo);
       const matchingIdxs=(jobForMatch?.items||[]).map((it,i)=>({it,i})).filter(({it})=>it.calType==='Onsite'&&it.assignedTo===currentUser).map(({i})=>i);
       for(const mi of matchingIdxs){
         const rec=getTestCheckinRec(_checkinJobNo,mi);
-        rec.checkoutTime=now; rec.checkoutNotes=notes;
+        rec.checkoutTime=now; rec.checkoutNotes=notes; rec.checkoutSignature=sigUrl;
       }
       await saveTestCheckins();
     } else {
@@ -11570,19 +11706,30 @@ async function confirmCheckOut(){
         matchingItems.forEach(it=>{
           it.checkoutTime=now;
           it.checkoutNotes=notes;
+          it.checkoutSignature=sigUrl;
         });
         job.history.push({
-          action:`Check-Out at ${new Date(now).toLocaleTimeString('en-MY')} — covers ${matchingItems.length} item${matchingItems.length!==1?'s':''}`,
+          action:`Check-Out at ${new Date(now).toLocaleTimeString('en-MY')} — covers ${matchingItems.length} item${matchingItems.length!==1?'s':''}, customer signature captured`,
           by:currentUser,time:now
         });
       });
     }
+
+    // Backup copy of the feedback/complaint links via WhatsApp, in case they didn't scan on-site
+    const job=getJob(_checkinJobNo);
+    if(job?.mobile&&(_settings.feedbackFormUrl||_settings.complaintFormUrl)){
+      const msg=`Thank you for having Westlab (M) Sdn. Bhd. calibrate your equipment today.\n\n⭐ Rate our service: ${_settings.feedbackFormUrl||''}\n⚠️ Report an issue: ${_settings.complaintFormUrl||''}`;
+      window.open(buildWhatsAppUrl(job.mobile,msg),'_blank');
+    }
+
     closeModal('modal-checkout');
     renderMyJobs();
     showToast(`🏁 Checked out at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`,'success',3000);
-    addAudit('🏁',`Job <strong>${_checkinJobNo}</strong> — Engineer checked out${isTestingModeOn()?' (test)':''}`);
+    addAudit('🏁',`Job <strong>${_checkinJobNo}</strong> — Engineer checked out, customer signed${isTestingModeOn()?' (test)':''}`);
   }catch(e){
     showToast('❌ Check-out failed: '+e.message,'error',5000);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🏁 Confirm Check Out';}
   }
 }
 
@@ -11977,6 +12124,8 @@ function renderMyJobs(){
           `<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})">📄 View Certificate</button>`:''}
         ${item.status==='Completed'?
           `<span style="font-size:12px;color:var(--green);font-weight:600;padding:5px;">✅ Completed</span>`:''}
+        ${item.calType==='Onsite'&&item.checkinSelfie&&canViewStaffEvaluation(currentUser)?
+          `<a href="javascript:void(0)" onclick="openSignedUrl('${item.checkinSelfie}')" style="font-size:11px;">📷 View Check-In Selfie</a>`:''}
         ${item.status==='Returned - Abnormal'?`
           <span style="font-size:12px;color:var(--red);font-weight:600;padding:5px;">⚠️ Returned - Abnormal</span>
           ${item.abnormalCause?`<span style="font-size:11px;background:${item.abnormalCause==='Occurred During Handling'?'#fef2f2':'#f0fdf4'};color:${item.abnormalCause==='Occurred During Handling'?'#991b1b':'#166534'};font-weight:600;padding:4px 8px;border-radius:4px;">${item.abnormalCause==='Occurred During Handling'?'🔍 Occurred During Handling':'🔍 Pre-existing'}</span>`
@@ -16402,7 +16551,11 @@ function renderCompletedJobs(){
       <td colspan="3" style="padding:6px 10px;font-size:11px;color:var(--text-muted);text-align:right;">
         ${j.billed?`<span class="badge badge-green">✅ Billed ${j.billedAt?.split('T')[0]||''}</span>`:`<span class="badge badge-amber">⏳ Pending Billing</span>`}
         &nbsp;
+        ${j.collectedAt?`<span class="badge badge-green">📦 Collected by ${j.collectedBy||''} — ${j.doNumber||''}</span>`:`<span class="badge badge-amber">📦 Not Yet Collected</span>`}
+        &nbsp;
         ${isAdmin(currentUser)&&!j.billed?`<button class="btn btn-primary btn-sm" onclick="markBilled('${j.jobNo}')">💰 Mark Billed</button>`:''}
+        ${canCreateJobs(currentUser)&&!j.collectedAt?`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="openMarkCollectedModal('${j.jobNo}')">📦 Mark Collected</button>`:''}
+        ${j.collectedAt?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportDeliveryOrderPdf('${j.jobNo}')">📄 View DO</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#25D366;color:#fff;border-color:#25D366;" onclick="sendWhatsAppCollection('${j.jobNo}')">💬 WhatsApp</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#991b1b;color:#fff;border-color:#991b1b;" onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (irreversible)">🗑️⚠️ Delete</button>`:''}
       </td>
@@ -16615,6 +16768,109 @@ Tel: +6011-3508 9986`;
   addAudit('💬', `WhatsApp job receipt sent for job <strong>${jobNo}</strong> to ${mobile}`);
 }
 
+// ══════════════════════════════════════════════════
+// MARK COLLECTED (Lab items) — the actual physical pickup moment, separate from
+// "Mark Billed" (which only means "certificates are ready"). Generates a real
+// Delivery Order, optionally captures a signature, and sends the feedback/complaint
+// links — since asking "how was our service?" only makes sense once they've actually
+// received the item back.
+// ══════════════════════════════════════════════════
+function openMarkCollectedModal(jobNo){
+  const j=getJob(jobNo); if(!j)return;
+  _collectedJobNo=jobNo;
+  el('collected-by-name').value=j.attention||'';
+  const summary=el('collected-summary');
+  if(summary) summary.innerHTML=`<strong>${j.custName}</strong> — ${j.items?.length||1} item(s)`;
+  openModal('modal-mark-collected');
+  setTimeout(()=>initSignaturePad('collected-sig-canvas'),100);
+}
+let _collectedJobNo=null;
+async function confirmMarkCollected(){
+  const collectedBy=el('collected-by-name').value.trim();
+  if(!collectedBy){alert('Please enter who is collecting the item(s).');return;}
+  const btn=document.querySelector('#modal-mark-collected .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Saving…';}
+  try{
+    let sigUrl='';
+    if(!isSignaturePadEmpty('collected-sig-canvas')){
+      try{
+        const canvas=el('collected-sig-canvas');
+        const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+        const path=`${isTestingModeOn()?'signatures_test':'signatures'}/${_collectedJobNo}_collection_${Date.now()}.png`;
+        const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':'image/png'},body:blob});
+        if(uploadRes.ok){ const r2=await uploadRes.json(); sigUrl=r2.url||''; }
+      }catch(e){ console.error('Collection signature upload failed:',e); }
+    }
+    const doNumber=await getNextDocNumber('WDO');
+    const now=new Date().toISOString();
+    await updateJob(_collectedJobNo,job=>{
+      job.collectedBy=collectedBy;
+      job.collectedAt=now;
+      job.collectionSignature=sigUrl;
+      job.doNumber=doNumber;
+      job.history.push({action:`📦 Marked Collected by ${collectedBy} — Delivery Order ${doNumber} issued`,by:currentUser,time:now});
+    });
+    closeModal('modal-mark-collected');
+    renderCompletedJobs();
+    showToast(`📦 Marked Collected — Delivery Order ${doNumber} issued`,'success',4000);
+    addAudit('📦',`Job <strong>${_collectedJobNo}</strong> marked Collected by ${collectedBy} — DO ${doNumber}`);
+
+    // Feedback/complaint email — this is the right moment, since they've actually received the item now
+    const jFull=getJob(_collectedJobNo);
+    const recip=resolveEmailRecipient(jFull||{custName:'',email:''});
+    if(jFull&&recip.email&&(_settings.feedbackFormUrl||_settings.complaintFormUrl)){
+      const lab=_settings.labName||'Westlab (M) Sdn. Bhd.';
+      const dearName=recip.attention||recip.name;
+      const htmlBody=`<p>Dear ${dearName},</p>
+        <p>Thank you for collecting your item(s) from ${lab} (Job No.: ${jFull.jobNo}). We hope you're satisfied with our service.</p>
+        <p>We'd really appreciate a couple of minutes of your time:</p>
+        <p>⭐ <a href="${_settings.feedbackFormUrl}">Rate Our Service</a> — tell us how we did<br/>
+        ⚠️ <a href="${_settings.complaintFormUrl}">Report an Issue</a> — if anything needs our attention</p>
+        <p>Thank you for choosing ${lab}.</p>`;
+      const textBody=`Dear ${dearName},\n\nThank you for collecting your item(s) from ${lab} (Job No.: ${jFull.jobNo}).\n\nRate our service: ${_settings.feedbackFormUrl}\nReport an issue: ${_settings.complaintFormUrl}\n\nThank you for choosing ${lab}.`;
+      sendEmail(recip.email,recip.name,`Your Calibration Certificate(s) — ${jFull.jobNo} — We'd Love Your Feedback`,textBody,htmlBody)
+        .then(ok=>{ if(ok) addAudit('📧',`Feedback request emailed to ${recip.email} for ${jFull.jobNo}`); });
+    }
+  }catch(e){
+    console.error('confirmMarkCollected error:',e);
+    showToast('❌ Failed to mark collected: '+e.message,'error',4000);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='📦 Confirm Collected';}
+  }
+}
+async function exportDeliveryOrderPdf(jobNo){
+  const j=getJob(jobNo); if(!j||!j.doNumber){alert('This job has not been marked Collected yet.');return;}
+  const s=_settings;
+  const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:16px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
+      <div style="font-size:11px;color:#64748b;">${s.address||''}</div>
+    </div>
+    <div style="text-align:center;font-size:15px;font-weight:800;text-decoration:underline;margin-bottom:20px;">DELIVERY ORDER</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+      <tr><td style="padding:5px 8px;color:#64748b;width:160px;">DO Number</td><td style="padding:5px 8px;font-weight:600;">${j.doNumber}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Job No.</td><td style="padding:5px 8px;font-weight:600;">${j.jobNo}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Customer</td><td style="padding:5px 8px;font-weight:600;">${j.custName||''}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Collected By</td><td style="padding:5px 8px;font-weight:600;">${j.collectedBy||''}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;">Date Collected</td><td style="padding:5px 8px;font-weight:600;">${fmtDateShort(j.collectedAt)}</td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:20px;">
+      <thead><tr>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;text-align:left;">Description</th>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;">Cert No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Serial No.</th>
+      </tr></thead>
+      <tbody>${(j.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${i+1}</td>
+        <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${it.eqName||''} ${it.brand||''} ${it.model||''}</td>
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.certNo||''}</td>
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.serial||'N/A'}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+    ${j.collectionSignature?`<div style="margin-bottom:16px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">Signature</div><img src="${j.collectionSignature}" style="max-width:250px;border:1px solid #e2e8f0;border-radius:4px;"/></div>`:''}
+    <div style="margin-top:24px;font-size:10.5px;color:#94a3b8;">This Delivery Order confirms the item(s) listed above were returned to the customer on the date stated.</div>
+  </div>`;
+  await exportHtmlAsPdf(html,`${j.doNumber}.pdf`,'Delivery Order',(j.items||[]).length);
+}
 async function markBilled(jobNo){
   try{
   const j=getJob(jobNo); if(!j)return;
