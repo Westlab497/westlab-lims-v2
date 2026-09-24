@@ -3121,6 +3121,24 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <label class="form-label">Notes</label>
         <textarea class="form-control" id="cnr-notes" rows="2" placeholder="Additional details…"></textarea>
       </div>
+      <div class="form-group">
+        <label class="form-label">Cause <span class="req">*</span></label>
+        <select class="form-control" id="cnr-cause">
+          <option value="Customer">Customer-side — client not ready/available</option>
+          <option value="Internal">Our side — staff/equipment issue (e.g. forgot tools, accident)</option>
+        </select>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">If the delay was our fault, the office won't be able to charge the customer for it.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirmation Signature <span class="req">*</span></label>
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;">
+          <canvas id="cnr-sig-canvas" width="380" height="140" style="width:100%;touch-action:none;cursor:crosshair;display:block;"></canvas>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+          <span style="font-size:11px;color:var(--text-muted);">Whoever's on-site confirms this happened — protects both sides if there's a dispute later.</span>
+          <button type="button" class="btn btn-outline btn-sm" onclick="clearSignaturePad('cnr-sig-canvas')">🔄 Clear</button>
+        </div>
+      </div>
       <div style="font-size:11.5px;color:var(--text-muted);">This will be flagged for the office to reschedule with the customer — you don't need to set a new date yourself.</div>
     </div>
     <div class="modal-footer">
@@ -3970,6 +3988,8 @@ function setCurrentUser(username){
     if(isAdmin(currentUser)) setTimeout(checkOnsiteCheckInAlerts, 3000);
     // Check KIV expiry for all users
     checkKIVExpiry();
+    // Live refresh benefits everyone (My Jobs, Dashboard, etc.), not just Admin
+    startLiveRefresh();
   },1500);
   }catch(_e){
     console.error("setCurrentUser error:",_e);
@@ -4346,6 +4366,7 @@ function closeModal(id){
   if(!m)return;
   m.classList.remove('open');
   m.style.display='none';
+  if(id==='modal-add-equipment') stopJobDraftAutoSave();
 }
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
@@ -5220,6 +5241,69 @@ function removeExcel(){
 }
 
 // ── OPEN NEW JOB MODAL ──
+// ══════════════════════════════════════════════════
+// JOB CREATION AUTO-SAVE — periodically saves the in-progress form to local browser
+// storage, so navigating away or an accidental close doesn't mean starting over.
+// ══════════════════════════════════════════════════
+const JOB_DRAFT_FIELD_IDS=['eq-company','eq-attention','eq-address','eq-email','eq-mobile','eq-tel','eq-fax','eq-po',
+  'eq-end-user','eq-end-user-address','eq-end-user-attention','eq-end-user-mobile','eq-end-user-tel',
+  'eq-name','eq-brand','eq-model','eq-serial','eq-tag-no','eq-range','eq-spec','eq-resolution','eq-cal-points','eq-cal-interval',
+  'eq-condition','eq-condition-other','eq-accessories','eq-remarks','eq-priority','eq-promised-date','eq-price',
+  'eq-item-type','eq-job-category','eq-assign-to','eq-assign-note',
+  'eq-site-address','eq-site-area','eq-site-contact','eq-site-mobile','eq-appointment-date','eq-visit-end-date',
+  'eq-deposit-required','eq-deposit-amount'];
+let _jobDraftTimer=null;
+function saveJobDraftToLocalStorage(){
+  try{
+    const fields={};
+    JOB_DRAFT_FIELD_IDS.forEach(id=>{
+      const elm=el(id); if(!elm)return;
+      fields[id]=elm.type==='checkbox'?elm.checked:elm.value;
+    });
+    // Only bother saving if something meaningful has actually been typed
+    if(!fields['eq-company']&&!fields['eq-name'])return;
+    localStorage.setItem('wl_job_draft',JSON.stringify({fields,extraEquipment:_extraEquipment,savedAt:new Date().toISOString()}));
+  }catch(e){ console.error('Job draft save failed:',e); }
+}
+function startJobDraftAutoSave(){
+  if(_jobDraftTimer) clearInterval(_jobDraftTimer);
+  _jobDraftTimer=setInterval(saveJobDraftToLocalStorage,15000); // every 15s while the form is open
+}
+function stopJobDraftAutoSave(){
+  if(_jobDraftTimer){ clearInterval(_jobDraftTimer); _jobDraftTimer=null; }
+}
+function clearJobDraft(){
+  localStorage.removeItem('wl_job_draft');
+  stopJobDraftAutoSave();
+}
+function checkForJobDraft(){
+  try{
+    const raw=localStorage.getItem('wl_job_draft');
+    if(!raw)return false;
+    const draft=JSON.parse(raw);
+    const savedAt=new Date(draft.savedAt);
+    const hoursOld=(new Date()-savedAt)/3600000;
+    if(hoursOld>24){ localStorage.removeItem('wl_job_draft'); return false; } // too stale to trust
+    const company=draft.fields?.['eq-company']||draft.fields?.['eq-name']||'a job';
+    if(confirm(`You have an unsaved draft from ${savedAt.toLocaleString('en-MY')} (${company}). Restore it?`)){
+      restoreJobDraft(draft);
+    } else {
+      localStorage.removeItem('wl_job_draft');
+    }
+    return true;
+  }catch(e){ console.error('Job draft check failed:',e); return false; }
+}
+function restoreJobDraft(draft){
+  Object.entries(draft.fields||{}).forEach(([id,val])=>{
+    const elm=el(id); if(!elm)return;
+    if(elm.type==='checkbox') elm.checked=val; else elm.value=val;
+  });
+  _extraEquipment=draft.extraEquipment||[];
+  renderExtraEquipment();
+  updateSiteFieldsVisibility();
+  toggleInternalCalibrationMode();
+  showToast('✅ Draft restored','success',3000);
+}
 async function openNewJobModal(){
   try{
     if(!canCreateJobs(currentUser)){alert('You do not have permission to create new jobs.');return;}
@@ -5341,7 +5425,12 @@ async function openNewJobModal(){
       }
     }
 
+    // Only offer a restored draft when not starting fresh from a quotation, so the two
+    // pre-fill sources never fight each other.
+    if(!_startingFromQuotationV2Id) checkForJobDraft();
+
     openModal('modal-add-equipment');
+    startJobDraftAutoSave();
   }catch(err){
     console.error('openNewJobModal error:',err);
     alert('Error opening new job form: '+err.message+'\n\nPlease refresh the page and try again.');
@@ -5686,6 +5775,7 @@ async function saveEquipment(printReceipt=false){
   }
 
   closeModal('modal-add-equipment');
+  clearJobDraft();
   renderEquipmentTable(); renderDashboard(); refreshAllBadges();
   showToast(`✅ Job ${jobNo} created — ${items.length} item${items.length>1?'s':''}, ${items.length} cert${items.length>1?'s':''}${anyAssigned?' · Assigned to '+assignedNames.join(', '):''}`,'success',4000);
   addAudit('🔧',`Job <strong>${jobNo}</strong> created — ${items.length} item(s) for ${company}`);
@@ -7300,7 +7390,7 @@ function populateApprovedByDropdown(){
   const current=sel.value;
   sel.innerHTML='<option value="">— Select Approved Signatory —</option>';
   (_staff||[]).filter(s=>s.approvedSignatory===true&&s.active!==false).forEach(s=>{
-    sel.innerHTML+=`<option value="${s.name}">${s.name}</option>`;
+    sel.innerHTML+=`<option value="${s.username}">${s.certName||s.name}</option>`;
   });
   if(current) sel.value=current;
 }
@@ -7770,7 +7860,7 @@ async function openCalModal(jobNo, itemIdx=0){
     });
     if(cd.procedure) el('cal-procedure').value=cd.procedure||'';
     if(cd.total_pages) el('cal-total-pages').value=cd.total_pages||'2';
-    if(cd.approved_by) el('cal-approved-by').value=cd.approved_by||'';
+    if(item.approvedBy) el('cal-approved-by').value=item.approvedBy||'';
     // Restore ambient split fields
     if(cd.temp){const m=cd.temp.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-temp-val').value=m[1].trim();el('cal-temp-pm').value=m[2].trim();}}
     if(cd.humidity){const m=cd.humidity.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-humidity-val').value=m[1].trim();el('cal-humidity-pm').value=m[2].trim();}}
@@ -8994,6 +9084,14 @@ const STICKER_TYPES={
   voidSticker:{label:'Void',numbered:false},
   abnormal:{label:'Abnormal',numbered:false}
 };
+function navigateAndRequestSticker(type){
+  _stickerActiveTab=type;
+  showView('stickers');
+  setTimeout(()=>{
+    if(STICKER_TYPES[type].numbered) requestStickerBatch(type);
+    else openCountBasedRequestModal(type);
+  },150); // give the page a moment to render before triggering the request modal
+}
 function stickerTypeCfg(type){
   return {
     batchSize:_settings[`sticker_${type}_batchSize`]||(STICKER_TYPES[type].numbered?50:20),
@@ -11918,6 +12016,7 @@ async function confirmCheckIn(){
     if(_selfieStream){_selfieStream.getTracks().forEach(t=>t.stop());_selfieStream=null;}
     closeModal('modal-checkin');
     renderMyJobs();
+    checkOnsiteCheckInAlerts(); // clear the alert banner immediately, don't wait for the next poll cycle
     showToast(`✅ Checked in at ${new Date(now).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`,'success',4000);
     addAudit('📍',`Job <strong>${_checkinJobNo}</strong> — Engineer checked in${_checkinFlagged?' (⚠️ unusual GPS accuracy)':''}`);
   }catch(e){
@@ -11948,16 +12047,21 @@ function openConditionCaptureModal(jobNo,itemIdx){
   if(_condCaptureStream){_condCaptureStream.getTracks().forEach(t=>t.stop());_condCaptureStream=null;}
   openModal('modal-condition-capture');
 }
-function startConditionCamera(){
+let _condCaptureFacingMode='environment';
+function startConditionCamera(facingMode){
+  if(facingMode) _condCaptureFacingMode=facingMode;
   const vid=el('cond-capture-video');
   const btns=el('cond-capture-buttons');
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}) // rear camera — photographing the item, not a selfie
+  if(_condCaptureStream){_condCaptureStream.getTracks().forEach(t=>t.stop());_condCaptureStream=null;}
+  navigator.mediaDevices.getUserMedia({video:{facingMode:_condCaptureFacingMode}})
     .then(stream=>{
       _condCaptureStream=stream;
       vid.srcObject=stream;
       vid.style.display='block';
+      const otherMode=_condCaptureFacingMode==='environment'?'user':'environment';
       btns.innerHTML=`
         <button class="btn btn-primary btn-sm" onclick="captureConditionPhoto()">📸 Capture</button>
+        <button class="btn btn-outline btn-sm" onclick="startConditionCamera('${otherMode}')">🔄 Swap Camera</button>
         <button class="btn btn-outline btn-sm" onclick="cancelConditionPhoto()">Cancel</button>`;
     })
     .catch(e=>{
@@ -12220,6 +12324,35 @@ async function confirmCheckOut(){
 }
 
 // ── ADMIN ALERT: unchecked-in onsite visits ──
+// ══════════════════════════════════════════════════
+// LIVE REFRESH (polling-based) — the app doesn't expose Supabase credentials directly to
+// the browser (everything goes through the Cloudflare Worker as a proxy, a deliberate
+// security boundary), so true Realtime would mean a new direct connection bypassing that.
+// This achieves the same practical goal — no more relying on manual refresh — by
+// periodically re-checking for changes through the same proven API instead.
+// ══════════════════════════════════════════════════
+let _liveRefreshTimer=null;
+async function pollForLiveUpdates(){
+  try{
+    // Skip entirely if a modal is open — never disrupt someone mid-form-entry
+    if(document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"]'))return;
+    const jobs=await SB.getAll('wl_jobs').catch(()=>null);
+    if(!jobs)return; // network hiccup — just try again next cycle, don't wipe existing data
+    _jobs=jobs.filter(j=>j.items&&Array.isArray(j.items));
+    checkOnsiteCheckInAlerts();
+    // Only re-render the views that are safe/cheap to refresh live and commonly left open
+    const activeView=document.querySelector('.view.active')?.id;
+    if(activeView==='view-my-jobs') renderMyJobs();
+    else if(activeView==='view-dashboard') renderDashboard();
+    else if(activeView==='view-equipment') renderEquipmentTable();
+    else if(activeView==='view-completed') renderCompletedJobs();
+    else if(activeView==='view-approval') renderApprovalQueue();
+  }catch(e){ console.error('pollForLiveUpdates error:',e); }
+}
+function startLiveRefresh(){
+  if(_liveRefreshTimer) clearInterval(_liveRefreshTimer);
+  _liveRefreshTimer=setInterval(pollForLiveUpdates,45000); // every 45s
+}
 function checkOnsiteCheckInAlerts(){
   const now=new Date();
   const todayStr=toLocalDateStr(now);
@@ -12241,9 +12374,9 @@ function checkOnsiteCheckInAlerts(){
       }
     });
   });
-  if(!alerts.length) return;
   const existing=document.getElementById('onsite-checkin-alert');
   if(existing) existing.remove();
+  if(!alerts.length) return;
   const banner=document.createElement('div');
   banner.id='onsite-checkin-alert';
   banner.style.cssText='position:fixed;top:60px;left:240px;right:0;z-index:500;background:#ffeaee;border-bottom:2px solid #c0001a;padding:10px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;';
@@ -12263,28 +12396,45 @@ function openCustomerNotReadyModal(jobNo, itemIdx){
   _cnrJobNo=jobNo; _cnrItemIdx=itemIdx;
   el('cnr-reason').value='';
   el('cnr-notes').value='';
+  el('cnr-cause').value='Customer';
   openModal('modal-customer-not-ready');
+  setTimeout(()=>initSignaturePad('cnr-sig-canvas'),100);
 }
 
 async function confirmCustomerNotReady(){
   const reason=el('cnr-reason').value;
   const notes=el('cnr-notes').value.trim();
+  const cause=el('cnr-cause').value;
   if(!reason){showToast('Please select a reason','error',3000);return;}
+  if(isSignaturePadEmpty('cnr-sig-canvas')){showToast('❌ A confirmation signature is required — whoever is on-site needs to confirm this.','error',4500);return;}
+  const btn=document.querySelector('#modal-customer-not-ready .btn-danger');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Saving…';}
+  let sigUrl='';
+  try{
+    const canvas=el('cnr-sig-canvas');
+    const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+    const path=`${isTestingModeOn()?'signatures_test':'signatures'}/${_cnrJobNo}_notready_${Date.now()}.png`;
+    const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':'image/png'},body:blob});
+    if(uploadRes.ok){ const r2=await uploadRes.json(); sigUrl=r2.url||''; }
+  }catch(e){ console.error('Not Ready signature upload failed:',e); }
   const today=toLocalDateStr(new Date());
   await updateJob(_cnrJobNo,job=>{
     const it=job.items[_cnrItemIdx];
     it.status='Customer Not Ready';
     it.customerNotReadyReason=reason+(notes?' — '+notes:'');
     it.customerNotReadyDate=today;
+    it.customerNotReadyCause=cause;
+    it.customerNotReadySignature=sigUrl;
     job.history.push({
-      action:`Item ${it.itemNo} — Customer Not Ready: "${reason}"${notes?' ('+notes+')':''}. Flagged for office to reschedule.`,
+      action:`Item ${it.itemNo} — Customer Not Ready: "${reason}"${notes?' ('+notes+')':''}. Cause: ${cause==='Internal'?'Our side':'Customer side'}. Flagged for office to reschedule.`,
       by:currentUser,time:new Date().toISOString()
     });
   });
   closeModal('modal-customer-not-ready');
   renderMyJobs(); renderEquipmentTable(); renderDashboard();
   showToast(`⚠️ Marked as Customer Not Ready — flagged for the office to reschedule`,'warn',5000);
-  addAudit('⚠️',`Job <strong>${_cnrJobNo}</strong> Item ${_cnrItemIdx+1} — Customer Not Ready: "${reason}". Awaiting reschedule.`);
+  addAudit('⚠️',`Job <strong>${_cnrJobNo}</strong> Item ${_cnrItemIdx+1} — Customer Not Ready: "${reason}" (${cause}). Awaiting reschedule.`);
+  if(btn){btn.disabled=false;btn.textContent='⚠️ Mark Not Ready';}
 }
 
 let _cnrResolveJobNo=null, _cnrResolveItemIdx=null;
@@ -12302,9 +12452,14 @@ function openResolveCustomerNotReadyModal(jobNo, itemIdx){
     <div style="padding:16px 20px;">
       <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;">
         <strong>${job?.custName||''}</strong> — ${item?.eqName||''}<br/>
-        <span style="color:var(--text-muted);">Reason given: "${item?.customerNotReadyReason||''}"</span>
+        <span style="color:var(--text-muted);">Reason given: "${item?.customerNotReadyReason||''}"</span><br/>
+        <span style="color:var(--text-muted);">Cause: <strong>${item?.customerNotReadyCause==='Internal'?'Our side (staff/equipment)':'Customer side'}</strong></span>
+        ${item?.customerNotReadySignature?`<br/><a href="javascript:void(0)" onclick="openSignedUrl('${item.customerNotReadySignature}')" style="font-size:11px;">📝 View confirmation signature</a>`:''}
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">⚠️ Make sure you've already set the new Onsite Date in Edit Job before resolving this — resolving here doesn't set the date for you.</div>
+      ${item?.customerNotReadyCause==='Internal'?`
+      <div style="background:#eff6ff;border-radius:8px;padding:10px 12px;font-size:12px;color:#1e40af;">This was recorded as our own side's issue — no extra charge applies here.</div>
+      `:`
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
           <input type="checkbox" id="cnr-extra-charge-checkbox" onchange="el('cnr-extra-charge-fields').style.display=this.checked?'block':'none'"/>
@@ -12315,6 +12470,7 @@ function openResolveCustomerNotReadyModal(jobNo, itemIdx){
         <div class="form-group"><label class="form-label">Amount (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="cnr-extra-charge-amount" placeholder="e.g. 150.00"/></div>
         <div class="form-group"><label class="form-label">Reason</label><input class="form-control" id="cnr-extra-charge-reason" placeholder="e.g. Late notice — customer not informed in advance"/></div>
       </div>
+      `}
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
         <button class="btn btn-outline" onclick="document.getElementById('resolve-cnr-overlay').style.display='none'">Cancel</button>
         <button class="btn btn-primary" onclick="confirmResolveCustomerNotReady()">✅ Resolve — Resume</button>
@@ -12324,9 +12480,9 @@ function openResolveCustomerNotReadyModal(jobNo, itemIdx){
   ov.style.display='flex';
 }
 async function confirmResolveCustomerNotReady(){
-  const extraChargeApplicable=el('cnr-extra-charge-checkbox').checked;
-  const extraChargeAmount=extraChargeApplicable?(parseFloat(el('cnr-extra-charge-amount').value)||0):0;
-  const extraChargeReason=extraChargeApplicable?el('cnr-extra-charge-reason').value.trim():'';
+  const extraChargeApplicable=el('cnr-extra-charge-checkbox')?.checked||false;
+  const extraChargeAmount=extraChargeApplicable?(parseFloat(el('cnr-extra-charge-amount')?.value)||0):0;
+  const extraChargeReason=extraChargeApplicable?(el('cnr-extra-charge-reason')?.value.trim()||''):'';
   if(extraChargeApplicable&&(!extraChargeAmount||!extraChargeReason)){alert('Please enter both an amount and a reason for the extra charge.');return;}
   await updateJob(_cnrResolveJobNo,job=>{
     const it=job.items[_cnrResolveItemIdx];
@@ -13172,7 +13328,7 @@ function renderNeedsAttention(){
       const c=stickerCounts(type);
       if(c.totalPrinted>0){
         const pct=c.available/c.totalPrinted*100;
-        if(pct<=stickerTypeCfg(type).lowPct) items.push({icon:'🏷️',text:`${STICKER_TYPES[type].label} stickers running low (${c.available} left)`,view:'stickers'});
+        if(pct<=stickerTypeCfg(type).lowPct) items.push({icon:'🏷️',text:`${STICKER_TYPES[type].label} stickers running low (${c.available} left)`,view:'stickers',onclick:`navigateAndRequestSticker('${type}')`});
       }
     });
   }
@@ -13231,7 +13387,7 @@ function renderNeedsAttention(){
   box.innerHTML=`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 16px;">
     <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:8px;">⚠️ Needs Attention</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;">
-      ${items.map(i=>`<span onclick="showView('${i.view}')" style="cursor:pointer;background:#fff;border:1px solid #fdba74;border-radius:20px;padding:5px 12px;font-size:12px;color:#9a3412;">${i.icon} ${i.text}</span>`).join('')}
+      ${items.map(i=>`<span onclick="${i.onclick||`showView('${i.view}')`}" style="cursor:pointer;background:#fff;border:1px solid #fdba74;border-radius:20px;padding:5px 12px;font-size:12px;color:#9a3412;">${i.icon} ${i.text}</span>`).join('')}
     </div>
   </div>`;
 }
