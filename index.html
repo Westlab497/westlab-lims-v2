@@ -65,12 +65,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 #sidebar.collapsed .sidebar-logo{justify-content:center;}
 #sidebar.collapsed .sidebar-logo-text{display:none;}
 #sidebar.collapsed .sidebar-logo>div:first-child{display:none;}
-#sidebar.collapsed #sidebar-logo-collapsed{display:none;align-items:center;justify-content:center;width:26px;height:26px;background:var(--blue);border-radius:6px;}
+#sidebar.collapsed #sidebar-logo-collapsed{display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:var(--blue);border-radius:6px;}
 #sidebar.collapsed .sidebar-logo-img{width:26px;height:26px;}
 #sidebar.collapsed .sidebar-nav{padding:12px 6px;}
 #sidebar.collapsed .nav-section-label{display:none;}
 #sidebar.collapsed .nav-item{padding:9px;justify-content:center;position:relative;}
-#sidebar.collapsed .nav-item .nav-label{display:none;}
+#sidebar.collapsed .nav-item .nav-label,#sidebar.collapsed .nav-item .nav-text{display:none;}
 #sidebar.collapsed .nav-item:hover::after{content:attr(data-label);position:absolute;left:60px;background:var(--sidebar-bg);color:var(--sidebar-text-active);padding:6px 12px;border-radius:6px;font-size:12px;white-space:nowrap;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;border:1px solid rgba(255,255,255,.08);}
 #sidebar.collapsed .nav-item .nav-badge{display:none;}
 #sidebar.collapsed .sidebar-footer{display:none;}
@@ -451,7 +451,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
     <div class="nav-section-label">Job Management</div>
     <button class="nav-item hidden-nav" id="nav-my-jobs" onclick="showView('my-jobs')"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-text">My Jobs <span class="nav-badge" id="my-jobs-badge" style="display:none;">0</span></span></button>
-    <button class="nav-item hidden-nav" id="nav-onsite-schedule" onclick="showView('onsite-schedule')"><span class="nav-icon"><i class="ti ti-calendar"></i></span><span class="nav-text">Onsite Schedule</span></button>
     <button class="nav-item hidden-nav" id="nav-staff-evaluation" onclick="showView('staff-evaluation')"><span class="nav-icon"><i class="ti ti-chart-dots"></i></span><span class="nav-text">Staff Evaluation</span></button>
     <button class="nav-item hidden-nav" id="nav-approval" onclick="showView('approval')"><span class="nav-icon"><i class="ti ti-circle-check"></i></span><span class="nav-text">Approval Queue <span class="nav-badge" id="approval-badge" style="display:none;">0</span></span></button>
     <button class="nav-item" id="nav-equipment" onclick="showView('equipment')" data-label="Equipment &amp; Calibration"><span class="nav-icon"><i class="ti ti-tool"></i></span><span class="nav-label">Equipment &amp; Calibration</span></button>
@@ -465,6 +464,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item hidden-nav" id="nav-price-ref" onclick="openPriceReferenceModal()" data-label="Price Reference"><span class="nav-icon"><i class="ti ti-tag"></i></span><span class="nav-label">Price Reference</span></button>
     <button class="nav-item hidden-nav" id="nav-quotations" onclick="showView('quotations')" data-label="Quotations"><span class="nav-icon"><i class="ti ti-file-invoice"></i></span><span class="nav-label">Quotations</span></button>
     <button class="nav-item hidden-nav" id="nav-sales-tracker" onclick="showView('sales-tracker')" data-label="Sales Tracker"><span class="nav-icon"><i class="ti ti-timeline"></i></span><span class="nav-label">Sales Tracker</span></button>
+    <button class="nav-item hidden-nav" id="nav-quotations-v2" onclick="showView('quotations-v2')" data-label="Quotations"><span class="nav-icon"><i class="ti ti-file-text"></i></span><span class="nav-label">Quotations</span></button>
+    <button class="nav-item hidden-nav" id="nav-invoices" onclick="showView('invoices')" data-label="Invoices"><span class="nav-icon"><i class="ti ti-receipt"></i></span><span class="nav-label">Invoices</span></button>
     <button class="nav-item hidden-nav" id="nav-capability-review" onclick="showView('capability-review')" data-label="Capability Review"><span class="nav-icon"><i class="ti ti-clipboard-check"></i></span><span class="nav-label">Capability Review</span></button>
     <button class="nav-item hidden-nav" id="nav-purchasing-tracker" onclick="showView('purchasing-tracker')" data-label="Purchasing Tracker"><span class="nav-icon"><i class="ti ti-shopping-cart"></i></span><span class="nav-label">Purchasing Tracker</span></button>
     <button class="nav-item hidden-nav" id="nav-outsourcing-queue" onclick="showView('outsourcing-queue')" data-label="Outsourcing Queue"><span class="nav-icon"><i class="ti ti-send"></i></span><span class="nav-label">Outsourcing Queue</span></button>
@@ -670,20 +671,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
         <button id="my-jobs-clear-test-btn" class="btn btn-outline btn-sm" style="display:none;color:#991b1b;border-color:#fca5a5;" onclick="clearTestCheckinData()">🧪 Clear Test Check-In Data</button>
       </div>
+      <div id="my-jobs-checkin-strip" style="margin-bottom:16px;"></div>
       <div id="my-jobs-list"></div>
-    </div>
-
-    <!-- ════ ONSITE SCHEDULE ════ -->
-    <div class="view" id="view-onsite-schedule">
-      <div class="page-header">
-        <div>
-          <div class="page-title">📅 Onsite Schedule</div>
-          <div class="page-sub">Every onsite visit, by date — one entry per job, showing customer, engineer(s), and area</div>
-        </div>
-      </div>
-      <div class="card" style="padding:16px;">
-        <div id="onsite-schedule-calendar"></div>
-      </div>
     </div>
 
     <!-- ════ STAFF EVALUATION ════ -->
@@ -887,6 +876,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div id="ref-eq-alert" style="display:none;margin-bottom:16px;"></div>
       <!-- Pending checkout requests (Admin/Manager) -->
       <div id="ref-checkout-queue" style="display:none;margin-bottom:16px;"></div>
+      <!-- Intermediate Check Tracker -->
+      <div class="card" id="intermediate-check-tracker-card" style="margin-bottom:16px;display:none;">
+        <div class="card-header"><span class="card-title">📋 Intermediate Check Tracker</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Equipment</th><th>Last Checked</th><th>Days Since</th><th>Status</th><th>Recent History</th></tr></thead>
+          <tbody id="intermediate-check-tracker-body"></tbody>
+        </table></div>
+      </div>
       <div class="card">
         <div class="card-header">
           <span class="card-title">Masterlist of Equipment</span>
@@ -1007,6 +1004,50 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div id="capability-review-queue" style="margin-bottom:16px;"></div>
       <div id="sales-tracker-list"></div>
+    </div>
+
+    <!-- ════ QUOTATIONS ════ -->
+    <div class="view" id="view-quotations-v2">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📄 Quotations</div>
+          <div class="page-sub">Draft, send, and track quotations — accepted quotations flow directly into job creation</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="openQuotationV2Modal()">+ New Quotation</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <select class="form-control" id="qtv2-filter-status" onchange="renderQuotationsV2Page()" style="width:auto;">
+          <option value="">All Statuses</option>
+          <option value="Draft">Draft</option>
+          <option value="Sent">Sent</option>
+          <option value="Accepted">Accepted</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+        <input class="form-control" id="qtv2-search" placeholder="Search customer…" oninput="renderQuotationsV2Page()" style="width:200px;"/>
+      </div>
+      <div id="quotations-v2-list"></div>
+    </div>
+
+    <!-- ════ INVOICES ════ -->
+    <div class="view" id="view-invoices">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🧾 Invoices</div>
+          <div class="page-sub">Generated automatically when a job is marked Billed — track payment status here</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <select class="form-control" id="inv-filter-status" onchange="renderInvoicesPage()" style="width:auto;">
+          <option value="">All Statuses</option>
+          <option value="Unpaid">Unpaid</option>
+          <option value="Partially Paid">Partially Paid</option>
+          <option value="Paid">Paid</option>
+        </select>
+        <input class="form-control" id="inv-search" placeholder="Search customer or job no…" oninput="renderInvoicesPage()" style="width:220px;"/>
+      </div>
+      <div id="invoices-list"></div>
     </div>
 
     <!-- ════ CAPABILITY REVIEW (standalone, for Technical Manager who has no other Sales Tracker access) ════ -->
@@ -1755,8 +1796,23 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <input type="hidden" id="eq-job-type" value="Lab"/>
 
+      <div class="form-group" style="background:#eff6ff;border-radius:8px;padding:10px 12px;border:1px solid #bfdbfe;">
+        <label class="form-label">Job Category</label>
+        <select class="form-control" id="eq-job-category" onchange="toggleInternalCalibrationMode()">
+          <option value="Customer">Customer Job</option>
+          <option value="Internal">🔧 Internal Calibration (Westlab's own reference equipment)</option>
+        </select>
+      </div>
+      <div class="form-group" id="eq-internal-refeq-group" style="display:none;background:#fff7ed;border-radius:8px;padding:10px 12px;border:1px solid #fdba74;">
+        <label class="form-label">Select Reference Equipment <span class="req">*</span></label>
+        <select class="form-control" id="eq-internal-refeq-picker" onchange="applyInternalRefEqSelection()">
+          <option value="">— Select —</option>
+        </select>
+        <div style="font-size:11px;color:#92610c;margin-top:4px;">No customer, no billing — this still goes through the full Perform Calibration and Approval process, using the same certificate and job numbering as any other job.</div>
+      </div>
+
       <!-- Customer search autocomplete -->
-      <div class="form-group" style="position:relative;">
+      <div class="form-group" style="position:relative;" id="eq-customer-search-group">
         <label class="form-label">Customer / Company Name <span class="req">*</span></label>
         <div style="display:flex;gap:8px;">
           <input class="form-control" id="eq-company" placeholder="Type to search customer database…" autocomplete="off" oninput="this.value=this.value.toUpperCase();customerSearchInput(this.value)" onkeydown="customerSearchKeydown(event)" style="flex:1;"/>
@@ -1914,6 +1970,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group" id="eq-price-group" style="display:none;background:#fff7ed;border-radius:8px;padding:12px 14px;border:1px solid #fdba74;">
         <label class="form-label">💰 Price Quoted (RM)</label>
         <input class="form-control" id="eq-price" type="number" min="0" step="0.01" placeholder="e.g. 350.00"/>
+        <div id="eq-price-quote-hint" style="font-size:11px;color:#92610c;margin-top:4px;"></div>
       </div>
 
       <!-- MULTI-ITEM ADD MORE -->
@@ -1928,7 +1985,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-row">
           <div class="form-group"><label class="form-label">📅 Onsite Start Date <span class="req">*</span></label><input class="form-control" id="eq-appointment-date" type="date" onchange="syncVisitEndDateMin()"/>
             <div style="font-size:11px;color:#92610c;margin-top:3px;">Defaults to the Receiving Date above — change it if the site visit is scheduled for a different day.</div>
-            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openOnsiteScheduleModal('eq-appointment-date')">📅 View Onsite Schedule</button>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📅 Check existing bookings on the <a href="javascript:void(0)" onclick="showView('calendar')">Schedule Calendar</a> page before setting this date.</div>
           </div>
           <div class="form-group"><label class="form-label">📅 Onsite End Date</label><input class="form-control" id="eq-visit-end-date" type="date"/>
             <div style="font-size:11px;color:#92610c;margin-top:3px;">Leave same as Onsite Start Date for a single-day visit, or set later for a multi-day job.</div>
@@ -1954,16 +2011,19 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <label class="form-label">Deposit Amount (RM)</label>
             <input class="form-control" id="eq-deposit-amount" type="number" min="0" step="0.01" placeholder="e.g. 500.00"/>
           </div>
+          <div id="eq-deposit-quote-hint" style="font-size:11px;color:#92610c;margin-top:4px;"></div>
         </div>
       </div>
 
-      <div class="form-section-title" style="margin-top:6px;">📷 Equipment Photos</div>
-      <div class="photo-upload-area" id="photo-drop-zone" onclick="document.getElementById('photo-file-input').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handlePhotoDrop(event)">
-        <div class="photo-upload-icon">📷</div>
-        <div class="photo-upload-text"><strong>Click to upload</strong> or drag &amp; drop<br/><span style="font-size:12px;">JPG, PNG, WEBP · Multiple files</span></div>
-      </div>
-      <input type="file" id="photo-file-input" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(event)"/>
-      <div class="photo-preview-grid" id="photo-preview-grid"></div>
+        <div class="form-group" id="eq-item1-photos-group">
+          <label class="form-label">📷 Item Photos <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+          <div class="photo-upload-area" id="photo-drop-zone" onclick="document.getElementById('photo-file-input').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handlePhotoDrop(event)">
+            <div class="photo-upload-icon">📷</div>
+            <div class="photo-upload-text"><strong>Click to upload</strong> or drag &amp; drop<br/><span style="font-size:12px;">JPG, PNG, WEBP · Multiple files</span></div>
+          </div>
+          <input type="file" id="photo-file-input" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(event)"/>
+          <div class="photo-preview-grid" id="photo-preview-grid"></div>
+        </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-add-equipment')">Cancel</button>
@@ -2454,7 +2514,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div style="font-size:12px;font-weight:700;color:#c84b00;margin-bottom:8px;">📍 Onsite Visit Details</div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">📅 Onsite Start Date</label><input class="form-control" id="edit-eq-appointment-date" type="date" onchange="syncEditVisitEndDateMin()"/>
-            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openOnsiteScheduleModal('edit-eq-appointment-date')">📅 View Onsite Schedule</button>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">📅 Check existing bookings on the <a href="javascript:void(0)" onclick="showView('calendar')">Schedule Calendar</a> page before setting this date.</div>
           </div>
           <div class="form-group"><label class="form-label">📅 Onsite End Date</label><input class="form-control" id="edit-eq-visit-end-date" type="date"/></div>
         </div>
@@ -2667,6 +2727,37 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-checkout')">Cancel</button>
       <button class="btn btn-primary" onclick="confirmCheckOut()">🏁 Confirm Check Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM RECEIPT MODAL (Lab items pre-filled from a Quotation) -->
+<div class="modal-overlay" id="modal-confirm-receipt" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">✅ Confirm Receipt</span>
+      <button class="modal-close" onclick="closeModal('modal-confirm-receipt')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">This item's details were transcribed from the Quotation/PO before it physically arrived. Please verify and correct anything below now that it's actually here.</div>
+      <div class="form-group"><label class="form-label">Serial No.</label><input class="form-control" id="cr-serial" placeholder="e.g. SN-12345 or N/A"/></div>
+      <div class="form-group">
+        <label class="form-label">Condition of Item <span class="req">*</span></label>
+        <select class="form-control" id="cr-condition" onchange="el('cr-condition-other-group').style.display=this.value==='Others'?'block':'none'">
+          <option value="Good">Good</option><option value="Fair">Fair</option>
+          <option value="Damaged">Damaged</option><option value="Others">Others (specify)</option>
+        </select>
+      </div>
+      <div class="form-group" id="cr-condition-other-group" style="display:none;">
+        <label class="form-label">Specify Condition</label>
+        <input class="form-control" id="cr-condition-other"/>
+      </div>
+      <div class="form-group"><label class="form-label">Accessories / Included Items</label><input class="form-control" id="cr-accessories" placeholder="e.g. power adapter, carrying case"/></div>
+      <div class="form-group"><label class="form-label">Notes <span style="font-size:11px;color:var(--text-muted);">(optional — any discrepancy from the quotation)</span></label><input class="form-control" id="cr-notes" placeholder="e.g. Model differs slightly from PO description"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-confirm-receipt')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmReceiptSave()">✅ Confirm Receipt</button>
     </div>
   </div>
 </div>
@@ -3269,11 +3360,73 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </select>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Tracked separately from calibration status — shown as its own column, not blended together.</div>
       </div>
+      <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="ref-eq-intermediate-check-applicable"/>
+          <strong style="font-size:12.5px;">📋 Intermediate check applicable to this item</strong>
+        </label>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Some reference standards are too high-level to be intermediate-checked in-house — leave unticked for those. Ticked items get reminded every 3 months.</div>
+      </div>
       <div class="form-group" style="margin-top:12px;"><label class="form-label">Remarks / Notes</label><textarea class="form-control" id="ref-eq-remarks" placeholder="Additional notes…"></textarea></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-add-ref-eq')">Cancel</button>
       <button class="btn btn-primary" onclick="saveRefEquipment()">💾 Save Reference Equipment</button>
+    </div>
+  </div>
+</div>
+
+<!-- INTERMEDIATE CHECK MODAL -->
+<div class="modal-overlay" id="modal-intermediate-check" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">📋 Intermediate Check</span>
+      <button class="modal-close" onclick="closeModal('modal-intermediate-check')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="ic-summary" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;"></div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:12px;">Actual readings stay in your Excel check sheet — this just records the outcome.</div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;margin-bottom:8px;">
+          <input type="radio" name="ic-result" value="Pass" checked/> ✅ Pass — still performing correctly
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="radio" name="ic-result" value="Fail"/> ❌ Fail — pull out of service
+        </label>
+      </div>
+      <div class="form-group"><label class="form-label">Notes <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label><input class="form-control" id="ic-notes"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-intermediate-check')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmIntermediateCheck()">✅ Record Result</button>
+    </div>
+  </div>
+</div>
+
+<!-- DAILY MAINTENANCE MODAL -->
+<div class="modal-overlay" id="modal-daily-maintenance" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">🔧 Daily Maintenance Check</span>
+      <button class="modal-close" onclick="closeModal('modal-daily-maintenance')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="dm-summary" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;"></div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="dm-visual" checked/> 👁️ Visual Inspection — OK
+        </label>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="dm-functional" checked/> ⚙️ Functional Check — OK
+        </label>
+      </div>
+      <div class="form-group"><label class="form-label">Notes <span style="font-size:11px;color:var(--text-muted);">(optional — untick above and note the issue if something's wrong)</span></label><input class="form-control" id="dm-notes"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-daily-maintenance')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmDailyMaintenance()">✅ Record Check</button>
     </div>
   </div>
 </div>
@@ -3490,7 +3643,7 @@ let _certPreviewJobNo=null;
 let _certPreviewItemIdx=0;
 let _notifications=[];
 let _traceSelected=[];
-let currentPhotos=[];
+let _item1Photos=[];
 let currentExcel=null;
 let _excelFile=null;
 let _editingJobNo=null;
@@ -3597,6 +3750,8 @@ async function loadAll(){
     await loadSalesTracker();
     await loadPurchasingTracker();
     await loadExternalPartners();
+    await loadQuotationsV2();
+    await loadInvoices();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
     await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
@@ -3909,82 +4064,7 @@ function canViewSalesTrackerReadOnly(u){ const r=getUserRole(u||currentUser); re
 function canSeeSalesTrackerPage(u){ return canUseSalesTracker(u)||canViewSalesTrackerReadOnly(u); }
 function canReviewCapability(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager'].includes(r); }
 function canUsePurchasingTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
-function canViewOnsiteSchedule(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator','Engineer'].includes(r); }
 function canViewStaffEvaluation(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director'].includes(r); }
-
-// ══════════════════════════════════════════════════
-// ONSITE SCHEDULE — one calendar, built once, used both as its own page and as a
-// popup during Job Creation, so there's only ever one real source of truth for this.
-// ══════════════════════════════════════════════════
-let _onsiteCalYear=new Date().getFullYear(), _onsiteCalMonth=new Date().getMonth(); // 0-indexed month
-
-function getOnsiteJobsForDate(dateStr){
-  // One entry per JOB (not per item) — a job with several onsite items still shows once.
-  // A multi-day visit shows on every day within its range, not just the start date.
-  const results=[];
-  _jobs.forEach(j=>{
-    if(j.status==='Deleted')return;
-    const onsiteItems=(j.items||[]).filter(it=>it.calType==='Onsite');
-    if(!onsiteItems.length)return;
-    const start=j.appointmentDate||j.receiveDate; if(!start)return;
-    const end=j.visitEndDate||start;
-    if(dateStr<start||dateStr>end)return;
-    const engineers=[...new Set(onsiteItems.map(it=>it.assignedTo).filter(Boolean))].map(u=>USERS[u]?.name||u);
-    results.push({jobNo:j.jobNo,custName:j.custName,area:j.siteArea||'',engineers,itemCount:onsiteItems.length});
-  });
-  return results;
-}
-
-function renderOnsiteCalendar(containerId,onDayClick){
-  const box=el(containerId); if(!box)return;
-  const year=_onsiteCalYear, month=_onsiteCalMonth;
-  const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const firstDay=new Date(year,month,1);
-  const startWeekday=firstDay.getDay(); // 0=Sun
-  const daysInMonth=new Date(year,month+1,0).getDate();
-  const todayStr=toLocalDateStr(new Date());
-
-  let cells='';
-  for(let i=0;i<startWeekday;i++) cells+='<td style="background:var(--bg);"></td>';
-  for(let d=1;d<=daysInMonth;d++){
-    const dateStr=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const jobs=getOnsiteJobsForDate(dateStr);
-    const isToday=dateStr===todayStr;
-    cells+=`<td style="vertical-align:top;padding:4px;border:1px solid var(--border);${isToday?'background:#eff6ff;':''}min-width:110px;height:90px;${onDayClick?'cursor:pointer;':''}" ${onDayClick?`onclick="${onDayClick}('${dateStr}')"`:''}>
-      <div style="font-size:11px;font-weight:${isToday?'800':'600'};color:${isToday?'var(--blue)':'inherit'};margin-bottom:3px;">${d}${jobs.length?` <span style="background:var(--navy);color:#fff;border-radius:10px;padding:1px 6px;font-size:9px;">${jobs.length}</span>`:''}</div>
-      ${jobs.slice(0,2).map(j=>`<div style="font-size:9.5px;background:#fff7ed;border-radius:4px;padding:2px 4px;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.custName} — ${j.engineers.join(', ')||'Unassigned'}${j.area?' — '+j.area:''}">
-        <strong>${j.custName}</strong>${j.area?' · '+j.area:''}<br/>${j.engineers.join(', ')||'<span style="color:var(--text-muted);">Unassigned</span>'}
-      </div>`).join('')}
-      ${jobs.length>2?`<div style="font-size:9px;color:var(--text-muted);">+${jobs.length-2} more</div>`:''}
-    </td>`;
-    if((startWeekday+d)%7===0) cells+='</tr><tr>';
-  }
-  const totalCells=startWeekday+daysInMonth;
-  const remainder=totalCells%7;
-  if(remainder!==0) for(let i=0;i<7-remainder;i++) cells+='<td style="background:var(--bg);"></td>';
-
-  box.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <button class="btn btn-outline btn-sm" onclick="shiftOnsiteCalMonth(-1,'${containerId}',${onDayClick?`'${onDayClick}'`:'null'})">◀ Prev</button>
-      <strong style="font-size:14px;">${monthNames[month]} ${year}</strong>
-      <button class="btn btn-outline btn-sm" onclick="shiftOnsiteCalMonth(1,'${containerId}',${onDayClick?`'${onDayClick}'`:'null'})">Next ▶</button>
-    </div>
-    <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
-      <thead><tr>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<th style="font-size:10px;color:var(--text-muted);padding:4px;">${d}</th>`).join('')}</tr></thead>
-      <tbody><tr>${cells}</tr></tbody>
-    </table>`;
-}
-function shiftOnsiteCalMonth(delta,containerId,onDayClick){
-  _onsiteCalMonth+=delta;
-  if(_onsiteCalMonth>11){_onsiteCalMonth=0;_onsiteCalYear++;}
-  if(_onsiteCalMonth<0){_onsiteCalMonth=11;_onsiteCalYear--;}
-  renderOnsiteCalendar(containerId,onDayClick&&onDayClick!=='null'?onDayClick:null);
-}
-function renderOnsiteSchedulePage(){
-  if(!canViewOnsiteSchedule(currentUser)){ el('onsite-schedule-calendar').innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
-  _onsiteCalYear=new Date().getFullYear(); _onsiteCalMonth=new Date().getMonth();
-  renderOnsiteCalendar('onsite-schedule-calendar',null);
-}
 
 // ══════════════════════════════════════════════════
 // STAFF EVALUATION — Admin/MD only. Revenue cleared is the primary ranking metric (the
@@ -4119,35 +4199,6 @@ function renderStaffEvalSalesTab(box){
 }
 
 
-let _onsiteScheduleTargetField='eq-appointment-date'; // which field gets filled when a date is picked
-function openOnsiteScheduleModal(targetFieldId){
-  _onsiteScheduleTargetField=targetFieldId||'eq-appointment-date';
-  let ov=document.getElementById('onsite-schedule-modal-overlay');
-  if(!ov){ov=document.createElement('div');ov.id='onsite-schedule-modal-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:9999999;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:600px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:700;font-size:15px;">📅 Onsite Schedule</span>
-      <button onclick="document.getElementById('onsite-schedule-modal-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
-    </div>
-    <div style="padding:16px 20px;">
-      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">Click a date to set it as the Onsite Start Date.</div>
-      <div id="onsite-schedule-modal-calendar"></div>
-    </div>
-  </div>`;
-  ov.style.display='flex';
-  _onsiteCalYear=new Date().getFullYear(); _onsiteCalMonth=new Date().getMonth();
-  renderOnsiteCalendar('onsite-schedule-modal-calendar','pickOnsiteScheduleDate');
-}
-function pickOnsiteScheduleDate(dateStr){
-  const apptEl=el(_onsiteScheduleTargetField);
-  if(apptEl){
-    apptEl.value=dateStr;
-    if(_onsiteScheduleTargetField==='edit-eq-appointment-date') syncEditVisitEndDateMin();
-    else syncVisitEndDateMin();
-  }
-  document.getElementById('onsite-schedule-modal-overlay').style.display='none';
-  showToast(`📅 Onsite Start Date set to ${dateStr}`,'success',2000);
-}
 function canUseExternalPartners(u){ return canUsePurchasingTracker(u); }
 function canUseOutsourcingQueue(u){ return canUsePurchasingTracker(u); }
 function canViewQuotationDashboard(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Sales'].includes(r); }
@@ -4169,7 +4220,6 @@ function applyRoleUI(){
   el('nav-equipment').classList.toggle('hidden-nav', sales||hr);
   el('nav-completed').classList.toggle('hidden-nav', engineer||sales||hr);
   el('nav-my-jobs').classList.toggle('hidden-nav', pureAdmin||coordinator||sales||hr); // shown for Engineer, Manager, and MD (MD also does hands-on calibration)
-  el('nav-onsite-schedule').classList.toggle('hidden-nav', !canViewOnsiteSchedule(currentUser));
   el('nav-staff-evaluation').classList.toggle('hidden-nav', !canViewStaffEvaluation(currentUser));
   el('nav-approval').classList.toggle('hidden-nav', !(admin||manager));
   el('nav-customers').classList.toggle('hidden-nav', hr);
@@ -4177,6 +4227,8 @@ function applyRoleUI(){
   el('nav-price-ref').classList.toggle('hidden-nav', !canViewPriceReference(currentUser));
   el('nav-quotations').classList.add('hidden-nav'); // Retired — superseded by Sales Tracker (Chapter 31). Data kept intact for migration/history only.
   el('nav-sales-tracker').classList.toggle('hidden-nav', !canSeeSalesTrackerPage(currentUser));
+  el('nav-quotations-v2').classList.toggle('hidden-nav', !canUseQuotationSystem(currentUser));
+  el('nav-invoices').classList.toggle('hidden-nav', !canUseInvoiceSystem(currentUser));
   el('nav-capability-review').classList.toggle('hidden-nav', !canReviewCapability(currentUser)||canUseSalesTracker(currentUser)); // hide for those who already see it inside Sales Tracker itself
   el('nav-purchasing-tracker').classList.toggle('hidden-nav', !canUsePurchasingTracker(currentUser));
   el('nav-outsourcing-queue').classList.toggle('hidden-nav', !canUseOutsourcingQueue(currentUser));
@@ -4258,7 +4310,6 @@ function showView(name){
   if(name==='reports') renderReports();
   if(name==='settings') loadCounterPreviews();
   if(name==='my-jobs') renderMyJobs();
-  if(name==='onsite-schedule') renderOnsiteSchedulePage();
   if(name==='staff-evaluation') renderStaffEvaluationPage();
   if(name==='approval'){
     // Refresh jobs from Supabase to get latest status before rendering
@@ -4273,6 +4324,8 @@ function showView(name){
   if(name==='stickers') renderStickerPage();
   if(name==='quotations') renderQuotationsPage();
   if(name==='sales-tracker') renderSalesTrackerPage();
+  if(name==='quotations-v2') renderQuotationsV2Page();
+  if(name==='invoices') renderInvoicesPage();
   if(name==='capability-review') renderCapabilityReviewQueue();
   if(name==='purchasing-tracker') renderPurchasingTrackerPage();
   if(name==='outsourcing-queue') renderOutsourcingQueue();
@@ -5031,27 +5084,61 @@ function handlePhotoDrop(e){
 function readPhoto(file){
   const r=new FileReader();
   r.onload=ev=>{
-    currentPhotos.push({name:file.name,size:file.size,dataUrl:ev.target.result,_file:file});
+    _item1Photos.push({name:file.name,size:file.size,dataUrl:ev.target.result,_file:file});
     renderPhotoPreviews();
   };
   r.readAsDataURL(file);
 }
 function renderPhotoPreviews(){
-  el('photo-preview-grid').innerHTML=currentPhotos.map((p,i)=>`
+  el('photo-preview-grid').innerHTML=_item1Photos.map((p,i)=>`
     <div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}" title="${p.name}"/>
     <button class="photo-thumb-remove" onclick="removePhoto(${i})">✕</button></div>`).join('');
 }
-function removePhoto(i){currentPhotos.splice(i,1);renderPhotoPreviews();}
+function removePhoto(i){_item1Photos.splice(i,1);renderPhotoPreviews();}
 
-async function uploadPhotosToStorage(jobNo){
+// Same idea as the Item 1 functions above, parameterized by extra item index —
+// each item gets its own photos now, instead of everything landing on Item 1.
+function handleExtraPhotoSelect(e,idx){Array.from(e.target.files).forEach(f=>readExtraPhoto(f,idx));e.target.value='';}
+function handleExtraPhotoDrop(e,idx){
+  e.preventDefault(); e.currentTarget.classList.remove('dragover');
+  Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/')).forEach(f=>readExtraPhoto(f,idx));
+}
+function readExtraPhoto(file,idx){
+  const r=new FileReader();
+  r.onload=ev=>{
+    if(!_extraEquipment[idx].photos) _extraEquipment[idx].photos=[];
+    _extraEquipment[idx].photos.push({name:file.name,size:file.size,dataUrl:ev.target.result,_file:file});
+    renderExtraPhotoPreviews(idx);
+  };
+  r.readAsDataURL(file);
+}
+function renderExtraPhotoPreviews(idx){
+  const grid=el(`extra-photo-preview-${idx}`); if(!grid)return;
+  const photos=_extraEquipment[idx]?.photos||[];
+  grid.innerHTML=photos.map((p,i)=>`
+    <div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}" title="${p.name}"/>
+    <button class="photo-thumb-remove" onclick="removeExtraPhoto(${idx},${i})">✕</button></div>`).join('');
+}
+function removeExtraPhoto(idx,photoIdx){
+  _extraEquipment[idx].photos.splice(photoIdx,1);
+  renderExtraPhotoPreviews(idx);
+}
+
+// Uploads a set of in-memory photos (with a _file blob) to the same proven R2 upload
+// worker already used for selfies/signatures/condition photos — SB.uploadFile was being
+// called here but was never actually defined anywhere, so every photo was silently
+// failing that upload and falling back to storing raw base64 data directly in the job
+// record instead of a real URL.
+async function uploadPhotoSet(photos,jobNo,itemLabel){
   const uploaded=[];
-  for(const p of currentPhotos){
+  for(const p of photos){
     if(p.url){uploaded.push({name:p.name,url:p.url});continue;}
     if(p._file){
       try{
-        const path=`jobs/${jobNo}/photos/${Date.now()}_${sanitizeFilenameForPath(p.name)}`;
-        const url=await SB.uploadFile('westlab-files',path,p._file);
-        uploaded.push({name:p.name,url});
+        const path=`jobs/${jobNo}/photos/${itemLabel}_${Date.now()}_${sanitizeFilenameForPath(p.name)}`;
+        const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':p._file.type||'image/jpeg'},body:p._file});
+        if(uploadRes.ok){ const r2=await uploadRes.json(); uploaded.push({name:p.name,url:r2.url}); }
+        else uploaded.push({name:p.name,dataUrl:p.dataUrl});
       }catch(e){
         console.error('Photo upload failed, using dataUrl:',e);
         uploaded.push({name:p.name,dataUrl:p.dataUrl});
@@ -5136,7 +5223,7 @@ function removeExcel(){
 async function openNewJobModal(){
   try{
     if(!canCreateJobs(currentUser)){alert('You do not have permission to create new jobs.');return;}
-    currentPhotos=[];
+    _item1Photos=[];
     const ppg=el('photo-preview-grid'); if(ppg) ppg.innerHTML='';
     const jnEl=el('eq-job-no'); if(jnEl) jnEl.value='Generating…';
     const cnEl=el('eq-cert-no-preview'); if(cnEl) cnEl.value='Generating…';
@@ -5166,6 +5253,8 @@ async function openNewJobModal(){
     const depositAmt=el('eq-deposit-amount'); if(depositAmt) depositAmt.value='';
     const depositRow=el('eq-deposit-amount-row'); if(depositRow) depositRow.style.display='none';
     const jtEl=el('eq-job-type'); if(jtEl) jtEl.value='Lab';
+    const jobCatEl=el('eq-job-category'); if(jobCatEl) jobCatEl.value='Customer';
+    toggleInternalCalibrationMode();
     const itEl=el('eq-item-type'); if(itEl) itEl.value='Lab';
     updateSiteFieldsVisibility();
     populateUserDropdown('eq-assign-to',false,true);
@@ -5208,6 +5297,50 @@ async function openNewJobModal(){
       }
     }
 
+    // If starting from a NEW-system Quotation (V2), pre-fill customer + all items
+    if(_startingFromQuotationV2Id){
+      const quo=_quotationsV2.find(q=>q.id===_startingFromQuotationV2Id);
+      if(quo&&quo.items&&quo.items.length){
+        const compEl=el('eq-company'); if(compEl) compEl.value=quo.custName||'';
+        const attEl=el('eq-attention'); if(attEl) attEl.value=quo.attention||'';
+        const addrEl=el('eq-address'); if(addrEl) addrEl.value=quo.address||'';
+        const emailEl=el('eq-email'); if(emailEl) emailEl.value=quo.email||'';
+        const first=quo.items[0];
+        const nameEl=el('eq-name'); if(nameEl) nameEl.value=first.eqName||'';
+        const brandEl=el('eq-brand'); if(brandEl) brandEl.value=first.brand||'';
+        const modelEl=el('eq-model'); if(modelEl) modelEl.value=first.model||'';
+        const rangeEl=el('eq-range'); if(rangeEl) rangeEl.value=first.range||'';
+        const specEl=el('eq-spec'); if(specEl) specEl.value=first.spec||'';
+        if(itEl) itEl.value=first.calType||'Lab';
+        if(canViewPrice(currentUser)){
+          const priceEl=el('eq-price');
+          if(priceEl){ priceEl.value=first.unitPrice||''; priceEl.readOnly=true; priceEl.style.background='#f1f5f9'; priceEl.title=`Locked — pulled from ${quo.quotationNo}`; }
+          const priceHint=el('eq-price-quote-hint');
+          if(priceHint) priceHint.textContent=`🔒 Pulled from ${quo.quotationNo} — not editable here`;
+        }
+        if(first.socRequested){
+          _item1Soc.socRequested=true;
+          _item1Soc.quotedSocPricePerUnit=first.socPricePerUnit||0; // used as the default when a parameter is added below, rather than starting blank
+        }
+        // Deposit — pulled and locked from the quotation, whole job level
+        if(quo.depositRequired){
+          const depCheck=el('eq-deposit-required'); const depAmount=el('eq-deposit-amount'); const depGroup=el('eq-deposit-group');
+          if(depGroup) depGroup.style.display='block';
+          if(depCheck){ depCheck.checked=true; depCheck.disabled=true; }
+          if(depAmount){ depAmount.value=quo.depositAmount||0; depAmount.readOnly=true; depAmount.style.background='#f1f5f9'; }
+          const depRow=el('eq-deposit-amount-row'); if(depRow) depRow.style.display='block';
+          const depHint=el('eq-deposit-quote-hint');
+          if(depHint) depHint.textContent=`🔒 Pulled from ${quo.quotationNo} — not editable here`;
+        }
+        updateSiteFieldsVisibility();
+        quo.items.slice(1).forEach(it=>{
+          _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:'',tagNo:'N/A',range:it.range||'',calPoints:'',spec:it.spec||'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.unitPrice||0):0,priceLocked:true,quotedSocRequested:it.socRequested||false,quotedSocPricePerUnit:it.socPricePerUnit||0});
+        });
+        renderExtraEquipment();
+        showToast(`✅ Pre-filled from ${quo.quotationNo} — ${quo.items.length} item(s). Please fill in Serial No. and other physical details once the item arrives.`,'success',5000);
+      }
+    }
+
     openModal('modal-add-equipment');
   }catch(err){
     console.error('openNewJobModal error:',err);
@@ -5247,6 +5380,37 @@ async function markDepositCollected(jobNo){
   addAudit('💰',`Deposit collected for job <strong>${jobNo}</strong>`);
   renderEquipmentTable();
   if(_editingJobNo===jobNo) openEditJobModal(jobNo,_editingItemIdx);
+}
+function toggleInternalCalibrationMode(){
+  const isInternal=el('eq-job-category').value==='Internal';
+  const custGroup=el('eq-customer-search-group');
+  const refEqGroup=el('eq-internal-refeq-group');
+  const priceGroup=el('eq-price-group');
+  const socSection=el('eq-soc-section');
+  if(custGroup) custGroup.style.display=isInternal?'none':'block';
+  if(refEqGroup) refEqGroup.style.display=isInternal?'block':'none';
+  if(isInternal){
+    // No real customer or billing for internal work — this name makes it unmistakable
+    // wherever it shows up (job list, certificate, dashboard), while still going through
+    // the exact same certificate numbering, sticker, and approval process as any other job.
+    const compEl=el('eq-company'); if(compEl) compEl.value='WESTLAB (M) SDN. BHD. — INTERNAL CALIBRATION';
+    if(priceGroup) priceGroup.style.display='none'; // no customer paying, so no price to quote
+    if(socSection) socSection.innerHTML=''; // SoC is a customer-facing conformity statement, not applicable here
+    const pickerEl=el('eq-internal-refeq-picker');
+    if(pickerEl&&pickerEl.options.length<=1){
+      pickerEl.innerHTML='<option value="">— Select —</option>'+_refEq.map(r=>`<option value="${r.id}">${r.name} — ${r.brand||''} ${r.model||''} (S/N: ${r.serial||'N/A'})</option>`).join('');
+    }
+  } else {
+    const compEl=el('eq-company'); if(compEl&&compEl.value==='WESTLAB (M) SDN. BHD. — INTERNAL CALIBRATION') compEl.value='';
+  }
+}
+function applyInternalRefEqSelection(){
+  const refId=el('eq-internal-refeq-picker').value;
+  const ref=_refEq.find(r=>r.id===refId); if(!ref)return;
+  const nameEl=el('eq-name'); if(nameEl) nameEl.value=ref.name||'';
+  const brandEl=el('eq-brand'); if(brandEl) brandEl.value=ref.brand||'';
+  const modelEl=el('eq-model'); if(modelEl) modelEl.value=ref.model||'';
+  const serialEl=el('eq-serial'); if(serialEl) serialEl.value=ref.serial||'';
 }
 function toggleDepositAmountField(){
   const checked=el('eq-deposit-required')?.checked;
@@ -5408,6 +5572,7 @@ async function saveEquipment(printReceipt=false){
     fax:el('eq-fax')?.value.trim()||'', email:el('eq-email')?.value.trim()||'',
     po:el('eq-po')?.value.trim()||'', priority:el('eq-priority')?.value||'Normal',
     jobType, siteAddress, siteArea, siteContact, siteMobile, appointmentDate, visitEndDate,
+    isInternal:el('eq-job-category')?.value==='Internal',
     depositRequired, depositAmount, depositCollected:false, depositCollectedDate:null, depositCollectedBy:null,
     endUserName:el('eq-end-user')?.value.trim()||'',
     endUserAddress:el('eq-end-user-address')?.value.trim()||'',
@@ -5442,8 +5607,6 @@ async function saveEquipment(printReceipt=false){
 
   // ONE job number for the whole visit
   const jobNo=await commitJobNo();
-  // Upload photos for primary item
-  const uploadedPhotos=await uploadPhotosToStorage(jobNo);
 
   // Build items with individual cert numbers and status
   const items=[];
@@ -5451,6 +5614,10 @@ async function saveEquipment(printReceipt=false){
     const certNo=await commitCertNo();
     const itemAssignTo=rawItems[i].assignTo||null;
     const cleanPrice=parseFloat(rawItems[i].price)||0;
+    // Each item's own photos, uploaded separately — previously every photo was dumped onto
+    // Item 1 regardless of which item it actually depicted, in a multi-item job.
+    const itemPhotos=i===0?_item1Photos:(rawItems[i].photos||[]);
+    const uploadedItemPhotos=await uploadPhotoSet(itemPhotos,jobNo,`item${i+1}`);
     items.push({
       itemNo:i+1,
       certNo,
@@ -5466,7 +5633,7 @@ async function saveEquipment(printReceipt=false){
       approvalComments:'',
       approvedBy:null,
       approvedAt:null,
-      photos:i===0?uploadedPhotos:[],
+      photos:uploadedItemPhotos,
     });
   }
 
@@ -5501,12 +5668,28 @@ async function saveEquipment(printReceipt=false){
     }
     _startingFromQuotationId=null;
   }
+  // Same, for the new Quotation system (V2)
+  if(_startingFromQuotationV2Id){
+    const quoV2=_quotationsV2.find(q=>q.id===_startingFromQuotationV2Id);
+    if(quoV2){
+      quoV2.createdJobNo=jobNo;
+      await saveQuotationsV2();
+    }
+    // Lab items were pre-filled from the quotation before the item was ever physically seen —
+    // flag them so the receiving desk must actually verify/correct the details once it arrives,
+    // rather than trusting an unverified transcription. Onsite items don't need this since
+    // Record Item Details already handles that same problem at Check-In.
+    await updateJob(jobNo,j=>{
+      (j.items||[]).forEach(it=>{ if(it.calType==='Lab') it.pendingReceiptConfirmation=true; });
+    });
+    _startingFromQuotationV2Id=null;
+  }
 
   closeModal('modal-add-equipment');
   renderEquipmentTable(); renderDashboard(); refreshAllBadges();
   showToast(`✅ Job ${jobNo} created — ${items.length} item${items.length>1?'s':''}, ${items.length} cert${items.length>1?'s':''}${anyAssigned?' · Assigned to '+assignedNames.join(', '):''}`,'success',4000);
   addAudit('🔧',`Job <strong>${jobNo}</strong> created — ${items.length} item(s) for ${company}`);
-  currentPhotos=[]; _extraEquipment=[];
+  _item1Photos=[]; _extraEquipment=[];
   openReceivingLabelsPrompt(job);
 
   // ── EMAIL: Job Received ──
@@ -5973,13 +6156,13 @@ function calcPromisedDate(){
 // to cover extra items — meaning their promised date never auto-calculated at all before.
 function calcExtraPromisedDate(idx){
   const eq=_extraEquipment[idx]; if(!eq)return;
+  if(eq.promisedDateManuallySet)return; // genuinely typed by the user — never overwrite this
   const priority=eq.priority||'Normal';
   const dateField=el(`extra-eq-promised-${idx}`);
   const hint=el(`extra-eq-promised-hint-${idx}`);
   if(!dateField)return; // Onsite item — no promised date field to fill
 
   if(priority==='Express'){
-    if(dateField.value)return; // don't overwrite a manual edit
     const now=new Date();
     const isBeforeNoon=now.getHours()<12;
     const target=new Date(now);
@@ -5997,11 +6180,9 @@ function calcExtraPromisedDate(idx){
   let added=0;
   while(added<days){d.setDate(d.getDate()+1);if(d.getDay()!==0&&d.getDay()!==6)added++;}
   const result=toLocalDateStr(d);
-  if(!dateField.value){
-    dateField.value=result;
-    eq.promisedDate=result;
-    if(hint) hint.textContent=`Auto: ${priority} = ${days} working days`;
-  }
+  dateField.value=result;
+  eq.promisedDate=result;
+  if(hint) hint.textContent=`Auto: ${priority} = ${days} working days`;
 }
 function fmtDateShort(d){
   if(!d)return'';
@@ -6209,7 +6390,7 @@ function addExtraEquipment(){
   const defaultType=el('eq-item-type')?.value||'Lab';
   const defaultPromised=el('eq-promised-date')?.value||'';
   const defaultPriority=el('eq-priority')?.value||'Normal';
-  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:defaultType,priority:defaultPriority,assignTo:'',promisedDate:defaultPromised,assignNote:''});
+  _extraEquipment.push({eqName:'',brand:'',model:'',serial:'',tagNo:'N/A',range:'',calPoints:'',spec:'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:defaultType,priority:defaultPriority,assignTo:'',promisedDate:defaultPromised,assignNote:'',photos:[]});
   renderExtraEquipment();
   updateSiteFieldsVisibility();
   if(!defaultPromised) calcExtraPromisedDate(idx); // fill it in immediately if nothing was inherited to start with
@@ -6308,6 +6489,17 @@ function renderExtraEquipment(){
       <div class="form-group"><label class="form-label">Remarks</label>
         <textarea class="form-control" oninput="updateExtraField(${i},'remarks',this.value)" placeholder="Special instructions…">${eq.remarks||''}</textarea></div>
       <div class="form-group">
+        <label class="form-label">📷 Item Photos <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+        <div class="photo-upload-area" onclick="document.getElementById('extra-photo-file-${i}').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleExtraPhotoDrop(event,${i})">
+          <div class="photo-upload-icon">📷</div>
+          <div class="photo-upload-text"><strong>Click to upload</strong> or drag &amp; drop</div>
+        </div>
+        <input type="file" id="extra-photo-file-${i}" accept="image/*" multiple style="display:none;" onchange="handleExtraPhotoSelect(event,${i})"/>
+        <div class="photo-preview-grid" id="extra-photo-preview-${i}">${(eq.photos||[]).map((p,pi)=>`
+          <div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}" title="${p.name}"/>
+          <button class="photo-thumb-remove" onclick="removeExtraPhoto(${i},${pi})">✕</button></div>`).join('')}</div>
+      </div>
+      <div class="form-group">
         <label class="form-label">Priority</label>
         <select class="form-control" onchange="updateExtraField(${i},'priority',this.value);calcExtraPromisedDate(${i});">
           <option value="Normal" ${(eq.priority||'Normal')==='Normal'?'selected':''}>Normal</option>
@@ -6325,7 +6517,7 @@ function renderExtraEquipment(){
         </div>
         ${eq.calType!=='Onsite'?`<div class="form-group">
           <label class="form-label">Promised Ready Date</label>
-          <input class="form-control" type="date" id="extra-eq-promised-${i}" value="${eq.promisedDate||''}" oninput="updateExtraField(${i},'promisedDate',this.value)"/>
+          <input class="form-control" type="date" id="extra-eq-promised-${i}" value="${eq.promisedDate||''}" oninput="updateExtraField(${i},'promisedDate',this.value);updateExtraField(${i},'promisedDateManuallySet',true)"/>
           <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="extra-eq-promised-hint-${i}">${eq.promisedDate?'':'Auto-calculated from priority'}</div>
         </div>`:`<div class="form-group"><label class="form-label" style="color:var(--text-muted);">Promised Ready Date</label><div style="font-size:11.5px;color:var(--text-muted);padding-top:8px;">📅 Not applicable — see Onsite Start/End Date instead.</div></div>`}
       </div>
@@ -6338,7 +6530,8 @@ function renderExtraEquipment(){
       ${canViewPrice(currentUser)?`
       <div class="form-group" style="background:#fff7ed;border-radius:8px;padding:10px 12px;border:1px solid #fdba74;margin-top:8px;">
         <label class="form-label">💰 Price Quoted (RM)</label>
-        <input class="form-control" value="${eq.price||''}" type="number" min="0" step="0.01" placeholder="e.g. 350.00" oninput="updateExtraField(${i},'price',this.value)"/>
+        <input class="form-control" value="${eq.price||''}" type="number" min="0" step="0.01" placeholder="e.g. 350.00" ${eq.priceLocked?'readonly style="background:#f1f5f9;"':''} oninput="updateExtraField(${i},'price',this.value)"/>
+        ${eq.priceLocked?`<div style="font-size:11px;color:#92610c;margin-top:4px;">🔒 Pulled from Quotation — not editable here</div>`:''}
       </div>`:''}
     </div>`).join('');
   _extraEquipment.forEach((eq,i)=>{
@@ -7481,6 +7674,10 @@ async function openCalModal(jobNo, itemIdx=0){
   el('excel-drop-zone').style.display='block';
   const j=getJob(jobNo);
   const item=j&&j.items&&j.items[itemIdx];
+  if(item?.pendingReceiptConfirmation){
+    showToast('❌ Please Confirm Receipt for this item first — its details were only pre-filled from the Quotation and have not been physically verified yet.','error',5000);
+    return;
+  }
   const s=_settings;
   // Job summary bar
   el('cal-job-no').textContent=`${jobNo} — Item ${item?item.itemNo:'?'}`;
@@ -8492,6 +8689,294 @@ let _stickerCounts=[]; // one entry per (staff, type) for Void/Abnormal — {use
 let _stickerRecons=[]; // reconciliation log
 const ABNORMAL_REPORTS_KEY='wl_abnormal_reports';
 const QUOTATIONS_KEY='wl_quotations';
+const QUOTATIONS_V2_KEY='wl_quotations_v2';
+let _quotationsV2=[];
+async function loadQuotationsV2(){
+  try{
+    const q=await SB.get('wl_settings',QUOTATIONS_V2_KEY);
+    _quotationsV2=Array.isArray(q)?q:[];
+  }catch(e){_quotationsV2=[];}
+}
+async function saveQuotationsV2(){ await SB.upsert('wl_settings',QUOTATIONS_V2_KEY,_quotationsV2); }
+function canUseQuotationSystem(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Sales','Coordinator'].includes(r); }
+const INVOICES_KEY='wl_invoices';
+let _invoices=[];
+async function loadInvoices(){
+  try{
+    const inv=await SB.get('wl_settings',INVOICES_KEY);
+    _invoices=Array.isArray(inv)?inv:[];
+  }catch(e){_invoices=[];}
+}
+async function saveInvoices(){ await SB.upsert('wl_settings',INVOICES_KEY,_invoices); }
+function canUseInvoiceSystem(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator'].includes(r); }
+
+// ══════════════════════════════════════════════════
+// QUOTATION SYSTEM (V2) — properly numbered (WQT-YYMM-0001), multi-item, can be built
+// standalone or pre-filled from a Won Sales Tracker item. Draft → Sent → Accepted/Rejected.
+// ══════════════════════════════════════════════════
+let _qtv2DraftItems=[];
+function addQtv2ItemRow(){
+  _qtv2DraftItems.push({id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),eqName:'',brand:'',model:'',spec:'',range:'',calType:'Lab',quantity:1,unitPrice:0});
+  renderQtv2ItemsList();
+}
+function removeQtv2ItemRow(idx){ _qtv2DraftItems.splice(idx,1); renderQtv2ItemsList(); }
+function updateQtv2ItemField(idx,field,val){ if(_qtv2DraftItems[idx]) _qtv2DraftItems[idx][field]=val; }
+function updateQtv2ItemTotal(idx){
+  const it=_qtv2DraftItems[idx]; if(!it)return;
+  const total=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
+  const el2=el(`qtv2-item-total-${idx}`); if(el2) el2.textContent=`RM ${total.toFixed(2)}`;
+  updateQtv2GrandTotal();
+}
+function updateQtv2GrandTotal(){
+  const grand=_qtv2DraftItems.reduce((s,it)=>s+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
+  const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${grand.toFixed(2)}`;
+}
+function renderQtv2ItemsList(){
+  const box=el('qtv2-items-list'); if(!box)return;
+  box.innerHTML=_qtv2DraftItems.map((it,idx)=>{
+    const total=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
+    return `<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <strong style="font-size:12px;">Item ${idx+1}</strong>
+        <button onclick="removeQtv2ItemRow(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
+      </div>
+      <input class="form-control" placeholder="Equipment Name" value="${it.eqName||''}" oninput="updateQtv2ItemField(${idx},'eqName',this.value)" style="margin-bottom:6px;"/>
+      <div class="form-row">
+        <div class="form-group"><input class="form-control" placeholder="Brand" value="${it.brand||''}" oninput="updateQtv2ItemField(${idx},'brand',this.value)"/></div>
+        <div class="form-group"><input class="form-control" placeholder="Model" value="${it.model||''}" oninput="updateQtv2ItemField(${idx},'model',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><input class="form-control" placeholder="Spec" value="${it.spec||''}" oninput="updateQtv2ItemField(${idx},'spec',this.value)"/></div>
+        <div class="form-group"><input class="form-control" placeholder="Range" value="${it.range||''}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <select class="form-control" onchange="updateQtv2ItemField(${idx},'calType',this.value)">
+            <option value="Lab" ${it.calType==='Lab'?'selected':''}>Lab</option>
+            <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
+          </select>
+        </div>
+        <div class="form-group"><input class="form-control" type="number" min="1" placeholder="Qty" value="${it.quantity||1}" oninput="updateQtv2ItemField(${idx},'quantity',this.value);updateQtv2ItemTotal(${idx})"/></div>
+      </div>
+      <input class="form-control" type="number" min="0" step="0.01" placeholder="Unit Price (RM)" value="${it.unitPrice||''}" oninput="updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0);updateQtv2ItemTotal(${idx})" style="margin-bottom:4px;"/>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:11.5px;margin-bottom:4px;">
+        <input type="checkbox" ${it.socRequested?'checked':''} onchange="updateQtv2ItemField(${idx},'socRequested',this.checked);renderQtv2ItemsList()"/>
+        📋 Statement of Conformity requested for this item
+      </label>
+      ${it.socRequested?`<input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Per Unit (RM)" value="${it.socPricePerUnit||''}" oninput="updateQtv2ItemField(${idx},'socPricePerUnit',parseFloat(this.value)||0)" style="margin-bottom:4px;"/>`:''}
+      <div style="font-size:11px;color:var(--text-muted);">Total: <strong id="qtv2-item-total-${idx}">RM ${total.toFixed(2)}</strong></div>
+    </div>`;
+  }).join('');
+  updateQtv2GrandTotal();
+}
+function openQuotationV2Modal(quotationId,salesTrackerEntryId){
+  if(!canUseQuotationSystem(currentUser)){alert('You do not have access to create quotations.');return;}
+  const existing=quotationId?_quotationsV2.find(q=>q.id===quotationId):null;
+  let prefillEntry=null;
+  if(!existing&&salesTrackerEntryId) prefillEntry=_salesTracker.find(e=>e.id===salesTrackerEntryId);
+  _qtv2DraftItems=existing?JSON.parse(JSON.stringify(existing.items||[])):
+    prefillEntry?(prefillEntry.items||[]).filter(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict)).map(it=>({id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0})):[];
+  let ov=document.getElementById('qtv2-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='qtv2-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:620px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} Quotation ${existing?.quotationNo?'— '+existing.quotationNo:''}</span>
+      <button onclick="document.getElementById('qtv2-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div class="form-group" style="position:relative;">
+        <label class="form-label">Customer <span class="req">*</span></label>
+        <input class="form-control" id="qtv2-cust-name" value="${existing?.custName||prefillEntry?.name||''}" autocomplete="off" oninput="suggestQtv2Customer(this.value)" onfocus="suggestQtv2Customer(this.value)"/>
+        <div id="qtv2-cust-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+        <input type="hidden" id="qtv2-cust-id" value="${existing?.custId||prefillEntry?.custId||''}"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="qtv2-attention" value="${existing?.attention||prefillEntry?.prospectAttention||''}"/></div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="qtv2-email" value="${existing?.email||prefillEntry?.prospectEmail||''}"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="qtv2-address" rows="2">${existing?.address||prefillEntry?.prospectAddress||''}</textarea></div>
+      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Items Quoted</div>
+      <div id="qtv2-items-list"></div>
+      <button class="btn btn-outline btn-sm" onclick="addQtv2ItemRow()">+ Add Item</button>
+      <div style="text-align:right;font-size:14px;font-weight:700;margin-top:10px;">Grand Total: <span id="qtv2-grand-total" style="color:var(--green);">RM 0.00</span></div>
+      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Validity (days)</label><input class="form-control" type="number" id="qtv2-validity" value="${existing?.validityDays||30}"/></div>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="qtv2-deposit-required" ${existing?.depositRequired?'checked':''} onchange="el('qtv2-deposit-amount-group').style.display=this.checked?'block':'none'"/>
+          💰 Deposit required before work begins
+        </label>
+      </div>
+      <div class="form-group" id="qtv2-deposit-amount-group" style="display:${existing?.depositRequired?'block':'none'};">
+        <label class="form-label">Deposit Amount (RM)</label>
+        <input class="form-control" type="number" min="0" step="0.01" id="qtv2-deposit-amount" value="${existing?.depositAmount||''}"/>
+      </div>
+      <div class="form-group"><label class="form-label">Terms &amp; Conditions</label><textarea class="form-control" id="qtv2-terms" rows="3">${existing?.termsConditions||'1. Prices are in Ringgit Malaysia (RM) and exclude any applicable taxes.\n2. Payment terms: Cash on delivery / as agreed.\n3. Validity as stated above from date of issue.'}</textarea></div>
+      <input type="hidden" id="qtv2-linked-sales-entry" value="${existing?.linkedSalesTrackerId||salesTrackerEntryId||''}"/>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('qtv2-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveQuotationV2('${quotationId||''}')">${existing?'Save Changes':'Save as Draft'}</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  renderQtv2ItemsList();
+}
+function suggestQtv2Customer(query){
+  const box=el('qtv2-cust-suggestions'); if(!box)return;
+  const q=(query||'').trim().toLowerCase();
+  el('qtv2-cust-id').value='';
+  if(q.length<2){box.style.display='none';return;}
+  const matches=_customers.filter(c=>(c.company||'').toLowerCase().includes(q)).slice(0,6);
+  if(!matches.length){box.style.display='none';return;}
+  box.innerHTML=matches.map(c=>`<div onclick="selectQtv2Customer('${c.id}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">${c.company}</div>`).join('');
+  box.style.display='block';
+}
+function selectQtv2Customer(custId){
+  const c=_customers.find(x=>x.id===custId); if(!c)return;
+  el('qtv2-cust-name').value=c.company; el('qtv2-cust-id').value=custId;
+  el('qtv2-attention').value=c.attention||''; el('qtv2-email').value=c.email||'';
+  el('qtv2-address').value=c.address||'';
+  el('qtv2-cust-suggestions').style.display='none';
+}
+async function saveQuotationV2(quotationId){
+  const custName=el('qtv2-cust-name').value.trim();
+  if(!custName){alert('Please enter the customer name.');return;}
+  if(!_qtv2DraftItems.some(it=>it.eqName)){alert('Please add at least one item.');return;}
+  let q=quotationId?_quotationsV2.find(x=>x.id===quotationId):null;
+  const isNew=!q;
+  if(isNew){
+    const quotationNo=await getNextDocNumber('WQT');
+    q={id:'QT-'+Date.now(),quotationNo,status:'Draft',createdBy:currentUser,createdAt:new Date().toISOString()};
+    _quotationsV2.push(q);
+  }
+  q.custName=custName;
+  q.custId=el('qtv2-cust-id').value||null;
+  q.attention=el('qtv2-attention').value.trim();
+  q.email=el('qtv2-email').value.trim();
+  q.address=el('qtv2-address').value.trim();
+  q.items=_qtv2DraftItems.filter(it=>it.eqName);
+  q.validityDays=parseInt(el('qtv2-validity').value)||30;
+  q.termsConditions=el('qtv2-terms').value.trim();
+  q.depositRequired=el('qtv2-deposit-required').checked;
+  q.depositAmount=q.depositRequired?(parseFloat(el('qtv2-deposit-amount').value)||0):0;
+  q.linkedSalesTrackerId=el('qtv2-linked-sales-entry')?.value||null;
+  await saveQuotationsV2();
+  document.getElementById('qtv2-overlay').style.display='none';
+  renderQuotationsV2Page();
+  showToast(`✅ Quotation ${q.quotationNo} saved`,'success',3000);
+  addAudit('📄',`Quotation ${q.quotationNo} ${isNew?'created':'updated'} for ${custName}`);
+}
+function renderQuotationsV2Page(){
+  const box=el('quotations-v2-list'); if(!box)return;
+  if(!canUseQuotationSystem(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  const statusFilter=el('qtv2-filter-status')?.value||'';
+  const search=(el('qtv2-search')?.value||'').toLowerCase();
+  let list=[..._quotationsV2].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  if(statusFilter) list=list.filter(q=>q.status===statusFilter);
+  if(search) list=list.filter(q=>(q.custName||'').toLowerCase().includes(search));
+  if(!list.length){ box.innerHTML='<div class="empty-state"><p>No quotations yet.</p></div>'; return; }
+  const statusBadge=s=>{
+    const colors={Draft:'badge-amber',Sent:'badge-blue',Accepted:'badge-green',Rejected:'badge-red'};
+    return `<span class="badge ${colors[s]||'badge-amber'}">${s}</span>`;
+  };
+  box.innerHTML=list.map(q=>{
+    const total=(q.items||[]).reduce((s,it)=>s+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
+    return `<div class="card" style="padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-weight:700;font-size:13px;">${q.quotationNo} — ${q.custName}</div>
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">${(q.items||[]).length} item(s) · RM ${total.toFixed(2)} · Created ${fmtDateShort(q.createdAt)} by ${USERS[q.createdBy]?.name||q.createdBy||''}</div>
+        </div>
+        <div>${statusBadge(q.status)}</div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="exportQuotationV2Pdf('${q.id}')">📄 View PDF</button>
+        ${q.status==='Draft'?`<button class="btn btn-outline btn-sm" onclick="openQuotationV2Modal('${q.id}')">✏️ Edit</button>`:''}
+        ${q.status==='Draft'?`<button class="btn btn-primary btn-sm" onclick="sendQuotationV2('${q.id}')">📧 Mark Sent</button>`:''}
+        ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="respondQuotationV2('${q.id}',true)">✅ Mark Accepted</button>`:''}
+        ${q.status==='Sent'?`<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fca5a5;" onclick="respondQuotationV2('${q.id}',false)">✗ Mark Rejected</button>`:''}
+        ${q.status==='Accepted'&&!q.createdJobNo?`<button class="btn btn-primary btn-sm" onclick="createJobFromQuotationV2('${q.id}')">➕ Create Job</button>`:''}
+        ${q.createdJobNo?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Job Created: ${q.createdJobNo}</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function sendQuotationV2(quotationId){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  if(!confirm(`Mark ${q.quotationNo} as sent to the customer?`))return;
+  q.status='Sent'; q.sentAt=new Date().toISOString();
+  await saveQuotationsV2();
+  renderQuotationsV2Page();
+  showToast(`📧 ${q.quotationNo} marked as Sent`,'success',3000);
+  addAudit('📄',`Quotation ${q.quotationNo} marked Sent`);
+}
+async function respondQuotationV2(quotationId,accepted){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  q.status=accepted?'Accepted':'Rejected';
+  q.respondedAt=new Date().toISOString();
+  await saveQuotationsV2();
+  renderQuotationsV2Page();
+  showToast(`${accepted?'✅':'✗'} ${q.quotationNo} marked ${q.status}`,accepted?'success':'warn',3000);
+  addAudit('📄',`Quotation ${q.quotationNo} marked ${q.status}`);
+}
+async function exportQuotationV2Pdf(quotationId){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  const s=_settings;
+  const total=(q.items||[]).reduce((sum,it)=>sum+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
+  const validUntil=new Date(q.createdAt); validUntil.setDate(validUntil.getDate()+(q.validityDays||30));
+  const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #0f1f3d;padding-bottom:14px;">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
+        <div style="font-size:11px;color:#64748b;max-width:320px;">${s.address||''}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:16px;font-weight:800;">QUOTATION</div>
+        <div style="font-size:12px;color:#64748b;">${q.quotationNo}</div>
+        <div style="font-size:11px;color:#64748b;">Date: ${fmtDateShort(q.createdAt)}</div>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+      <tr><td style="padding:4px 8px;color:#64748b;width:120px;">Customer</td><td style="padding:4px 8px;font-weight:600;">${q.custName}</td></tr>
+      ${q.attention?`<tr><td style="padding:4px 8px;color:#64748b;">Attention</td><td style="padding:4px 8px;">${q.attention}</td></tr>`:''}
+      ${q.address?`<tr><td style="padding:4px 8px;color:#64748b;">Address</td><td style="padding:4px 8px;">${q.address}</td></tr>`:''}
+      <tr><td style="padding:4px 8px;color:#64748b;">Valid Until</td><td style="padding:4px 8px;font-weight:600;">${fmtDateShort(toLocalDateStr(validUntil))}</td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px;">
+      <thead><tr>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;text-align:left;">Description</th>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;">Type</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Qty</th>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;">Unit Price</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Total</th>
+      </tr></thead>
+      <tbody>${(q.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${i+1}</td>
+        <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${it.eqName} ${it.brand||''} ${it.model||''} ${it.spec?'('+it.spec+')':''}</td>
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.calType}</td>
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.quantity}</td>
+        <td style="padding:5px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${(it.unitPrice||0).toFixed(2)}</td>
+        <td style="padding:5px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${((it.unitPrice||0)*(parseFloat(it.quantity)||1)).toFixed(2)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="5" style="padding:8px 6px;text-align:right;font-weight:700;">Grand Total (RM)</td><td style="padding:8px 6px;text-align:right;font-weight:700;">${total.toFixed(2)}</td></tr></tfoot>
+    </table>
+    <div style="font-size:11px;color:#374151;white-space:pre-line;margin-top:16px;"><strong>Terms &amp; Conditions:</strong>\n${q.termsConditions||''}</div>
+  </div>`;
+  await exportHtmlAsPdf(html,`${q.quotationNo}.pdf`,'Quotation',(q.items||[]).length);
+}
+let _startingFromQuotationV2Id=null;
+async function createJobFromQuotationV2(quotationId){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  if(q.createdJobNo){alert(`A job has already been created from this quotation: ${q.createdJobNo}`);return;}
+  if(!confirm(`Create a new job from ${q.quotationNo}? This will open Job Creation pre-filled with this quotation's items.`))return;
+  _startingFromQuotationV2Id=quotationId;
+  showView('equipment');
+  await openNewJobModal();
+}
+
+
 let _quotations=[];
 const SALES_TRACKER_KEY='wl_sales_tracker';
 let _salesTracker=[];
@@ -8982,6 +9467,7 @@ function renderTrackerPage(type){
         <td style="white-space:nowrap;">
           ${externalCheckButtons?`<div style="margin-bottom:4px;">${externalCheckButtons}</div>`:''}
           ${type==='sales'&&items.some(it=>it.capabilityVerdict)?`<button class="btn btn-outline btn-sm" onclick="exportEntryCapabilityReviewPdf('${e.id}')" title="Export capability review for this entry">📄</button>`:''}
+          ${type==='purchasing'&&e.quotedPrice>0?(e.poNumber?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportPurchaseOrderPdf('${e.id}')">📄 ${e.poNumber}</button>`:`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="issuePurchaseOrder('${e.id}')">🧾 Issue PO</button>`):''}
           ${readOnly?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
           <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>`}
         </td>
@@ -12021,7 +12507,36 @@ function renderMyJobs(){
     const aTime=a.item.assignedAt||'0'; const bTime=b.item.assignedAt||'0';
     return aTime<bTime?-1:aTime>bTime?1:0;
   });
-  const _shownCheckinForJob=new Set(); // one check-in/out button per job, not per item — same visit covers every onsite item assigned to this person in that job
+
+  // A dedicated strip for onsite check-in/out, separate from the item cards below — so the
+  // action isn't buried on whichever item happens to land first in the FIFO-sorted list,
+  // which was confusing since that position isn't predictable.
+  const onsiteJobsSeen=new Set();
+  const checkinStripJobs=[];
+  myItems.forEach(({job:j,item,idx})=>{
+    if(item.calType!=='Onsite')return;
+    if(item.status==='Completed'||item.status==='Returned - Abnormal')return;
+    if(onsiteJobsSeen.has(j.jobNo))return;
+    onsiteJobsSeen.add(j.jobNo);
+    const cd=getCheckinData(j.jobNo,idx);
+    checkinStripJobs.push({jobNo:j.jobNo,custName:j.custName,itemIdx:idx,checkedIn:cd.checkinTime&&!cd.checkoutTime});
+  });
+  const stripEl=el('my-jobs-checkin-strip');
+  if(stripEl){
+    if(!checkinStripJobs.length){ stripEl.innerHTML=''; }
+    else {
+      stripEl.innerHTML=`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;">📍 Onsite Check-In / Check-Out</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${checkinStripJobs.map(s=>`<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+          <div><strong style="font-size:12px;">${s.jobNo}</strong><br/><span style="font-size:11px;color:var(--text-muted);">${s.custName}</span></div>
+          ${s.checkedIn
+            ?`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${s.jobNo}',${s.itemIdx})">🏁 Check Out</button>`
+            :`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${s.jobNo}',${s.itemIdx})">📍 Check In</button>`}
+        </div>`).join('')}
+      </div>`;
+    }
+  }
+
   container.innerHTML=myItems.map(({job:j,item,idx})=>{
     const cd=getCheckinData(j.jobNo,idx);
     // If this job is mixed (has both Lab and Onsite items), flag any sibling item with a
@@ -12098,17 +12613,6 @@ function renderMyJobs(){
         ${item.status==='Customer Not Ready'?`
           <span class="badge badge-red" style="font-size:11px;padding:5px 8px;">⚠️ Customer Not Ready — awaiting reschedule by the office</span>`:''}
         ${item.calType==='Onsite'&&item.status!=='Completed'&&item.status!=='Returned - Abnormal'?`
-          ${(()=>{
-            // One check-in/out button per job, not per item — same visit, same person, covers
-            // every onsite item assigned to them in this job. Subsequent items from the same
-            // job just reference it instead of showing a duplicate button.
-            if(_shownCheckinForJob.has(j.jobNo)){
-              return `<div style="font-size:10.5px;color:var(--text-muted);">📍 Check-in for Job ${j.jobNo} shown on another item above — same visit covers this item too.</div>`;
-            }
-            _shownCheckinForJob.add(j.jobNo);
-            return (!cd.checkinTime||cd.checkoutTime?`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${j.jobNo}',${idx})">📍 Check In${isTestingModeOn()?' 🧪':''}</button>`
-              :`<button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${j.jobNo}',${idx})">🏁 Check Out${isTestingModeOn()?' 🧪':''}</button>`);
-          })()}
           ${cd.checkinTime&&!cd.onsiteCondition?`<button class="btn btn-outline btn-sm" style="background:#7c2d12;color:#fff;border:none;" onclick="openConditionCaptureModal('${j.jobNo}',${idx})">📋 Record Item Details${isTestingModeOn()?' 🧪':''}</button>`:''}
           ${cd.onsiteCondition?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Condition: ${cd.onsiteCondition}${cd.onsiteAccessories?' · Accessories: '+cd.onsiteAccessories:''}</span>`:''}
           ${cd.visitHistory&&cd.visitHistory.length?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;width:100%;">${cd.visitHistory.length} earlier visit${cd.visitHistory.length!==1?'s':''} on this item — <a href="javascript:void(0)" onclick="openVisitHistoryModal('${j.jobNo}',${idx})">view</a></div>`:''}
@@ -12126,6 +12630,10 @@ function renderMyJobs(){
           `<span style="font-size:12px;color:var(--green);font-weight:600;padding:5px;">✅ Completed</span>`:''}
         ${item.calType==='Onsite'&&item.checkinSelfie&&canViewStaffEvaluation(currentUser)?
           `<a href="javascript:void(0)" onclick="openSignedUrl('${item.checkinSelfie}')" style="font-size:11px;">📷 View Check-In Selfie</a>`:''}
+        ${item.pendingReceiptConfirmation?`
+          <span style="font-size:12px;color:#c84b00;font-weight:600;padding:5px;background:#fff7ed;border-radius:6px;">📦 Pre-filled from Quotation — not yet physically verified</span>
+          ${canCreateJobs(currentUser)?`<button class="btn btn-primary btn-sm" onclick="openConfirmReceiptModal('${j.jobNo}',${idx})">✅ Confirm Receipt</button>`:''}
+        `:''}
         ${item.status==='Returned - Abnormal'?`
           <span style="font-size:12px;color:var(--red);font-weight:600;padding:5px;">⚠️ Returned - Abnormal</span>
           ${item.abnormalCause?`<span style="font-size:11px;background:${item.abnormalCause==='Occurred During Handling'?'#fef2f2':'#f0fdf4'};color:${item.abnormalCause==='Occurred During Handling'?'#991b1b':'#166534'};font-weight:600;padding:4px 8px;border-radius:4px;">${item.abnormalCause==='Occurred During Handling'?'🔍 Occurred During Handling':'🔍 Pre-existing'}</span>`
@@ -12327,7 +12835,7 @@ async function viewJobDetail(jobNo){
     </div>
     ${j.remarks?`<div style="margin-top:14px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Remarks:</strong> ${j.remarks}</div>`:''}
     ${calSection}
-    ${j.photos&&j.photos.length?`<div style="margin-top:14px;"><div class="form-section-title">📷 Photos</div><div class="photo-preview-grid">${j.photos.map(p=>`<div class="photo-thumb"><img src="${p.dataUrl}" alt="${p.name}"/></div>`).join('')}</div></div>`:''}
+    ${j.items?.[0]?.photos&&j.items[0].photos.length?`<div style="margin-top:14px;"><div class="form-section-title">📷 Item 1 Photos</div><div class="photo-preview-grid">${j.items[0].photos.map(p=>`<div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}"/></div>`).join('')}</div></div>`:''}
     ${j.jobType==='Onsite'?buildTravelExpenseSection(j):''}
     ${histSection}
   `;
@@ -12701,6 +13209,23 @@ function renderNeedsAttention(){
       }
     });
   });
+
+  // 7. Intermediate checks due — 3 months since the last check (or since last calibration if
+  // never checked before), only for items flagged as applicable. Visible to Admin/MD/Technical
+  // Manager/Quality Manager, matching who's actually allowed to record the result.
+  if(canApprove(currentUser)){
+    const today=new Date();
+    _refEq.forEach(r=>{
+      if(!r.intermediateCheckApplicable)return;
+      if(r.lifecycleStatus==='Under Repair'||r.lifecycleStatus==='Quarantine')return; // already out of service, not sitting "due" for a check
+      const baseline=r.lastIntermediateCheckDate||r.lastCal;
+      if(!baseline)return;
+      const daysSince=Math.floor((today-new Date(baseline+'T00:00:00'))/86400000);
+      if(daysSince>=90){
+        items.push({icon:'📋',text:`${r.name} (${r.id}) — intermediate check due (${daysSince} days since last check)`,view:'ref-eq'});
+      }
+    });
+  }
 
   if(!items.length){ box.innerHTML=''; return; }
   box.innerHTML=`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 16px;">
@@ -13364,6 +13889,7 @@ function openAddRefEqModal(){
   ['ref-eq-id','ref-eq-name','ref-eq-brand','ref-eq-model','ref-eq-serial','ref-eq-location',
    'ref-eq-scope','ref-eq-supplier','ref-eq-remarks'].forEach(f=>{const e=el(f);if(e)e.value='';});
   el('ref-eq-lifecycle').value='In Use';
+  el('ref-eq-intermediate-check-applicable').checked=false;
   _refEqParams=[{parameter:'',range:'',resolution:''}]; // every instrument starts with at least one parameter row
   renderRefEqParams();
   openModal('modal-add-ref-eq');
@@ -13519,6 +14045,7 @@ async function saveRefEquipment(){
     scope:el('ref-eq-scope').value.trim(),
     supplier:el('ref-eq-supplier').value.trim(),
     lifecycleStatus:el('ref-eq-lifecycle').value||'In Use',
+    intermediateCheckApplicable:el('ref-eq-intermediate-check-applicable').checked,
     remarks:el('ref-eq-remarks').value.trim(),
     addedAt:existing?.addedAt||new Date().toISOString()
   };
@@ -13577,9 +14104,39 @@ function populateRefEqLocationFilter(){
   sel.innerHTML='<option value="">All Locations</option>'+locations.map(l=>`<option value="${l}">${l}</option>`).join('');
   sel.value=current;
 }
+function renderIntermediateCheckTracker(){
+  const card=el('intermediate-check-tracker-card');
+  const body=el('intermediate-check-tracker-body');
+  if(!card||!body)return;
+  if(!canApprove(currentUser)){ card.style.display='none'; return; }
+  const applicable=_refEq.filter(r=>r.intermediateCheckApplicable);
+  if(!applicable.length){ card.style.display='none'; return; }
+  card.style.display='block';
+  const today=new Date();
+  body.innerHTML=applicable.map(r=>{
+    const baseline=r.lastIntermediateCheckDate||r.lastCal;
+    const daysSince=baseline?Math.floor((today-new Date(baseline+'T00:00:00'))/86400000):null;
+    let statusBadge;
+    if(!baseline) statusBadge=`<span class="badge badge-slate">No baseline yet</span>`;
+    else if(r.lifecycleStatus==='Under Repair') statusBadge=`<span class="badge badge-red">🔧 Out of Service</span>`;
+    else if(daysSince>=90) statusBadge=`<span class="badge badge-red">⚠️ Overdue</span>`;
+    else if(daysSince>=75) statusBadge=`<span class="badge badge-amber">Due Soon</span>`;
+    else statusBadge=`<span class="badge badge-green">OK</span>`;
+    const history=(r.intermediateCheckHistory||[]).slice(-3).reverse();
+    const historyText=history.length?history.map(h=>`${fmtDateShort(h.date)}: ${h.result==='Pass'?'✅':'❌'}`).join(' · '):'—';
+    return `<tr>
+      <td>${r.name}<br/><span style="font-size:11px;color:var(--text-muted);">${r.id}</span></td>
+      <td>${baseline?fmtDateShort(baseline):'—'}</td>
+      <td>${daysSince!==null?daysSince+'d':'—'}</td>
+      <td>${statusBadge}</td>
+      <td style="font-size:11.5px;color:var(--text-muted);">${historyText}</td>
+    </tr>`;
+  }).join('');
+}
 function renderRefEqTable(){
   try{
   populateRefEqLocationFilter();
+  renderIntermediateCheckTracker();
   const list=_refEq;
   const q=(el('ref-eq-search')?.value||'').toLowerCase();
   const sf=el('ref-eq-filter')?.value||'';
@@ -13650,6 +14207,21 @@ function renderRefEqTable(){
     const linkedPurchase=(_purchasingTracker||[]).find(e=>e.refEqId===r.id&&e.status!=='Closed');
     if(linkedPurchase) availBadge+=`<br/><span class="badge badge-blue" style="margin-top:3px;cursor:pointer;" onclick="showView('purchasing-tracker')" title="${linkedPurchase.status}">🛒 Tracked in Purchasing Tracker</span>`;
     let actions=`<button class="btn btn-outline btn-sm" onclick="viewRefEq('${r.id}')">View</button>`;
+    if(canApprove(currentUser)){
+      const today=toLocalDateStr(new Date());
+      const doneToday=(r.dailyMaintenanceLog||[]).find(m=>m.date===today);
+      if(doneToday){
+        actions+=`<span class="badge badge-green" style="margin-left:4px;font-size:10px;" title="${doneToday.notes||''}">✅ Checked today by ${USERS[doneToday.checkedBy]?.name||doneToday.checkedBy}</span>`;
+      } else {
+        actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#f0fdf4;" onclick="openDailyMaintenanceModal('${r.id}')">🔧 Daily Check</button>`;
+      }
+      if((r.dailyMaintenanceLog||[]).length){
+        actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportMaintenanceLogPdf('${r.id}')">📄 Export Log</button>`;
+      }
+    }
+    if(r.intermediateCheckApplicable&&canApprove(currentUser)&&avail==='Available'){
+      actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#eff6ff;" onclick="openIntermediateCheckModal('${r.id}')">📋 Intermediate Check</button>`;
+    }
     if(isAdmin(currentUser)){
       actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditRefEqModal('${r.id}')">✏️</button>`;
       actions+=`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteRefEq('${r.id}')">🗑</button>`;
@@ -14213,11 +14785,112 @@ function openEditRefEqModal(id){
   el('ref-eq-scope').value=r.scope||'';
   el('ref-eq-supplier').value=r.supplier||'';
   el('ref-eq-lifecycle').value=r.lifecycleStatus||'In Use';
+  el('ref-eq-intermediate-check-applicable').checked=!!r.intermediateCheckApplicable;
   el('ref-eq-remarks').value=r.remarks||'';
   const saveBtn=el('modal-add-ref-eq').querySelector('.btn-primary');
   if(saveBtn) saveBtn.textContent='💾 Update Equipment';
   openModal('modal-add-ref-eq');
 }
+let _icRefId=null;
+function openIntermediateCheckModal(refId){
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  _icRefId=refId;
+  const summary=el('ic-summary');
+  if(summary) summary.innerHTML=`<strong>${r.name}</strong> — ${r.brand||''} ${r.model||''} (S/N: ${r.serial||'N/A'})<br/><span style="color:var(--text-muted);">Last checked: ${r.lastIntermediateCheckDate?fmtDateShort(r.lastIntermediateCheckDate):'Never — due since last calibration'}</span>`;
+  document.querySelector('input[name="ic-result"][value="Pass"]').checked=true;
+  el('ic-notes').value='';
+  openModal('modal-intermediate-check');
+}
+async function confirmIntermediateCheck(){
+  const result=document.querySelector('input[name="ic-result"]:checked')?.value||'Pass';
+  const notes=el('ic-notes').value.trim();
+  const r=_refEq.find(x=>x.id===_icRefId); if(!r)return;
+  const today=toLocalDateStr(new Date());
+  r.lastIntermediateCheckDate=today;
+  if(!r.intermediateCheckHistory) r.intermediateCheckHistory=[];
+  r.intermediateCheckHistory.push({date:today,result,notes,checkedBy:currentUser});
+  if(result==='Fail'){
+    r.lifecycleStatus='Under Repair'; // reusing the existing lifecycle status — same meaning, out of service
+  }
+  await SB.upsert('wl_ref_equipment',r.id,r);
+  closeModal('modal-intermediate-check');
+  renderRefEqTable();
+  if(result==='Pass'){
+    showToast(`✅ Intermediate check passed for ${r.name} — 3-month clock reset`,'success',3500);
+  } else {
+    showToast(`❌ Marked out of service — please use "🔧 Send for Cal." to arrange calibration or repair`,'warn',6000);
+  }
+  addAudit('📋',`Intermediate check recorded for ${r.name} (${r.id}): ${result}`);
+}
+let _dmRefId=null;
+function openDailyMaintenanceModal(refId){
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  _dmRefId=refId;
+  const summary=el('dm-summary');
+  if(summary) summary.innerHTML=`<strong>${r.name}</strong> — ${r.brand||''} ${r.model||''} (S/N: ${r.serial||'N/A'})`;
+  el('dm-visual').checked=true;
+  el('dm-functional').checked=true;
+  el('dm-notes').value='';
+  openModal('modal-daily-maintenance');
+}
+async function confirmDailyMaintenance(){
+  const visual=el('dm-visual').checked;
+  const functional=el('dm-functional').checked;
+  const notes=el('dm-notes').value.trim();
+  const r=_refEq.find(x=>x.id===_dmRefId); if(!r)return;
+  const today=toLocalDateStr(new Date());
+  if(!r.dailyMaintenanceLog) r.dailyMaintenanceLog=[];
+  if(r.dailyMaintenanceLog.find(m=>m.date===today)){alert('Already recorded for today.');return;}
+  r.dailyMaintenanceLog.push({date:today,visual,functional,notes,checkedBy:currentUser});
+  await SB.upsert('wl_ref_equipment',r.id,r);
+  closeModal('modal-daily-maintenance');
+  renderRefEqTable();
+  showToast(`✅ Daily maintenance recorded for ${r.name}`,'success',3000);
+  addAudit('🔧',`Daily maintenance recorded for ${r.name} (${r.id}) — Visual: ${visual?'OK':'ISSUE'}, Functional: ${functional?'OK':'ISSUE'}`);
+}
+async function exportMaintenanceLogPdf(refId){
+  const r=_refEq.find(x=>x.id===refId); if(!r)return;
+  const now=new Date();
+  const year=now.getFullYear(), month=now.getMonth();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const monthName=now.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const log=r.dailyMaintenanceLog||[];
+  const getDay=d=>{
+    const dateStr=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    return log.find(m=>m.date===dateStr);
+  };
+  const half1=Array.from({length:16},(_,i)=>i+1).filter(d=>d<=daysInMonth);
+  const half2=Array.from({length:15},(_,i)=>i+17).filter(d=>d<=daysInMonth);
+  const buildRow=(days,label,key)=>`<tr><td style="border:1px solid #000;padding:2px 4px;font-weight:600;font-size:9pt;">${label}</td>${days.map(d=>{
+    const m=getDay(d); const val=m?(m[key]?'✓':'✗'):'';
+    return `<td style="border:1px solid #000;text-align:center;font-size:9pt;">${val}</td>`;
+  }).join('')}</tr>`;
+  const buildCheckByRow=days=>`<tr><td style="border:1px solid #000;padding:2px 4px;font-weight:600;font-size:9pt;">Check By</td>${days.map(d=>{
+    const m=getDay(d); const initials=m?(USERS[m.checkedBy]?.name||m.checkedBy||'').split(' ').map(w=>w[0]).join('').substring(0,3):'';
+    return `<td style="border:1px solid #000;text-align:center;font-size:8pt;">${initials}</td>`;
+  }).join('')}</tr>`;
+  const buildHeaderRow=days=>`<tr><td style="border:1px solid #000;padding:2px 4px;font-weight:700;font-size:9pt;">Date</td>${days.map(d=>`<td style="border:1px solid #000;text-align:center;font-weight:700;font-size:9pt;">${d}</td>`).join('')}</tr>`;
+  const html=`<div style="width:900px;padding:24px;font-family:Arial,sans-serif;background:#fff;font-size:10pt;">
+    <div style="text-align:center;font-weight:800;font-size:13pt;margin-bottom:4px;">Equipment Maintenance Form</div>
+    <div style="text-align:center;font-size:10pt;color:#555;margin-bottom:16px;">For Month of: ${monthName}</div>
+    <div style="margin-bottom:12px;"><strong>Equipment Name:</strong> ${r.name} &nbsp;&nbsp;&nbsp; <strong>Serial No.:</strong> ${r.serial||'N/A'}</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+      ${buildHeaderRow(half1)}
+      ${buildRow(half1,'Visual Inspection','visual')}
+      ${buildRow(half1,'Functional Check','functional')}
+      ${buildCheckByRow(half1)}
+    </table>
+    <table style="width:100%;border-collapse:collapse;">
+      ${buildHeaderRow(half2)}
+      ${buildRow(half2,'Visual Inspection','visual')}
+      ${buildRow(half2,'Functional Check','functional')}
+      ${buildCheckByRow(half2)}
+    </table>
+    <div style="margin-top:16px;font-size:8pt;color:#888;">✓ = OK · ✗ = Issue noted · F023, matching Westlab's standard Equipment Maintenance Form layout</div>
+  </div>`;
+  await exportHtmlAsPdf(html,`Maintenance_${r.id}_${monthName.replace(' ','_')}.pdf`,'Maintenance Log',daysInMonth);
+}
+
 async function deleteRefEq(id){
   try{
   const r=_refEq.find(x=>x.id===id);
@@ -16488,6 +17161,19 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.mcal-popup')&&!e.target.closest('.mcal-bar')&&!e.target.closest('.mcal-more')) closeCalPopup();
 });
 
+function buildCompletedJobPhotosHtml(j){
+  const itemsWithPhotos=j.items.filter(it=>(it.photos||[]).length);
+  if(!itemsWithPhotos.length)return '';
+  let html='<div style="font-weight:700;font-size:11.5px;color:var(--navy);margin:10px 0 6px;">Photos</div>';
+  itemsWithPhotos.forEach(it=>{
+    html+=`<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Item ${it.itemNo} — ${it.eqName}:</div><div class="photo-preview-grid" style="margin-bottom:10px;">`;
+    it.photos.forEach(p=>{
+      html+=`<div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}"/></div>`;
+    });
+    html+='</div>';
+  });
+  return html;
+}
 function renderCompletedJobs(){
   try{
   // A job is completed when all its items are completed
@@ -16549,6 +17235,7 @@ function renderCompletedJobs(){
         ${j.jobNo} &nbsp;<span style="font-weight:400;color:var(--text-muted);">— ${j.custName}${j.attention?' · '+j.attention:''}</span>
       </td>
       <td colspan="3" style="padding:6px 10px;font-size:11px;color:var(--text-muted);text-align:right;">
+        ${j.isInternal?`<span class="badge badge-blue">🔧 Internal Calibration — no billing/collection applicable</span>`:`
         ${j.billed?`<span class="badge badge-green">✅ Billed ${j.billedAt?.split('T')[0]||''}</span>`:`<span class="badge badge-amber">⏳ Pending Billing</span>`}
         &nbsp;
         ${j.collectedAt?`<span class="badge badge-green">📦 Collected by ${j.collectedBy||''} — ${j.doNumber||''}</span>`:`<span class="badge badge-amber">📦 Not Yet Collected</span>`}
@@ -16557,7 +17244,16 @@ function renderCompletedJobs(){
         ${canCreateJobs(currentUser)&&!j.collectedAt?`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="openMarkCollectedModal('${j.jobNo}')">📦 Mark Collected</button>`:''}
         ${j.collectedAt?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportDeliveryOrderPdf('${j.jobNo}')">📄 View DO</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#25D366;color:#fff;border-color:#25D366;" onclick="sendWhatsAppCollection('${j.jobNo}')">💬 WhatsApp</button>`:''}
+        `}
         ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#991b1b;color:#fff;border-color:#991b1b;" onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (irreversible)">🗑️⚠️ Delete</button>`:''}
+        <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="toggleJobHistory('comp-hist-${j.jobNo.replace(/[^a-z0-9]/gi,'_')}')">📋 History</button>
+      </td>
+    </tr>
+    <tr id="comp-hist-${j.jobNo.replace(/[^a-z0-9]/gi,'_')}" style="display:none;">
+      <td colspan="8" style="padding:8px 16px;background:var(--bg);">
+        <div style="font-weight:700;font-size:11.5px;color:var(--navy);margin-bottom:6px;">Full Job History</div>
+        ${(j.history||[]).slice().reverse().map(h=>`<div style="font-size:11px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid var(--border);"><span style="color:var(--navy);font-weight:600;">${h.action}</span> — ${USERS[h.by]?.name||h.by||''} <span style="float:right;">${h.time?h.time.split('T')[0]:''}</span></div>`).join('')||'<span style="font-size:11px;color:var(--text-muted);">No history recorded.</span>'}
+        ${buildCompletedJobPhotosHtml(j)}
       </td>
     </tr>`);
     j.items.forEach((item,idx)=>{
@@ -16775,6 +17471,45 @@ Tel: +6011-3508 9986`;
 // links — since asking "how was our service?" only makes sense once they've actually
 // received the item back.
 // ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// CONFIRM RECEIPT — for Lab items pre-filled from an accepted Quotation before the item
+// ever physically arrived. Blocks Perform Calibration until the receiving desk has actually
+// looked at the item and verified/corrected its details, same principle as Onsite's
+// Record Item Details step but triggered by physical arrival instead of a site visit.
+// ══════════════════════════════════════════════════
+let _crJobNo=null, _crItemIdx=null;
+function openConfirmReceiptModal(jobNo,itemIdx){
+  const job=getJob(jobNo); const item=job?.items?.[itemIdx]; if(!item)return;
+  _crJobNo=jobNo; _crItemIdx=itemIdx;
+  el('cr-serial').value=item.serial||'';
+  el('cr-condition').value=item.condition||'Good';
+  el('cr-condition-other-group').style.display=item.condition==='Others'?'block':'none';
+  el('cr-condition-other').value=item.conditionOther||'';
+  el('cr-accessories').value=item.accessories||'';
+  el('cr-notes').value='';
+  openModal('modal-confirm-receipt');
+}
+async function confirmReceiptSave(){
+  const condition=el('cr-condition').value;
+  const conditionOther=el('cr-condition-other').value.trim();
+  if(condition==='Others'&&!conditionOther){alert('Please describe the condition.');return;}
+  const serial=el('cr-serial').value.trim();
+  const accessories=el('cr-accessories').value.trim();
+  const notes=el('cr-notes').value.trim();
+  await updateJob(_crJobNo,job=>{
+    const it=job.items[_crItemIdx]; if(!it)return;
+    it.serial=serial;
+    it.condition=condition;
+    it.conditionOther=conditionOther;
+    it.accessories=accessories;
+    it.pendingReceiptConfirmation=false;
+    job.history.push({action:`✅ Receipt confirmed for ${it.eqName} — ${condition}${notes?' ('+notes+')':''}`,by:currentUser,time:new Date().toISOString()});
+  });
+  closeModal('modal-confirm-receipt');
+  renderEquipmentTable();
+  showToast('✅ Receipt confirmed — item is now ready for calibration','success',3000);
+  addAudit('✅',`Receipt confirmed for job <strong>${_crJobNo}</strong> item ${_crItemIdx+1}`);
+}
 function openMarkCollectedModal(jobNo){
   const j=getJob(jobNo); if(!j)return;
   _collectedJobNo=jobNo;
@@ -16871,6 +17606,186 @@ async function exportDeliveryOrderPdf(jobNo){
   </div>`;
   await exportHtmlAsPdf(html,`${j.doNumber}.pdf`,'Delivery Order',(j.items||[]).length);
 }
+async function generateInvoiceFromJob(jobNo){
+  const j=getJob(jobNo); if(!j)return null;
+  if(_invoices.some(inv=>inv.jobNo===jobNo)) return _invoices.find(inv=>inv.jobNo===jobNo); // already has one, don't duplicate
+  const invoiceNo=await getNextDocNumber('WIV');
+  const invoiceDate=new Date().toISOString();
+  const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+30);
+  const totalAmount=(j.items||[]).reduce((sum,it)=>sum+(it.price||0),0);
+  const inv={
+    id:'INV-'+Date.now(),invoiceNo,jobNo,
+    custName:j.custName,custId:j.custId||null,attention:j.attention||'',address:j.address||'',email:j.email||'',
+    items:(j.items||[]).map(it=>({eqName:it.eqName,brand:it.brand,model:it.model,certNo:it.certNo,price:it.price||0})),
+    invoiceDate,dueDate:toLocalDateStr(dueDate),totalAmount,
+    paymentStatus:'Unpaid',amountPaid:0,
+    createdBy:currentUser,createdAt:invoiceDate
+  };
+  _invoices.push(inv);
+  await saveInvoices();
+  addAudit('🧾',`Invoice ${invoiceNo} generated for job ${jobNo} — RM ${totalAmount.toFixed(2)}`);
+  return inv;
+}
+function renderInvoicesPage(){
+  const box=el('invoices-list'); if(!box)return;
+  if(!canUseInvoiceSystem(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  const statusFilter=el('inv-filter-status')?.value||'';
+  const search=(el('inv-search')?.value||'').toLowerCase();
+  let list=[..._invoices].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  if(statusFilter) list=list.filter(inv=>inv.paymentStatus===statusFilter);
+  if(search) list=list.filter(inv=>(inv.custName||'').toLowerCase().includes(search)||(inv.jobNo||'').toLowerCase().includes(search));
+  if(!list.length){ box.innerHTML='<div class="empty-state"><p>No invoices yet — these get created automatically when a job is marked Billed.</p></div>'; return; }
+  const today=toLocalDateStr(new Date());
+  const statusBadge=inv=>{
+    const colors={Unpaid:'badge-red','Partially Paid':'badge-amber',Paid:'badge-green'};
+    const overdue=inv.paymentStatus!=='Paid'&&inv.dueDate<today;
+    return `<span class="badge ${colors[inv.paymentStatus]||'badge-red'}">${inv.paymentStatus}${overdue?' — OVERDUE':''}</span>`;
+  };
+  box.innerHTML=list.map(inv=>`<div class="card" style="padding:14px 16px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="font-weight:700;font-size:13px;">${inv.invoiceNo} — ${inv.custName}</div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Job ${inv.jobNo} · RM ${inv.totalAmount.toFixed(2)}${inv.amountPaid>0?` (RM ${inv.amountPaid.toFixed(2)} paid)`:''} · Due ${fmtDateShort(inv.dueDate)}</div>
+      </div>
+      <div>${statusBadge(inv)}</div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" onclick="exportInvoicePdf('${inv.id}')">📄 View PDF</button>
+      ${inv.paymentStatus!=='Paid'?`<button class="btn btn-primary btn-sm" onclick="openRecordPaymentModal('${inv.id}')">💰 Record Payment</button>`:''}
+    </div>
+  </div>`).join('');
+}
+function openRecordPaymentModal(invoiceId){
+  const inv=_invoices.find(x=>x.id===invoiceId); if(!inv)return;
+  const remaining=inv.totalAmount-inv.amountPaid;
+  let ov=document.getElementById('record-payment-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='record-payment-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:400px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">💰 Record Payment — ${inv.invoiceNo}</span>
+      <button onclick="document.getElementById('record-payment-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Total: RM ${inv.totalAmount.toFixed(2)} · Already paid: RM ${inv.amountPaid.toFixed(2)} · Remaining: RM ${remaining.toFixed(2)}</div>
+      <div class="form-group"><label class="form-label">Payment Amount (RM)</label><input class="form-control" type="number" id="payment-amount" min="0" step="0.01" max="${remaining}" placeholder="${remaining.toFixed(2)}"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('record-payment-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmRecordPayment('${invoiceId}')">✅ Record</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function confirmRecordPayment(invoiceId){
+  const inv=_invoices.find(x=>x.id===invoiceId); if(!inv)return;
+  const amount=parseFloat(el('payment-amount').value);
+  if(!amount||amount<=0){alert('Please enter a valid payment amount.');return;}
+  inv.amountPaid=Math.min(inv.totalAmount,inv.amountPaid+amount);
+  inv.paymentStatus=inv.amountPaid>=inv.totalAmount?'Paid':'Partially Paid';
+  await saveInvoices();
+  document.getElementById('record-payment-overlay').style.display='none';
+  renderInvoicesPage();
+  showToast(`✅ Payment of RM ${amount.toFixed(2)} recorded — ${inv.paymentStatus}`,'success',3000);
+  addAudit('💰',`Payment of RM ${amount.toFixed(2)} recorded for ${inv.invoiceNo} — now ${inv.paymentStatus}`);
+}
+// ══════════════════════════════════════════════════
+// PURCHASE ORDER — Westlab issuing its own PO to a vendor, distinct from job.po
+// (which is the customer's PO number to Westlab, a separate existing field).
+// Available once a Purchasing Tracker entry has a quoted price recorded.
+// ══════════════════════════════════════════════════
+async function issuePurchaseOrder(entryId){
+  const e=_purchasingTracker.find(x=>x.id===entryId); if(!e)return;
+  if(e.poNumber){alert(`A PO has already been issued for this: ${e.poNumber}`);return;}
+  if(!e.quotedPrice||e.quotedPrice<=0){alert('Please record a quoted price before issuing a PO.');return;}
+  if(!confirm(`Issue a Purchase Order to ${e.name} for RM ${e.quotedPrice.toFixed(2)}?`))return;
+  const poNumber=await getNextDocNumber('WPO');
+  e.poNumber=poNumber;
+  e.poIssuedAt=new Date().toISOString();
+  e.poIssuedBy=currentUser;
+  await savePurchasingTracker();
+  renderPurchasingTrackerPage();
+  showToast(`🧾 Purchase Order ${poNumber} issued to ${e.name}`,'success',4000);
+  addAudit('🧾',`Purchase Order ${poNumber} issued to ${e.name} — RM ${e.quotedPrice.toFixed(2)}`);
+}
+async function exportPurchaseOrderPdf(entryId){
+  const e=_purchasingTracker.find(x=>x.id===entryId); if(!e||!e.poNumber){alert('No PO has been issued for this entry yet.');return;}
+  const partner=e.linkedExternalPartnerId?_externalPartners.find(p=>p.id===e.linkedExternalPartnerId):null;
+  const salesEntry=e.linkedSalesTrackerId?_salesTracker.find(se=>se.id===e.linkedSalesTrackerId):null;
+  const salesItem=salesEntry&&e.linkedSalesItemIdx!=null?salesEntry.items?.[e.linkedSalesItemIdx]:null;
+  const s=_settings;
+  const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #0f1f3d;padding-bottom:14px;">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
+        <div style="font-size:11px;color:#64748b;max-width:320px;">${s.address||''}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:16px;font-weight:800;">PURCHASE ORDER</div>
+        <div style="font-size:12px;color:#64748b;">${e.poNumber}</div>
+        <div style="font-size:11px;color:#64748b;">Date: ${fmtDateShort(e.poIssuedAt)}</div>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+      <tr><td style="padding:4px 8px;color:#64748b;width:120px;">To (Vendor)</td><td style="padding:4px 8px;font-weight:600;">${e.name}</td></tr>
+      ${partner?.contactPerson?`<tr><td style="padding:4px 8px;color:#64748b;">Attention</td><td style="padding:4px 8px;">${partner.contactPerson}</td></tr>`:''}
+      ${partner?.email?`<tr><td style="padding:4px 8px;color:#64748b;">Email</td><td style="padding:4px 8px;">${partner.email}</td></tr>`:''}
+      ${partner?.phone?`<tr><td style="padding:4px 8px;color:#64748b;">Phone</td><td style="padding:4px 8px;">${partner.phone}</td></tr>`:''}
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px;">
+      <thead><tr>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;text-align:left;">Description</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Amount (RM)</th>
+      </tr></thead>
+      <tbody><tr>
+        <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;">${salesItem?`${salesItem.eqName} ${salesItem.brand||''} ${salesItem.model||''} — outsourced calibration`:e.remark||'Outsourced calibration services'}</td>
+        <td style="padding:8px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${e.quotedPrice.toFixed(2)}</td>
+      </tr></tbody>
+      <tfoot><tr><td style="padding:8px 6px;text-align:right;font-weight:700;">Total (RM)</td><td style="padding:8px 6px;text-align:right;font-weight:700;">${e.quotedPrice.toFixed(2)}</td></tr></tfoot>
+    </table>
+    <div style="font-size:10.5px;color:#94a3b8;margin-top:16px;">Please proceed with the above and invoice ${s.labName||'Westlab (M) Sdn. Bhd.'} accordingly, quoting this PO number.</div>
+  </div>`;
+  await exportHtmlAsPdf(html,`${e.poNumber}.pdf`,'Purchase Order',1);
+}
+async function exportInvoicePdf(invoiceId){
+  const inv=_invoices.find(x=>x.id===invoiceId); if(!inv)return;
+  const s=_settings;
+  const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #0f1f3d;padding-bottom:14px;">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
+        <div style="font-size:11px;color:#64748b;max-width:320px;">${s.address||''}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:16px;font-weight:800;">INVOICE</div>
+        <div style="font-size:12px;color:#64748b;">${inv.invoiceNo}</div>
+        <div style="font-size:11px;color:#64748b;">Date: ${fmtDateShort(inv.invoiceDate)} · Due: ${fmtDateShort(inv.dueDate)}</div>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+      <tr><td style="padding:4px 8px;color:#64748b;width:120px;">Bill To</td><td style="padding:4px 8px;font-weight:600;">${inv.custName}</td></tr>
+      <tr><td style="padding:4px 8px;color:#64748b;">Job No.</td><td style="padding:4px 8px;">${inv.jobNo}</td></tr>
+      ${inv.address?`<tr><td style="padding:4px 8px;color:#64748b;">Address</td><td style="padding:4px 8px;">${inv.address}</td></tr>`:''}
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px;">
+      <thead><tr>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;text-align:left;">Description</th>
+        <th style="padding:6px;background:#0f1f3d;color:#fff;">Cert No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Amount</th>
+      </tr></thead>
+      <tbody>${(inv.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${i+1}</td>
+        <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${it.eqName||''} ${it.brand||''} ${it.model||''}</td>
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.certNo||'—'}</td>
+        <td style="padding:5px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${(it.price||0).toFixed(2)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot>
+        <tr><td colspan="3" style="padding:6px;text-align:right;font-weight:700;">Total (RM)</td><td style="padding:6px;text-align:right;font-weight:700;">${inv.totalAmount.toFixed(2)}</td></tr>
+        <tr><td colspan="3" style="padding:6px;text-align:right;">Amount Paid</td><td style="padding:6px;text-align:right;">${inv.amountPaid.toFixed(2)}</td></tr>
+        <tr><td colspan="3" style="padding:6px;text-align:right;font-weight:700;">Balance Due</td><td style="padding:6px;text-align:right;font-weight:700;color:${inv.totalAmount-inv.amountPaid>0?'#c0001a':'#166534'};">${(inv.totalAmount-inv.amountPaid).toFixed(2)}</td></tr>
+      </tfoot>
+    </table>
+    <div style="font-size:11px;color:#94a3b8;margin-top:16px;">Payment Status: ${inv.paymentStatus}</div>
+  </div>`;
+  await exportHtmlAsPdf(html,`${inv.invoiceNo}.pdf`,'Invoice',(inv.items||[]).length);
+}
 async function markBilled(jobNo){
   try{
   const j=getJob(jobNo); if(!j)return;
@@ -16883,6 +17798,7 @@ async function markBilled(jobNo){
   });
   renderCompletedJobs();
   addAudit('💰',`Job <strong>${jobNo}</strong> marked for billing`);
+  const generatedInvoice=await generateInvoiceFromJob(jobNo);
   // ── EMAIL: All instruments ready for collection ──
   const jFull=getJob(jobNo);
   const recip=resolveEmailRecipient(jFull||{custName:'',email:''});
