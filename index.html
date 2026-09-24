@@ -223,6 +223,9 @@ tbody tr:hover{background:#f8fafc;}
 .form-group{margin-bottom:13px;min-width:0;}.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
 textarea.form-control{resize:vertical;min-height:70px;}
 .form-section-title{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:1px;padding:10px 0 8px;border-bottom:2px solid var(--blue-pale);margin-bottom:13px;}
+.job-tab-btn{background:none;border:none;padding:10px 16px;font-size:12.5px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;}
+.job-tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+.job-tab-btn:hover{color:var(--navy);}
 
 /* ── PHOTO UPLOAD ── */
 .photo-upload-area{border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg);}
@@ -1785,6 +1788,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <button class="modal-close" onclick="closeModal('modal-add-equipment')">✕</button>
     </div>
     <div class="modal-body">
+      <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:2px solid var(--border);padding-bottom:0;">
+        <button type="button" class="job-tab-btn active" id="job-tab-btn-customer" onclick="switchJobTab('customer')">👤 Customer &amp; Contact</button>
+        <button type="button" class="job-tab-btn" id="job-tab-btn-items" onclick="switchJobTab('items')">🔩 Item(s), Visit &amp; Deposit</button>
+      </div>
+      <div id="job-tab-customer">
       <div class="form-section-title">👤 Customer Information</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Job Number</label><input class="form-control" id="eq-job-no" readonly/></div>
@@ -1863,6 +1871,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Fax No.</label><input class="form-control" id="eq-fax" placeholder="e.g. +603-6157 0706"/></div>
       </div>
       <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="eq-email" type="email" placeholder="customer@company.com"/></div>
+      </div>
+      <div id="job-tab-items" style="display:none;">
 
       <div class="form-section-title" style="margin-top:6px;">🔩 Equipment Details</div>
       <div style="margin-bottom:8px;">
@@ -2024,6 +2034,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <input type="file" id="photo-file-input" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(event)"/>
           <div class="photo-preview-grid" id="photo-preview-grid"></div>
         </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-add-equipment')">Cancel</button>
@@ -2727,6 +2738,28 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-checkout')">Cancel</button>
       <button class="btn btn-primary" onclick="confirmCheckOut()">🏁 Confirm Check Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACCEPT QUOTATION MODAL (captures PO number/document) -->
+<div class="modal-overlay" id="modal-accept-quotation" style="display:none;">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-title">✅ Mark Accepted</span>
+      <button class="modal-close" onclick="closeModal('modal-accept-quotation')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="aq-summary" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;"></div>
+      <div class="form-group"><label class="form-label">PO Number <span class="req">*</span></label><input class="form-control" id="aq-po-number" placeholder="Customer's PO number"/></div>
+      <div class="form-group">
+        <label class="form-label">PO Document <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+        <input type="file" id="aq-po-file" accept=".pdf,.jpg,.jpeg,.png"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-accept-quotation')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAcceptQuotation()">✅ Confirm Accepted</button>
     </div>
   </div>
 </div>
@@ -3647,7 +3680,9 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
   logoUrl:'',
   slaUrgent:1,slaExpress:2,slaNormal:5,slaRoutine:10,testingModeOn:false,
   feedbackFormUrl:'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=Us-oYwU870WTARXkWufvjYDemna27MNAtjzAir4JLZxUQkRNOE1GSUtSQ1QzRzk1MzBHRlIxT0NKNC4u',
-  complaintFormUrl:'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=Us-oYwU870WTARXkWufvjYDemna27MNAtjzAir4JLZxUQ0hDTFNPQjMzNkxaWExDVDdSTjE4OFkwQy4u'};
+  complaintFormUrl:'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=Us-oYwU870WTARXkWufvjYDemna27MNAtjzAir4JLZxUQ0hDTFNPQjMzNkxaWExDVDdSTjE4OFkwQy4u',
+  feedbackFormJobParam:'r6b19fc4f80e64f7b9966b6bf3de577fe',
+  complaintFormJobParam:'r89744f4551a248d1848d3232350c4e56'};
 
 // In-memory cache
 let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[];
@@ -4369,6 +4404,14 @@ function closeModal(id){
   if(id==='modal-add-equipment') stopJobDraftAutoSave();
 }
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+// Prevent accidental value changes when scrolling past a focused number input — a known
+// browser quirk where the mouse wheel changes the value instead of scrolling the page.
+// Fixed globally here, once, rather than per-field.
+document.addEventListener('wheel',e=>{
+  if(document.activeElement&&document.activeElement.type==='number'&&document.activeElement===e.target){
+    document.activeElement.blur();
+  }
+},{passive:true});
 
 // ── SETTINGS ──
 function renderStickerSettingsBody(){
@@ -5304,6 +5347,13 @@ function restoreJobDraft(draft){
   toggleInternalCalibrationMode();
   showToast('✅ Draft restored','success',3000);
 }
+function switchJobTab(tab){
+  ['customer','items'].forEach(t=>{
+    const panel=el(`job-tab-${t}`); const btn=el(`job-tab-btn-${t}`);
+    if(panel) panel.style.display=t===tab?'block':'none';
+    if(btn) btn.classList.toggle('active',t===tab);
+  });
+}
 async function openNewJobModal(){
   try{
     if(!canCreateJobs(currentUser)){alert('You do not have permission to create new jobs.');return;}
@@ -5338,6 +5388,7 @@ async function openNewJobModal(){
     const depositRow=el('eq-deposit-amount-row'); if(depositRow) depositRow.style.display='none';
     const jtEl=el('eq-job-type'); if(jtEl) jtEl.value='Lab';
     const jobCatEl=el('eq-job-category'); if(jobCatEl) jobCatEl.value='Customer';
+    _selectedInternalRefEqId=null;
     toggleInternalCalibrationMode();
     const itEl=el('eq-item-type'); if(itEl) itEl.value='Lab';
     updateSiteFieldsVisibility();
@@ -5389,12 +5440,23 @@ async function openNewJobModal(){
         const attEl=el('eq-attention'); if(attEl) attEl.value=quo.attention||'';
         const addrEl=el('eq-address'); if(addrEl) addrEl.value=quo.address||'';
         const emailEl=el('eq-email'); if(emailEl) emailEl.value=quo.email||'';
+        const telElQ=el('eq-tel'); if(telElQ) telElQ.value=quo.tel||'';
+        const mobileElQ=el('eq-mobile'); if(mobileElQ) mobileElQ.value=quo.mobile||'';
+        const faxElQ=el('eq-fax'); if(faxElQ) faxElQ.value=quo.fax||'';
+        if(quo.endUserName){
+          const endUserEl=el('eq-end-user'); if(endUserEl) endUserEl.value=quo.endUserName;
+          const endUserAddrEl=el('eq-end-user-address'); if(endUserAddrEl) endUserAddrEl.value=quo.endUserAddress||'';
+        }
         const first=quo.items[0];
         const nameEl=el('eq-name'); if(nameEl) nameEl.value=first.eqName||'';
         const brandEl=el('eq-brand'); if(brandEl) brandEl.value=first.brand||'';
         const modelEl=el('eq-model'); if(modelEl) modelEl.value=first.model||'';
         const rangeEl=el('eq-range'); if(rangeEl) rangeEl.value=first.range||'';
         const specEl=el('eq-spec'); if(specEl) specEl.value=first.spec||'';
+        const serialElQ=el('eq-serial'); if(serialElQ) serialElQ.value=first.serial||'';
+        const tagNoElQ=el('eq-tag-no'); if(tagNoElQ) tagNoElQ.value=first.tagNo||'';
+        const calPointsElQ=el('eq-cal-points'); if(calPointsElQ) calPointsElQ.value=first.calPoints||'';
+        const resolutionElQ=el('eq-resolution'); if(resolutionElQ) resolutionElQ.value=first.resolution||'';
         if(itEl) itEl.value=first.calType||'Lab';
         if(canViewPrice(currentUser)){
           const priceEl=el('eq-price');
@@ -5418,7 +5480,7 @@ async function openNewJobModal(){
         }
         updateSiteFieldsVisibility();
         quo.items.slice(1).forEach(it=>{
-          _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:'',tagNo:'N/A',range:it.range||'',calPoints:'',spec:it.spec||'',resolution:'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.unitPrice||0):0,priceLocked:true,quotedSocRequested:it.socRequested||false,quotedSocPricePerUnit:it.socPricePerUnit||0});
+          _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:it.serial||'',tagNo:it.tagNo||'N/A',range:it.range||'',calPoints:it.calPoints||'',spec:it.spec||'',resolution:it.resolution||'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.unitPrice||0):0,priceLocked:true,quotedSocRequested:it.socRequested||false,quotedSocPricePerUnit:it.socPricePerUnit||0});
         });
         renderExtraEquipment();
         showToast(`✅ Pre-filled from ${quo.quotationNo} — ${quo.items.length} item(s). Please fill in Serial No. and other physical details once the item arrives.`,'success',5000);
@@ -5430,6 +5492,7 @@ async function openNewJobModal(){
     if(!_startingFromQuotationV2Id) checkForJobDraft();
 
     openModal('modal-add-equipment');
+    switchJobTab('customer');
     startJobDraftAutoSave();
   }catch(err){
     console.error('openNewJobModal error:',err);
@@ -5493,9 +5556,11 @@ function toggleInternalCalibrationMode(){
     const compEl=el('eq-company'); if(compEl&&compEl.value==='WESTLAB (M) SDN. BHD. — INTERNAL CALIBRATION') compEl.value='';
   }
 }
+let _selectedInternalRefEqId=null;
 function applyInternalRefEqSelection(){
   const refId=el('eq-internal-refeq-picker').value;
   const ref=_refEq.find(r=>r.id===refId); if(!ref)return;
+  _selectedInternalRefEqId=refId;
   const nameEl=el('eq-name'); if(nameEl) nameEl.value=ref.name||'';
   const brandEl=el('eq-brand'); if(brandEl) brandEl.value=ref.brand||'';
   const modelEl=el('eq-model'); if(modelEl) modelEl.value=ref.model||'';
@@ -5620,15 +5685,15 @@ function reprintReceivingLabels(jobNo){
 async function saveEquipment(printReceipt=false){
   const company=el('eq-company').value.trim();
   const eqName=el('eq-name').value.trim();
-  if(!company){alert('Customer / Company name is required.');return;}
-  if(!eqName){alert('Equipment name is required.');return;}
+  if(!company){switchJobTab('customer');alert('Customer / Company name is required.');return;}
+  if(!eqName){switchJobTab('items');alert('Equipment name is required.');return;}
   const cond=el('eq-condition').value;
   const condOther=el('eq-condition-other').value.trim();
-  if(cond==='Others'&&!condOther){alert('Please specify the item condition.');return;}
+  if(cond==='Others'&&!condOther){switchJobTab('items');alert('Please specify the item condition.');return;}
 
   // Validate extra items
   for(let i=0;i<_extraEquipment.length;i++){
-    if(!_extraEquipment[i].eqName){alert(`Item ${i+2}: Equipment name is required.`);return;}
+    if(!_extraEquipment[i].eqName){switchJobTab('items');alert(`Item ${i+2}: Equipment name is required.`);return;}
   }
 
   // Disable save buttons to prevent double-click
@@ -5723,6 +5788,9 @@ async function saveEquipment(printReceipt=false){
       approvedBy:null,
       approvedAt:null,
       photos:uploadedItemPhotos,
+      // Links this item back to its source Reference Equipment record, so completing
+      // the calibration automatically updates that record's own due date and cert number.
+      ...(i===0&&el('eq-job-category')?.value==='Internal'&&_selectedInternalRefEqId?{isInternalRefCal:true,refEqId:_selectedInternalRefEqId}:{}),
     });
   }
 
@@ -6634,6 +6702,12 @@ function renderExtraEquipment(){
 
 // ── JOB RECEIPT PRINT ──
 // Generate a QR code entirely client-side (no external network call, no CORS/timing issues)
+function buildPrefilledFormUrl(baseUrl,paramName,jobNo){
+  if(!baseUrl)return '';
+  if(!paramName||!jobNo)return baseUrl; // fall back to the plain link if not configured
+  const sep=baseUrl.includes('?')?'&':'?';
+  return `${baseUrl}${sep}${paramName}=${encodeURIComponent(jobNo)}`;
+}
 function generateQRDataUrl(text, size){
   size=size||110;
   try{
@@ -8840,6 +8914,14 @@ function renderQtv2ItemsList(){
         <div class="form-group"><input class="form-control" placeholder="Range" value="${it.range||''}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/></div>
       </div>
       <div class="form-row">
+        <div class="form-group"><input class="form-control" placeholder="Serial No." value="${it.serial||''}" oninput="updateQtv2ItemField(${idx},'serial',this.value)"/></div>
+        <div class="form-group"><input class="form-control" placeholder="Tag No." value="${it.tagNo||''}" oninput="updateQtv2ItemField(${idx},'tagNo',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><input class="form-control" placeholder="Calibration Points" value="${it.calPoints||''}" oninput="updateQtv2ItemField(${idx},'calPoints',this.value)"/></div>
+        <div class="form-group"><input class="form-control" placeholder="Resolution" value="${it.resolution||''}" oninput="updateQtv2ItemField(${idx},'resolution',this.value)"/></div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <select class="form-control" onchange="updateQtv2ItemField(${idx},'calType',this.value)">
             <option value="Lab" ${it.calType==='Lab'?'selected':''}>Lab</option>
@@ -8884,7 +8966,23 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
         <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="qtv2-attention" value="${existing?.attention||prefillEntry?.prospectAttention||''}"/></div>
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="qtv2-email" value="${existing?.email||prefillEntry?.prospectEmail||''}"/></div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Tel</label><input class="form-control" id="qtv2-tel" value="${existing?.tel||''}"/></div>
+        <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="qtv2-mobile" value="${existing?.mobile||''}"/></div>
+        <div class="form-group"><label class="form-label">Fax</label><input class="form-control" id="qtv2-fax" value="${existing?.fax||''}"/></div>
+      </div>
       <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="qtv2-address" rows="2">${existing?.address||prefillEntry?.prospectAddress||''}</textarea></div>
+      <div style="border-top:1px solid var(--border);margin:10px 0;"></div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;margin-bottom:8px;">
+        <input type="checkbox" id="qtv2-has-end-user" ${existing?.endUserName?'checked':''} onchange="el('qtv2-end-user-group').style.display=this.checked?'block':'none'"/>
+        🏭 This is a dealer — certificate should go to their client instead
+      </label>
+      <div class="form-group" id="qtv2-end-user-group" style="display:${existing?.endUserName?'block':'none'};background:var(--bg);border-radius:8px;padding:10px 12px;">
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">End User Company Name</label><input class="form-control" id="qtv2-end-user-name" value="${existing?.endUserName||''}"/></div>
+          <div class="form-group"><label class="form-label">End User Address</label><input class="form-control" id="qtv2-end-user-address" value="${existing?.endUserAddress||''}"/></div>
+        </div>
+      </div>
       <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
       <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Items Quoted</div>
       <div id="qtv2-items-list"></div>
@@ -8930,6 +9028,9 @@ function selectQtv2Customer(custId){
   el('qtv2-cust-name').value=c.company; el('qtv2-cust-id').value=custId;
   el('qtv2-attention').value=c.attention||''; el('qtv2-email').value=c.email||'';
   el('qtv2-address').value=c.address||'';
+  if(el('qtv2-tel')) el('qtv2-tel').value=c.tel||'';
+  if(el('qtv2-mobile')) el('qtv2-mobile').value=c.mobile||'';
+  if(el('qtv2-fax')) el('qtv2-fax').value=c.fax||'';
   el('qtv2-cust-suggestions').style.display='none';
 }
 async function saveQuotationV2(quotationId){
@@ -8947,6 +9048,11 @@ async function saveQuotationV2(quotationId){
   q.custId=el('qtv2-cust-id').value||null;
   q.attention=el('qtv2-attention').value.trim();
   q.email=el('qtv2-email').value.trim();
+  q.tel=el('qtv2-tel')?.value.trim()||'';
+  q.mobile=el('qtv2-mobile')?.value.trim()||'';
+  q.fax=el('qtv2-fax')?.value.trim()||'';
+  q.endUserName=el('qtv2-has-end-user')?.checked?(el('qtv2-end-user-name')?.value.trim()||''):'';
+  q.endUserAddress=el('qtv2-has-end-user')?.checked?(el('qtv2-end-user-address')?.value.trim()||''):'';
   q.address=el('qtv2-address').value.trim();
   q.items=_qtv2DraftItems.filter(it=>it.eqName);
   q.validityDays=parseInt(el('qtv2-validity').value)||30;
@@ -8980,6 +9086,7 @@ function renderQuotationsV2Page(){
         <div>
           <div style="font-weight:700;font-size:13px;">${q.quotationNo} — ${q.custName}</div>
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">${(q.items||[]).length} item(s) · RM ${total.toFixed(2)} · Created ${fmtDateShort(q.createdAt)} by ${USERS[q.createdBy]?.name||q.createdBy||''}</div>
+          ${q.poNumber?`<div style="font-size:11.5px;color:var(--green);margin-top:2px;">📎 PO: ${q.poNumber}${q.poDocUrl?` — <a href="javascript:void(0)" onclick="openSignedUrl('${q.poDocUrl}')">view document</a>`:''}</div>`:''}
         </div>
         <div>${statusBadge(q.status)}</div>
       </div>
@@ -8987,7 +9094,7 @@ function renderQuotationsV2Page(){
         <button class="btn btn-outline btn-sm" onclick="exportQuotationV2Pdf('${q.id}')">📄 View PDF</button>
         ${q.status==='Draft'?`<button class="btn btn-outline btn-sm" onclick="openQuotationV2Modal('${q.id}')">✏️ Edit</button>`:''}
         ${q.status==='Draft'?`<button class="btn btn-primary btn-sm" onclick="sendQuotationV2('${q.id}')">📧 Mark Sent</button>`:''}
-        ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="respondQuotationV2('${q.id}',true)">✅ Mark Accepted</button>`:''}
+        ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="openAcceptQuotationModal('${q.id}')">✅ Mark Accepted</button>`:''}
         ${q.status==='Sent'?`<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fca5a5;" onclick="respondQuotationV2('${q.id}',false)">✗ Mark Rejected</button>`:''}
         ${q.status==='Accepted'&&!q.createdJobNo?`<button class="btn btn-primary btn-sm" onclick="createJobFromQuotationV2('${q.id}')">➕ Create Job</button>`:''}
         ${q.createdJobNo?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Job Created: ${q.createdJobNo}</span>`:''}
@@ -9003,6 +9110,42 @@ async function sendQuotationV2(quotationId){
   renderQuotationsV2Page();
   showToast(`📧 ${q.quotationNo} marked as Sent`,'success',3000);
   addAudit('📄',`Quotation ${q.quotationNo} marked Sent`);
+}
+function openAcceptQuotationModal(quotationId){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  _acceptQuotationId=quotationId;
+  el('aq-summary').innerHTML=`<strong>${q.quotationNo}</strong> — ${q.custName}`;
+  el('aq-po-number').value='';
+  el('aq-po-file').value='';
+  openModal('modal-accept-quotation');
+}
+let _acceptQuotationId=null;
+async function confirmAcceptQuotation(){
+  const poNumber=el('aq-po-number').value.trim();
+  if(!poNumber){alert("Please enter the customer's PO number.");return;}
+  const q=_quotationsV2.find(x=>x.id===_acceptQuotationId); if(!q)return;
+  const btn=document.querySelector('#modal-accept-quotation .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Saving…';}
+  let poDocUrl='';
+  const fileInput=el('aq-po-file');
+  if(fileInput.files&&fileInput.files[0]){
+    try{
+      const file=fileInput.files[0];
+      const path=`quotations/${q.quotationNo}/po/${Date.now()}_${sanitizeFilenameForPath(file.name)}`;
+      const uploadRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':file.type||'application/octet-stream'},body:file});
+      if(uploadRes.ok){ const r2=await uploadRes.json(); poDocUrl=r2.url||''; }
+    }catch(e){ console.error('PO document upload failed:',e); showToast('⚠️ PO document could not be uploaded, but acceptance was still recorded.','warn',4000); }
+  }
+  q.status='Accepted';
+  q.respondedAt=new Date().toISOString();
+  q.poNumber=poNumber;
+  q.poDocUrl=poDocUrl;
+  await saveQuotationsV2();
+  closeModal('modal-accept-quotation');
+  renderQuotationsV2Page();
+  showToast(`✅ ${q.quotationNo} marked Accepted — PO ${poNumber}`,'success',3500);
+  addAudit('📄',`Quotation ${q.quotationNo} marked Accepted — PO ${poNumber}`);
+  if(btn){btn.disabled=false;btn.textContent='✅ Confirm Accepted';}
 }
 async function respondQuotationV2(quotationId,accepted){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
@@ -12257,8 +12400,10 @@ function openCheckoutModal(jobNo, itemIdx){
   setTimeout(()=>{
     initSignaturePad('checkout-sig-canvas');
     const fbQr=el('checkout-feedback-qr'); const cpQr=el('checkout-complaint-qr');
-    if(fbQr&&_settings.feedbackFormUrl) fbQr.innerHTML=`<img src="${generateQRDataUrl(_settings.feedbackFormUrl,90)}" style="width:90px;height:90px;"/>`;
-    if(cpQr&&_settings.complaintFormUrl) cpQr.innerHTML=`<img src="${generateQRDataUrl(_settings.complaintFormUrl,90)}" style="width:90px;height:90px;"/>`;
+    const fbUrl=buildPrefilledFormUrl(_settings.feedbackFormUrl,_settings.feedbackFormJobParam,_checkinJobNo);
+    const cpUrl=buildPrefilledFormUrl(_settings.complaintFormUrl,_settings.complaintFormJobParam,_checkinJobNo);
+    if(fbQr&&fbUrl) fbQr.innerHTML=`<img src="${generateQRDataUrl(fbUrl,90)}" style="width:90px;height:90px;"/>`;
+    if(cpQr&&cpUrl) cpQr.innerHTML=`<img src="${generateQRDataUrl(cpUrl,90)}" style="width:90px;height:90px;"/>`;
   },100);
 }
 
@@ -12308,7 +12453,9 @@ async function confirmCheckOut(){
     // Backup copy of the feedback/complaint links via WhatsApp, in case they didn't scan on-site
     const job=getJob(_checkinJobNo);
     if(job?.mobile&&(_settings.feedbackFormUrl||_settings.complaintFormUrl)){
-      const msg=`Thank you for having Westlab (M) Sdn. Bhd. calibrate your equipment today.\n\n⭐ Rate our service: ${_settings.feedbackFormUrl||''}\n⚠️ Report an issue: ${_settings.complaintFormUrl||''}`;
+      const fbUrlWa=buildPrefilledFormUrl(_settings.feedbackFormUrl,_settings.feedbackFormJobParam,_checkinJobNo);
+      const cpUrlWa=buildPrefilledFormUrl(_settings.complaintFormUrl,_settings.complaintFormJobParam,_checkinJobNo);
+      const msg=`Thank you for having Westlab (M) Sdn. Bhd. calibrate your equipment today.\n\n⭐ Rate our service: ${fbUrlWa}\n⚠️ Report an issue: ${cpUrlWa}`;
       window.open(buildWhatsAppUrl(job.mobile,msg),'_blank');
     }
 
@@ -17396,6 +17543,8 @@ function renderCompletedJobs(){
         &nbsp;
         ${j.collectedAt?`<span class="badge badge-green">📦 Collected by ${j.collectedBy||''} — ${j.doNumber||''}</span>`:`<span class="badge badge-amber">📦 Not Yet Collected</span>`}
         &nbsp;
+        ${j.collectedAt?(j.feedbackConfirmed?`<span class="badge badge-green">✅ Feedback Confirmed</span>`:`<button class="btn btn-outline btn-sm" onclick="markFeedbackConfirmed('${j.jobNo}')">📝 Mark Feedback Confirmed</button>`):''}
+        &nbsp;
         ${isAdmin(currentUser)&&!j.billed?`<button class="btn btn-primary btn-sm" onclick="markBilled('${j.jobNo}')">💰 Mark Billed</button>`:''}
         ${canCreateJobs(currentUser)&&!j.collectedAt?`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="openMarkCollectedModal('${j.jobNo}')">📦 Mark Collected</button>`:''}
         ${j.collectedAt?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportDeliveryOrderPdf('${j.jobNo}')">📄 View DO</button>`:''}
@@ -17712,13 +17861,15 @@ async function confirmMarkCollected(){
     if(jFull&&recip.email&&(_settings.feedbackFormUrl||_settings.complaintFormUrl)){
       const lab=_settings.labName||'Westlab (M) Sdn. Bhd.';
       const dearName=recip.attention||recip.name;
+      const fbUrlEmail=buildPrefilledFormUrl(_settings.feedbackFormUrl,_settings.feedbackFormJobParam,jFull.jobNo);
+      const cpUrlEmail=buildPrefilledFormUrl(_settings.complaintFormUrl,_settings.complaintFormJobParam,jFull.jobNo);
       const htmlBody=`<p>Dear ${dearName},</p>
         <p>Thank you for collecting your item(s) from ${lab} (Job No.: ${jFull.jobNo}). We hope you're satisfied with our service.</p>
         <p>We'd really appreciate a couple of minutes of your time:</p>
-        <p>⭐ <a href="${_settings.feedbackFormUrl}">Rate Our Service</a> — tell us how we did<br/>
-        ⚠️ <a href="${_settings.complaintFormUrl}">Report an Issue</a> — if anything needs our attention</p>
+        <p>⭐ <a href="${fbUrlEmail}">Rate Our Service</a> — tell us how we did<br/>
+        ⚠️ <a href="${cpUrlEmail}">Report an Issue</a> — if anything needs our attention</p>
         <p>Thank you for choosing ${lab}.</p>`;
-      const textBody=`Dear ${dearName},\n\nThank you for collecting your item(s) from ${lab} (Job No.: ${jFull.jobNo}).\n\nRate our service: ${_settings.feedbackFormUrl}\nReport an issue: ${_settings.complaintFormUrl}\n\nThank you for choosing ${lab}.`;
+      const textBody=`Dear ${dearName},\n\nThank you for collecting your item(s) from ${lab} (Job No.: ${jFull.jobNo}).\n\nRate our service: ${fbUrlEmail}\nReport an issue: ${cpUrlEmail}\n\nThank you for choosing ${lab}.`;
       sendEmail(recip.email,recip.name,`Your Calibration Certificate(s) — ${jFull.jobNo} — We'd Love Your Feedback`,textBody,htmlBody)
         .then(ok=>{ if(ok) addAudit('📧',`Feedback request emailed to ${recip.email} for ${jFull.jobNo}`); });
     }
