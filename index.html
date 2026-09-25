@@ -340,6 +340,32 @@ textarea.form-control{resize:vertical;min-height:70px;}
   .stats-grid{grid-template-columns:repeat(2,1fr);}
 }
 
+/* ══ MOBILE (phones) — sidebar becomes a slide-in overlay drawer instead of pushing content ══ */
+@media(max-width:768px){
+  #sidebar{transform:translateX(-100%);transition:transform .25s ease;width:240px;min-width:240px;z-index:200;}
+  #sidebar.mobile-open{transform:translateX(0);box-shadow:0 0 24px rgba(0,0,0,.35);}
+  #sidebar.collapsed{width:240px;min-width:240px;} /* the icon-only collapse mode doesn't apply on mobile — it's an overlay either way */
+  #main{margin-left:0!important;}
+  #mobile-menu-btn{display:inline-block!important;}
+  #sidebar-toggle-btn{display:none;} /* the desktop collapse-to-icon toggle is meaningless once the sidebar is an overlay */
+  #mobile-sidebar-backdrop{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:150;}
+  #mobile-sidebar-backdrop.visible{display:block;}
+  #content{padding:14px;}
+  .modal{width:96vw!important;}
+  .modal-lg{width:96vw!important;}
+  .form-row{flex-direction:column;}
+  table{font-size:12px;}
+  .topbar-user-info{display:none;} /* username/role text — reclaim space for the title on a narrow screen */
+  #topbar-title{font-size:15px;}
+  .btn{padding:10px 16px;min-height:40px;}
+  .btn-sm{padding:8px 12px;min-height:36px;}
+  input,select,textarea{font-size:16px!important;} /* prevents iOS Safari from auto-zooming in on focus */
+  .stats-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px;}
+}
+@media(max-width:420px){
+  .stats-grid{grid-template-columns:1fr!important;}
+}
+
 </style>
 </head>
 <body>
@@ -502,10 +528,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
   </div>
 </nav>
+<div id="mobile-sidebar-backdrop" onclick="closeMobileSidebar()"></div>
 
 <!-- ══ MAIN ══ -->
 <div id="main">
   <div id="topbar">
+    <button id="mobile-menu-btn" onclick="toggleMobileSidebar()" style="display:none;background:none;border:none;font-size:22px;color:inherit;cursor:pointer;padding:4px 8px;margin-right:8px;" title="Menu">☰</button>
     <h2 id="topbar-title">Dashboard</h2>
     <div class="topbar-right">
       <!-- Notification Bell -->
@@ -988,6 +1016,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-sub">Enquiry-to-collection status pipeline</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openEnquiryTemplatesModal()">📋 Enquiry Templates</button>
           <button class="btn btn-outline" onclick="openSalesTrackerDashboard()">📊 Performance Dashboard</button>
           <button class="btn btn-outline" onclick="exportCapabilityReviewPdf()">📄 Capability Review History</button>
           <button class="btn btn-outline" onclick="exportTrackerExcel('sales')">📊 Excel</button>
@@ -1017,6 +1046,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-sub">Draft, send, and track quotations — accepted quotations flow directly into job creation</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="openStandardPriceListModal()">💰 Standard Price List</button>
           <button class="btn btn-primary" onclick="openQuotationV2Modal()">+ New Quotation</button>
         </div>
       </div>
@@ -1028,7 +1058,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <option value="Accepted">Accepted</option>
           <option value="Rejected">Rejected</option>
         </select>
-        <input class="form-control" id="qtv2-search" placeholder="Search customer…" oninput="renderQuotationsV2Page()" style="width:200px;"/>
+        <input class="form-control" id="qtv2-search" placeholder="Search quotation no., customer, or PO…" oninput="renderQuotationsV2Page()" style="width:260px;"/>
       </div>
       <div id="quotations-v2-list"></div>
     </div>
@@ -1599,6 +1629,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header"><span class="card-title">🏢 Company Information</span></div>
         <div class="card-body">
+          <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+              <input type="checkbox" id="set-sst-enabled"/>
+              <strong style="font-size:12.5px;">Charge SST (Service Tax)</strong>
+            </label>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Only turn this on once you're actually registered for SST. When enabled, 8% is added automatically on Quotations and Invoices.</div>
+          </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">Laboratory / Company Name</label><input id="set-lab-name" class="form-control" placeholder="e.g. Westlab (M) Sdn. Bhd."/></div>
             <div class="form-group"><label class="form-label">Public Status Lookup URL</label><input id="set-public-status-url" class="form-control" placeholder="e.g. https://status.westlab.com.my"/>
@@ -1910,7 +1947,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Specification / Tolerance</label><input class="form-control" id="eq-spec" placeholder="e.g. ±0.5°C" oninput="autoPlusMinus(this)"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Range / Capacity</label><input class="form-control" id="eq-range" placeholder="e.g. 0–200°C"/></div>
+        <div class="form-group"><label class="form-label">Range / Capacity</label>
+          <div style="display:flex;gap:6px;">
+            <input class="form-control" id="eq-range" placeholder="e.g. 0–200"/>
+            <select class="form-control unit-picker-select" style="max-width:90px;" onchange="appendUnitToField('eq-range',this.value);this.value='';">
+              <option value="">Unit…</option>
+            </select>
+          </div>
+        </div>
         <div class="form-group"><label class="form-label">Calibration Points</label><input class="form-control" id="eq-cal-points" placeholder="e.g. 0, 50, 100°C"/></div>
       </div>
       <div class="form-row">
@@ -2211,7 +2255,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Range / Capacity</label><input class="form-control" id="cal-range" readonly style="background:#f1f5f9;"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Resolution / Readability</label><input class="form-control" id="cal-resolution" placeholder="e.g. pH 0.01"/></div>
+        <div class="form-group"><label class="form-label">Resolution / Readability</label>
+          <div style="display:flex;gap:6px;">
+            <input class="form-control" id="cal-resolution" placeholder="e.g. 0.01"/>
+            <select class="form-control unit-picker-select" style="max-width:90px;" onchange="appendUnitToField('cal-resolution',this.value);this.value='';">
+              <option value="">Unit…</option>
+            </select>
+          </div>
+        </div>
         <div class="form-group"><label class="form-label">Calibration Points</label><input class="form-control" id="cal-cal-points" readonly style="background:#f1f5f9;"/></div>
       </div>
 
@@ -2571,7 +2622,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Specification / Tolerance</label><input class="form-control" id="edit-eq-spec" placeholder="e.g. ±0.5°C" oninput="autoPlusMinus(this)"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Range / Capacity</label><input class="form-control" id="edit-eq-range" placeholder="e.g. 0–200°C"/></div>
+        <div class="form-group"><label class="form-label">Range / Capacity</label>
+          <div style="display:flex;gap:6px;">
+            <input class="form-control" id="edit-eq-range" placeholder="e.g. 0–200"/>
+            <select class="form-control unit-picker-select" style="max-width:90px;" onchange="appendUnitToField('edit-eq-range',this.value);this.value='';">
+              <option value="">Unit…</option>
+            </select>
+          </div>
+        </div>
         <div class="form-group"><label class="form-label">Calibration Points</label><input class="form-control" id="edit-eq-cal-points" placeholder="e.g. 0, 50, 100°C"/></div>
       </div>
       <div class="form-row">
@@ -3428,6 +3486,78 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- INTERMEDIATE CHECK MODAL -->
+<!-- ENQUIRY TEMPLATES MODAL -->
+<div class="modal-overlay" id="modal-enquiry-templates" style="display:none;">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title">📋 Enquiry Info Templates</span>
+      <button class="modal-close" onclick="closeModal('modal-enquiry-templates')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:12px;">Ready-to-send text for asking a customer what info you need before quoting — pick the equipment type, copy, paste into email or WhatsApp. Different equipment types need different details (e.g. a Balance needs Adjustment Y/N, a Thermometer doesn't) — use General for anything not covered yet.</div>
+      <select class="form-control" id="et-type-select" onchange="renderEnquiryTemplatePreview()" style="margin-bottom:12px;">
+        <option value="">— Select equipment type —</option>
+      </select>
+      <div id="et-preview" style="background:var(--bg);border-radius:8px;padding:12px 14px;white-space:pre-line;font-size:12.5px;margin-bottom:10px;min-height:60px;"></div>
+      <button class="btn btn-primary btn-sm" onclick="copyEnquiryTemplate()">📋 Copy to Clipboard</button>
+      <div style="border-top:1px solid var(--border);margin:16px 0;"></div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Manage Templates</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input class="form-control" id="et-new-type" placeholder="Equipment type (e.g. Thermometer)"/>
+      </div>
+      <textarea class="form-control" id="et-new-text" rows="4" placeholder="Please provide: Equipment name, brand, model..."></textarea>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="saveEnquiryTemplate()">💾 Save Template</button>
+      <div id="et-manage-list" style="margin-top:12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-enquiry-templates')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- STANDARD PRICE LIST MODAL -->
+<div class="modal-overlay" id="modal-price-reference" style="display:none;">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title">💰 Standard Price List</span>
+      <button class="modal-close" onclick="closeModal('modal-price-reference')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:12px;">Standard prices per equipment type — shown as a suggestion when quoting, so pricing stays consistent even though individual customers can still be quoted differently.</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input class="form-control" id="pr-new-name" placeholder="Equipment type (e.g. pH Meter)"/>
+        <input class="form-control" type="number" min="0" step="0.01" id="pr-new-price" placeholder="Standard Price (RM)" style="max-width:180px;"/>
+        <button class="btn btn-primary" onclick="addPriceReferenceEntry()">+ Add</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Equipment Type</th><th>Standard Price (RM)</th><th></th></tr></thead>
+        <tbody id="price-reference-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-price-reference')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- PDF PREVIEW MODAL -->
+<div class="modal-overlay" id="modal-pdf-preview" style="display:none;">
+  <div class="modal modal-lg" style="height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <span class="modal-title">📄 Preview</span>
+      <button class="modal-close" onclick="closeModal('modal-pdf-preview')">✕</button>
+    </div>
+    <div class="modal-body" style="flex:1;padding:0;overflow:hidden;">
+      <iframe id="pdf-preview-frame" style="width:100%;height:100%;border:none;"></iframe>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-pdf-preview')">Close</button>
+      <button class="btn btn-outline" onclick="printPreviewedPdf()">🖨️ Print</button>
+      <button class="btn btn-primary" onclick="downloadPreviewedPdf()">⬇️ Download</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-intermediate-check" style="display:none;">
   <div class="modal modal-sm">
     <div class="modal-header">
@@ -4025,6 +4155,7 @@ function setCurrentUser(username){
     checkKIVExpiry();
     // Live refresh benefits everyone (My Jobs, Dashboard, etc.), not just Admin
     startLiveRefresh();
+    populateAllUnitPickers();
   },1500);
   }catch(_e){
     console.error("setCurrentUser error:",_e);
@@ -4157,10 +4288,12 @@ function renderStaffEvalTechnicalTab(box){
   const inPeriod=getStaffEvalPeriodFilter();
   const stats={};
   const ensure=u=>{ if(!stats[u]) stats[u]={valueCleared:0,itemsCompleted:0,visits:[],abnormalPreExisting:0,abnormalHandling:0,abnormalUnclassified:0,rejectionCount:0}; return stats[u]; };
+  let excludedCount=0;
   _jobs.forEach(j=>{
     if(j.status==='Deleted')return;
     (j.items||[]).forEach(it=>{
       const doneBy=it.calData?.calibratedByUsername;
+      if(!doneBy&&it.status==='Completed'&&inPeriod(it.calData?.date||j.receiveDate)) excludedCount++;
       if(doneBy&&it.status==='Completed'&&inPeriod(it.calData?.date||j.receiveDate)){
         const s=ensure(doneBy);
         s.valueCleared+=(it.price||0);
@@ -4196,7 +4329,9 @@ function renderStaffEvalTechnicalTab(box){
   })).sort((a,b)=>b.valueCleared-a.valueCleared);
 
   const fmtDuration=mins=>{ const h=Math.floor(mins/60); return `${h>0?h+'h ':''}${mins%60}min`; };
-  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+  box.innerHTML=`
+  ${excludedCount>0?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#9a3412;">⚠️ ${excludedCount} completed item(s) in this period have no recorded "calibrated by" and are excluded from the table below — likely older records from before this tracking existed. These aren't wrong, just not attributable to anyone.</div>`:''}
+  <div class="card"><div class="table-wrap"><table>
     <thead><tr>
       <th>Rank</th><th>Staff</th><th>💰 Value Cleared (RM)</th><th>Items Completed</th>
       <th>Onsite Visits</th><th>Avg Visit Duration</th>
@@ -4221,11 +4356,12 @@ function renderStaffEvalSalesTab(box){
   const inPeriod=getStaffEvalPeriodFilter();
   const stats={};
   const ensure=u=>{ if(!stats[u]) stats[u]={valueWon:0,itemsWon:0,itemsReviewed:0}; return stats[u]; };
+  let excludedCount=0;
   _salesTracker.forEach(e=>{
-    if(!e.salesPersonnel)return;
     (e.items||[]).forEach(it=>{
       if(!['Can Do','Can Do (External)'].includes(it.capabilityVerdict))return; // never actually quotable
       if(!inPeriod(e.createdAt))return;
+      if(!e.salesPersonnel){ excludedCount++; return; }
       const s=ensure(e.salesPersonnel);
       s.itemsReviewed+=1;
       if(it.outcome==='Won'){ s.valueWon+=(it.price||0)*(parseFloat(it.quantity)||1); s.itemsWon+=1; }
@@ -4237,7 +4373,9 @@ function renderStaffEvalSalesTab(box){
     winRate:s.itemsReviewed?Math.round((s.itemsWon/s.itemsReviewed)*100):0
   })).sort((a,b)=>b.valueWon-a.valueWon);
 
-  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+  box.innerHTML=`
+  ${excludedCount>0?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#9a3412;">⚠️ ${excludedCount} reviewed item(s) in this period have no salesperson recorded and are excluded from the table below.</div>`:''}
+  <div class="card"><div class="table-wrap"><table>
     <thead><tr>
       <th>Rank</th><th>Sales Person</th><th>💰 Value Won (RM)</th><th>Items Won</th><th>Win Rate</th>
     </tr></thead>
@@ -4341,6 +4479,7 @@ const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',complete
   personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings'};
 
 function showView(name){
+  closeMobileSidebar();
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const v=document.getElementById('view-'+name);
@@ -4601,6 +4740,7 @@ function applySettings(s){
     feedbackFormUrl:'set-feedback-form-url', complaintFormUrl:'set-complaint-form-url'
   };
   Object.entries(map).forEach(([k,id])=>{const e=document.getElementById(id);if(e&&s[k]!==undefined)e.value=s[k];});
+  const sstEl=document.getElementById('set-sst-enabled'); if(sstEl) sstEl.checked=!!s.sstEnabled;
   if(typeof renderStickerSettingsBody==='function') renderStickerSettingsBody();
   // Show logo if saved
   if(s.logoUrl){
@@ -4939,6 +5079,7 @@ async function migratePasswords(){
 async function saveSettings(){
   try{
   const s=Object.assign({},_settings);
+  s.sstEnabled=el('set-sst-enabled')?.checked||false;
   s.labName=el('set-lab-name').value.trim()||'Westlab';
   s.publicStatusUrl=el('set-public-status-url')?.value.trim()||'';
   s.feedbackFormUrl=el('set-feedback-form-url')?.value.trim()||'';
@@ -4971,8 +5112,10 @@ async function saveSettings(){
   });
   // Never save base64 logo to DB — only save Storage URL
   if(s.logoUrl&&s.logoUrl.startsWith('data:')){
-    // Logo is still base64 — don't save it to DB, it makes the row huge
+    // Logo is still base64 — the upload to Storage never actually completed, so saving
+    // it here would make the row huge. Warn clearly rather than silently dropping it.
     delete s.logoUrl;
+    showToast('⚠️ Logo was not saved — the upload to storage never completed. Please re-upload it.','warn',6000);
   }
   await SB.upsert('wl_settings','main',s);
   if(pw){
@@ -5460,13 +5603,20 @@ async function openNewJobModal(){
         if(itEl) itEl.value=first.calType||'Lab';
         if(canViewPrice(currentUser)){
           const priceEl=el('eq-price');
-          if(priceEl){ priceEl.value=first.unitPrice||''; priceEl.readOnly=true; priceEl.style.background='#f1f5f9'; priceEl.title=`Locked — pulled from ${quo.quotationNo}`; }
-          const priceHint=el('eq-price-quote-hint');
-          if(priceHint) priceHint.textContent=`🔒 Pulled from ${quo.quotationNo} — not editable here`;
+          const priceGroupEl=el('eq-price-group');
+          if(priceEl) priceEl.value=first.unitPrice||'';
+          if(priceGroupEl){
+            priceGroupEl.style.display='block';
+            priceGroupEl.innerHTML=`<label class="form-label">💰 Price Quoted (RM)</label>
+              <div style="font-size:16px;font-weight:700;color:var(--navy);">${(first.unitPrice||0).toFixed(2)}</div>
+              <div style="font-size:11px;color:#92610c;margin-top:4px;">🔒 Pulled from ${quo.quotationNo} — not editable here</div>
+              <input type="hidden" id="eq-price" value="${first.unitPrice||''}"/>`;
+          }
         }
         if(first.socRequested){
           _item1Soc.socRequested=true;
           _item1Soc.quotedSocPricePerUnit=first.socPricePerUnit||0; // used as the default when a parameter is added below, rather than starting blank
+          if(first.socParameters&&first.socParameters.length) _item1Soc.socParameters=JSON.parse(JSON.stringify(first.socParameters));
         }
         // Deposit — pulled and locked from the quotation, whole job level
         if(quo.depositRequired){
@@ -5480,7 +5630,7 @@ async function openNewJobModal(){
         }
         updateSiteFieldsVisibility();
         quo.items.slice(1).forEach(it=>{
-          _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:it.serial||'',tagNo:it.tagNo||'N/A',range:it.range||'',calPoints:it.calPoints||'',spec:it.spec||'',resolution:it.resolution||'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.unitPrice||0):0,priceLocked:true,quotedSocRequested:it.socRequested||false,quotedSocPricePerUnit:it.socPricePerUnit||0});
+          _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:it.serial||'',tagNo:it.tagNo||'N/A',range:it.range||'',calPoints:it.calPoints||'',spec:it.spec||'',resolution:it.resolution||'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.unitPrice||0):0,priceLocked:true,quotedSocRequested:it.socRequested||false,quotedSocPricePerUnit:it.socPricePerUnit||0,socRequested:it.socRequested||false,socParameters:it.socParameters&&it.socParameters.length?JSON.parse(JSON.stringify(it.socParameters)):undefined});
         });
         renderExtraEquipment();
         showToast(`✅ Pre-filled from ${quo.quotationNo} — ${quo.items.length} item(s). Please fill in Serial No. and other physical details once the item arrives.`,'success',5000);
@@ -5831,6 +5981,7 @@ async function saveEquipment(printReceipt=false){
     if(quoV2){
       quoV2.createdJobNo=jobNo;
       await saveQuotationsV2();
+      await advanceLinkedTrackerStage(quoV2.id,'Job In Progress',`Job ${jobNo} created`);
     }
     // Lab items were pre-filled from the quotation before the item was ever physically seen —
     // flag them so the receiving desk must actually verify/correct the details once it arrives,
@@ -5995,12 +6146,10 @@ function handleLogoSelect(e){
         _settings.logoUrl=r2res.url||'https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/'+path;
         showToast('✅ Logo uploaded — click Save Changes','success',3000);
       } else {
-        _settings.logoUrl=dataUrl;
-        showToast('Logo ready — click Save Changes','info',2000);
+        showToast('❌ Logo upload failed — please try again (nothing was saved)','error',5000);
       }
     }catch(err){
-      _settings.logoUrl=dataUrl;
-      showToast('Logo ready — click Save Changes','info',2000);
+      showToast('❌ Logo upload failed — please check your connection and try again (nothing was saved)','error',5000);
     }
   };
   r.readAsDataURL(f);
@@ -6475,7 +6624,11 @@ function removeSocParameter(containerId,item,idx){
   item.socParameters.splice(idx,1);
   renderSocSection(containerId,item);
 }
-function updateSocParamField(item,idx,field,val){
+function updateSocParamField(item,idx,field,val,inputEl){
+  if(field==='limitValue'&&/^\d/.test(val)&&!val.startsWith('±')){
+    val='±'+val;
+    if(inputEl) inputEl.value=val;
+  }
   if(item.socParameters&&item.socParameters[idx]) item.socParameters[idx][field]=val;
 }
 // Updates just one parameter's Total display in place, without a full re-render —
@@ -6520,7 +6673,7 @@ function renderSocSection(containerId,item){
             </select>
             ${p.specType==='Other'?`<input class="form-control" placeholder="Specify…" value="${p.specTypeOther||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'specTypeOther',this.value)" style="font-size:12px;"/>`:''}
           </div>
-          <input class="form-control" placeholder="Limit Value(s) / Parameter(s) to check" value="${p.limitValue||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'limitValue',this.value)" style="margin-bottom:6px;font-size:12px;"/>
+          <input class="form-control" placeholder="Limit Value(s) / Parameter(s) to check" value="${p.limitValue||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'limitValue',this.value,this)" style="margin-bottom:6px;font-size:12px;"/>
           <input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Per Unit (RM)" value="${p.socPrice||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'socPrice',parseFloat(this.value)||0);updateSocParamTotal('${containerId}',${idx})" style="margin-bottom:2px;font-size:12px;"/>
           <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:6px;" id="soc-total-${containerId}-${idx}">Total for ${item.socUnitsNeeded||item.quantity||1} unit(s): RM ${((p.socPrice||0)*(item.socUnitsNeeded||parseFloat(item.quantity)||1)).toFixed(2)}</div>
           <div style="display:flex;gap:6px;margin-bottom:6px;">
@@ -6609,7 +6762,13 @@ function renderExtraEquipment(){
         <div class="form-group"><label class="form-label">Specification / Tolerance</label>
           <input class="form-control" value="${eq.spec}" placeholder="e.g. ±0.5°C" oninput="autoPlusMinus(this);updateExtraField(${i},'spec',this.value)"/></div>
         <div class="form-group"><label class="form-label">Range / Capacity</label>
-          <input class="form-control" value="${eq.range}" placeholder="e.g. 0–200°C" oninput="updateExtraField(${i},'range',this.value)"/></div>
+          <div style="display:flex;gap:6px;">
+            <input class="form-control" value="${eq.range}" placeholder="e.g. 0–200" oninput="updateExtraField(${i},'range',this.value)"/>
+            <select class="form-control unit-picker-select" style="max-width:90px;" onchange="appendUnitToSiblingField(this,${i},'range');this.value='';">
+              <option value="">Unit…</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Calibration Points</label>
@@ -6698,6 +6857,7 @@ function renderExtraEquipment(){
     if(sel) sel.value=eq.assignTo||'';
     renderSocSection(`extra-eq-soc-${i}`,eq);
   });
+  populateAllUnitPickers();
 }
 
 // ── JOB RECEIPT PRINT ──
@@ -7154,7 +7314,7 @@ async function exportStickerLogPdf(){
 }
 
 // Shared helper — renders an HTML block to a landscape PDF and downloads it
-async function exportHtmlAsPdf(html,filename,auditLabel,rowCount){
+async function exportHtmlAsPdf(html,filename,auditLabel,rowCount,previewMode=false){
   try{
     const frame=el('receipt-print-frame');
     frame.innerHTML=html;
@@ -7175,15 +7335,34 @@ async function exportHtmlAsPdf(html,filename,auditLabel,rowCount){
     const bytes=await pdf.save();
     const blob=new Blob([bytes],{type:'application/pdf'});
     const url=URL.createObjectURL(blob);
-    const link=document.createElement('a');
-    link.href=url; link.download=filename; link.click();
-    URL.revokeObjectURL(url);
+    if(previewMode){
+      openPdfPreviewModal(url,filename);
+    } else {
+      const link=document.createElement('a');
+      link.href=url; link.download=filename; link.click();
+      URL.revokeObjectURL(url);
+    }
     addAudit('📄',`${auditLabel} exported to PDF — ${rowCount} rows`);
   }catch(e){
     console.error('exportHtmlAsPdf error:',e);
     showToast('❌ PDF export failed: '+e.message,'error',4000);
   }
 }
+function openPdfPreviewModal(url,filename){
+  _pdfPreviewUrl=url; _pdfPreviewFilename=filename;
+  el('pdf-preview-frame').src=url;
+  openModal('modal-pdf-preview');
+}
+function downloadPreviewedPdf(){
+  if(!_pdfPreviewUrl)return;
+  const link=document.createElement('a');
+  link.href=_pdfPreviewUrl; link.download=_pdfPreviewFilename||'document.pdf'; link.click();
+}
+function printPreviewedPdf(){
+  const frame=el('pdf-preview-frame');
+  if(frame&&frame.contentWindow) frame.contentWindow.print();
+}
+let _pdfPreviewUrl=null, _pdfPreviewFilename=null;
 
 async function generateReceiptPdfBase64(jobs){
   try{
@@ -7926,8 +8105,8 @@ async function openCalModal(jobNo, itemIdx=0){
   el('trace-search').value='';
   el('trace-suggestions').style.display='none';
   // Pre-fill if re-submitting after rejection
-  if(j&&j.calData){
-    const cd=j.calData;
+  if(item&&item.calData){
+    const cd=item.calData;
     ['issue-date','date','receipt-date','tag-no','resolution','next-due',
      'cond-before','cond-after','cond-remark','sticker-no','calibrated-by'].forEach(k=>{
       const e=el('cal-'+k); if(e&&cd[k.replace(/-/g,'_')]!==undefined) e.value=cd[k.replace(/-/g,'_')]||'';
@@ -8895,6 +9074,149 @@ function updateQtv2GrandTotal(){
   const grand=_qtv2DraftItems.reduce((s,it)=>s+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
   const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${grand.toFixed(2)}`;
 }
+const DEFAULT_ENQUIRY_TEMPLATES=[
+  {type:'Balance',text:'To prepare a quotation, please provide the following for each balance:\n- Equipment name\n- Brand\n- Model\n- Type: Single-range / Multi-range\n- Serial No.\n- Range/Capacity\n- Resolution\n- Adjustment required: Yes/No\n- Result required: As Found / As Left / Both\n- Specification/Tolerance\n- Calibration Points'},
+  {type:'General',text:'To prepare a quotation, please provide the following for each item:\n- Equipment name\n- Brand\n- Model\n- Serial No.\n- Range/Capacity\n- Resolution\n- Specification/Tolerance\n- Calibration Points'}
+];
+function openEnquiryTemplatesModal(){
+  if(!_settings.enquiryTemplates||!_settings.enquiryTemplates.length){
+    _settings.enquiryTemplates=JSON.parse(JSON.stringify(DEFAULT_ENQUIRY_TEMPLATES));
+  }
+  const sel=el('et-type-select');
+  sel.innerHTML='<option value="">— Select equipment type —</option>'+_settings.enquiryTemplates.map(t=>`<option value="${t.type}">${t.type}</option>`).join('');
+  el('et-preview').textContent='';
+  renderEnquiryTemplateManageList();
+  openModal('modal-enquiry-templates');
+}
+function renderEnquiryTemplatePreview(){
+  const type=el('et-type-select').value;
+  const t=(_settings.enquiryTemplates||[]).find(x=>x.type===type);
+  el('et-preview').textContent=t?t.text:'';
+}
+function copyEnquiryTemplate(){
+  const text=el('et-preview').textContent;
+  if(!text){showToast('Select an equipment type first','warn',2500);return;}
+  navigator.clipboard.writeText(text).then(()=>showToast('📋 Copied to clipboard','success',2000));
+}
+function renderEnquiryTemplateManageList(){
+  const box=el('et-manage-list'); if(!box)return;
+  box.innerHTML=(_settings.enquiryTemplates||[]).map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+    <span>${t.type}</span>
+    <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deleteEnquiryTemplate('${t.type}')">✕</button>
+  </div>`).join('');
+}
+async function saveEnquiryTemplate(){
+  const type=el('et-new-type').value.trim();
+  const text=el('et-new-text').value.trim();
+  if(!type||!text){alert('Please enter both an equipment type and the info text.');return;}
+  if(!_settings.enquiryTemplates) _settings.enquiryTemplates=JSON.parse(JSON.stringify(DEFAULT_ENQUIRY_TEMPLATES));
+  const existingIdx=_settings.enquiryTemplates.findIndex(t=>t.type===type);
+  if(existingIdx>-1) _settings.enquiryTemplates[existingIdx].text=text;
+  else _settings.enquiryTemplates.push({type,text});
+  await SB.upsert('wl_settings','main',_settings);
+  el('et-new-type').value=''; el('et-new-text').value='';
+  openEnquiryTemplatesModal();
+  showToast('✅ Template saved','success',2500);
+}
+async function deleteEnquiryTemplate(type){
+  if(!confirm(`Remove the "${type}" template?`))return;
+  _settings.enquiryTemplates=(_settings.enquiryTemplates||[]).filter(t=>t.type!==type);
+  await SB.upsert('wl_settings','main',_settings);
+  openEnquiryTemplatesModal();
+}
+const STANDARD_UNITS=['g','kg','mg','°C','°F','K','psi','bar','kPa','MPa','mm','cm','m','V','A','mA','Ω','mL','L','%'];
+function populateAllUnitPickers(){
+  const custom=_settings.customUnits||[];
+  const allUnits=[...STANDARD_UNITS,...custom];
+  document.querySelectorAll('.unit-picker-select').forEach(sel=>{
+    sel.innerHTML='<option value="">Unit…</option>'+allUnits.map(u=>`<option value="${u}">${u}</option>`).join('')+'<option value="__other__">+ Other…</option>';
+  });
+}
+async function appendUnitToField(fieldId,unit){
+  if(!unit)return;
+  if(unit==='__other__'){
+    const custom=prompt('Enter the new unit (e.g. N·m):');
+    if(!custom||!custom.trim())return;
+    unit=custom.trim();
+    if(!_settings.customUnits) _settings.customUnits=[];
+    if(!_settings.customUnits.includes(unit)){
+      _settings.customUnits.push(unit);
+      await SB.upsert('wl_settings','main',_settings);
+      populateAllUnitPickers();
+    }
+  }
+  const fieldEl=el(fieldId); if(!fieldEl)return;
+  const current=fieldEl.value.trim();
+  fieldEl.value=current?`${current}${unit}`:unit;
+}
+async function appendUnitToSiblingField(selectEl,idx,field,updateFn){
+  updateFn=updateFn||updateExtraField;
+  let unit=selectEl.value;
+  if(!unit)return;
+  if(unit==='__other__'){
+    const custom=prompt('Enter the new unit (e.g. N·m):');
+    if(!custom||!custom.trim())return;
+    unit=custom.trim();
+    if(!_settings.customUnits) _settings.customUnits=[];
+    if(!_settings.customUnits.includes(unit)){
+      _settings.customUnits.push(unit);
+      await SB.upsert('wl_settings','main',_settings);
+      populateAllUnitPickers();
+    }
+  }
+  const inputEl=selectEl.parentElement.querySelector('input');
+  if(!inputEl)return;
+  const current=inputEl.value.trim();
+  inputEl.value=current?`${current}${unit}`:unit;
+  updateFn(idx,field,inputEl.value);
+}
+function openStandardPriceListModal(){
+  renderPriceReferenceTable();
+  openModal('modal-price-reference');
+}
+function renderPriceReferenceTable(){
+  const body=el('price-reference-tbody'); if(!body)return;
+  const list=(_settings.priceReference||[]).slice().sort((a,b)=>a.eqName.localeCompare(b.eqName));
+  body.innerHTML=list.map((p,idx)=>`<tr>
+    <td>${p.eqName}</td>
+    <td style="text-align:right;">${(p.standardPrice||0).toFixed(2)}</td>
+    <td><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deletePriceReferenceEntry('${p.id}')">✕</button></td>
+  </tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No price references yet.</td></tr>';
+}
+async function addPriceReferenceEntry(){
+  const name=el('pr-new-name').value.trim();
+  const price=parseFloat(el('pr-new-price').value)||0;
+  if(!name||!price){alert('Please enter both an equipment type and a price.');return;}
+  if(!_settings.priceReference) _settings.priceReference=[];
+  _settings.priceReference.push({id:'PR-'+Date.now(),eqName:name,standardPrice:price});
+  await SB.upsert('wl_settings','main',_settings);
+  el('pr-new-name').value=''; el('pr-new-price').value='';
+  renderPriceReferenceTable();
+  showToast('✅ Price reference added','success',2500);
+}
+async function deletePriceReferenceEntry(id){
+  if(!confirm('Remove this price reference?'))return;
+  _settings.priceReference=(_settings.priceReference||[]).filter(p=>p.id!==id);
+  await SB.upsert('wl_settings','main',_settings);
+  renderPriceReferenceTable();
+}
+// Finds the closest matching standard price and the customer's own price history for a
+// given equipment name, used while quoting so pricing stays informed and consistent.
+function lookupPriceGuidance(eqName,custId){
+  if(!eqName)return null;
+  const nameLower=eqName.toLowerCase();
+  const standard=(_settings.priceReference||[]).find(p=>p.eqName.toLowerCase()===nameLower||nameLower.includes(p.eqName.toLowerCase())||p.eqName.toLowerCase().includes(nameLower));
+  let lastCustomerPrice=null;
+  if(custId){
+    const pastQuotes=_quotationsV2.filter(q=>q.custId===custId&&q.id!==_qtv2EditingId).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    for(const q of pastQuotes){
+      const match=(q.items||[]).find(it=>(it.eqName||'').toLowerCase()===nameLower);
+      if(match){ lastCustomerPrice={price:match.unitPrice,date:q.createdAt,quotationNo:q.quotationNo}; break; }
+    }
+  }
+  if(!standard&&!lastCustomerPrice)return null;
+  return {standardPrice:standard?.standardPrice,lastCustomerPrice};
+}
 function renderQtv2ItemsList(){
   const box=el('qtv2-items-list'); if(!box)return;
   box.innerHTML=_qtv2DraftItems.map((it,idx)=>{
@@ -8911,7 +9233,14 @@ function renderQtv2ItemsList(){
       </div>
       <div class="form-row">
         <div class="form-group"><input class="form-control" placeholder="Spec" value="${it.spec||''}" oninput="updateQtv2ItemField(${idx},'spec',this.value)"/></div>
-        <div class="form-group"><input class="form-control" placeholder="Range" value="${it.range||''}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/></div>
+        <div class="form-group">
+          <div style="display:flex;gap:6px;">
+            <input class="form-control" placeholder="Range (e.g. 0 – 200g)" value="${it.range||''}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/>
+            <select class="form-control unit-picker-select" style="max-width:90px;" onchange="appendUnitToSiblingField(this,${idx},'range',(i,f,v)=>updateQtv2ItemField(i,f,v));this.value='';">
+              <option value="">Unit…</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group"><input class="form-control" placeholder="Serial No." value="${it.serial||''}" oninput="updateQtv2ItemField(${idx},'serial',this.value)"/></div>
@@ -8931,18 +9260,33 @@ function renderQtv2ItemsList(){
         <div class="form-group"><input class="form-control" type="number" min="1" placeholder="Qty" value="${it.quantity||1}" oninput="updateQtv2ItemField(${idx},'quantity',this.value);updateQtv2ItemTotal(${idx})"/></div>
       </div>
       <input class="form-control" type="number" min="0" step="0.01" placeholder="Unit Price (RM)" value="${it.unitPrice||''}" oninput="updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0);updateQtv2ItemTotal(${idx})" style="margin-bottom:4px;"/>
+      ${(()=>{
+        const custId=el('qtv2-cust-id')?.value;
+        const guidance=lookupPriceGuidance(it.eqName,custId);
+        if(!guidance)return '';
+        let text='';
+        if(guidance.standardPrice) text+=`Standard: RM ${guidance.standardPrice.toFixed(2)}`;
+        if(guidance.lastCustomerPrice) text+=`${text?' · ':''}Last quoted to this customer: RM ${guidance.lastCustomerPrice.price.toFixed(2)} (${fmtDateShort(guidance.lastCustomerPrice.date)})`;
+        const useValue=guidance.lastCustomerPrice?guidance.lastCustomerPrice.price:guidance.standardPrice;
+        return `<div style="font-size:11px;color:var(--blue);margin-bottom:6px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateQtv2ItemField(${idx},'unitPrice',${useValue});renderQtv2ItemsList()">use this</a></div>`;
+      })()}
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:11.5px;margin-bottom:4px;">
         <input type="checkbox" ${it.socRequested?'checked':''} onchange="updateQtv2ItemField(${idx},'socRequested',this.checked);renderQtv2ItemsList()"/>
         📋 Statement of Conformity requested for this item
       </label>
       ${it.socRequested?`<input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Per Unit (RM)" value="${it.socPricePerUnit||''}" oninput="updateQtv2ItemField(${idx},'socPricePerUnit',parseFloat(this.value)||0)" style="margin-bottom:4px;"/>`:''}
+      <div class="form-group" id="qtv2-item-soc-${idx}"></div>
       <div style="font-size:11px;color:var(--text-muted);">Total: <strong id="qtv2-item-total-${idx}">RM ${total.toFixed(2)}</strong></div>
     </div>`;
   }).join('');
+  _qtv2DraftItems.forEach((it,idx)=>renderSocSection(`qtv2-item-soc-${idx}`,it));
   updateQtv2GrandTotal();
+  populateAllUnitPickers();
 }
+let _qtv2EditingId=null;
 function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   if(!canUseQuotationSystem(currentUser)){alert('You do not have access to create quotations.');return;}
+  _qtv2EditingId=quotationId||null;
   const existing=quotationId?_quotationsV2.find(q=>q.id===quotationId):null;
   let prefillEntry=null;
   if(!existing&&salesTrackerEntryId) prefillEntry=_salesTracker.find(e=>e.id===salesTrackerEntryId);
@@ -9061,6 +9405,21 @@ async function saveQuotationV2(quotationId){
   q.depositAmount=q.depositRequired?(parseFloat(el('qtv2-deposit-amount').value)||0):0;
   q.linkedSalesTrackerId=el('qtv2-linked-sales-entry')?.value||null;
   await saveQuotationsV2();
+  // Complete the bidirectional link, and reflect this real progress in the entry's stage
+  // automatically — creating a quotation from a reviewed entry IS reaching "Quotation
+  // Generated", not a separate manual step someone has to remember to also click.
+  if(q.linkedSalesTrackerId){
+    const linkedEntry=_salesTracker.find(en=>en.id===q.linkedSalesTrackerId);
+    if(linkedEntry&&linkedEntry.linkedQuotationId!==q.id){
+      linkedEntry.linkedQuotationId=q.id;
+      if(linkedEntry.status!=='Quotation Generated'&&SALES_STAGES.indexOf(linkedEntry.status)<SALES_STAGES.indexOf('Quotation Generated')){
+        linkedEntry.status='Quotation Generated';
+        if(!linkedEntry.statusHistory) linkedEntry.statusHistory=[];
+        linkedEntry.statusHistory.push({status:'Quotation Generated',date:new Date().toISOString(),by:currentUser,note:`Quotation ${q.quotationNo} created`});
+      }
+      await saveSalesTracker();
+    }
+  }
   document.getElementById('qtv2-overlay').style.display='none';
   renderQuotationsV2Page();
   showToast(`✅ Quotation ${q.quotationNo} saved`,'success',3000);
@@ -9073,34 +9432,55 @@ function renderQuotationsV2Page(){
   const search=(el('qtv2-search')?.value||'').toLowerCase();
   let list=[..._quotationsV2].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
   if(statusFilter) list=list.filter(q=>q.status===statusFilter);
-  if(search) list=list.filter(q=>(q.custName||'').toLowerCase().includes(search));
+  if(search) list=list.filter(q=>(q.custName||'').toLowerCase().includes(search)||(q.quotationNo||'').toLowerCase().includes(search)||(q.poNumber||'').toLowerCase().includes(search));
   if(!list.length){ box.innerHTML='<div class="empty-state"><p>No quotations yet.</p></div>'; return; }
   const statusBadge=s=>{
     const colors={Draft:'badge-amber',Sent:'badge-blue',Accepted:'badge-green',Rejected:'badge-red'};
     return `<span class="badge ${colors[s]||'badge-amber'}">${s}</span>`;
   };
-  box.innerHTML=list.map(q=>{
-    const total=(q.items||[]).reduce((s,it)=>s+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
-    return `<div class="card" style="padding:14px 16px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-weight:700;font-size:13px;">${q.quotationNo} — ${q.custName}</div>
-          <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">${(q.items||[]).length} item(s) · RM ${total.toFixed(2)} · Created ${fmtDateShort(q.createdAt)} by ${USERS[q.createdBy]?.name||q.createdBy||''}</div>
-          ${q.poNumber?`<div style="font-size:11.5px;color:var(--green);margin-top:2px;">📎 PO: ${q.poNumber}${q.poDocUrl?` — <a href="javascript:void(0)" onclick="openSignedUrl('${q.poDocUrl}')">view document</a>`:''}</div>`:''}
-        </div>
-        <div>${statusBadge(q.status)}</div>
-      </div>
-      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="btn btn-outline btn-sm" onclick="exportQuotationV2Pdf('${q.id}')">📄 View PDF</button>
-        ${q.status==='Draft'?`<button class="btn btn-outline btn-sm" onclick="openQuotationV2Modal('${q.id}')">✏️ Edit</button>`:''}
-        ${q.status==='Draft'?`<button class="btn btn-primary btn-sm" onclick="sendQuotationV2('${q.id}')">📧 Mark Sent</button>`:''}
-        ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="openAcceptQuotationModal('${q.id}')">✅ Mark Accepted</button>`:''}
-        ${q.status==='Sent'?`<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fca5a5;" onclick="respondQuotationV2('${q.id}',false)">✗ Mark Rejected</button>`:''}
-        ${q.status==='Accepted'&&!q.createdJobNo?`<button class="btn btn-primary btn-sm" onclick="createJobFromQuotationV2('${q.id}')">➕ Create Job</button>`:''}
-        ${q.createdJobNo?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ Job Created: ${q.createdJobNo}</span>`:''}
-      </div>
-    </div>`;
-  }).join('');
+  box.innerHTML=`<div class="table-wrap"><table>
+    <thead><tr><th>Quotation No.</th><th>Customer</th><th>Items</th><th>Total (RM)</th><th>Status</th><th>Created</th><th>PO</th><th>Actions</th></tr></thead>
+    <tbody>${list.map(q=>{
+      const total=(q.items||[]).reduce((s,it)=>s+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
+      return `<tr>
+        <td style="font-weight:700;">${q.quotationNo}</td>
+        <td>${q.custName}</td>
+        <td style="text-align:center;">${(q.items||[]).length}</td>
+        <td style="text-align:right;">${total.toFixed(2)}</td>
+        <td>${statusBadge(q.status)}</td>
+        <td style="font-size:11.5px;color:var(--text-muted);">${fmtDateShort(q.createdAt)}<br/>by ${USERS[q.createdBy]?.name||q.createdBy||''}</td>
+        <td style="font-size:11px;">${q.poNumber?`📎 ${q.poNumber}${q.poDocUrl?` — <a href="javascript:void(0)" onclick="openSignedUrl('${q.poDocUrl}')">view</a>`:''}`:'—'}</td>
+        <td>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="exportQuotationV2Pdf('${q.id}')">📄 PDF</button>
+            ${q.status==='Draft'?`<button class="btn btn-outline btn-sm" onclick="openQuotationV2Modal('${q.id}')">✏️ Edit</button>`:''}
+            ${q.status==='Draft'?`<button class="btn btn-primary btn-sm" onclick="sendQuotationV2('${q.id}')">📧 Sent</button>`:''}
+            ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="openAcceptQuotationModal('${q.id}')">✅ Accepted</button>`:''}
+            ${q.status==='Sent'?`<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fca5a5;" onclick="respondQuotationV2('${q.id}',false)">✗ Rejected</button>`:''}
+            ${q.status==='Accepted'&&!q.createdJobNo?`<button class="btn btn-primary btn-sm" onclick="createJobFromQuotationV2('${q.id}')">➕ Job</button>`:''}
+            ${q.createdJobNo?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ ${q.createdJobNo}</span>`:''}
+            ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fca5a5;" onclick="deleteQuotationV2('${q.id}')">🗑️</button>`:''}
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+// Advances a linked Sales Tracker entry's stage to match real Quotation/Job/Invoice
+// progress — only ever moves forward, never backward, and only when a link exists.
+async function advanceLinkedTrackerStage(quotationId,newStage,note){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q||!q.linkedSalesTrackerId)return;
+  const entry=_salesTracker.find(en=>en.id===q.linkedSalesTrackerId); if(!entry)return;
+  if(SALES_STAGES.indexOf(newStage)<=SALES_STAGES.indexOf(entry.status))return; // never move backward
+  applyAutoOutcomes(entry,newStage); // same Won/Lost derivation the manual dropdown already triggers — must not be skipped just because this path is automatic
+  entry.status=newStage;
+  if(!entry.statusHistory) entry.statusHistory=[];
+  entry.statusHistory.push({status:newStage,date:new Date().toISOString(),by:currentUser,note:note||''});
+  await saveSalesTracker();
+}
+async function advanceLinkedTrackerStageByJobNo(jobNo,newStage,note){
+  const q=_quotationsV2.find(x=>x.createdJobNo===jobNo); if(!q)return;
+  await advanceLinkedTrackerStage(q.id,newStage,note);
 }
 async function sendQuotationV2(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
@@ -9141,17 +9521,48 @@ async function confirmAcceptQuotation(){
   q.poNumber=poNumber;
   q.poDocUrl=poDocUrl;
   await saveQuotationsV2();
+  // Accepting a quotation with a PO number IS the customer's confirmation — mark the linked
+  // entry's items accepted so applyAutoOutcomes (triggered by the stage advance below)
+  // correctly derives Won rather than defaulting to Lost for lack of this flag.
+  if(q.linkedSalesTrackerId){
+    const linkedEntryForAccept=_salesTracker.find(en=>en.id===q.linkedSalesTrackerId);
+    if(linkedEntryForAccept){
+      (linkedEntryForAccept.items||[]).forEach(it=>{
+        if(['Can Do','Can Do (External)'].includes(it.capabilityVerdict)) it.clientAccepted=true;
+      });
+    }
+  }
+  await advanceLinkedTrackerStage(q.id,'PO Received',`Quotation ${q.quotationNo} accepted — PO ${poNumber}`);
   closeModal('modal-accept-quotation');
   renderQuotationsV2Page();
   showToast(`✅ ${q.quotationNo} marked Accepted — PO ${poNumber}`,'success',3500);
   addAudit('📄',`Quotation ${q.quotationNo} marked Accepted — PO ${poNumber}`);
   if(btn){btn.disabled=false;btn.textContent='✅ Confirm Accepted';}
 }
+async function deleteQuotationV2(quotationId){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  if(!confirm(`Permanently delete ${q.quotationNo}? This cannot be undone — it will be completely removed, not just hidden.`))return;
+  const idx=_quotationsV2.findIndex(x=>x.id===quotationId);
+  if(idx===-1)return;
+  _quotationsV2.splice(idx,1);
+  await saveQuotationsV2();
+  renderQuotationsV2Page();
+  showToast(`🗑️ ${q.quotationNo} permanently deleted`,'success',3000);
+  addAudit('🗑️',`Quotation ${q.quotationNo} permanently deleted by ${USERS[currentUser]?.name||currentUser}`);
+}
 async function respondQuotationV2(quotationId,accepted){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   q.status=accepted?'Accepted':'Rejected';
   q.respondedAt=new Date().toISOString();
   await saveQuotationsV2();
+  if(!accepted&&q.linkedSalesTrackerId){
+    const entry=_salesTracker.find(en=>en.id===q.linkedSalesTrackerId);
+    if(entry){
+      (entry.items||[]).forEach(it=>{ if(!it.outcome||it.outcome==='Pending') it.outcome='Lost'; });
+      if(!entry.lostReason) entry.lostReason='Quotation Rejected';
+      await saveSalesTracker();
+    }
+  }
   renderQuotationsV2Page();
   showToast(`${accepted?'✅':'✗'} ${q.quotationNo} marked ${q.status}`,accepted?'success':'warn',3000);
   addAudit('📄',`Quotation ${q.quotationNo} marked ${q.status}`);
@@ -9159,45 +9570,175 @@ async function respondQuotationV2(quotationId,accepted){
 async function exportQuotationV2Pdf(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   const s=_settings;
-  const total=(q.items||[]).reduce((sum,it)=>sum+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
+  const subtotal=(q.items||[]).reduce((sum,it)=>{
+    const line=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
+    const socLine=it.socRequested?(it.socPricePerUnit||0)*(parseFloat(it.quantity)||1):0;
+    return sum+line+socLine;
+  },0);
+  const sstAmount=s.sstEnabled?subtotal*0.08:0;
+  const total=subtotal+sstAmount;
   const validUntil=new Date(q.createdAt); validUntil.setDate(validUntil.getDate()+(q.validityDays||30));
-  const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #0f1f3d;padding-bottom:14px;">
-      <div>
-        <div style="font-size:18px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
-        <div style="font-size:11px;color:#64748b;max-width:320px;">${s.address||''}</div>
+  // Reuse the same staff signature/certName lookup used on calibration certificates
+  const creatorUsername=q.createdBy;
+  const creatorStaff=(_staff||[]).find(x=>x.username===creatorUsername);
+  const creatorName=creatorStaff?.certName||creatorStaff?.name||USERS[creatorUsername]?.name||creatorUsername||'';
+  const creatorSig=creatorStaff?.signature||'';
+
+  const buildItemDescription=(it)=>{
+    const lines=[`<strong>${it.eqName||''}</strong>`];
+    const details=[];
+    if(it.brand) details.push(`Brand: ${it.brand}`);
+    if(it.model) details.push(`Model: ${it.model}`);
+    if(it.serial) details.push(`S/N: ${it.serial}`);
+    if(details.length) lines.push(details.join(', '));
+    if(it.range) lines.push(`Range/Capacity: ${it.range}`);
+    if(it.resolution) lines.push(`Resolution: ${it.resolution}`);
+    if(it.spec) lines.push(`Specification: ${it.spec}`);
+    if(it.calPoints) lines.push(`Calibration Points: ${it.calPoints}`);
+    lines.push(`Calibration Type: ${it.calType||'Lab'}${it.socRequested?' · Statement of Conformity requested':''}`);
+    return lines.join('<br/>');
+  };
+
+  const itemRows=(q.items||[]).map((it,i)=>{
+    const lineAmount=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
+    let rows=`<tr>
+      <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e2e8f0;vertical-align:top;">${i+1}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;">${buildItemDescription(it)}</td>
+      <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e2e8f0;vertical-align:top;">${it.quantity||1}</td>
+      <td style="padding:6px 8px;text-align:right;border-bottom:1px solid #e2e8f0;vertical-align:top;">${(it.unitPrice||0).toFixed(2)}</td>
+      <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e2e8f0;vertical-align:top;"></td>
+      <td style="padding:6px 8px;text-align:right;border-bottom:1px solid #e2e8f0;vertical-align:top;">${lineAmount.toFixed(2)}</td>
+    </tr>`;
+    if(it.socRequested&&it.socPricePerUnit){
+      const socAmount=(it.socPricePerUnit||0)*(parseFloat(it.quantity)||1);
+      rows+=`<tr>
+        <td style="padding:4px 8px;text-align:center;border-bottom:1px solid #e2e8f0;color:#64748b;"></td>
+        <td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b;">↳ Statement of Conformity</td>
+        <td style="padding:4px 8px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.quantity||1}</td>
+        <td style="padding:4px 8px;text-align:right;border-bottom:1px solid #e2e8f0;">${(it.socPricePerUnit||0).toFixed(2)}</td>
+        <td style="padding:4px 8px;text-align:center;border-bottom:1px solid #e2e8f0;"></td>
+        <td style="padding:4px 8px;text-align:right;border-bottom:1px solid #e2e8f0;">${socAmount.toFixed(2)}</td>
+      </tr>`;
+    }
+    return rows;
+  }).join('');
+
+  const page1=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;font-size:12px;">
+    <div style="text-align:center;margin-bottom:6px;">
+      <div style="font-size:16px;font-weight:800;">${s.labName||'WESTLAB (M) SDN BHD'} ${s.regNo?`(${s.regNo})`:''}</div>
+      <div style="font-size:11px;color:#333;">${s.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor.'}</div>
+      <div style="font-size:11px;color:#333;">Phone: ${s.phone||'0162589602'}&nbsp;&nbsp;email: ${s.salesEmail||'sales@westlab.com.my'}</div>
+      ${s.tinNo?`<div style="font-size:11px;color:#333;">(TIN No: ${s.tinNo})</div>`:''}
+    </div>
+    <div style="border-top:2px solid #000;margin:10px 0 14px;"></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:14px;">
+      <div style="border:1px solid #000;padding:8px 12px;width:48%;">
+        <div style="font-weight:700;">${q.custName}</div>
+        <div style="white-space:pre-line;">${q.address||''}</div>
+        ${q.attention?`<div style="margin-top:4px;">Attn: ${q.attention}</div>`:''}
+        ${q.tel?`<div>Tel: ${q.tel}</div>`:''}
+        ${q.fax?`<div>Fax: ${q.fax}</div>`:''}
       </div>
-      <div style="text-align:right;">
-        <div style="font-size:16px;font-weight:800;">QUOTATION</div>
-        <div style="font-size:12px;color:#64748b;">${q.quotationNo}</div>
-        <div style="font-size:11px;color:#64748b;">Date: ${fmtDateShort(q.createdAt)}</div>
+      <div style="width:48%;">
+        <div style="font-weight:800;text-align:right;margin-bottom:6px;">QUOTATION : ${q.quotationNo}</div>
+        <table style="width:100%;font-size:11px;">
+          <tr><td style="color:#555;">Your Ref.</td><td>:</td><td></td></tr>
+          <tr><td style="color:#555;">Our Ref.</td><td>:</td><td></td></tr>
+          <tr><td style="color:#555;">Date</td><td>:</td><td>${fmtDateShort(q.createdAt)}</td></tr>
+          <tr><td style="color:#555;">Page</td><td>:</td><td>1 of 2</td></tr>
+        </table>
       </div>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
-      <tr><td style="padding:4px 8px;color:#64748b;width:120px;">Customer</td><td style="padding:4px 8px;font-weight:600;">${q.custName}</td></tr>
-      ${q.attention?`<tr><td style="padding:4px 8px;color:#64748b;">Attention</td><td style="padding:4px 8px;">${q.attention}</td></tr>`:''}
-      ${q.address?`<tr><td style="padding:4px 8px;color:#64748b;">Address</td><td style="padding:4px 8px;">${q.address}</td></tr>`:''}
-      <tr><td style="padding:4px 8px;color:#64748b;">Valid Until</td><td style="padding:4px 8px;font-weight:600;">${fmtDateShort(toLocalDateStr(validUntil))}</td></tr>
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px;">
-      <thead><tr>
-        <th style="padding:6px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;text-align:left;">Description</th>
-        <th style="padding:6px;background:#0f1f3d;color:#fff;">Type</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Qty</th>
-        <th style="padding:6px;background:#0f1f3d;color:#fff;">Unit Price</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Total</th>
+    ${q.endUserName?`<div style="background:#f8fafc;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;"><strong>End User:</strong> ${q.endUserName}${q.endUserAddress?' — '+q.endUserAddress:''}</div>`:''}
+    <div style="margin-bottom:10px;">Thank you for your inquiry. We are pleased to submit our quote as follows:</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;">
+      <thead><tr style="background:#f1f5f9;">
+        <th style="padding:6px 8px;border-bottom:2px solid #000;">Item</th>
+        <th style="padding:6px 8px;border-bottom:2px solid #000;text-align:left;">Description</th>
+        <th style="padding:6px 8px;border-bottom:2px solid #000;">Qty</th>
+        <th style="padding:6px 8px;border-bottom:2px solid #000;">Unit Price</th>
+        <th style="padding:6px 8px;border-bottom:2px solid #000;">Disc</th>
+        <th style="padding:6px 8px;border-bottom:2px solid #000;">Amount</th>
       </tr></thead>
-      <tbody>${(q.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
-        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${i+1}</td>
-        <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${it.eqName} ${it.brand||''} ${it.model||''} ${it.spec?'('+it.spec+')':''}</td>
-        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.calType}</td>
-        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.quantity}</td>
-        <td style="padding:5px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${(it.unitPrice||0).toFixed(2)}</td>
-        <td style="padding:5px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${((it.unitPrice||0)*(parseFloat(it.quantity)||1)).toFixed(2)}</td>
-      </tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="5" style="padding:8px 6px;text-align:right;font-weight:700;">Grand Total (RM)</td><td style="padding:8px 6px;text-align:right;font-weight:700;">${total.toFixed(2)}</td></tr></tfoot>
+      <tbody>${itemRows}</tbody>
     </table>
-    <div style="font-size:11px;color:#374151;white-space:pre-line;margin-top:16px;"><strong>Terms &amp; Conditions:</strong>\n${q.termsConditions||''}</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+      <table style="font-size:12px;">
+        ${s.sstEnabled?`<tr><td style="padding:4px 16px 4px 0;">Subtotal (MYR)</td><td style="padding:4px 8px;text-align:right;">${subtotal.toFixed(2)}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0;">SST (8%)</td><td style="padding:4px 8px;text-align:right;">${sstAmount.toFixed(2)}</td></tr>`:''}
+        <tr><td style="padding:4px 16px 4px 0;font-weight:700;">Total (MYR)</td><td style="padding:4px 8px;border:1px solid #000;font-weight:700;">${total.toFixed(2)}</td></tr>
+      </table>
+    </div>
+    <table style="font-size:11px;margin-bottom:16px;">
+      <tr><td style="color:#555;padding:2px 0;width:110px;">Validity</td><td>:</td><td style="padding-left:8px;">${q.validityDays||30} Days</td></tr>
+      <tr><td style="color:#555;padding:2px 0;">Delivery Term</td><td>:</td><td style="padding-left:8px;"></td></tr>
+      <tr><td style="color:#555;padding:2px 0;">Payment Term</td><td>:</td><td style="padding-left:8px;">30 Days</td></tr>
+    </table>
+    <div style="font-weight:700;font-size:11px;margin-bottom:16px;">Note : Prices are subjected to change without prior notice.</div>
+    <div style="margin-bottom:20px;">We hope that our quotation is favourable to you and looking forward to receive your valued orders in due course.</div>
+    <div style="margin-bottom:6px;">Thank and regards.</div>
+    <div style="display:flex;justify-content:space-between;margin-top:30px;">
+      <div>
+        <div>Yours faithfully,</div>
+        ${creatorSig?`<img src="${creatorSig}" style="height:50px;margin:8px 0;display:block;"/>`:`<div style="height:58px;"></div>`}
+        <div style="border-top:1px solid #000;padding-top:4px;width:180px;font-weight:700;">${creatorName}</div>
+      </div>
+      <div style="text-align:center;">
+        <div>We confirm the order by accepting the terms<br/>&amp; conditions stated above.</div>
+        <div style="height:50px;"></div>
+        <div style="border-top:1px solid #000;padding-top:4px;width:180px;"><em>chop &amp; sign</em></div>
+        <div style="font-size:11px;margin-top:4px;">Person incharge :<br/>Date :</div>
+      </div>
+    </div>
   </div>`;
-  await exportHtmlAsPdf(html,`${q.quotationNo}.pdf`,'Quotation',(q.items||[]).length);
+
+  const page2=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;font-size:10.5px;">
+    <div style="text-align:center;margin-bottom:6px;">
+      <div style="font-size:14px;font-weight:800;">${s.labName||'WESTLAB (M) SDN BHD'} ${s.regNo?`(${s.regNo})`:''}</div>
+      <div style="font-size:10px;color:#333;">${s.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor.'}</div>
+      <div style="font-size:10px;color:#333;">Phone: ${s.phone||'0162589602'}&nbsp;&nbsp;email: ${s.salesEmail||'sales@westlab.com.my'}</div>
+      ${s.tinNo?`<div style="font-size:10px;color:#333;">(TIN No: ${s.tinNo})</div>`:''}
+    </div>
+    <div style="border-top:2px solid #000;margin:10px 0 14px;"></div>
+    <div style="text-align:center;font-weight:800;margin-bottom:14px;">Term &amp; Condition</div>
+    <ol style="padding-left:18px;line-height:1.6;">
+      <li>This quotation is valid for 30 days from the date of issue</li>
+      <li>Payment Term: Net 30 days from invoice date. Interest of 2% per month will be charged on the total amount due for any overdue payment.</li>
+      <li>Currency: MYR. Prices exclude SST unless stated otherwise; SST is charged at the prevailing rate (currently 8%).</li>
+      <li>Customer to acknowledge this quotation or provide a Purchase Order before work commences.</li>
+      <li>(*) Items marked with an asterisk are subcontracted to a qualified third party due to unavailability of standard or being beyond Westlab's scope of accreditation.</li>
+      <li>Completion date for in-house calibration services (excludes delivery/courier time, and assumes item received in good, complete, workable condition):
+        <ul style="padding-left:18px;">
+          <li>Standard Service: 5–7 working days (standard price)</li>
+          <li>Urgent Service: 3–4 working days (+50% on standard price)</li>
+          <li>Express Service: 1–2 working days (+75–100% on standard price)</li>
+          <li>Items received after 12:00 pm will be considered received the next working day.</li>
+          <li>Urgent/Express service is not available for outsourced (*) items.</li>
+        </ul>
+      </li>
+      <li>Prices quoted are for calibration service only and exclude adjustment, repair, or parts. Any necessary adjustment will be quoted and charged separately.</li>
+      <li>Customer shall ensure the item is in workable condition upon submission. Items with excessive error that cannot be adjusted will be returned without a certificate; only the calibration attempt fee (if applicable) will be charged.</li>
+      <li>Courier/transport charges to be borne by the customer, unless otherwise agreed.</li>
+      <li>Customer shall inspect items immediately upon receipt and notify Westlab of any shortfall or discrepancy within 5 working days; no claims will be entertained thereafter. Westlab does not bear responsibility for damage caused by courier service or third-party transporter.</li>
+      <li>For on-site/site calibration jobs:
+        <ul style="padding-left:18px;">
+          <li>Minimum fee per on-site job within Klang Valley: RM350–RM550; outstation jobs quoted based on location.</li>
+          <li>Customer is responsible for dismantling, assembling, and resetting items as required; Westlab is not liable for damage arising from customer mishandling.</li>
+          <li>Customer or an authorised representative must accompany Westlab's technician during the on-site calibration.</li>
+          <li>Postponement of a scheduled on-site calibration must be notified at least 24 working hours in advance; otherwise a minimum charge of RM350 applies once the technician has arrived on-site.</li>
+          <li>Equipment must be in a condition ready for calibration on-site; a minimum charge of RM350 plus transportation fee applies if the technician arrives and the equipment is not ready.</li>
+        </ul>
+      </li>
+      <li>A charge of RM10 will be imposed for reissuance of a Calibration Certificate.</li>
+      <li>Westlab guarantees reasonable care and diligence in performing calibration in accordance with ISO/IEC 17025, but no warranty is given as to the performance of the customer's equipment/facility. Any dissatisfaction with calibration results must be raised within 2 weeks of certificate issuance; no claims will be entertained thereafter.</li>
+      <li>Statement of conformity to a specification or standard is not automatically provided unless specifically requested and agreed at the time of quotation.</li>
+      <li>Items are calibrated under SAMM accreditation only within Westlab's accredited scope. Items outside this scope, if calibrated, will be issued on a non-accredited basis and clearly indicated as such.</li>
+      <li>Westlab agrees not to disclose confidential information obtained from the customer to any third party, except as required by law.</li>
+    </ol>
+    <div style="text-align:center;font-weight:700;margin-top:20px;">This is a computer-generated quotation; no signature is required unless otherwise stated.</div>
+  </div>`;
+
+  await exportHtmlAsPdf(page1+'<div style="page-break-before:always;"></div>'+page2,`${q.quotationNo}.pdf`,'Quotation',(q.items||[]).length,true);
 }
 let _startingFromQuotationV2Id=null;
 async function createJobFromQuotationV2(quotationId){
@@ -9420,7 +9961,7 @@ async function exportCapabilityReviewPdf(){
       }).join('')}</tbody>
     </table>
   </div>`;
-  await exportHtmlAsPdf(html,`Westlab_Capability_Review_Log_${toLocalDateStr(new Date())}.pdf`,'Capability Review Log',rows.length);
+  await exportHtmlAsPdf(html,`Westlab_Capability_Review_Log_${toLocalDateStr(new Date())}.pdf`,'Capability Review Log',rows.length,true);
 }
 function renderCapabilityReviewQueue(){
   const box=el('capability-review-queue');
@@ -9707,6 +10248,7 @@ function renderTrackerPage(type){
         <td style="font-size:12px;">${linkedHtml}</td>
         <td style="white-space:nowrap;">
           ${externalCheckButtons?`<div style="margin-bottom:4px;">${externalCheckButtons}</div>`:''}
+          ${type==='sales'&&anyCleared?(e.linkedQuotationId?`<div style="margin-bottom:4px;"><span style="font-size:11px;color:var(--green);font-weight:600;">✅ ${(_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||'Quotation linked'}</span> <a href="#" onclick="event.preventDefault();showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')" style="font-size:10px;">(view)</a></div>`:`<div style="margin-bottom:4px;"><button class="btn btn-primary btn-sm" onclick="openQuotationV2Modal(null,'${e.id}')">📄 Create Quotation</button></div>`):''}
           ${type==='sales'&&items.some(it=>it.capabilityVerdict)?`<button class="btn btn-outline btn-sm" onclick="exportEntryCapabilityReviewPdf('${e.id}')" title="Export capability review for this entry">📄</button>`:''}
           ${type==='purchasing'&&e.quotedPrice>0?(e.poNumber?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportPurchaseOrderPdf('${e.id}')">📄 ${e.poNumber}</button>`:`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="issuePurchaseOrder('${e.id}')">🧾 Issue PO</button>`):''}
           ${readOnly?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
@@ -9866,7 +10408,14 @@ function renderSalesItemsList(){
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Spec <span style="font-weight:normal;color:var(--text-muted);">(± added automatically)</span></label><input class="form-control" value="${it.spec||''}" oninput="updateSalesItemSpec(${idx},this)"/></div>
-        <div class="form-group"><label class="form-label">Range</label><input class="form-control" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/></div>
+        <div class="form-group"><label class="form-label">Range</label>
+          <div style="display:flex;gap:6px;">
+            <input class="form-control" placeholder="e.g. 0 – 200g" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/>
+            <select class="form-control unit-picker-select" style="max-width:90px;" onchange="appendUnitToSiblingField(this,${idx},'range',(i,f,v)=>updateSalesItemField(i,f,v));this.value='';">
+              <option value="">Unit…</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div class="form-group"><label class="form-label">Remark <span style="font-weight:normal;color:var(--text-muted);">(customer's stated requirement for this item)</span></label><textarea class="form-control" rows="2" oninput="updateSalesItemField(${idx},'remark',this.value)">${it.remark||''}</textarea></div>
       <div class="form-group" id="sales-item-soc-${idx}"></div>
@@ -9877,11 +10426,21 @@ function renderSalesItemsList(){
             <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Quantity <span style="font-weight:normal;color:var(--text-muted);">(or leave blank if listing individually)</span></label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);updateSalesItemTotal(${idx});"/></div>
+        <div class="form-group"><label class="form-label">Quantity</label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);updateSalesItemTotal(${idx});"/></div>
       </div>
       <div class="form-group">
         <label class="form-label">Unit Price (RM)</label>
         <input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});"/>
+        ${(()=>{
+          const custId=el('tk-cust-id')?.value;
+          const guidance=lookupPriceGuidance(it.eqName,custId);
+          if(!guidance)return '';
+          let text='';
+          if(guidance.standardPrice) text+=`Standard: RM ${guidance.standardPrice.toFixed(2)}`;
+          if(guidance.lastCustomerPrice) text+=`${text?' · ':''}Last quoted to this customer: RM ${guidance.lastCustomerPrice.price.toFixed(2)} (${fmtDateShort(guidance.lastCustomerPrice.date)})`;
+          const useValue=guidance.lastCustomerPrice?guidance.lastCustomerPrice.price:guidance.standardPrice;
+          return `<div style="font-size:11px;color:var(--blue);margin-top:4px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateSalesItemField(${idx},'price',${useValue});renderSalesItemsList()">use this</a></div>`;
+        })()}
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Total (Unit Price × Qty <span id="sales-item-qty-display-${idx}">${qty}</span>): <strong id="sales-item-total-${idx}">RM ${total.toFixed(2)}</strong></div>
       </div>
       ${it.capabilityVerdict?`<div style="font-size:11px;font-weight:700;color:${VERDICT_COLOR[it.capabilityVerdict]||'#64748b'};margin-top:4px;">✓ Capability: ${capabilityVerdictLabel(it.capabilityVerdict)}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">⏳ Awaiting capability review</div>`}
@@ -9905,6 +10464,7 @@ function renderSalesItemsList(){
     </div>`;
   }).join('');
   _salesDraftItems.forEach((it,idx)=>renderSocSection(`sales-item-soc-${idx}`,it));
+  populateAllUnitPickers();
 }
 function suggestTrackerName(type,query){
   const box=el('tk-name-suggestions'); if(!box)return;
@@ -13087,18 +13647,46 @@ async function viewJobDetail(jobNo){
   try{
   const j=await getJobFull(jobNo); if(!j)return;
   const r=(lbl,val)=>`<tr><td style="color:var(--text-muted);padding:4px 0;width:130px;font-size:12px;">${lbl}</td><td style="padding:4px 0;font-weight:500;font-size:13px;">${val||'—'}</td></tr>`;
-  let calSection='';
-  if(j.calData){
-    calSection=`<div class="form-section-title" style="margin-top:14px;">🔬 Calibration Data</div>
-    <table style="width:100%;">
-      ${r('Date',j.calData.date)}${r('Certificate No.',j.calData.certNo)}
-      ${r('Result','<span class="badge '+(j.calData.result==='Pass'?'badge-green':j.calData.result==='Fail'?'badge-red':'badge-amber')+'">'+j.calData.result+'</span>')}
-      ${r('Traceability',j.calData.traceability)}
-      ${r('Next Due',j.calData?.nextDue?fmtDateShort(j.calData.nextDue):(j.calData?.calInterval?getIntervalLabel(j.calData.calInterval):'—'))}${r('Remarks',j.calData?.remarks)}
-      ${r('Submitted By',USERS[j.calData.submittedBy]?.name||j.calData.submittedBy)}
-    </table>`;
-  }
-  if(j.excelFile) calSection+=`<div style="margin-top:10px;"><div class="file-attached"><span>📊</span><span class="file-attached-name">${j.excelFile.name}</span></div></div>`;
+
+  // Equipment, calibration data, and photos are all per-item — a job can have many items,
+  // each in its own state, so each gets its own block rather than one flat table that only
+  // ever showed Item 1's fields (or blanks, for jobs with more than one item).
+  const items=j.items||[];
+  const itemBlocks=items.map((it,idx)=>{
+    let block=`<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <strong style="font-size:12.5px;color:var(--navy);">Item ${it.itemNo||idx+1}${it.calType==='Onsite'?' <span class="badge badge-teal" style="font-size:9px;">📍 Onsite</span>':''}</strong>
+        <span class="badge ${STATUS_BADGE[it.status]||'badge-slate'}">${it.status||'—'}</span>
+      </div>
+      <table style="width:100%;">
+        ${r('Equipment',it.eqName)}${r('Brand',it.brand)}${r('Model',it.model)}
+        ${r('Serial No.',it.serial)}${r('Range',it.range)}${r('Cal Points',it.calPoints)}
+        ${r('Specification',it.spec)}${r('Resolution',it.resolution)}${r('Condition',it.condition)}${r('Accessories',it.accessories)}
+        ${r('Assigned To',it.assignedTo?USERS[it.assignedTo]?.name||it.assignedTo:'Unassigned')}
+        ${it.certNo?r('Certificate No.',it.certNo):''}
+      </table>
+      ${it.remarks?`<div style="margin-top:8px;padding:8px 10px;background:#fff;border-radius:6px;font-size:12px;"><strong>Remarks:</strong> ${it.remarks}</div>`:''}`;
+    if(it.calData){
+      block+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:4px;">🔬 Calibration Data</div>
+        <table style="width:100%;">
+          ${r('Date',it.calData.date)}
+          ${r('Result','<span class="badge '+(it.calData.result==='Pass'?'badge-green':it.calData.result==='Fail'?'badge-red':'badge-amber')+'">'+(it.calData.result||'—')+'</span>')}
+          ${r('Traceability',it.calData.traceability)}
+          ${r('Next Due',it.calData?.nextDue?fmtDateShort(it.calData.nextDue):(it.calData?.calInterval?getIntervalLabel(it.calData.calInterval):'—'))}
+          ${r('Calibrated By',USERS[it.calData.calibratedByUsername]?.name||it.calData.calibratedByUsername)}
+        </table>
+      </div>`;
+    }
+    if(it.photos&&it.photos.length){
+      block+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:4px;">📷 Photos</div>
+        <div class="photo-preview-grid">${it.photos.map(p=>`<div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}"/></div>`).join('')}</div>
+      </div>`;
+    }
+    block+='</div>';
+    return block;
+  }).join('');
 
   let histSection=`<div class="form-section-title" style="margin-top:14px;">📜 Job History</div>
     <div style="display:flex;flex-direction:column;gap:0;">`;
@@ -13111,49 +13699,31 @@ async function viewJobDetail(jobNo){
   });
   histSection+='</div>';
 
-  el('view-job-title').textContent='Job: '+j.jobNo+' — '+j.eqName;
+  el('view-job-title').textContent='Job: '+j.jobNo+' — '+(items[0]?.eqName||'')+(items.length>1?` (+${items.length-1} more item${items.length>2?'s':''})`:'');
   el('view-job-body').innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div>
-        <div class="form-section-title">👤 Customer</div>
-        <table style="width:100%;">
-          ${r('Customer',j.custName)}${r('Company',j.company)}${r('Attention',j.attention)}
-          ${r('Tel',j.tel)}${r('Mobile',j.mobile)}${r('Fax',j.fax)}
-          ${r('Email',j.email)}${r('PO No.',j.po)}
-          ${r('Priority','<span class="badge '+(PB[j.priority]||'badge-slate')+'">'+j.priority+'</span>')}
-          ${r('Received',j.receiveDate)}
-          ${j.promisedDate?r('Promised Ready',`<strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'var(--red)':'var(--green)'}">${j.promisedDate}</strong>`):''}
-        </table>
-      </div>
-      <div>
-        <div class="form-section-title">🔩 Equipment</div>
-        <table style="width:100%;">
-          ${r('Equipment',j.eqName)}${r('Brand',j.brand)}${r('Model',j.model)}
-          ${r('Serial No.',j.serial)}${r('Range',j.range)}${r('Cal Points',j.calPoints)}
-          ${r('Specification',j.spec)}${r('Condition',j.condition)}${r('Accessories',j.accessories)}
-          ${r('Status','<span class="badge '+(STATUS_BADGE[j.status]||'badge-slate')+'">'+j.status+'</span>')}
-          ${r('Assigned To',j.assignedTo?USERS[j.assignedTo]?.name||j.assignedTo:'Unassigned')}
-        </table>
-      </div>
-    </div>
-    ${j.remarks?`<div style="margin-top:14px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Remarks:</strong> ${j.remarks}</div>`:''}
-    ${calSection}
-    ${j.items?.[0]?.photos&&j.items[0].photos.length?`<div style="margin-top:14px;"><div class="form-section-title">📷 Item 1 Photos</div><div class="photo-preview-grid">${j.items[0].photos.map(p=>`<div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}"/></div>`).join('')}</div></div>`:''}
+    <div class="form-section-title">👤 Customer</div>
+    <table style="width:100%;margin-bottom:14px;">
+      ${r('Customer',j.custName)}${r('Company',j.company)}${r('Attention',j.attention)}
+      ${r('Tel',j.tel)}${r('Mobile',j.mobile)}${r('Fax',j.fax)}
+      ${r('Email',j.email)}${r('PO No.',j.po)}
+      ${r('Priority','<span class="badge '+(PB[j.priority]||'badge-slate')+'">'+j.priority+'</span>')}
+      ${r('Received',j.receiveDate)}
+      ${j.promisedDate?r('Promised Ready',`<strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'var(--red)':'var(--green)'}">${j.promisedDate}</strong>`):''}
+    </table>
+    <div class="form-section-title">🔩 Item${items.length!==1?'s':''} (${items.length})</div>
+    ${itemBlocks}
+    ${j.remarks?`<div style="margin-top:14px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Job Remarks:</strong> ${j.remarks}</div>`:''}
     ${j.jobType==='Onsite'?buildTravelExpenseSection(j):''}
     ${histSection}
   `;
-  // Footer actions in view modal
+  // Footer actions in view modal — job-level actions only; per-item actions (Perform
+  // Calibration, Approve) belong in Equipment Records / My Jobs where the specific item
+  // being acted on is unambiguous, not guessed at here from a job that may have many.
   let footerBtns='';
   if(isAdmin(currentUser))
     footerBtns+=`<button class="btn btn-amber" onclick="closeModal('modal-view-job');openEditJobModal('${j.jobNo}')">✏️ Edit Job</button>`;
-  if(isAdmin(currentUser)&&j.status==='Unassigned')
-    footerBtns+=`<button class="btn btn-primary" onclick="closeModal('modal-view-job');openAssignModal('${j.jobNo}')">Assign Job</button>`;
-  if((currentUser===j.assignedTo)&&j.status!=='Pending Approval'&&j.status!=='Completed')
-    footerBtns+=`<button class="btn btn-primary" onclick="closeModal('modal-view-job');openCalModal('${j.jobNo}')">🔬 Perform Calibration</button>`;
-  if(canApprove(currentUser)&&j.status==='Pending Approval')
-    footerBtns+=`<button class="btn btn-success" onclick="closeModal('modal-view-job');openApproveModal('${j.jobNo}')">✅ Review &amp; Approve</button>`;
-  if(j.status==='Completed'&&j.calData)
-    footerBtns+=`<button class="btn btn-outline" onclick="showCertFromJob('${j.jobNo}')">📄 View Certificate</button>`;
+  if(j.status==='Completed'&&items.some(it=>it.calData))
+    footerBtns+=`<button class="btn btn-outline" onclick="closeModal('modal-view-job');showView('equipment');el('equipment-search').value='${j.jobNo}';renderEquipmentTable();">📄 View in Equipment Records</button>`;
   el('view-job-footer').innerHTML=`<button class="btn btn-outline" onclick="closeModal('modal-view-job')">Close</button>${footerBtns}`;
   openModal('modal-view-job');
   }catch(_err){
@@ -13406,9 +13976,13 @@ async function updateJob(jobNo,fn){
   try{
   let j=_jobsCache[jobNo]||_jobs.find(x=>x.jobNo===jobNo);
   if(!j) return;
+  const statusBefore=j.status;
   fn(j);
   // Recompute derived job-level status from items
   if(j.items&&j.items.length) j.status=deriveJobStatus(j);
+  if(statusBefore!=='Completed'&&j.status==='Completed'){
+    advanceLinkedTrackerStageByJobNo(jobNo,'Job Completed',`Job ${jobNo} completed`).catch(e=>console.error('Tracker stage advance failed:',e));
+  }
   await SB.upsert('wl_jobs',jobNo,j);
   cacheFullJob(j);
   // Fully sync every field back to the lightweight _jobs list — not just a hardcoded subset.
@@ -13706,6 +14280,19 @@ function toggleSidebar(){
   if(icon) icon.className=collapsed?'ti ti-layout-sidebar-left-expand':'ti ti-layout-sidebar-left-collapse';
   updateSidebarLogoForCollapse(collapsed);
   try{localStorage.setItem('sb_collapsed',collapsed?'1':'0');}catch(e){}
+}
+function toggleMobileSidebar(){
+  const sb=document.getElementById('sidebar');
+  const backdrop=document.getElementById('mobile-sidebar-backdrop');
+  const opening=!sb.classList.contains('mobile-open');
+  sb.classList.toggle('mobile-open',opening);
+  if(backdrop) backdrop.classList.toggle('visible',opening);
+}
+function closeMobileSidebar(){
+  const sb=document.getElementById('sidebar');
+  const backdrop=document.getElementById('mobile-sidebar-backdrop');
+  sb.classList.remove('mobile-open');
+  if(backdrop) backdrop.classList.remove('visible');
 }
 
 function initSidebarCollapse(){
@@ -17599,21 +18186,31 @@ async function sendCertEmail(jobNo){
 }
 
 function printBillingSummary(){
-  const list=_jobs.filter(j=>j.status==='Completed');
   const now=new Date();
   const thisMonth=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const mf=el('comp-filter-month')?.value||thisMonth;
-  const monthList=mf?list.filter(j=>(j.approvedAt||'').startsWith(mf)):list;
+  // Certificates are per-item, not per-job — a job with 5 items should contribute 5 rows here,
+  // each with its own cert number, equipment, and cal date, not one blank row per job.
+  const rows_data=[];
+  _jobs.forEach(j=>{
+    if(j.status==='Deleted')return;
+    (j.items||[]).forEach(it=>{
+      if(it.status!=='Completed')return;
+      if(mf&&!(it.approvedAt||'').startsWith(mf))return;
+      rows_data.push({jobNo:j.jobNo,custName:j.custName,billed:j.billed,certNo:it.certNo,eqName:it.eqName,calDate:it.calData?.date});
+    });
+  });
+  const monthList=rows_data;
   const dt=new Date(mf+'-01');
   const monthLabel=dt.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
-  const rows=monthList.map((j,i)=>`<tr>
+  const rows=monthList.map((row,i)=>`<tr>
     <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${i+1}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;font-weight:700;">${j.jobNo}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${j.certNo||'—'}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${j.custName}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${j.eqName}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${j.calData?.date||'—'}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;text-align:center;">${j.billed?'✅':'⏳'}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;font-weight:700;">${row.jobNo}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${row.certNo||'—'}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${row.custName}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${row.eqName}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${row.calDate||'—'}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;text-align:center;">${row.billed?'✅':'⏳'}</td>
   </tr>`).join('');
   const html=`<div style="padding:16mm;font-family:'Calibri',Arial,sans-serif;font-size:10pt;color:#111;">
     <div style="text-align:center;margin-bottom:6mm;">
@@ -17622,9 +18219,9 @@ function printBillingSummary(){
       <div style="font-size:9pt;color:#555;">Generated: ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
     </div>
     <div style="display:flex;gap:20mm;margin-bottom:6mm;">
-      <div>Total Jobs: <strong>${monthList.length}</strong></div>
-      <div>Billed: <strong style="color:green;">${monthList.filter(j=>j.billed).length}</strong></div>
-      <div>Pending: <strong style="color:orange;">${monthList.filter(j=>!j.billed).length}</strong></div>
+      <div>Total Certificates: <strong>${monthList.length}</strong></div>
+      <div>Billed: <strong style="color:green;">${monthList.filter(row=>row.billed).length}</strong></div>
+      <div>Pending: <strong style="color:orange;">${monthList.filter(row=>!row.billed).length}</strong></div>
     </div>
     <table style="width:100%;border-collapse:collapse;">
       <thead><tr style="background:#eee;">
@@ -17919,18 +18516,21 @@ async function generateInvoiceFromJob(jobNo){
   const invoiceNo=await getNextDocNumber('WIV');
   const invoiceDate=new Date().toISOString();
   const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+30);
-  const totalAmount=(j.items||[]).reduce((sum,it)=>sum+(it.price||0),0);
+  const subtotal=(j.items||[]).reduce((sum,it)=>sum+(it.price||0),0);
+  const sstAmount=_settings.sstEnabled?subtotal*0.08:0;
+  const totalAmount=subtotal+sstAmount;
   const inv={
     id:'INV-'+Date.now(),invoiceNo,jobNo,
     custName:j.custName,custId:j.custId||null,attention:j.attention||'',address:j.address||'',email:j.email||'',
     items:(j.items||[]).map(it=>({eqName:it.eqName,brand:it.brand,model:it.model,certNo:it.certNo,price:it.price||0})),
-    invoiceDate,dueDate:toLocalDateStr(dueDate),totalAmount,
+    invoiceDate,dueDate:toLocalDateStr(dueDate),subtotal,sstAmount,totalAmount,
     paymentStatus:'Unpaid',amountPaid:0,
     createdBy:currentUser,createdAt:invoiceDate
   };
   _invoices.push(inv);
   await saveInvoices();
   addAudit('🧾',`Invoice ${invoiceNo} generated for job ${jobNo} — RM ${totalAmount.toFixed(2)}`);
+  await advanceLinkedTrackerStageByJobNo(jobNo,'Invoice Generated',`Invoice ${invoiceNo} generated`);
   return inv;
 }
 function renderInvoicesPage(){
@@ -17990,6 +18590,9 @@ async function confirmRecordPayment(invoiceId){
   inv.amountPaid=Math.min(inv.totalAmount,inv.amountPaid+amount);
   inv.paymentStatus=inv.amountPaid>=inv.totalAmount?'Paid':'Partially Paid';
   await saveInvoices();
+  if(inv.paymentStatus==='Paid'){
+    await advanceLinkedTrackerStageByJobNo(inv.jobNo,'Closed',`Invoice ${inv.invoiceNo} fully paid`);
+  }
   document.getElementById('record-payment-overlay').style.display='none';
   renderInvoicesPage();
   showToast(`✅ Payment of RM ${amount.toFixed(2)} recorded — ${inv.paymentStatus}`,'success',3000);
@@ -18084,6 +18687,8 @@ async function exportInvoicePdf(invoiceId){
         <td style="padding:5px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${(it.price||0).toFixed(2)}</td>
       </tr>`).join('')}</tbody>
       <tfoot>
+        ${inv.sstAmount>0?`<tr><td colspan="3" style="padding:4px 6px;text-align:right;">Subtotal (RM)</td><td style="padding:4px 6px;text-align:right;">${inv.subtotal.toFixed(2)}</td></tr>
+        <tr><td colspan="3" style="padding:4px 6px;text-align:right;">SST (8%)</td><td style="padding:4px 6px;text-align:right;">${inv.sstAmount.toFixed(2)}</td></tr>`:''}
         <tr><td colspan="3" style="padding:6px;text-align:right;font-weight:700;">Total (RM)</td><td style="padding:6px;text-align:right;font-weight:700;">${inv.totalAmount.toFixed(2)}</td></tr>
         <tr><td colspan="3" style="padding:6px;text-align:right;">Amount Paid</td><td style="padding:6px;text-align:right;">${inv.amountPaid.toFixed(2)}</td></tr>
         <tr><td colspan="3" style="padding:6px;text-align:right;font-weight:700;">Balance Due</td><td style="padding:6px;text-align:right;font-weight:700;color:${inv.totalAmount-inv.amountPaid>0?'#c0001a':'#166534'};">${(inv.totalAmount-inv.amountPaid).toFixed(2)}</td></tr>
