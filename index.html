@@ -3950,6 +3950,15 @@ async function loadAll(){
   }
 }
 
+// Escapes free-text before inserting into innerHTML, so a staff member typing something like
+// <img src=x onerror=...> into a remarks/notes field can't run script in another user's browser
+// when they later view the same record (stored XSS). Use this around any user-typed free text
+// going into a template literal — not needed for values already known to be plain (dates, numbers,
+// dropdown-selected enums).
+function escapeHtml(str){
+  if(str===null||str===undefined)return '';
+  return String(str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function showToast(msg, type='info', duration=2500){
   let t=document.getElementById('wl-toast');
   if(!t){
@@ -4132,8 +4141,11 @@ function setCurrentUser(username){
   // Seed notifications for current user on login
   setTimeout(()=>{
     // Notify engineer of unread assigned jobs
-    const myJobs=_jobs.filter(j=>j.assignedTo===currentUser&&j.status==='Assigned');
-    myJobs.forEach(j=>addNotification('🔧',`Job ${j.jobNo} assigned — ${j.eqName}`,j.jobNo));
+    const myJobs=_jobs.filter(j=>(j.items||[]).some(it=>it.assignedTo===currentUser&&it.status==='Assigned'));
+    myJobs.forEach(j=>{
+      const myItem=(j.items||[]).find(it=>it.assignedTo===currentUser&&it.status==='Assigned');
+      addNotification('🔧',`Job ${j.jobNo} assigned — ${myItem?.eqName||''}`,j.jobNo);
+    });
     // Notify signatory of pending approval
     if(canApprove(currentUser)){
       const pending=_jobs.filter(j=>j.status==='Pending Approval');
@@ -7058,7 +7070,7 @@ function buildWorkOrderHTML(job){
       `Brand: ${it.brand||'—'}, Model: ${it.model||'—'}, S/N: ${it.serial||'—'}`,
       `Range: ${it.range||'—'}, Specification: ${it.spec||'—'}, Cal points: ${it.calPoints||'—'}`,
       `Condition: ${it.condition||'—'}, Accessories: ${it.accessories||'—'}`,
-      it.remarks?`Remark: ${it.remarks}`:''
+      it.remarks?`Remark: ${escapeHtml(it.remarks)}`:''
     ].filter(Boolean).join('<br/>');
     const calDate=it.calData?.date?fmtDate(it.calData.date):'';
     const calBy=it.calData?.calibratedByUsername?(USERS[it.calData.calibratedByUsername]?.name||''):'';
@@ -8074,7 +8086,7 @@ async function openCalModal(jobNo, itemIdx=0){
   el('cal-cond-remark').value='Without Adjustment.';
   const remarksBox=el('cal-item-remarks-box');
   if(remarksBox){
-    if(item&&item.remarks){ remarksBox.style.display='block'; remarksBox.innerHTML=`<strong>📝 Item Remark (from job creation):</strong> ${item.remarks}`; }
+    if(item&&item.remarks){ remarksBox.style.display='block'; remarksBox.innerHTML=`<strong>📝 Item Remark (from job creation):</strong> ${escapeHtml(item.remarks)}`; }
     else{ remarksBox.style.display='none'; remarksBox.innerHTML=''; }
   }
   // Dates
@@ -8605,7 +8617,7 @@ async function exportAmendmentPdf(jobNo,itemIdx,amendmentId){
       <tr><td style="padding:5px 8px;color:#64748b;">Item</td><td style="padding:5px 8px;font-weight:600;">${item.eqName} ${item.brand||''} ${item.model||''}</td></tr>
       <tr><td style="padding:5px 8px;color:#64748b;">Amendment Date</td><td style="padding:5px 8px;font-weight:600;">${fmtDateShort(amendment.approvedAt)}</td></tr>
     </table>
-    <div style="margin-bottom:16px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">DESCRIPTION OF AMENDMENT</div><div style="font-size:13px;background:#f8fafc;border-radius:8px;padding:12px 14px;">${amendment.description}</div></div>
+    <div style="margin-bottom:16px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">DESCRIPTION OF AMENDMENT</div><div style="font-size:13px;background:#f8fafc;border-radius:8px;padding:12px 14px;">${escapeHtml(amendment.description)}</div></div>
     <div style="margin-bottom:24px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">REASON FOR AMENDMENT</div><div style="font-size:13px;background:#f8fafc;border-radius:8px;padding:12px 14px;">${amendment.reason}</div></div>
     <div style="border-top:1px solid #e2e8f0;padding-top:14px;font-size:11px;color:#64748b;">
       Requested by ${USERS[amendment.requestedBy]?.name||amendment.requestedBy} on ${fmtDateShort(amendment.requestedAt)}<br/>
@@ -8626,6 +8638,11 @@ async function approveJob(){
   }
   const approveBtn=document.querySelector('#modal-approve-job .btn-success');
   const approveBtnText=approveBtn?approveBtn.textContent:'';
+  if(itemForCheck&&itemForCheck.status==='Completed'){
+    showToast('⚠️ This item was already approved (possibly in another tab) — no changes made.','warn',5000);
+    closeModal('modal-approve-job');
+    return;
+  }
   if(approveBtn){approveBtn.disabled=true;approveBtn.textContent='⏳ Approving…';}
   try{
     const comments=el('approve-comments').value.trim();
@@ -9909,7 +9926,7 @@ async function exportEntryCapabilityReviewPdf(entryId){
         ${row('Realistic Turnaround Achievable?',ev.turnaroundRealistic)}
         ${row("Meets Customer's Stated Requirement?",ev.meetsRequirement)}
       </table>
-      ${ev.notes?`<div style="font-size:11px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-bottom:8px;"><strong>Notes:</strong> ${ev.notes}</div>`:''}
+      ${ev.notes?`<div style="font-size:11px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-bottom:8px;"><strong>Notes:</strong> ${escapeHtml(ev.notes)}</div>`:''}
       <div style="font-size:10px;color:#94a3b8;">Reviewed by ${USERS[item.capabilityReviewedBy]?.name||item.capabilityReviewedBy||'—'} on ${item.capabilityReviewedAt?fmtDateShort(item.capabilityReviewedAt):'—'}</div>
     </div>`;
   }).join('');
@@ -10040,7 +10057,7 @@ function openCapabilityEvalModal(entryId,itemIdx){
         ${item.capabilityHistory.map(h=>`<div style="font-size:11px;color:#374151;margin-bottom:4px;">
           ${h.verdict==='Resubmitted'
             ?`<strong>🔄 Resubmitted</strong> by ${USERS[h.reviewedBy]?.name||h.reviewedBy} on ${fmtDateShort(h.reviewedAt)} — "${h.resubmitComment}"`
-            :`<strong>${capabilityVerdictLabel(h.verdict)}</strong> by ${USERS[h.reviewedBy]?.name||h.reviewedBy} on ${fmtDateShort(h.reviewedAt)}${h.evaluation?.notes?` — "${h.evaluation.notes}"`:''}`}
+            :`<strong>${capabilityVerdictLabel(h.verdict)}</strong> by ${USERS[h.reviewedBy]?.name||h.reviewedBy} on ${fmtDateShort(h.reviewedAt)}${h.evaluation?.notes?` — "${escapeHtml(h.evaluation.notes)}"`:''}`}
         </div>`).join('')}
       </div>`:''}
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">Scope &amp; Capability</div>
@@ -10860,7 +10877,7 @@ function renderExternalPartnersPage(){
             <span>${fmtDateShort(h.date)} — ${h.itemDescription||h.capability||'—'}</span><strong>RM ${(h.price||0).toFixed(2)}</strong>
           </div>`).join('')}
         </div>`:''}
-        ${p.notes?`<div style="margin-top:8px;font-size:11.5px;color:var(--text-muted);">📝 ${p.notes}</div>`:''}
+        ${p.notes?`<div style="margin-top:8px;font-size:11.5px;color:var(--text-muted);">📝 ${escapeHtml(p.notes)}</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -12222,7 +12239,7 @@ function renderClaims(){
         ${admin?`<td style="padding:10px;font-size:13px;">${staffName}</td>`:''}
         <td style="padding:10px;font-size:13px;white-space:nowrap;">${c.date||'—'}</td>
         <td style="padding:10px;font-size:13px;white-space:nowrap;">${c.type}</td>
-        <td style="padding:10px;font-size:12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.description}">${c.description}${c.jobNo?` <span style="color:var(--blue);">[${c.jobNo}]</span>`:''}</td>
+        <td style="padding:10px;font-size:12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(c.description)}">${escapeHtml(c.description)}${c.jobNo?` <span style="color:var(--blue);">[${c.jobNo}]</span>`:''}</td>
         <td style="padding:10px;font-size:13px;font-weight:700;text-align:right;">RM ${parseFloat(c.amount||0).toFixed(2)}</td>
         <td style="padding:10px;text-align:center;"><span class="badge ${statusBadge[c.status]||'badge-slate'}">${c.status}</span></td>
         <td style="padding:10px;white-space:nowrap;">
@@ -12249,7 +12266,7 @@ function openReviewClaim(claimId){
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Date</td><td>${c.date}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Type</td><td>${c.type}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Amount</td><td><strong style="color:var(--blue);font-size:16px;">RM ${parseFloat(c.amount).toFixed(2)}</strong></td></tr>
-      <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Description</td><td>${c.description}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Description</td><td>${escapeHtml(c.description)}</td></tr>
       ${c.jobNo?`<tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Job No.</td><td>${c.jobNo}</td></tr>`:''}
       ${c.distance?`<tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Distance</td><td>${c.distance} km @ RM${c.rate}/km</td></tr>`:''}
       ${c.receiptUrl?`<tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Receipt</td><td><a href="${c.receiptUrl}" target="_blank" style="color:var(--blue);">📎 View Receipt</a></td></tr>`:''}
@@ -12295,6 +12312,8 @@ function editClaim(claimId){
 }
 
 async function deleteClaim(claimId){
+  const c=_claims.find(x=>x.id===claimId);
+  if(!isAdmin(currentUser)&&c?.submittedBy!==currentUser){showToast('❌ You can only delete your own claims.','error',4000);return;}
   if(!confirm('Delete this claim? This cannot be undone.')) return;
   _claims=_claims.filter(c=>c.id!==claimId);
   await saveClaims();
@@ -12365,7 +12384,7 @@ function buildTravelExpenseSection(j){
         ${est.toll?`<div style="font-size:12px;"><strong>Toll/Parking:</strong> RM${parseFloat(est.toll).toFixed(2)}</div>`:''}
         ${est.other?`<div style="font-size:12px;"><strong>Other:</strong> RM${parseFloat(est.other).toFixed(2)}</div>`:''}
         ${est.total?`<div style="font-size:13px;font-weight:700;color:var(--blue);margin-top:6px;border-top:1px solid var(--border);padding-top:6px;">Total: RM${parseFloat(est.total).toFixed(2)}</div>`:''}
-        ${est.notes?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${est.notes}</div>`:''}
+        ${est.notes?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${escapeHtml(est.notes)}</div>`:''}
       </div>
       <div style="background:#e8f5e9;border-radius:8px;padding:12px;">
         <div style="font-size:11px;font-weight:700;color:#2e7d32;margin-bottom:8px;">ACTUAL</div>
@@ -12375,7 +12394,7 @@ function buildTravelExpenseSection(j){
         ${act.toll?`<div style="font-size:12px;"><strong>Toll/Parking:</strong> RM${parseFloat(act.toll).toFixed(2)}</div>`:''}
         ${act.other?`<div style="font-size:12px;"><strong>Other:</strong> RM${parseFloat(act.other).toFixed(2)}</div>`:''}
         ${act.total?`<div style="font-size:13px;font-weight:700;color:#2e7d32;margin-top:6px;border-top:1px solid #c8e6c9;padding-top:6px;">Total: RM${parseFloat(act.total).toFixed(2)}</div>`:''}
-        ${act.notes?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${act.notes}</div>`:''}
+        ${act.notes?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${escapeHtml(act.notes)}</div>`:''}
       </div>
     </div>
     ${est.total&&act.total?`<div style="margin-top:8px;font-size:12px;padding:6px 12px;border-radius:6px;background:${parseFloat(act.total)>parseFloat(est.total)?'#ffeaee':'#e8f5e9'};color:${parseFloat(act.total)>parseFloat(est.total)?'#c0001a':'#2e7d32'};">
@@ -13246,7 +13265,7 @@ function openKIVModal(jobNo, itemIdx){
     const daysLeft=Math.max(0,7-daysUsed);
     const expiry=addWorkingDays(item.kivStartDate,7);
     info.style.display='block';
-    info.innerHTML=`<strong>Current KIV:</strong> "${item.kivReason}"<br/>
+    info.innerHTML=`<strong>Current KIV:</strong> "${escapeHtml(item.kivReason)}"<br/>
       Started: ${item.kivStartDate} &nbsp;·&nbsp; Days used: ${daysUsed}/7 &nbsp;·&nbsp; Expires: ${expiry}<br/>
       TAT remaining when KIV'd: <strong>${item.kivTATRemaining} working day${item.kivTATRemaining!==1?'s':''}</strong>`;
     el('kiv-reason').placeholder='Update reason or leave blank to remove KIV…';
@@ -13454,9 +13473,9 @@ function renderMyJobs(){
       <div class="approval-card-meta">
         Cert No.: <strong style="color:var(--blue);">${item.certNo}</strong> &nbsp;·&nbsp;
         ${item.brand||''} ${item.model||''} &nbsp;·&nbsp; S/N: ${item.serial||'N/A'}
-        ${item.assignNote?`<br/>📝 Note: <em>"${item.assignNote}"</em>`:''}
-        ${item.approvalComments&&item.status==='Assigned'?`<br/><span style="color:var(--red);">✗ Rejected: <em>"${item.approvalComments}"</em></span>`:''}
-        ${item.status==='Customer Not Ready'&&item.customerNotReadyReason?`<br/><span style="color:#c0001a;">⚠️ Not Ready: <em>"${item.customerNotReadyReason}"</em></span>`:''}
+        ${item.assignNote?`<br/>📝 Note: <em>"${escapeHtml(item.assignNote)}"</em>`:''}
+        ${item.approvalComments&&item.status==='Assigned'?`<br/><span style="color:var(--red);">✗ Rejected: <em>"${escapeHtml(item.approvalComments)}"</em></span>`:''}
+        ${item.status==='Customer Not Ready'&&item.customerNotReadyReason?`<br/><span style="color:#c0001a;">⚠️ Not Ready: <em>"${escapeHtml(item.customerNotReadyReason)}"</em></span>`:''}
       </div>
       ${item.socRequested&&(item.socParameters||[]).length?`<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:8px;">
         <div style="font-size:11px;font-weight:700;color:#854d0e;margin-bottom:4px;">📋 Statement of Conformity</div>
@@ -13665,7 +13684,7 @@ async function viewJobDetail(jobNo){
         ${r('Assigned To',it.assignedTo?USERS[it.assignedTo]?.name||it.assignedTo:'Unassigned')}
         ${it.certNo?r('Certificate No.',it.certNo):''}
       </table>
-      ${it.remarks?`<div style="margin-top:8px;padding:8px 10px;background:#fff;border-radius:6px;font-size:12px;"><strong>Remarks:</strong> ${it.remarks}</div>`:''}`;
+      ${it.remarks?`<div style="margin-top:8px;padding:8px 10px;background:#fff;border-radius:6px;font-size:12px;"><strong>Remarks:</strong> ${escapeHtml(it.remarks)}</div>`:''}`;
     if(it.calData){
       block+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
         <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:4px;">🔬 Calibration Data</div>
@@ -13693,8 +13712,8 @@ async function viewJobDetail(jobNo){
   (j.history||[]).forEach(h=>{
     histSection+=`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
       <div style="font-size:12px;color:var(--text-muted);min-width:140px;">${new Date(h.time).toLocaleString()}</div>
-      <div><div style="font-size:13px;font-weight:600;">${h.action}</div>
-      <div style="font-size:12px;color:var(--text-muted);">By: ${USERS[h.by]?.name||h.by}${h.note?` · "${h.note}"`:''}
+      <div><div style="font-size:13px;font-weight:600;">${escapeHtml(h.action)}</div>
+      <div style="font-size:12px;color:var(--text-muted);">By: ${USERS[h.by]?.name||h.by}${h.note?` · "${escapeHtml(h.note)}"`:''}
       </div></div></div>`;
   });
   histSection+='</div>';
@@ -13712,7 +13731,7 @@ async function viewJobDetail(jobNo){
     </table>
     <div class="form-section-title">🔩 Item${items.length!==1?'s':''} (${items.length})</div>
     ${itemBlocks}
-    ${j.remarks?`<div style="margin-top:14px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Job Remarks:</strong> ${j.remarks}</div>`:''}
+    ${j.remarks?`<div style="margin-top:14px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Job Remarks:</strong> ${escapeHtml(j.remarks)}</div>`:''}
     ${j.jobType==='Onsite'?buildTravelExpenseSection(j):''}
     ${histSection}
   `;
@@ -13820,6 +13839,7 @@ async function confirmPermanentDeletionOfCompletedJob(jobNo){
 
 async function deleteJob(jobNo){
   try{
+  if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete a job.','error',4000);return;}
   const j=getJob(jobNo);
   if(j&&j.status==='Completed'){
     alert(`Job ${jobNo} is Completed with issued certificate(s) and cannot be deleted.\n\nCompleted jobs are official accredited records and must be retained.`);
@@ -15649,7 +15669,7 @@ function viewRefEq(id){
         ${p.certFileUrl?`<button onclick="openSignedUrl('${p.certFileUrl}')" class="btn btn-outline btn-sm" style="margin-top:6px;">📄 View Certificate</button>`:''}
       </div>`;
     }).join(''):'<div style="font-size:12px;color:var(--text-muted);">No parameters recorded.</div>'}
-    ${r.remarks?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Remarks:</strong> ${r.remarks}</div>`:''}
+    ${r.remarks?`<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"><strong>Remarks:</strong> ${escapeHtml(r.remarks)}</div>`:''}
   `;  el('del-ref-eq-btn').onclick=()=>{closeModal('modal-view-ref-eq');deleteRefEq(id);};
   el('del-ref-eq-btn').style.display=isAdmin(currentUser)?'':'none';
   const editBtn=el('edit-ref-eq-btn');
@@ -15783,6 +15803,7 @@ async function exportMaintenanceLogPdf(refId){
 
 async function deleteRefEq(id){
   try{
+  if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete reference equipment.','error',4000);return;}
   const r=_refEq.find(x=>x.id===id);
   if(!confirm(`Delete reference equipment "${id}"?\n\nThis will also permanently remove any uploaded certificate PDF from storage.`))return;
 
@@ -15947,6 +15968,7 @@ async function saveCustomer(){
 
 async function deleteCustomer(custId){
   try{
+  if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete a customer record.','error',4000);return;}
   const c=_customers.find(x=>x.id===custId);
   if(!confirm(`Delete customer "${c?.company}"? This cannot be undone.`))return;
   await SB.delete(CUST_TABLE,custId);
@@ -16004,7 +16026,7 @@ function renderCustomerTable(){
       <td style="white-space:nowrap;">
         <button class="btn btn-outline btn-sm" onclick="viewCustomerDetail('${c.id}')">👁 View</button>
         <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditCustomerModal('${c.id}')">✏️</button>
-        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteCustomer('${c.id}')">🗑</button>
+        ${isAdmin(currentUser)?`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteCustomer('${c.id}')">🗑</button>`:''}
       </td>
     </tr>`;
   }).join('');
@@ -17471,7 +17493,7 @@ function viewCustomerDetail(custId){
         ${c.fax?`<div><span style="color:var(--text-muted);">Fax:</span> ${c.fax}</div>`:''}
         ${c.email?`<div><span style="color:var(--text-muted);">Email:</span> ${c.email}</div>`:''}
         ${c.address?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Address:</span> ${c.address}</div>`:''}
-        ${c.notes?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Notes:</span> ${c.notes}</div>`:''}
+        ${c.notes?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Notes:</span> ${escapeHtml(c.notes)}</div>`:''}
       </div>`;
   // Customer Timeline — quotations, jobs, and Sales Tracker entries merged chronologically
   const custQuotations=(_quotations||[]).filter(q=>q.custName===c.company);
@@ -18859,6 +18881,7 @@ async function recoverJob(jobNo){
 
 async function permanentlyDeleteJob(jobNo){
   try{
+  if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can permanently delete a job.','error',4000);return;}
   const j=getJob(jobNo); if(!j)return;
   if(!confirm(`⚠️ PERMANENTLY delete job ${jobNo} for ${j.custName}?\n\nThis removes the record completely from the database.\n\nTo reuse the job number, go to Settings → Reset Job Counter after purging.\n\nThis cannot be undone.`))return;
   // Hard delete from Supabase
@@ -19094,6 +19117,7 @@ async function saveStaff(){
 
 async function deleteStaff(username){
   try{
+  if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete a staff account.','error',4000);return;}
   const s=_staff.find(x=>x.username===username);
   if(!confirm(`Delete account for "${s?.name}"? They will no longer be able to log in.`))return;
   await SB.delete('wl_staff',username);
@@ -19249,6 +19273,7 @@ async function checkRecalReminders(){
     }
     const ok=await sendEmail(recip.email,recip.name,subject,body,htmlBody);
     if(ok) addAudit('📧',`Recal reminder (${daysUntil}d, ${items.length} item${plural?'s':''}) sent to ${recip.email}`);
+    else addAudit('⚠️',`Recal reminder (${daysUntil}d, ${items.length} item${plural?'s':''}) FAILED to send to ${recip.email}`);
   }
 
   // ── 2. ANNUAL REMINDER for items WITHOUT next_due (1 year after last cal) ──
@@ -19283,6 +19308,7 @@ async function checkRecalReminders(){
     }
     const ok=await sendEmail(recip.email,recip.name,subject,body,htmlBody);
     if(ok) addAudit('📧',`Annual recal reminder (${items.length} item${plural?'s':''}) sent to ${recip.email}`);
+    else addAudit('⚠️',`Annual recal reminder (${items.length} item${plural?'s':''}) FAILED to send to ${recip.email}`);
   }
 
   sessionStorage.setItem(reminderKey,'1');
@@ -19339,6 +19365,7 @@ async function checkRefEqDueReminders(){
     body
   );
   if(ok) addAudit('📧',`Reference equipment reminder emailed to sales@westlab.com.my and technical@westlab.com.my — ${overdue.length} overdue, ${dueSoon.length} due soon`);
+  else addAudit('⚠️',`Reference equipment reminder FAILED to send — ${overdue.length} overdue, ${dueSoon.length} due soon`);
   sessionStorage.setItem(reminderKey,'1');
   }catch(_err){
     console.error("checkRefEqDueReminders error:",_err);
