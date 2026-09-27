@@ -13279,6 +13279,13 @@ async function pollForLiveUpdates(){
     if(!jobs)return; // network hiccup — just try again next cycle, don't wipe existing data
     _jobs=jobs.filter(j=>j.items&&Array.isArray(j.items));
     checkOnsiteCheckInAlerts();
+    // Also quietly refresh sticker data every cycle (not just when that page is open) so the
+    // sidebar badge and Needs Attention box — visible on every page — can reflect something
+    // like a newly-approved sticker batch waiting on the current user's own confirmation,
+    // not just whoever happens to be sitting on the Stickers page when it happens.
+    if(typeof loadStickerData==='function') await loadStickerData().catch(()=>{});
+    if(typeof refreshAllBadges==='function') refreshAllBadges();
+    if(typeof renderNeedsAttention==='function') renderNeedsAttention();
     // Only re-render the views that are safe/cheap to refresh live and commonly left open
     const activeView=document.querySelector('.view.active')?.id;
     if(activeView==='view-my-jobs') renderMyJobs();
@@ -13286,12 +13293,7 @@ async function pollForLiveUpdates(){
     else if(activeView==='view-equipment') renderEquipmentTable();
     else if(activeView==='view-completed') renderCompletedJobs();
     else if(activeView==='view-approval') renderApprovalQueue();
-    else if(activeView==='view-stickers'){
-      // Sticker requests/approvals were previously invisible here until a full page refresh —
-      // someone waiting on this page for their request to be approved never saw it happen.
-      await loadStickerData();
-      renderStickerPage();
-    }
+    else if(activeView==='view-stickers') renderStickerPage();
   }catch(e){ console.error('pollForLiveUpdates error:',e); }
 }
 function startLiveRefresh(){
@@ -14391,6 +14393,20 @@ function renderNeedsAttention(){
     });
   }
 
+  // 8. Stickers approved and waiting on the current user's own confirmation of physical
+  // receipt — personal to them, not shown to anyone else, since only they can confirm it.
+  if(typeof _stickerRecords!=='undefined'&&typeof STICKER_TYPES!=='undefined'){
+    const myPendingByType={};
+    _stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Pending Confirmation').forEach(r=>{
+      (myPendingByType[r.type]=myPendingByType[r.type]||[]).push(r.number);
+    });
+    Object.keys(myPendingByType).forEach(type=>{
+      const nums=myPendingByType[type].sort((a,b)=>a-b);
+      const cfg=STICKER_TYPES[type];
+      items.push({icon:'📬',text:`${nums.length} ${cfg.label} sticker(s) approved — confirm receipt`,view:'stickers',onclick:`_stickerActiveTab='${type}';showView('stickers');`});
+    });
+  }
+
   if(!items.length){ box.innerHTML=''; return; }
   box.innerHTML=`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 16px;">
     <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:8px;">⚠️ Needs Attention</div>
@@ -14513,8 +14529,10 @@ function refreshAllBadges(){
   if(ab){ab.textContent=totalApprovalBadge;ab.style.display=totalApprovalBadge>0?'inline':'none';}
   const sb=el('stickers-badge');
   if(sb){
-    const stkPending=canApproveStickers(currentUser)?_stickerRequests.filter(r=>r.status==='Pending').length:0;
-    sb.textContent=stkPending; sb.style.display=stkPending>0?'inline':'none';
+    const stkPendingApproval=canApproveStickers(currentUser)?_stickerRequests.filter(r=>r.status==='Pending').length:0;
+    const myPendingConfirmation=currentUser?_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Pending Confirmation').length:0;
+    const stkTotal=stkPendingApproval+myPendingConfirmation;
+    sb.textContent=stkTotal; sb.style.display=stkTotal>0?'inline':'none';
   }
   renderDashboard();
   }catch(_e){
