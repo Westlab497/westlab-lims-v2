@@ -1978,6 +1978,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </select>
         </div>
       </div>
+      <div class="form-group" style="background:#fff7ed;border-radius:8px;padding:8px 12px;border:1px solid #fdba74;margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="eq-sticker-required" checked style="width:16px;height:16px;"/>
+          <span style="font-size:13px;">🏷️ This item needs a calibration sticker applied <span style="color:var(--text-muted);font-weight:normal;">(uncheck if the customer doesn't want one, or a sticker can't physically be applied)</span></span>
+        </label>
+      </div>
       <div class="form-row" id="eq-condition-row">
         <div class="form-group">
           <label class="form-label">Condition of Item <span class="req">*</span></label>
@@ -2651,6 +2657,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <option value="open">Open Date (No Due Date)</option>
           </select>
         </div>
+      </div>
+      <div class="form-group" style="background:#fff7ed;border-radius:8px;padding:8px 12px;border:1px solid #fdba74;margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" id="edit-eq-sticker-required" style="width:16px;height:16px;"/>
+          <span style="font-size:13px;">🏷️ This item needs a calibration sticker applied <span style="color:var(--text-muted);font-weight:normal;">(uncheck if the customer doesn't want one, or a sticker can't physically be applied)</span></span>
+        </label>
       </div>
       <div class="form-row" id="edit-eq-condition-row">
         <div class="form-group">
@@ -5933,6 +5945,7 @@ async function saveEquipment(printReceipt=false){
     range:el('eq-range')?.value.trim()||'', calPoints:el('eq-cal-points')?.value.trim()||'',
     spec:el('eq-spec')?.value.trim()||'', resolution:el('eq-resolution')?.value.trim()||'',
     nextDue:'',calInterval:(el('eq-cal-interval')?.value==='open'?'open':parseInt(el('eq-cal-interval')?.value)||0),
+    stickerRequired:el('eq-sticker-required')?.checked!==false,
     condition:cond==='Others'?condOther:cond,
     accessories:el('eq-accessories')?.value.trim()||'',
     remarks:el('eq-remarks')?.value.trim()||'',
@@ -6826,6 +6839,12 @@ function renderExtraEquipment(){
             <select class="form-control unit-picker-select" style="max-width:80px;" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select>
           </div></div>
       </div>
+      <div class="form-group" style="background:#fff7ed;border-radius:8px;padding:8px 12px;border:1px solid #fdba74;margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
+          <input type="checkbox" ${eq.stickerRequired!==false?'checked':''} onchange="updateExtraField(${i},'stickerRequired',this.checked)" style="width:16px;height:16px;"/>
+          <span style="font-size:13px;">🏷️ This item needs a calibration sticker applied <span style="color:var(--text-muted);font-weight:normal;">(uncheck if the customer doesn't want one, or a sticker can't physically be applied)</span></span>
+        </label>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Calibration Interval</label>
@@ -7550,6 +7569,7 @@ function openEditJobModal(jobNo, itemIdx=0){
   el('edit-eq-range').value=item.range||'';
   el('edit-eq-cal-points').value=item.calPoints||'';
   el('edit-eq-resolution').value=item.resolution||'';
+  const editStickerReqEl=el('edit-eq-sticker-required'); if(editStickerReqEl) editStickerReqEl.checked=item.stickerRequired!==false;
   const editIntervalEl=el('edit-eq-cal-interval');
   if(editIntervalEl) editIntervalEl.value=item.calInterval||'';
   el('edit-eq-promised-date').value=item.promisedDate||j.promisedDate||'';
@@ -7631,6 +7651,7 @@ async function saveEditJob(){
       it.range=el('edit-eq-range').value.trim();
       it.calPoints=el('edit-eq-cal-points').value.trim();
       it.resolution=el('edit-eq-resolution').value.trim();
+      it.stickerRequired=el('edit-eq-sticker-required')?.checked!==false;
       it.calInterval=(el('edit-eq-cal-interval')?.value==='open'?'open':parseInt(el('edit-eq-cal-interval')?.value)||0);
       it.condition=el('edit-eq-condition').value;
       it.accessories=el('edit-eq-accessories').value.trim();
@@ -8111,6 +8132,13 @@ async function openCalModal(jobNo, itemIdx=0){
     if(alreadyUsedOnThisItem) el('cal-sticker-number').value=alreadyUsedOnThisItem;
   }
   if(voidCb) voidCb.checked=!!item?.calData?.voidApplied;
+  // Whether this item needs a sticker at all was decided at job creation — some customers
+  // don't want one, or one can't physically be applied. Hide the whole section (and its
+  // required-field validation) when that's the case, rather than forcing a choice nobody
+  // needs to make.
+  const stickerGroup=el('cal-sticker-group');
+  const stickerNeeded=item?.stickerRequired!==false;
+  if(stickerGroup) stickerGroup.style.display=stickerNeeded?'':'none';
   // Pre-fill calibration interval from item
   const calInterval=el('cal-interval');
   if(calInterval){
@@ -8325,13 +8353,18 @@ async function submitCalibration(){
   const approvedBy=el('cal-approved-by').value;
   if(!approvedBy){alert('Please select the Approved Signatory.');return;}
   if(!currentExcel){alert('Please upload the calibration data PDF before submitting.');return;}
+  const jForSticker=getJob(calJobNo);
+  const itemForSticker=jForSticker&&jForSticker.items&&jForSticker.items[calItemIdx];
+  const stickerNeeded=itemForSticker?.stickerRequired!==false;
   const stickerType=el('cal-sticker-type')?.value||'accredited';
   const stickerNumSel=el('cal-sticker-number')?.value;
-  if(!stickerNumSel){alert('Please select the sticker number you attached to this equipment.');return;}
-  const stickerNum=parseInt(stickerNumSel);
-  const myHeldSorted=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===stickerType).sort((a,b)=>a.number-b.number);
-  if(myHeldSorted.length&&myHeldSorted[0].number!==stickerNum){
-    if(!confirm(`⚠️ You still have ${stickerFmt(stickerType,myHeldSorted[0].number)} unused — are you sure you want to use ${stickerFmt(stickerType,stickerNum)} instead (skipping ahead)?`)) return;
+  if(stickerNeeded&&!stickerNumSel){alert('Please select the sticker number you attached to this equipment.');return;}
+  const stickerNum=stickerNumSel?parseInt(stickerNumSel):null;
+  if(stickerNeeded){
+    const myHeldSorted=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===stickerType).sort((a,b)=>a.number-b.number);
+    if(myHeldSorted.length&&myHeldSorted[0].number!==stickerNum){
+      if(!confirm(`⚠️ You still have ${stickerFmt(stickerType,myHeldSorted[0].number)} unused — are you sure you want to use ${stickerFmt(stickerType,stickerNum)} instead (skipping ahead)?`)) return;
+    }
   }
   const voidApplied=!!el('cal-void-applied')?.checked;
   if(voidApplied){
@@ -8364,6 +8397,7 @@ async function submitCalibration(){
       cert_no:certNo, job_no:calJobNo,
       stickerNumber:stickerNum,
       stickerType:stickerType,
+      stickerRequired:stickerNeeded,
       voidApplied:voidApplied,
       page:`1 of ${totalPages}`, total_pages:totalPages,
       issue_date:el('cal-issue-date').value,
@@ -8388,7 +8422,7 @@ async function submitCalibration(){
       cond_remark:el('cal-cond-remark').value.trim(),
       location:el('cal-location').value.trim(),
       procedure:el('cal-procedure').value,
-      sticker_no:stickerFmt(stickerType,stickerNum),
+      sticker_no:stickerNeeded?stickerFmt(stickerType,stickerNum):'N/A',
       temp:buildAmbient('cal-temp-val','cal-temp-pm'),
       humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
       pressure:buildAmbient('cal-pressure-val','cal-pressure-pm'),
@@ -8422,7 +8456,9 @@ async function submitCalibration(){
     });
 
     closeModal('modal-perform-cal');
-    // Mark this sticker as Used, linked to the job/certificate
+    // Mark this sticker as Used, linked to the job/certificate — only when a sticker was
+    // actually needed and selected for this item.
+    if(stickerNeeded){
     const stickerRec=_stickerRecords.find(r=>r.number===stickerNum&&r.type===stickerType&&r.issuedTo===currentUser&&r.status==='Held');
     if(stickerRec){
       stickerRec.status='Used';
@@ -8430,6 +8466,7 @@ async function submitCalibration(){
       stickerRec.usedCertNo=item?.certNo||certNo;
       stickerRec.usedAt=new Date().toISOString();
       await saveStickerRecords();
+    }
     }
     if(voidApplied){
       const voidRec=getStickerCountRec(currentUser,'voidSticker');
@@ -19016,18 +19053,34 @@ async function permanentlyDeleteJob(jobNo){
     if(isHighest) await tryRollbackSequence('job_seq',seqNum);
   }
   // Certificate numbers: WLCS + YY + MM + NNNN, one sequence per year (cert_seq_YY) — the
-  // month is just for display, the counter itself doesn't reset monthly. Each item on this
-  // job may have its own certificate number, so check each one independently.
+  // month is just for display, the counter itself doesn't reset monthly. A job can have
+  // several items, each with its own certificate number — often consecutive, since they're
+  // all issued together at job creation. All of them are disappearing together here, so when
+  // deciding whether any one of them is "the highest still in existence", every item on THIS
+  // job must be excluded from that comparison, not just the one currently being checked.
+  // Processing must also go highest-to-lowest within each year: each rollback only succeeds
+  // if the sequence is still exactly where it expects it, so a lower number only becomes
+  // safely reusable once the one above it has already been rolled back.
+  const certsByYear={};
   for(const it of (j.items||[])){
     const certMatch=/^WLCS(\d{2})\d{2}(\d{4})$/.exec(it.certNo||'');
     if(!certMatch)continue;
     const yk=certMatch[1], seqNum=parseInt(certMatch[2],10);
-    const isHighest=!_jobs.some(otherJob=>(otherJob.items||[]).some(otherIt=>{
-      if(otherJob.jobNo===jobNo&&otherIt===it)return false;
-      const m2=/^WLCS(\d{2})\d{2}(\d{4})$/.exec(otherIt.certNo||'');
-      return m2&&m2[1]===yk&&parseInt(m2[2],10)>seqNum;
-    }));
-    if(isHighest) await tryRollbackSequence(`cert_seq_${yk}`,seqNum);
+    (certsByYear[yk]=certsByYear[yk]||[]).push(seqNum);
+  }
+  for(const yk of Object.keys(certsByYear)){
+    const seqNums=certsByYear[yk].sort((a,b)=>b-a); // highest first
+    for(const seqNum of seqNums){
+      const isHighest=!_jobs.some(otherJob=>{
+        if(otherJob.jobNo===jobNo)return false; // every item on the job being deleted is excluded
+        return (otherJob.items||[]).some(otherIt=>{
+          const m2=/^WLCS(\d{2})\d{2}(\d{4})$/.exec(otherIt.certNo||'');
+          return m2&&m2[1]===yk&&parseInt(m2[2],10)>seqNum;
+        });
+      });
+      if(isHighest) await tryRollbackSequence(`cert_seq_${yk}`,seqNum);
+      else break; // once one in this year fails the "highest" check, none lower can pass either
+    }
   }
   // Hard delete from Supabase
   await SB.delete('wl_jobs',jobNo);
@@ -19973,11 +20026,17 @@ function lookupJob(){
   };
   const completedCount=items.filter(it=>it.status==='Completed').length;
   const allDone=items.length>0&&completedCount===items.length;
+  // "All done" (calibration/certificate-wise) is not the same as "ready to collect" — the job
+  // still needs billing after approval (see the j.billed flag, set false the moment the last
+  // item is approved, then flipped true by the separate Mark Billed step). Inviting the
+  // customer to come collect before that happens causes exactly the confusion of them showing
+  // up, or pushing back, when the invoice isn't ready yet.
+  const readyForCollection=allDone&&j.billed===true;
   const overallColor=allDone?'#22c55e':(completedCount>0?'#3b82f6':(statusColor[j.status]||'#64748b'));
 
   const itemRows=items.map(it=>{
     const c=statusColor[it.status]||'#64748b';
-    const m=statusMsg[it.status]||'Being processed.';
+    const m=it.status==='Completed'?(readyForCollection?'Certificate ready for collection.':'Certificate approved — finalizing your invoice.'):(statusMsg[it.status]||'Being processed.');
     return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <strong style="font-size:12.5px;">${escapeHtml(it.eqName||'Equipment')}</strong>
@@ -19994,7 +20053,7 @@ function lookupJob(){
       <!-- Overall status bar -->
       <div style="background:${overallColor};padding:14px 18px;color:#fff;">
         <div style="font-size:11px;opacity:.8;margin-bottom:2px;">JOB STATUS</div>
-        <div style="font-size:16px;font-weight:700;">${allDone?'✅ All items completed':`${completedCount} of ${items.length} item${items.length!==1?'s':''} completed`}</div>
+        <div style="font-size:16px;font-weight:700;">${readyForCollection?'✅ All items completed':(allDone?'✅ Calibration completed — finalizing your invoice':`${completedCount} of ${items.length} item${items.length!==1?'s':''} completed`)}</div>
       </div>
       <div style="padding:16px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:12px;">
@@ -20003,10 +20062,12 @@ function lookupJob(){
           ${j.promisedDate&&!allDone?`<div><span style="color:#64748b;">Expected Ready</span><br/><strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'#ef4444':'#22c55e'}">${fmtDateShort(j.promisedDate)}</strong></div>`:''}
         </div>
         ${itemRows}
-        ${allDone?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;font-size:12px;color:#166534;text-align:center;margin-top:4px;">
+        ${readyForCollection?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;font-size:12px;color:#166534;text-align:center;margin-top:4px;">
           📞 Please contact us to collect your instrument(s).<br/>
           <strong>${_settings.tel||''}</strong>${_settings.email?' · '+_settings.email:''}
-        </div>`:''}
+        </div>`:(allDone?`<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:12px;font-size:12px;color:#1e40af;text-align:center;margin-top:4px;">
+          🧾 Your calibration is complete — we're finalizing your invoice and will contact you once it's ready for collection.
+        </div>`:'')}
       </div>
     </div>`;
 }
