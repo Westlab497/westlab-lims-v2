@@ -8507,6 +8507,43 @@ async function submitCalibration(){
   }
 }
 
+// ── RECALL — lets the technician who submitted an item pull it back from the approval
+// queue themselves, before the QM even looks at it, to fix something they noticed was
+// wrong (rather than having to wait for the QM to reject it first). Reverts to the same
+// state a QM rejection would, and critically also undoes the sticker/void marking that
+// submission applied — otherwise a resubmission with a different sticker would leave the
+// original incorrectly stuck as "Used" against this job forever.
+async function recallCalibrationSubmission(jobNo,itemIdx){
+  const j=getJob(jobNo); if(!j)return;
+  const item=j.items&&j.items[itemIdx]; if(!item)return;
+  if(item.calData?.submittedBy!==currentUser){alert('Only the person who submitted this can recall it.');return;}
+  if(!confirm('Recall this submission for editing?\n\nIt will be pulled back from the approval queue so you can fix it and resubmit.'))return;
+  const cd=item.calData||{};
+  if(cd.stickerRequired!==false&&cd.stickerNumber){
+    const stickerRec=_stickerRecords.find(r=>r.number===cd.stickerNumber&&r.type===cd.stickerType&&r.status==='Used'&&r.usedJobNo===jobNo);
+    if(stickerRec){
+      stickerRec.status='Held';
+      delete stickerRec.usedJobNo; delete stickerRec.usedCertNo; delete stickerRec.usedAt;
+      await saveStickerRecords();
+    }
+  }
+  if(cd.voidApplied){
+    const voidRec=getStickerCountRec(currentUser,'voidSticker');
+    voidRec.held+=1;
+    voidRec.totalUsed=Math.max(0,(voidRec.totalUsed||0)-1);
+    await saveStickerCounts();
+  }
+  await updateJob(jobNo,job=>{
+    const it=job.items&&job.items[itemIdx];
+    if(!it)return;
+    it.status='Assigned';
+    job.history.push({action:`↩️ Item ${it.itemNo} (${escapeHtml(it.eqName)}) recalled from approval by submitter for editing`,by:currentUser,time:new Date().toISOString()});
+  });
+  renderMyJobs(); renderDashboard(); refreshAllBadges();
+  showToast('↩️ Recalled — you can now edit and resubmit','success');
+  addAudit('↩️',`Job <strong>${jobNo}</strong> Item ${itemIdx+1} recalled from approval by ${USERS[currentUser]?.name||currentUser}`);
+}
+
 // ── APPROVAL (Jay) ──
 
 function openApproveItemModal(jobNo, itemIdx){
@@ -13646,7 +13683,8 @@ function renderMyJobs(){
             <button class="btn btn-outline btn-sm" style="background:#ffeaee;color:#c0001a;border-color:#ffb3bc;" onclick="openCustomerNotReadyModal('${j.jobNo}',${idx})">⚠️ Not Ready</button>
           `:`<button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">🔶 KIV</button>`}
         `:''}        ${item.status==='Pending Approval'?
-          `<span style="font-size:12px;color:var(--purple);font-weight:600;padding:5px;">📬 Awaiting approval…</span>`:''}
+          `<span style="font-size:12px;color:var(--purple);font-weight:600;padding:5px;">📬 Awaiting approval…</span>
+          ${item.calData?.submittedBy===currentUser?`<button class="btn btn-outline btn-sm" onclick="recallCalibrationSubmission('${j.jobNo}',${idx})">↩️ Recall for Editing</button>`:''}`:''}
         ${item.status==='Completed'&&item.calData?
           `<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})">📄 View Certificate</button>`:''}
         ${item.status==='Completed'?
