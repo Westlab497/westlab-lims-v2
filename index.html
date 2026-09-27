@@ -737,6 +737,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div id="approval-ref-checkout-section"></div>
       <div id="approval-extension-section"></div>
+      <div id="approval-oversight-summary"></div>
       <div class="form-section-title" style="margin-top:6px;">📋 Certificate Approvals</div>
       <div id="approval-list"></div>
     </div>
@@ -2517,9 +2518,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <textarea class="form-control" id="approve-comments" placeholder="Approval notes or rejection reason…" rows="3"></textarea>
       </div>
     </div>
+    <div id="approve-signatory-notice" style="display:none;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin:0 20px 12px;font-size:12.5px;color:#92400e;"></div>
     <div class="modal-footer">
       <button class="btn btn-danger" onclick="rejectJob()">✗ Reject — Return to Technician</button>
-      <button class="btn btn-success" onclick="approveJob()">✓ Approve &amp; Complete Job</button>
+      <button class="btn btn-success" id="approve-job-btn" onclick="approveJob()">✓ Approve &amp; Complete Job</button>
     </div>
   </div>
 </div>
@@ -8223,7 +8225,7 @@ async function openCalModal(jobNo, itemIdx=0){
     });
     if(cd.procedure) el('cal-procedure').value=cd.procedure||'';
     if(cd.total_pages) el('cal-total-pages').value=cd.total_pages||'2';
-    if(item.approvedBy) el('cal-approved-by').value=item.approvedBy||'';
+    if(cd.approvedByUsername) el('cal-approved-by').value=cd.approvedByUsername||'';
     // Restore ambient split fields
     if(cd.temp){const m=cd.temp.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-temp-val').value=m[1].trim();el('cal-temp-pm').value=m[2].trim();}}
     if(cd.humidity){const m=cd.humidity.match(/\(([^±]+)±([^)]+)\)/);if(m){el('cal-humidity-val').value=m[1].trim();el('cal-humidity-pm').value=m[2].trim();}}
@@ -8382,8 +8384,10 @@ document.addEventListener('click',e=>{
   }
 });
 async function submitCalibration(){
-  const approvedBy=el('cal-approved-by').value;
-  if(!approvedBy){alert('Please select the Approved Signatory.');return;}
+  const approvedByUsername=el('cal-approved-by').value;
+  if(!approvedByUsername){alert('Please select the Approved Signatory.');return;}
+  const approvedByStaffRec=_staff&&_staff.find(x=>x.username===approvedByUsername);
+  const approvedByName=approvedByStaffRec?.certName||approvedByStaffRec?.name||USERS[approvedByUsername]?.name||approvedByUsername;
   if(!currentExcel){alert('Please upload the calibration data PDF before submitting.');return;}
   const jForSticker=getJob(calJobNo);
   const itemForSticker=jForSticker&&jForSticker.items&&jForSticker.items[calItemIdx];
@@ -8459,8 +8463,8 @@ async function submitCalibration(){
       humidity:buildAmbient('cal-humidity-val','cal-humidity-pm'),
       pressure:buildAmbient('cal-pressure-val','cal-pressure-pm'),
       traceRows:getTraceRows(),
-      approved_by:approvedBy,
-      approvedByUsername:el('cal-approved-by').value||'',
+      approved_by:approvedByName,
+      approvedByUsername:approvedByUsername,
       calibrated_by:el('cal-calibrated-by').value.trim(),
       calibratedByUsername:currentUser,
       submittedBy:currentUser,
@@ -8582,6 +8586,19 @@ function openApproveItemModal(jobNo, itemIdx){
     el('approve-excel-section').style.display='none';
   }
   el('approve-comments').value='';
+  const signatoryUsername=cd.approvedByUsername||'';
+  const isSignatory=signatoryUsername===currentUser;
+  const approveBtnEl=el('approve-job-btn');
+  const noticeEl=el('approve-signatory-notice');
+  if(approveBtnEl) approveBtnEl.style.display=isSignatory?'':'none';
+  if(noticeEl){
+    if(isSignatory){
+      noticeEl.style.display='none';
+    }else{
+      noticeEl.style.display='block';
+      noticeEl.innerHTML=`⚠️ Only <strong>${escapeHtml(USERS[signatoryUsername]?.name||signatoryUsername||'the selected signatory')}</strong> can approve this item. You can still reject it to send it back for editing — including with a different signatory selected.`;
+    }
+  }
   const wrap=el('approval-cert-preview-wrap');
   const btn=el('toggle-cert-preview-btn');
   if(wrap){wrap.style.display='none';wrap.innerHTML='';}
@@ -8775,6 +8792,14 @@ async function approveJob(){
   if(approvalJobNo===null||approvalItemIdx===null)return;
   const jForCheck=getJob(approvalJobNo);
   const itemForCheck=jForCheck?.items?.[approvalItemIdx];
+  // Only the specific signatory selected at submission may approve — not just anyone with
+  // an approval-capable role. If someone else needs to approve, the item must first be
+  // rejected (or recalled) and resubmitted with a different signatory selected; that's the
+  // deliberate, only path to reassign who can approve, not a blanket override here.
+  if(itemForCheck&&itemForCheck.calData?.approvedByUsername!==currentUser){
+    alert(`⚠️ Only the selected signatory (${USERS[itemForCheck.calData?.approvedByUsername]?.name||itemForCheck.calData?.approvedByUsername||'—'}) can approve this item.\n\nIf it needs to be approved by someone else, it must be rejected (or recalled by the submitter) and resubmitted with a different signatory selected.`);
+    return;
+  }
   const pendingSoc=(itemForCheck?.socParameters||[]).filter(p=>p.status==='Pending');
   if(pendingSoc.length){
     alert(`⚠️ Cannot approve — this item has ${pendingSoc.length} Statement of Conformity still pending upload:\n${pendingSoc.map(p=>'• '+(p.parameterName||'Unnamed parameter')).join('\n')}\n\nPlease upload the SoC document(s) first, or withdraw the request if the customer no longer needs it.`);
@@ -8790,20 +8815,17 @@ async function approveJob(){
   if(approveBtn){approveBtn.disabled=true;approveBtn.textContent='⏳ Approving…';}
   try{
     const comments=el('approve-comments').value.trim();
-    const staffRec=_staff&&_staff.find(x=>x.username===currentUser);
-    const certName=staffRec?.certName||staffRec?.name||USERS[currentUser]?.name||currentUser;
     let allDone=false;
     await updateJob(approvalJobNo,j=>{
       const item=j.items[approvalItemIdx];
       if(!item)return;
       item.status='Completed';
       item.approvalComments=comments;
-      item.approvedBy=currentUser;
+      item.approvedBy=currentUser; // who performed the approval action — a separate fact from who the certificate's signatory is
       item.approvedAt=new Date().toISOString();
-      if(item.calData){
-        item.calData.approvedByUsername=currentUser;
-        item.calData.approved_by=certName;
-      }
+      // calData.approvedByUsername / approved_by are the signatory the technician selected
+      // at submission time — that selection is the whole point of that dropdown, and must
+      // not be silently overwritten here by whoever happens to click Approve.
       j.history.push({action:`✅ Item ${item.itemNo} (${escapeHtml(item.eqName)}) approved`,by:currentUser,time:new Date().toISOString(),note:comments});
       allDone=j.items.filter(i=>i.status!=='Deleted').every(i=>i.status==='Completed');
       if(allDone){
@@ -13744,6 +13766,44 @@ function renderApprovalQueue(){
       });
     });
     const container=el('approval-list'); if(!container)return;
+    const oversightEl=el('approval-oversight-summary');
+    if(oversightEl){
+      if(!isAdmin(currentUser)||!pendingItems.length){
+        oversightEl.innerHTML='';
+      }else{
+        const bySignatory={};
+        pendingItems.forEach(({item})=>{
+          const su=item.calData?.approvedByUsername||'';
+          if(!bySignatory[su]) bySignatory[su]=[];
+          bySignatory[su].push(item);
+        });
+        const now=Date.now();
+        const buildRow=(su,items,mine)=>{
+          const name=USERS[su]?.name||su||'Unassigned';
+          const oldestMs=Math.max(...items.map(it=>{
+            const t=it.calData?.submittedAt?new Date(it.calData.submittedAt).getTime():null;
+            return t?now-t:0;
+          }));
+          const oldestHrs=Math.round(oldestMs/3600000);
+          const isStale=oldestHrs>=48;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">
+            <span>${mine?'':'<strong>'+escapeHtml(name)+'</strong> — '}${items.length} pending${mine?' — awaiting your approval':''}</span>
+            <span style="color:${isStale?'var(--red)':'var(--text-muted)'};font-size:12px;">${oldestHrs>0?`oldest waiting ${oldestHrs}h${isStale?' ⚠️':''}`:''}</span>
+          </div>`;
+        };
+        const mineItems=bySignatory[currentUser]||null;
+        const othersEntries=Object.entries(bySignatory).filter(([su])=>su!==currentUser).sort((a,b)=>b[1].length-a[1].length);
+        const mineHtml=mineItems?`<div class="card" style="margin-bottom:10px;border-color:var(--green);">
+          <div class="card-header"><span class="card-title" style="color:var(--green);">✅ Your Pending Approvals</span></div>
+          <div class="card-body" style="padding:0;">${buildRow(currentUser,mineItems,true)}</div>
+        </div>`:'';
+        const othersHtml=othersEntries.length?`<div class="card" style="margin-bottom:16px;">
+          <div class="card-header"><span class="card-title">👁️ Others' Pending — Oversight Only <span style="font-weight:normal;color:var(--text-muted);font-size:11px;">(you can view/reject, not approve)</span></span></div>
+          <div class="card-body" style="padding:0;">${othersEntries.map(([su,items])=>buildRow(su,items,false)).join('')}</div>
+        </div>`:'';
+        oversightEl.innerHTML=mineHtml+othersHtml;
+      }
+    }
     const badge=el('approval-badge');
     const canSeeExtras=isAdmin(currentUser)||isManager(currentUser);
     const extraPending=canSeeExtras?_refCheckoutRequests.filter(r=>r.status==='Pending').length+_extensionRequests.filter(r=>r.status==='Pending').length:0;
@@ -13756,13 +13816,20 @@ function renderApprovalQueue(){
     container.innerHTML=pendingItems.map(({job:j,item,idx})=>{
       const submittedBy=item.calData?.submittedBy||'';
       const submitterName=USERS[submittedBy]?.name||submittedBy||'—';
+      const signatoryUsername=item.calData?.approvedByUsername||'';
+      const signatoryName=USERS[signatoryUsername]?.name||signatoryUsername||'—';
+      const isSignatory=signatoryUsername===currentUser;
       const brandModel=[item.brand,item.model].filter(Boolean).join(' ')||'—';
+      const submittedAtMs=item.calData?.submittedAt?new Date(item.calData.submittedAt).getTime():null;
+      const waitingHrs=submittedAtMs?Math.round((Date.now()-submittedAtMs)/3600000):null;
+      const agingHtml=waitingHrs!==null?` &nbsp;·&nbsp; <span style="color:${waitingHrs>=48?'var(--red)':'var(--text-muted)'};">waiting ${waitingHrs}h${waitingHrs>=48?' ⚠️':''}</span>`:'';
       const fileHtml=item.excelFile?.url
         ?`<br/>📎 <a href="javascript:void(0)" onclick="openSignedUrl('${item.excelFile.url}')" style="color:var(--blue);">${item.excelFile.name||'View file'}</a>`:'';
       return `<div class="approval-card urgent">
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
           <strong style="color:var(--navy);">${j.jobNo}</strong> &nbsp;·&nbsp; ${escapeHtml(j.custName||'—')}
           &nbsp;·&nbsp; Submitted by: <strong>${submitterName}</strong>
+          &nbsp;·&nbsp; Signatory: <strong style="color:${isSignatory?'var(--green)':'var(--amber)'};">${escapeHtml(signatoryName)}</strong>${agingHtml}
         </div>
         <div class="approval-card-header">
           <span class="approval-card-title">Item ${item.itemNo||idx+1}: ${escapeHtml(item.eqName||'—')}</span>
@@ -13777,7 +13844,9 @@ function renderApprovalQueue(){
           ${fileHtml}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-          <button class="btn btn-primary btn-sm" onclick="openApproveItemModal('${j.jobNo}',${idx})">📋 Review &amp; Approve</button>
+          ${isSignatory
+            ?`<button class="btn btn-primary btn-sm" onclick="openApproveItemModal('${j.jobNo}',${idx})">📋 Review &amp; Approve</button>`
+            :`<button class="btn btn-outline btn-sm" onclick="openApproveItemModal('${j.jobNo}',${idx})" title="Only ${escapeHtml(signatoryName)} can approve this — you can still review or reject/revert it">👁️ Review (Reject Only)</button>`}
           <button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})">📄 Preview Cert</button>
         </div>
       </div>`;
