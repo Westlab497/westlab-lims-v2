@@ -1681,22 +1681,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
 
-      <!-- Accreditation -->
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-header"><span class="card-title">📋 Accreditation & Lab Details</span></div>
-        <div class="card-body">
-          <div class="form-row">
-            <div class="form-group"><label class="form-label">SAMM / Accreditation Number</label><input id="set-accred-num" class="form-control" placeholder="e.g. SAMM 1234"/></div>
-            <div class="form-group"><label class="form-label">Accreditation Body</label><input id="set-accred-body" class="form-control" placeholder="e.g. SAMM / ILAC MRA"/></div>
-          </div>
-          <div class="form-row">
-            <div class="form-group"><label class="form-label">Technical Manager</label><input id="set-tech-manager" class="form-control" placeholder="Name of technical manager"/></div>
-            <div class="form-group"><label class="form-label">Quality Manager</label><input id="set-quality-manager" class="form-control" placeholder="Name of quality manager"/></div>
-          </div>
-          <div class="form-group"><label class="form-label">Accreditation Scope</label><textarea id="set-accred-scope" class="form-control" rows="3" placeholder="e.g. pH measurement (pH 0–14), Temperature (−20°C to 1200°C)…"></textarea></div>
-        </div>
-      </div>
-
       <!-- SLA -->
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header"><span class="card-title">📅 Turnaround Time (SLA)</span></div>
@@ -4776,7 +4760,6 @@ function applySettings(s){
   if(typeof renderTestingModeUI==='function') renderTestingModeUI();
   const name=s.labName||'Westlab (M) Sdn. Bhd.';
   ['sidebar-lab-name','sidebar-lab-label','login-lab-name'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=name;});
-  const an=document.getElementById('sidebar-accred-num');if(an)an.textContent=s.accredNum||'';
   document.title=name+' — ISO 17025 Lab Management System';
   if(typeof rebuildUsers==='function') rebuildUsers();
   // Fill all settings form fields
@@ -4784,9 +4767,6 @@ function applySettings(s){
     labName:'set-lab-name', regNo:'set-reg-no', branch:'set-branch',
     address:'set-address', tel:'set-tel', fax:'set-fax',
     email:'set-email', website:'set-website',
-    accredNum:'set-accred-num', accredBody:'set-accred-body',
-    accredScope:'set-accred-scope',
-    techManager:'set-tech-manager', qualityManager:'set-quality-manager',
     username:'set-username',
     
     slaUrgent:'set-sla-urgent', slaExpress:'set-sla-express',
@@ -5146,6 +5126,11 @@ async function saveSettings(){
     return;
   }
   const s=Object.assign({},DEF,freshFromServer);
+  // The logo is set directly on in-memory _settings by the upload/remove handlers, not read
+  // from a form field like everything else here — so it must be explicitly carried forward
+  // the same way every other field on this page is, or a just-uploaded logo (not yet saved
+  // to the server) would be silently discarded by starting fresh from the server's old copy.
+  s.logoUrl=_settings.logoUrl||'';
   s.sstEnabled=el('set-sst-enabled')?.checked||false;
   s.labName=el('set-lab-name').value.trim()||'Westlab';
   s.publicStatusUrl=el('set-public-status-url')?.value.trim()||'';
@@ -5158,11 +5143,6 @@ async function saveSettings(){
   s.fax=el('set-fax').value.trim();
   s.email=el('set-email').value.trim();
   s.website=el('set-website').value.trim();
-  s.accredNum=el('set-accred-num').value.trim();
-  s.accredBody=el('set-accred-body').value.trim();
-  s.accredScope=el('set-accred-scope').value.trim();
-  s.techManager=el('set-tech-manager').value.trim();
-  s.qualityManager=el('set-quality-manager').value.trim();
   s.username=el('set-username').value.trim()||'admin';
   const pw=el('set-password').value;
   // Password is NOT saved directly here — handled via the secure hashing endpoint after the main save below
@@ -19074,11 +19054,15 @@ async function exportPurchaseOrderPdf(entryId){
 async function exportInvoicePdf(invoiceId){
   const inv=_invoices.find(x=>x.id===invoiceId); if(!inv)return;
   const s=_settings;
+  const logoUrl=s.logoUrl&&!s.logoUrl.startsWith('data:')?s.logoUrl:'';
   const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #0f1f3d;padding-bottom:14px;">
-      <div>
-        <div style="font-size:18px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
-        <div style="font-size:11px;color:#64748b;max-width:320px;">${escapeHtml(s.address||'')}</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        ${logoUrl?`<img src="${logoUrl}" style="height:40px;object-fit:contain;"/>`:''}
+        <div>
+          <div style="font-size:18px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
+          <div style="font-size:11px;color:#64748b;max-width:320px;">${escapeHtml(s.address||'')}</div>
+        </div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:16px;font-weight:800;">INVOICE</div>
