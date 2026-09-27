@@ -682,8 +682,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Job / Item</th><th>Cert No.</th><th>Equipment</th><th>Serial No.</th><th>Priority</th>
-              <th>Received</th><th>Ready By</th><th>Actions</th>
+              <th style="cursor:pointer;user-select:none;" onclick="sortEquipmentTable('jobNo')">Job / Item <span id="eq-sort-jobNo"></span></th>
+              <th>Cert No.</th><th>Equipment</th><th>Serial No.</th>
+              <th style="cursor:pointer;user-select:none;" onclick="sortEquipmentTable('priority')">Priority <span id="eq-sort-priority"></span></th>
+              <th style="cursor:pointer;user-select:none;" onclick="sortEquipmentTable('receiveDate')">Received <span id="eq-sort-receiveDate"></span></th>
+              <th style="cursor:pointer;user-select:none;" onclick="sortEquipmentTable('promisedDate')">Ready By <span id="eq-sort-promisedDate"></span></th>
+              <th>Actions</th>
             </tr></thead>
             <tbody id="equipment-tbody">
               <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>No jobs yet. Click "+ New Job" to add.</p></div></td></tr>
@@ -3810,6 +3814,7 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
 
 // In-memory cache
 let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[], _settingsLoadFailed=false;
+let _eqSortField='receiveDate', _eqSortDir='desc'; // Equipment & Calibration Records table sort state
 let _custSelected=false;
 let _custModalContext='main'; // 'main' or 'endUser' — tracks which field triggered "+ Add new customer"
 const CUST_TABLE='wl_customers';
@@ -8876,6 +8881,12 @@ async function rejectJob(){
 
 // ── RENDER EQUIPMENT TABLE — group header per job, item row per equipment ──
 const PB={Urgent:'badge-red',Express:'badge-amber',Normal:'badge-blue',Routine:'badge-slate'};
+const PRIORITY_RANK={Urgent:0,Express:1,Normal:2,Routine:3};
+function sortEquipmentTable(field){
+  if(_eqSortField===field){ _eqSortDir=_eqSortDir==='asc'?'desc':'asc'; }
+  else { _eqSortField=field; _eqSortDir=field==='priority'?'asc':'desc'; } // priority defaults urgent-first; dates default newest-first
+  renderEquipmentTable();
+}
 const STATUS_BADGE={
   Unassigned:'badge-amber',Assigned:'badge-blue','In Progress':'badge-blue',
   Scheduled:'badge-teal','On-Site':'badge-teal',
@@ -8900,6 +8911,22 @@ function renderEquipmentTable(){
       (i.certNo||'').toLowerCase().includes(q)||(i.tagNo||'').toLowerCase().includes(q));
     const matchStatus=!sf||j.status===sf||items.some(i=>i.status===sf);
     return ms&&matchStatus;
+  });
+
+  // Sort the job groups by whichever column header was last clicked
+  const dirMul=_eqSortDir==='asc'?1:-1;
+  filtered.sort((a,b)=>{
+    let av,bv;
+    if(_eqSortField==='priority'){ av=PRIORITY_RANK[a.priority]??9; bv=PRIORITY_RANK[b.priority]??9; }
+    else if(_eqSortField==='jobNo'){ av=a.jobNo||''; bv=b.jobNo||''; }
+    else { av=a[_eqSortField]||''; bv=b[_eqSortField]||''; } // receiveDate / promisedDate — plain ISO/YYYY-MM-DD strings sort correctly as text
+    if(av<bv)return -1*dirMul;
+    if(av>bv)return 1*dirMul;
+    return 0;
+  });
+  ['jobNo','priority','receiveDate','promisedDate'].forEach(f=>{
+    const indEl=el('eq-sort-'+f);
+    if(indEl) indEl.textContent=f===_eqSortField?(_eqSortDir==='asc'?'▲':'▼'):'';
   });
 
   if(!filtered.length){
