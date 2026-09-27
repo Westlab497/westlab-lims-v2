@@ -1624,6 +1624,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="view" id="view-settings">
       <div class="page-header"><div class="page-title">⚙️ System Settings</div><button class="btn btn-primary" onclick="saveSettings()">💾 Save Changes</button></div>
       <div id="settings-saved-banner" class="success-banner">✅ Settings saved successfully.</div>
+      <div id="settings-load-failed-banner" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;color:#991b1b;font-size:13px;margin-bottom:16px;">
+        ⚠️ <strong>Could not load your currently saved settings</strong> (a network issue) — the fields below may be showing blank defaults rather than your real data. Please refresh the page before making any changes here; saving in this state is blocked to protect your existing settings.
+      </div>
 
       <!-- Company Information -->
       <div class="card" style="margin-bottom:16px;">
@@ -1758,16 +1761,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="card-body">
           <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Sales Tracker now covers everything Quotation Log did — multi-item quoting, pricing, and Won/Lost tracking — plus the capability review workflow. Run this once to bring your existing quotation history into Sales Tracker. This cannot be undone, and Quotation Log's own data stays untouched either way.</div>
           <button class="btn btn-outline btn-sm" onclick="migrateQuotationsToSalesTracker()">📈 Migrate Quotations Now</button>
-        </div>
-      </div>
-
-      <!-- System Test Suite -->
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-header"><span class="card-title">🧪 System Test Suite</span></div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Runs through 5 core flows automatically, using your real login — creating temporary test records (marked TEST-), checking each step works correctly, then deleting everything it created. Nothing is left behind, win or lose.</div>
-          <button class="btn btn-primary btn-sm" id="run-tests-btn" onclick="runSystemTests()">🧪 Run System Tests</button>
-          <div id="test-results-box" style="margin-top:14px;"></div>
         </div>
       </div>
 
@@ -3830,7 +3823,7 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
   complaintFormJobParam:'r89744f4551a248d1848d3232350c4e56'};
 
 // In-memory cache
-let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[];
+let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[], _settingsLoadFailed=false;
 let _custSelected=false;
 let _custModalContext='main'; // 'main' or 'endUser' — tracks which field triggered "+ Add new customer"
 const CUST_TABLE='wl_customers';
@@ -3930,11 +3923,24 @@ async function loadAll(){
       }
       return s;
     });
-    const settingsArr2=settingsArr.status==='fulfilled'?settingsArr.value:[];
+    let settingsArr2=settingsArr.status==='fulfilled'?settingsArr.value:[];
+    if(!settingsArr2||!settingsArr2[0]){
+      // First attempt failed or came back empty — could be a genuine transient network hiccup
+      // (this is exactly the kind of failure that, left unhandled, silently leaves _settings
+      // at bare defaults and can lead to real saved settings being wiped out on the next
+      // save). Worth one retry before treating it as a real failure.
+      try{
+        const retry=await withTimeout(SB.getAll('wl_settings'),8000);
+        settingsArr2=Array.isArray(retry)?retry:[];
+      }catch(e){ settingsArr2=[]; }
+    }
     if(settingsArr2&&settingsArr2[0]){
       const raw=settingsArr2[0];
       // If logo is huge base64, keep it but warn — it shouldn't cause issues
       _settings=Object.assign({},DEF,raw);
+    } else {
+      _settingsLoadFailed=true;
+      console.error('Could not load saved settings after retry — proceeding with bare defaults. Settings page will warn and block saving until this resolves.');
     }
     showLoading('Almost ready…');
     await loadClaims();
@@ -4763,6 +4769,8 @@ async function addStickerBatch(type){
 function applySettings(s){
   try{
   _settings=Object.assign({},DEF,s);
+  const loadFailedBanner=document.getElementById('settings-load-failed-banner');
+  if(loadFailedBanner) loadFailedBanner.style.display=_settingsLoadFailed?'block':'none';
   if(typeof renderTestingModeUI==='function') renderTestingModeUI();
   const name=s.labName||'Westlab (M) Sdn. Bhd.';
   ['sidebar-lab-name','sidebar-lab-label','login-lab-name'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=name;});
@@ -5123,7 +5131,19 @@ async function migratePasswords(){
 
 async function saveSettings(){
   try{
-  const s=Object.assign({},_settings);
+  // Never trust the in-memory _settings blindly here — if the initial page load ever failed
+  // or timed out fetching settings (a real, intermittent risk with any network call), or if
+  // another tab/session saved a change since this page was opened, _settings could be stale
+  // or missing fields entirely. Since this save does a full row replace, saving from a stale
+  // copy would silently and permanently wipe out anything not in that stale copy — which is
+  // exactly the "settings sometimes just disappear" symptom. Re-fetch fresh right before
+  // merging the form's changes on top, so nothing beyond what actually changed can be lost.
+  const freshFromServer=await SB.get('wl_settings','main');
+  if(!freshFromServer){
+    alert('⚠️ Could not confirm the current saved settings before saving (network issue?). To avoid accidentally erasing existing settings, this save has been stopped — please check your connection and try again.');
+    return;
+  }
+  const s=Object.assign({},DEF,freshFromServer);
   s.sstEnabled=el('set-sst-enabled')?.checked||false;
   s.labName=el('set-lab-name').value.trim()||'Westlab';
   s.publicStatusUrl=el('set-public-status-url')?.value.trim()||'';
@@ -9904,8 +9924,7 @@ function navigateAndRequestSticker(type){
   _stickerActiveTab=type;
   showView('stickers');
   setTimeout(()=>{
-    if(STICKER_TYPES[type].numbered) requestStickerBatch(type);
-    else openCountBasedRequestModal(type);
+    openCountBasedRequestModal(type); // both numbered and count-based types now self-report first
   },150); // give the page a moment to render before triggering the request modal
 }
 function stickerTypeCfg(type){
@@ -13189,6 +13208,12 @@ async function pollForLiveUpdates(){
     else if(activeView==='view-equipment') renderEquipmentTable();
     else if(activeView==='view-completed') renderCompletedJobs();
     else if(activeView==='view-approval') renderApprovalQueue();
+    else if(activeView==='view-stickers'){
+      // Sticker requests/approvals were previously invisible here until a full page refresh —
+      // someone waiting on this page for their request to be approved never saw it happen.
+      await loadStickerData();
+      renderStickerPage();
+    }
   }catch(e){ console.error('pollForLiveUpdates error:',e); }
 }
 function startLiveRefresh(){
@@ -16336,7 +16361,14 @@ function renderStickerPage(){
           </div>`;
         } else {
           const heldByRequester=_stickerRecords.filter(s=>s.issuedTo===r.requestedBy&&s.status==='Held'&&s.type===type);
-          if(heldByRequester.length) extraInfo=`<div style="margin-top:4px;font-size:11px;color:#92400e;">ℹ️ Currently still holds ${heldByRequester.length} unused: ${heldByRequester.map(s=>stickerFmt(type,s.number)).join(', ')}</div>`;
+          const expected=heldByRequester.length;
+          const reported=r.reportedRemaining;
+          const mismatch=reported!==undefined&&reported!==expected;
+          extraInfo=`<div style="margin-top:4px;font-size:11px;color:${mismatch?'#991b1b':'#92400e'};">
+            Staff reports currently holding: <strong>${reported!==undefined?reported:'—'}</strong> — system expected: <strong>${expected}</strong>
+            ${mismatch?` ⚠️ Mismatch of ${Math.abs(reported-expected)}`:' ✓ matches'}
+            ${heldByRequester.length?`<br/>Currently still holds: ${heldByRequester.map(s=>stickerFmt(type,s.number)).join(', ')}`:''}
+          </div>`;
         }
         return `<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -16359,7 +16391,7 @@ function renderStickerPage(){
   let myHtml='';
   if(cfg.numbered){
     const myHeld=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===type).sort((a,b)=>a.number-b.number);
-    const myRecent=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status!=='Held'&&r.type===type).sort((a,b)=>b.number-a.number).slice(0,10);
+    const myRecent=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status!=='Held'&&r.status!=='Pending Confirmation'&&r.type===type).sort((a,b)=>b.number-a.number).slice(0,10);
     myHtml=`<div style="padding:12px 16px;">
       ${myHeld.length?`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">Unused — ${myHeld.length} sticker(s)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
@@ -16385,13 +16417,25 @@ function renderStickerPage(){
     </div>`;
   }
 
+  const myPendingConfirmation=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Pending Confirmation'&&r.type===type);
+  let confirmReceiptHtml='';
+  if(myPendingConfirmation.length){
+    const nums=myPendingConfirmation.map(r=>r.number).sort((a,b)=>a-b);
+    const rangeLabel=nums.length>1?`${stickerFmt(type,nums[0])} – ${stickerFmt(type,nums[nums.length-1])}`:stickerFmt(type,nums[0]);
+    confirmReceiptHtml=`<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:12px 16px;color:#1e40af;font-size:13px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <span>📬 You were approved for <strong>${rangeLabel}</strong> (${nums.length}) — please confirm once you've physically collected them.</span>
+      <button class="btn btn-primary btn-sm" style="white-space:nowrap;" onclick="confirmStickerReceipt('${type}')">✅ Confirm Receipt</button>
+    </div>`;
+  }
+
   const requestBtnLabel=`📤 Request ${cfg.label} Stickers`;
 
   box.innerHTML=`
     ${kpiHtml}
     ${bannerHtml}
+    ${confirmReceiptHtml}
     <div style="margin-bottom:16px;">
-      <button class="btn btn-primary" onclick="${cfg.numbered?`requestStickerBatch('${type}')`:`openCountBasedRequestModal('${type}')`}">${requestBtnLabel}</button>
+      <button class="btn btn-primary" onclick="openCountBasedRequestModal('${type}')">${requestBtnLabel}</button>
     </div>
     ${pendingHtml}
     <div class="form-section-title" style="margin-top:0;">My ${cfg.label} Stickers</div>
@@ -16439,23 +16483,6 @@ function renderStickerPage(){
   }catch(e){console.error('renderStickerPage error:',e);}
 }
 
-async function requestStickerBatch(type){
-  if(!canPerformCal(currentUser)&&!isAdmin(currentUser)){alert('Only staff who perform calibration can request stickers.');return;}
-  const pendingAlready=_stickerRequests.find(r=>r.requestedBy===currentUser&&r.status==='Pending'&&r.type===type);
-  if(pendingAlready){alert('You already have a pending request for this sticker type awaiting approval.');return;}
-  const held=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Held'&&r.type===type).length;
-  const cfg=STICKER_TYPES[type];
-  const msg=held>0
-    ?`You still have ${held} unused ${cfg.label} sticker(s) on hand. Submit a new request anyway?`
-    :`Submit a request for a new batch of ${stickerTypeCfg(type).batchSize} ${cfg.label} stickers?`;
-  if(!confirm(msg))return;
-  const req={id:'STK-'+Date.now(),type,requestedBy:currentUser,requestedAt:new Date().toISOString(),status:'Pending'};
-  _stickerRequests.push(req);
-  await saveStickerRequests();
-  renderStickerPage();
-  showToast('✅ Sticker request submitted — awaiting approval','success',3000);
-  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} requested a new ${cfg.label} sticker batch`);
-}
 
 function openCountBasedRequestModal(type){
   if(!canPerformCal(currentUser)&&!isAdmin(currentUser)){alert('Only staff who perform calibration can request stickers.');return;}
@@ -16504,36 +16531,8 @@ async function approveStickerRequest(reqId){
   const batchSize=stickerTypeCfg(type).batchSize;
 
   if(cfg.numbered){
-    const previewStart=stickerNextToIssue(type); // preview only — the actual reservation happens atomically below, after confirmation
-    const previewEnd=previewStart+batchSize-1;
-    const totalPrinted=stickerTotalPrinted(type);
-    if(previewEnd>totalPrinted){
-      alert(`Not enough printed ${cfg.label} stickers remaining.\n\nNext available would be ${stickerFmt(type,previewStart)}–${stickerFmt(type,previewEnd)}, but only ${totalPrinted} have been printed in total.\n\nPlease add a new printed batch in Settings first.`);
-      return;
-    }
-    if(!confirm(`Approve — issue ${stickerFmt(type,previewStart)} to ${stickerFmt(type,previewEnd)} (${batchSize} stickers) to ${USERS[req.requestedBy]?.name||req.requestedBy}?`))return;
-    // Only now do we actually reserve the range — atomically, server-side, so two approvals
-    // happening at the exact same moment can never be handed overlapping numbers. The
-    // returned range may differ slightly from the preview above if another approval landed
-    // in between; that's fine, the success message below reflects what was actually reserved.
-    const seqKey=isTestingModeOn()?`sticker_${type}_seq_test`:`sticker_${type}_seq`;
-    const range=await apiFetch('/api/seq-next-range',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id:seqKey,count:batchSize,seed:previewStart})
-    });
-    const nextStart=range.start, nextEnd=range.end;
-    req.status='Approved'; req.issuedStart=nextStart; req.issuedEnd=nextEnd; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
-    for(let n=nextStart;n<=nextEnd;n++){
-      _stickerRecords.push({number:n,type,issuedTo:req.requestedBy,issuedAt:new Date().toISOString(),requestId:req.id,status:'Held'});
-    }
-    // wl_sequences is now the real source of truth for the next number (see above) — this
-    // is just a best-effort cache so the preview shown elsewhere in the UI stays reasonably
-    // current without needing every display spot to fetch the sequence table directly.
-    _settings[isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`]=nextEnd+1;
-    await SB.upsert('wl_settings','main',_settings);
-    await saveStickerRecords();
-    showToast(`✅ Issued ${stickerFmt(type,nextStart)}–${stickerFmt(type,nextEnd)} to ${USERS[req.requestedBy]?.name||req.requestedBy}`,'success',4000);
-    addAudit('🏷️',`${cfg.label} sticker batch ${stickerFmt(type,nextStart)}–${stickerFmt(type,nextEnd)} issued to ${USERS[req.requestedBy]?.name||req.requestedBy}`);
+    openApproveNumberedStickerModal(reqId);
+    return; // the modal itself completes the approval once the approver confirms
   } else {
     const holdRec=getStickerCountRec(req.requestedBy,type);
     const expected=holdRec.held;
@@ -16557,6 +16556,126 @@ async function approveStickerRequest(reqId){
   await saveStickerRequests();
   renderStickerPage();
   offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your ${cfg.label} sticker request has been APPROVED. Please collect from Admin.`);
+}
+function openApproveNumberedStickerModal(reqId){
+  const req=_stickerRequests.find(r=>r.id===reqId); if(!req)return;
+  const type=req.type;
+  const cfg=STICKER_TYPES[type];
+  const batchSize=stickerTypeCfg(type).batchSize;
+  const previewStart=stickerNextToIssue(type);
+  const previewEnd=previewStart+batchSize-1;
+  const totalPrinted=stickerTotalPrinted(type);
+  const expected=_stickerRecords.filter(r=>r.issuedTo===req.requestedBy&&r.status==='Held'&&r.type===type).length;
+  const reported=req.reportedRemaining!==undefined?req.reportedRemaining:expected;
+  const mismatch=reported-expected;
+  let ov=document.getElementById('approve-numbered-sticker-overlay');
+  if(!ov){ov=document.createElement('div');ov.id='approve-numbered-sticker-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:460px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🏷️ Approve ${cfg.label} Sticker Request</span>
+      <button onclick="document.getElementById('approve-numbered-sticker-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="font-size:13px;margin-bottom:12px;">Requested by <strong>${USERS[req.requestedBy]?.name||req.requestedBy}</strong></div>
+      ${mismatch!==0?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#92400e;">⚠️ Mismatch: staff reports <strong>${reported}</strong> unused stickers on hand, system expected <strong>${expected}</strong> (difference of ${mismatch>0?'+':''}${mismatch}). Approving will adjust their record to match what they reported.</div>`:''}
+      <div class="form-group">
+        <label class="form-label">Starting number <span style="font-weight:normal;color:var(--text-muted);">(defaults to the system's next in sequence — only change this to fix a past mistake, e.g. reissuing a range that was damaged before ever being handed out)</span></label>
+        <input class="form-control" type="number" id="approve-numbered-start" value="${previewStart}" oninput="updateApproveNumberedRangeEnd('${type}',${batchSize})"/>
+      </div>
+      <div style="font-size:13px;margin-bottom:4px;">Range to issue: <strong id="approve-numbered-range-display">${stickerFmt(type,previewStart)} – ${stickerFmt(type,previewEnd)}</strong> (${batchSize} stickers)</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">${totalPrinted} printed in total for this type.</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('approve-numbered-sticker-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmApproveNumberedSticker('${reqId}')">Approve</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+function updateApproveNumberedRangeEnd(type,batchSize){
+  const startEl=el('approve-numbered-start');
+  const start=parseInt(startEl?.value);
+  const displayEl=el('approve-numbered-range-display');
+  if(displayEl) displayEl.textContent=isNaN(start)?'—':`${stickerFmt(type,start)} – ${stickerFmt(type,start+batchSize-1)}`;
+}
+async function confirmApproveNumberedSticker(reqId){
+  const req=_stickerRequests.find(r=>r.id===reqId); if(!req)return;
+  const type=req.type;
+  const cfg=STICKER_TYPES[type];
+  const batchSize=stickerTypeCfg(type).batchSize;
+  const startVal=parseInt(el('approve-numbered-start')?.value);
+  if(isNaN(startVal)||startVal<1){alert('Please enter a valid starting number.');return;}
+  const endVal=startVal+batchSize-1;
+  const suggestedStart=stickerNextToIssue(type);
+  const isOverride=startVal!==suggestedStart;
+
+  // Overlap check — required whenever overridden, since we're bypassing the normal
+  // sequential counter. Checks every existing record of this type regardless of its status
+  // (Held, Used, or Wasted all mean that number was already issued to someone).
+  if(isOverride){
+    const conflict=_stickerRecords.filter(r=>r.type===type&&r.number>=startVal&&r.number<=endVal);
+    if(conflict.length){
+      alert(`⚠️ Cannot use this range — ${conflict.length} number(s) in it were already issued: ${conflict.map(c=>stickerFmt(type,c.number)).join(', ')}.\n\nPlease choose a different starting number.`);
+      return;
+    }
+  }
+
+  const expected=_stickerRecords.filter(r=>r.issuedTo===req.requestedBy&&r.status==='Held'&&r.type===type).length;
+  const reported=req.reportedRemaining!==undefined?req.reportedRemaining:expected;
+  const mismatch=reported-expected;
+  if(mismatch!==0){
+    _stickerRecons.push({id:'RECON-'+Date.now(),username:req.requestedBy,type,reportedCount:reported,expectedCount:expected,discrepancy:mismatch,date:new Date().toISOString(),checkedBy:currentUser,note:'Auto-flagged during sticker request approval',source:'request'});
+    await saveStickerRecons();
+  }
+
+  let nextStart,nextEnd;
+  if(!isOverride){
+    // Normal path — atomically reserve the next range server-side, so two approvals at the
+    // exact same moment can never be handed overlapping numbers.
+    const seqKey=isTestingModeOn()?`sticker_${type}_seq_test`:`sticker_${type}_seq`;
+    const range=await apiFetch('/api/seq-next-range',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id:seqKey,count:batchSize,seed:suggestedStart})
+    });
+    nextStart=range.start; nextEnd=range.end;
+  }else{
+    // Manual override — already overlap-checked above. If this range extends beyond where
+    // the counter currently is, advance it so future normal approvals continue correctly
+    // from there rather than colliding with what was just manually assigned. Never moves
+    // the counter backward if reusing an earlier gap.
+    nextStart=startVal; nextEnd=endVal;
+    const seqKey=isTestingModeOn()?`sticker_${type}_seq_test`:`sticker_${type}_seq`;
+    await apiFetch('/api/seq-advance-if-higher',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:seqKey,value:nextEnd})});
+  }
+
+  req.status='Approved'; req.issuedStart=nextStart; req.issuedEnd=nextEnd; req.decidedBy=currentUser; req.decidedAt=new Date().toISOString();
+  // Held only once the technician actually confirms receipt (see confirmStickerReceipt) —
+  // this catches transcription errors or handoff mistakes before the numbers are treated
+  // as truly in their possession and usable in Perform Calibration.
+  for(let n=nextStart;n<=nextEnd;n++){
+    _stickerRecords.push({number:n,type,issuedTo:req.requestedBy,issuedAt:new Date().toISOString(),requestId:req.id,status:'Pending Confirmation'});
+  }
+  _settings[isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`]=Math.max(nextEnd+1,stickerNextToIssue(type));
+  await SB.upsert('wl_settings','main',_settings);
+  await saveStickerRecords();
+  await saveStickerRequests();
+  document.getElementById('approve-numbered-sticker-overlay').style.display='none';
+  renderStickerPage();
+  showToast(`✅ Issued ${stickerFmt(type,nextStart)}–${stickerFmt(type,nextEnd)} to ${USERS[req.requestedBy]?.name||req.requestedBy} — awaiting their confirmation of receipt`,'success',4500);
+  addAudit('🏷️',`${cfg.label} sticker batch ${stickerFmt(type,nextStart)}–${stickerFmt(type,nextEnd)} issued to ${USERS[req.requestedBy]?.name||req.requestedBy}${isOverride?' (manual range override)':''}`);
+  offerWhatsAppNotify(req.requestedBy,`Hi ${USERS[req.requestedBy]?.name||''}, your ${cfg.label} sticker request has been APPROVED — ${stickerFmt(type,nextStart)} to ${stickerFmt(type,nextEnd)}. Please collect from Admin, then confirm receipt in the app.`);
+}
+async function confirmStickerReceipt(type){
+  const pending=_stickerRecords.filter(r=>r.issuedTo===currentUser&&r.status==='Pending Confirmation'&&r.type===type);
+  if(!pending.length)return;
+  const nums=pending.map(r=>r.number).sort((a,b)=>a-b);
+  const rangeLabel=nums.length>1?`${stickerFmt(type,nums[0])} – ${stickerFmt(type,nums[nums.length-1])}`:stickerFmt(type,nums[0]);
+  if(!confirm(`Confirm you have physically received ${rangeLabel} (${nums.length} sticker${nums.length>1?'s':''})?\n\nOnly confirm once you actually have them in hand.`))return;
+  pending.forEach(r=>{r.status='Held'; r.receiptConfirmedAt=new Date().toISOString();});
+  await saveStickerRecords();
+  renderStickerPage();
+  showToast(`✅ Receipt confirmed — ${rangeLabel} ready to use`,'success',3500);
+  addAudit('🏷️',`${USERS[currentUser]?.name||currentUser} confirmed receipt of ${STICKER_TYPES[type].label} sticker(s) ${rangeLabel}`);
 }
 async function rejectStickerRequest(reqId){
   if(!canApproveStickers(currentUser)){alert('Only Admin and Quality Manager can reject sticker requests.');return;}
