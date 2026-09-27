@@ -8103,9 +8103,21 @@ async function downloadAbnormalReportPdf(r){
 async function openCalModal(jobNo, itemIdx=0){
   try{
   calJobNo=jobNo; calItemIdx=itemIdx;
-  currentExcel=null; _excelFile=null;
-  el('excel-attached').style.display='none';
-  el('excel-drop-zone').style.display='block';
+  const jForExcel=getJob(jobNo);
+  const itemForExcel=jForExcel&&jForExcel.items&&jForExcel.items[itemIdx];
+  _excelFile=null; // the raw File object for a fresh upload — always starts empty
+  if(itemForExcel?.excelFile){
+    // A file was already uploaded on a previous submission (rejected, or recalled by the
+    // technician themselves) — restore it so the UI correctly shows it's still attached,
+    // and so submitting again reuses it rather than blocking on "please upload a PDF" or
+    // silently requiring a pointless re-upload of the exact same file.
+    currentExcel=itemForExcel.excelFile;
+    showExcelAttached();
+  }else{
+    currentExcel=null;
+    el('excel-attached').style.display='none';
+    el('excel-drop-zone').style.display='block';
+  }
   const j=getJob(jobNo);
   const item=j&&j.items&&j.items[itemIdx];
   if(item?.pendingReceiptConfirmation){
