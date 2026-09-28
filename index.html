@@ -3663,7 +3663,7 @@ async function apiFetch(path, opts={}, _isRetry=false){
   const timer=setTimeout(()=>ctrl.abort(),35000); // 35s — generous enough for slower onsite/mobile connections
   try{
     const headers={...(opts.headers||{}),'X-App-Secret':APP_SECRET};
-    const r=await fetch(API+path,{...opts,headers,signal:ctrl.signal});
+    const r=await fetch(API+path,{cache:'no-store',...opts,headers,signal:ctrl.signal}); // never serve a cached copy of a read
     clearTimeout(timer);
     if(!r.ok){
       const e=await r.text();
@@ -3822,7 +3822,7 @@ const DEF={labName:'Westlab (M) Sdn. Bhd.',accredNum:'SAMM 1234',accredBody:'SAM
   complaintFormJobParam:'r89744f4551a248d1848d3232350c4e56'};
 
 // In-memory cache
-let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[], _settingsLoadFailed=false;
+let _jobs=[], _refEq=[], _settings=Object.assign({},DEF), _customers=[], _staff=[], _settingsLoadFailed=false, _settingsLoaded=false;
 let _eqSortField='receiveDate', _eqSortDir='desc'; // Equipment & Calibration Records table sort state
 let _custSelected=false;
 let _custModalContext='main'; // 'main' or 'endUser' — tracks which field triggered "+ Add new customer"
@@ -3856,13 +3856,50 @@ let currentUser=null;
 // view the app as a different role while testing, without affecting anyone else's session.
 // ══════════════════════════════════════════════════
 let _simulatedRole=localStorage.getItem('wl_simulated_role')||null;
+// ── SAFE SETTINGS PERSISTENCE ──
+// All company/system settings live in ONE row (wl_settings / 'main'). Every browser keeps its own
+// in-memory copy from when the page was opened, and many actions (including every audit-log entry)
+// used to write that WHOLE copy back over the row. So any browser holding an older copy would, on
+// its next action, silently revert whatever someone else had saved since — the "settings keep going
+// back to the old data" problem. Nothing writes the whole in-memory object any more: a change
+// re-reads the current server row, applies only its own change to that fresh copy, and saves that.
+// A browser's changes are queued so they can't overwrite each other either. And if the settings
+// were never loaded successfully on this page, nothing is saved at all (rather than saving defaults
+// over real data).
+let _settingsPatchQueue=Promise.resolve();
+async function patchSettings(mutator,opts={}){
+  const run=async()=>{
+    if(!_settingsLoaded) throw new Error('Saved settings were not loaded on this page, so this change was not saved (to avoid overwriting your existing settings). Please refresh the page and try again.');
+    const fresh=await apiFetch('/api/row/wl_settings/main');
+    const base=Object.assign({},DEF,fresh||{});
+    mutator(base);
+    await SB.upsert('wl_settings','main',base);
+    if(opts.mirror!==false) mutator(_settings); // mirror the same change locally; leave everything else in memory alone
+  };
+  const p=_settingsPatchQueue.then(run,run);
+  _settingsPatchQueue=p.catch(()=>{});
+  try{ await p; }
+  catch(e){
+    console.error('patchSettings failed:',e);
+    if(!opts.silent&&typeof showToast==='function') showToast('❌ '+e.message,'error',6000);
+    throw e;
+  }
+}
+// Re-read the real settings row and repopulate the Settings form, so it's always edited from
+// current data (not whatever was loaded when the page was first opened, possibly hours ago).
+async function refreshSettingsFromServer(){
+  try{
+    const fresh=await apiFetch('/api/row/wl_settings/main');
+    _settingsLoaded=true; _settingsLoadFailed=false;
+    applySettings(Object.assign({},DEF,fresh||{}));
+  }catch(e){ console.warn('Could not refresh settings from server:',e); }
+}
 function isTestingModeOn(){ return !!_settings.testingModeOn; }
 async function setTestingMode(on){
   if(!confirm(on
     ?'Turn ON Testing Mode?\n\nAll new data created from now on (across supported modules) will be tagged as test data, kept separate from real records, until you turn it off.'
     :'Turn OFF Testing Mode?\n\nYou will go back to seeing only real data. Test data is not deleted — it stays saved until you clear it.'))return;
-  _settings.testingModeOn=on;
-  await SB.upsert('wl_settings','main',_settings);
+  await patchSettings(st=>{ st.testingModeOn=on; });
   if(!on){ setSimulatedRole(null); }
   if(typeof loadStickerData==='function') await loadStickerData();
   renderTestingModeUI();
@@ -3907,9 +3944,9 @@ async function loadAll(){
     _jobs=(jobs||[]).filter(j=>j.items&&Array.isArray(j.items));
 
     showLoading('Loading data…');
-    const [refEq,settingsArr,customers,staff]=await Promise.allSettled([
+    const [refEq,settingsRes,customers,staff]=await Promise.allSettled([
       withTimeout(SB.getAll('wl_ref_equipment')),
-      withTimeout(SB.getAll('wl_settings')),
+      withTimeout(apiFetch('/api/row/wl_settings/main'),15000),
       withTimeout(SB.getAll('wl_customers')),
       withTimeout(SB.getAll('wl_staff'))
     ]);
@@ -3923,24 +3960,25 @@ async function loadAll(){
       }
       return s;
     });
-    let settingsArr2=settingsArr.status==='fulfilled'?settingsArr.value:[];
-    if(!settingsArr2||!settingsArr2[0]){
-      // First attempt failed or came back empty — could be a genuine transient network hiccup
-      // (this is exactly the kind of failure that, left unhandled, silently leaves _settings
-      // at bare defaults and can lead to real saved settings being wiped out on the next
-      // save). Worth one retry before treating it as a real failure.
-      try{
-        const retry=await withTimeout(SB.getAll('wl_settings'),8000);
-        settingsArr2=Array.isArray(retry)?retry:[];
-      }catch(e){ settingsArr2=[]; }
+    // Settings live in ONE specific row (wl_settings / 'main'), fetched by that id. This used to
+    // take "the first row of the wl_settings table" — but that table also holds invoices,
+    // quotations, sticker records and ~20 other kinds of data, sorted most-recently-updated first,
+    // so "the first row" was whichever of those had changed last, NOT necessarily the company
+    // settings. When it wasn't, the app started on bare defaults, and the next audit-log entry
+    // then saved those defaults over the real settings.
+    let settingsOk=settingsRes.status==='fulfilled';
+    let mainRow=settingsOk?settingsRes.value:null;
+    if(!settingsOk){
+      // First attempt failed or timed out — worth one retry before treating it as a real failure.
+      try{ mainRow=await withTimeout(apiFetch('/api/row/wl_settings/main'),15000); settingsOk=true; }
+      catch(e){ settingsOk=false; }
     }
-    if(settingsArr2&&settingsArr2[0]){
-      const raw=settingsArr2[0];
-      // If logo is huge base64, keep it but warn — it shouldn't cause issues
-      _settings=Object.assign({},DEF,raw);
+    if(settingsOk){
+      _settings=Object.assign({},DEF,mainRow||{}); // null just means nothing has been saved yet (fresh install)
+      _settingsLoaded=true;
     } else {
       _settingsLoadFailed=true;
-      console.error('Could not load saved settings after retry — proceeding with bare defaults. Settings page will warn and block saving until this resolves.');
+      console.error('Could not load saved settings after retry — settings changes are blocked until this resolves, to avoid overwriting saved data with defaults.');
     }
     showLoading('Almost ready…');
     await loadClaims();
@@ -4553,7 +4591,7 @@ function showView(name){
   if(name==='personnel') renderPersonnel();
   if(name==='deleted') renderDeletedJobs();
   if(name==='reports') renderReports();
-  if(name==='settings') loadCounterPreviews();
+  if(name==='settings'){ refreshSettingsFromServer(); loadCounterPreviews(); }
   if(name==='my-jobs') renderMyJobs();
   if(name==='staff-evaluation') renderStaffEvaluationPage();
   if(name==='approval'){
@@ -5103,8 +5141,7 @@ async function testStickerFlow(){
   _stickerRecords=_stickerRecords.filter(r=>r.requestId!==req.id);
   if(issuedRecords.length){
     const key=isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`;
-    _settings[key]=nextStart;
-    await SB.upsert('wl_settings','main',_settings);
+    await patchSettings(st=>{ st[key]=nextStart; });
   }
   await saveStickerRequests();
   await saveStickerRecords();
@@ -5134,12 +5171,14 @@ async function saveSettings(){
   // copy would silently and permanently wipe out anything not in that stale copy — which is
   // exactly the "settings sometimes just disappear" symptom. Re-fetch fresh right before
   // merging the form's changes on top, so nothing beyond what actually changed can be lost.
-  const freshFromServer=await SB.get('wl_settings','main');
-  if(!freshFromServer){
+  let freshFromServer;
+  try{ freshFromServer=await apiFetch('/api/row/wl_settings/main'); }
+  catch(fetchErr){
     alert('⚠️ Could not confirm the current saved settings before saving (network issue?). To avoid accidentally erasing existing settings, this save has been stopped — please check your connection and try again.');
     return;
   }
-  const s=Object.assign({},DEF,freshFromServer);
+  // (null here simply means nothing has ever been saved yet — a fresh install — which is fine)
+  const s=Object.assign({},DEF,freshFromServer||{});
   // The logo is set directly on in-memory _settings by the upload/remove handlers, not read
   // from a form field like everything else here — so it must be explicitly carried forward
   // the same way every other field on this page is, or a just-uploaded logo (not yet saved
@@ -5179,6 +5218,7 @@ async function saveSettings(){
     showToast('⚠️ Logo was not saved — the upload to storage never completed. Please re-upload it.','warn',6000);
   }
   await SB.upsert('wl_settings','main',s);
+  _settingsLoaded=true; _settingsLoadFailed=false; // a confirmed read + write just succeeded
   if(pw){
     await apiFetch('/api/set-password',{
       method:'POST',
@@ -6695,9 +6735,9 @@ function removeSocParameter(containerId,item,idx){
   renderSocSection(containerId,item);
 }
 function updateSocParamField(item,idx,field,val,inputEl){
-  if(field==='limitValue'&&/^\d/.test(val)&&!val.startsWith('±')){
-    val='±'+val;
-    if(inputEl) inputEl.value=val;
+  if(field==='limitValue'){
+    if(inputEl){ prependPlusMinus(inputEl); val=inputEl.value; } // cursor-safe (see prependPlusMinus)
+    else if(/^\d/.test(val)&&!val.startsWith('±')) val='±'+val;
   }
   if(item.socParameters&&item.socParameters[idx]) item.socParameters[idx][field]=val;
 }
@@ -9308,19 +9348,19 @@ async function saveEnquiryTemplate(){
   const type=el('et-new-type').value.trim();
   const text=el('et-new-text').value.trim();
   if(!type||!text){alert('Please enter both an equipment type and the info text.');return;}
-  if(!_settings.enquiryTemplates) _settings.enquiryTemplates=JSON.parse(JSON.stringify(DEFAULT_ENQUIRY_TEMPLATES));
-  const existingIdx=_settings.enquiryTemplates.findIndex(t=>t.type===type);
-  if(existingIdx>-1) _settings.enquiryTemplates[existingIdx].text=text;
-  else _settings.enquiryTemplates.push({type,text});
-  await SB.upsert('wl_settings','main',_settings);
+  await patchSettings(st=>{
+    if(!st.enquiryTemplates) st.enquiryTemplates=JSON.parse(JSON.stringify(DEFAULT_ENQUIRY_TEMPLATES));
+    const existingIdx=st.enquiryTemplates.findIndex(t=>t.type===type);
+    if(existingIdx>-1) st.enquiryTemplates[existingIdx].text=text;
+    else st.enquiryTemplates.push({type,text});
+  });
   el('et-new-type').value=''; el('et-new-text').value='';
   openEnquiryTemplatesModal();
   showToast('✅ Template saved','success',2500);
 }
 async function deleteEnquiryTemplate(type){
   if(!confirm(`Remove the "${type}" template?`))return;
-  _settings.enquiryTemplates=(_settings.enquiryTemplates||[]).filter(t=>t.type!==type);
-  await SB.upsert('wl_settings','main',_settings);
+  await patchSettings(st=>{ st.enquiryTemplates=(st.enquiryTemplates||[]).filter(t=>t.type!==type); });
   openEnquiryTemplatesModal();
 }
 const STANDARD_UNITS=['g','kg','mg','°C','°F','K','psi','bar','kPa','MPa','mm','cm','m','V','A','mA','Ω','mL','L','%'];
@@ -9345,10 +9385,11 @@ async function applyUnitFromPicker(selectEl){
     const custom=prompt('Enter the new unit (e.g. N·m):');
     if(!custom||!custom.trim()){selectEl.value='';return;}
     unit=custom.trim();
-    if(!_settings.customUnits) _settings.customUnits=[];
-    if(!_settings.customUnits.includes(unit)){
-      _settings.customUnits.push(unit);
-      await SB.upsert('wl_settings','main',_settings);
+    if(!(_settings.customUnits||[]).includes(unit)){
+      await patchSettings(st=>{
+        if(!st.customUnits) st.customUnits=[];
+        if(!st.customUnits.includes(unit)) st.customUnits.push(unit);
+      });
       populateAllUnitPickers();
     }
   }
@@ -9357,13 +9398,46 @@ async function applyUnitFromPicker(selectEl){
   const prevUnit=selectEl.dataset.currentUnit||'';
   group.querySelectorAll('[data-unit-target]').forEach(fieldEl=>{
     let current=fieldEl.value;
-    if(prevUnit&&current.endsWith(prevUnit)) current=current.slice(0,current.length-prevUnit.length);
+    // The list being redrawn forgets which unit was picked, so fall back to recognising the unit
+    // already sitting on the field — otherwise changing g -> mg would give "0.5gmg".
+    const prev=prevUnit||getFieldUnit(fieldEl);
+    if(prev&&current.endsWith(prev)) current=current.slice(0,current.length-prev.length);
     fieldEl.value=current+unit;
     fieldEl.dispatchEvent(new Event('input',{bubbles:true})); // triggers whatever oninput handler keeps the data model in sync
   });
   selectEl.dataset.currentUnit=unit;
   selectEl.value='';
 }
+// The unit currently sitting at the end of a Spec/Range/Resolution field, if there is one.
+function getFieldUnit(fieldEl){
+  const val=fieldEl.value||'';
+  const remembered=fieldEl.closest('.unit-target-group')?.querySelector('.unit-picker-select')?.dataset.currentUnit||'';
+  if(remembered&&val.endsWith(remembered)) return remembered;
+  const known=[...STANDARD_UNITS,...((_settings&&_settings.customUnits)||[])].filter(Boolean).sort((a,b)=>b.length-a.length);
+  // Only count a known unit that comes straight after a number (or is the whole value), so text
+  // like "Grade A" isn't mistaken for a value in amps.
+  return known.find(u=>val===u||new RegExp('[\\d.]\\s*'+u.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$').test(val))||'';
+}
+// When someone clicks or tabs into a field that already holds a unit ("g"), the cursor should sit
+// BEFORE the unit — that's where the number goes. Clicking normally lands the cursor after it, so
+// the value ended up typed on the wrong side of the unit ("g0.0002").
+function placeCaretBeforeUnit(fieldEl,onlyIfAtEnd){
+  const unit=getFieldUnit(fieldEl); if(!unit) return;
+  const len=fieldEl.value.length;
+  if(onlyIfAtEnd&&!(fieldEl.selectionStart===len&&fieldEl.selectionEnd===len)) return; // they clicked somewhere specific — respect it
+  const pos=len-unit.length;
+  fieldEl.setSelectionRange(pos,pos);
+}
+document.addEventListener('mouseup',e=>{
+  const f=e.target;
+  if(f instanceof HTMLInputElement&&f.hasAttribute('data-unit-target')) placeCaretBeforeUnit(f,true);
+});
+document.addEventListener('keyup',e=>{
+  const f=e.target;
+  if(e.key!=='Tab'||!(f instanceof HTMLInputElement)||!f.hasAttribute('data-unit-target')) return;
+  const len=f.value.length;
+  if(len&&((f.selectionStart===0&&f.selectionEnd===len)||f.selectionStart===len)) placeCaretBeforeUnit(f,false); // tabbing in selects everything — typing would wipe the unit
+});
 function openStandardPriceListModal(){
   renderPriceReferenceTable();
   openModal('modal-price-reference');
@@ -9381,17 +9455,18 @@ async function addPriceReferenceEntry(){
   const name=el('pr-new-name').value.trim();
   const price=parseFloat(el('pr-new-price').value)||0;
   if(!name||!price){alert('Please enter both an equipment type and a price.');return;}
-  if(!_settings.priceReference) _settings.priceReference=[];
-  _settings.priceReference.push({id:'PR-'+Date.now(),eqName:name,standardPrice:price});
-  await SB.upsert('wl_settings','main',_settings);
+  const priceEntry={id:'PR-'+Date.now(),eqName:name,standardPrice:price}; // built once so the saved copy and local copy match
+  await patchSettings(st=>{
+    if(!st.priceReference) st.priceReference=[];
+    st.priceReference.push(priceEntry);
+  });
   el('pr-new-name').value=''; el('pr-new-price').value='';
   renderPriceReferenceTable();
   showToast('✅ Price reference added','success',2500);
 }
 async function deletePriceReferenceEntry(id){
   if(!confirm('Remove this price reference?'))return;
-  _settings.priceReference=(_settings.priceReference||[]).filter(p=>p.id!==id);
-  await SB.upsert('wl_settings','main',_settings);
+  await patchSettings(st=>{ st.priceReference=(st.priceReference||[]).filter(p=>p.id!==id); });
   renderPriceReferenceTable();
 }
 // Finds the closest matching standard price and the customer's own price history for a
@@ -10600,18 +10675,25 @@ function updateSalesItemField(idx,field,val){
 // Generic version for any plain input field (Resolution/Readability, etc.) — same rule:
 // auto-prepend ± only when the value starts with a number, only once (not on every
 // keystroke), so it never fights with normal typing.
+// Puts "±" in front of a value that starts with a digit, WITHOUT disturbing the cursor. Setting
+// an input's value from code makes the browser jump the cursor to the very end of the field, so
+// when a unit (e.g. "g") was already sitting in the field, everything typed after the first digit
+// landed AFTER the unit ("±0g.0002" instead of "±0.0002g"). So remember where the cursor was and
+// put it back, shifted one place for the ± that was just added.
+function prependPlusMinus(input){
+  const v=input.value;
+  if(!/^\d/.test(v)||v.startsWith('±')) return false;
+  const selStart=input.selectionStart, selEnd=input.selectionEnd;
+  input.value='±'+v;
+  if(selStart!==null&&selEnd!==null) input.setSelectionRange(selStart+1,selEnd+1);
+  return true;
+}
 function autoPlusMinus(input){
-  if(/^\d/.test(input.value)&&!input.value.startsWith('±')){
-    input.value='±'+input.value;
-  }
+  prependPlusMinus(input);
 }
 function updateSalesItemSpec(idx,input){
-  let val=input.value;
-  if(/^\d/.test(val)&&!val.startsWith('±')){
-    val='±'+val;
-    input.value=val;
-  }
-  updateSalesItemField(idx,'spec',val);
+  prependPlusMinus(input);
+  updateSalesItemField(idx,'spec',input.value);
 }
 // Updates just this one item's Total display in place — never re-renders the whole list,
 // so the input never loses focus or gets interrupted mid-keystroke.
@@ -14581,10 +14663,18 @@ function addAudit(icon,msg){
   // Persist to the actual Audit Log page's data source — this was previously only updating
   // the live on-screen widget above, never actually saved, so the full log page always
   // appeared empty on reload regardless of how many events had fired.
+  // Persist by adding just THIS entry to the current server copy — never by writing this
+  // browser's whole (possibly stale) settings object back, which used to silently revert
+  // settings that someone else had saved since this page was opened.
+  const auditEntry={icon,msg,by:currentUser,ts:new Date().toISOString()};
   if(!_settings.auditLog) _settings.auditLog=[];
-  _settings.auditLog.unshift({icon,msg,by:currentUser,ts:new Date().toISOString()});
+  _settings.auditLog.unshift(auditEntry);
   if(_settings.auditLog.length>500) _settings.auditLog.length=500; // cap growth
-  SB.upsert('wl_settings','main',_settings).catch(e=>console.error('Audit log save failed:',e));
+  patchSettings(st=>{
+    if(!st.auditLog) st.auditLog=[];
+    st.auditLog.unshift(auditEntry);
+    if(st.auditLog.length>500) st.auditLog.length=500;
+  },{mirror:false,silent:true}).catch(()=>{});
   filterAuditLog();
 }
 
@@ -16833,8 +16923,11 @@ async function confirmApproveNumberedSticker(reqId){
   for(let n=nextStart;n<=nextEnd;n++){
     _stickerRecords.push({number:n,type,issuedTo:req.requestedBy,issuedAt:new Date().toISOString(),requestId:req.id,status:'Pending Confirmation'});
   }
-  _settings[isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`]=Math.max(nextEnd+1,stickerNextToIssue(type));
-  await SB.upsert('wl_settings','main',_settings);
+  const nextKey=isTestingModeOn()?`sticker_${type}_nextToIssue_test`:`sticker_${type}_nextToIssue`;
+  const nextVal=Math.max(nextEnd+1,stickerNextToIssue(type));
+  // Best-effort preview cache only (the real counter lives server-side) — it must never block or
+  // abort this approval, since the numbers have already been reserved above.
+  try{ await patchSettings(st=>{ st[nextKey]=Math.max(nextVal,st[nextKey]||0); },{silent:true}); }catch(e){}
   await saveStickerRecords();
   await saveStickerRequests();
   document.getElementById('approve-numbered-sticker-overlay').style.display='none';
