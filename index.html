@@ -706,6 +706,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
         <button id="my-jobs-clear-test-btn" class="btn btn-outline btn-sm" style="display:none;color:#991b1b;border-color:#fca5a5;" onclick="clearTestCheckinData()">🧪 Clear Test Check-In Data</button>
       </div>
+      <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;color:var(--text-muted);font-weight:600;">Sort by:</label>
+        <select id="my-jobs-sort" class="form-control" style="max-width:240px;" onchange="renderMyJobs()">
+          <option value="default">Priority + Oldest first</option>
+          <option value="readyBy">Ready By (soonest first)</option>
+          <option value="newest">Newest assigned first</option>
+          <option value="customer">Customer name (A–Z)</option>
+        </select>
+      </div>
       <div id="my-jobs-checkin-strip" style="margin-bottom:16px;"></div>
       <div id="my-jobs-list"></div>
     </div>
@@ -13599,17 +13608,34 @@ function renderMyJobs(){
     container.innerHTML=`<div class="empty-state"><div class="empty-icon">🎉</div><p>No jobs assigned to you right now.</p></div>`;
     return;
   }
-  // Express/Urgent always float to the top regardless of when assigned; everything else
-  // is pure FIFO — whichever item was assigned to you first, you clear first. Items with
-  // no recorded assignment time (older data, from before this was tracked) are treated as
-  // the oldest, since they've realistically been waiting the longest.
-  myItems.sort((a,b)=>{
-    const aUrgent=a.item.priority==='Express'||a.item.priority==='Urgent';
-    const bUrgent=b.item.priority==='Express'||b.item.priority==='Urgent';
-    if(aUrgent&&!bUrgent)return -1; if(!aUrgent&&bUrgent)return 1;
-    const aTime=a.item.assignedAt||'0'; const bTime=b.item.assignedAt||'0';
-    return aTime<bTime?-1:aTime>bTime?1:0;
-  });
+  // Default: Express/Urgent always float to the top regardless of when assigned; everything
+  // else is pure FIFO — whichever item was assigned to you first, you clear first. Items
+  // with no recorded assignment time (older data, from before this was tracked) are treated
+  // as the oldest, since they've realistically been waiting the longest. The dropdown lets
+  // someone temporarily look at the list a different way without touching this underlying
+  // fairness logic, which stays exactly as it was whenever "default" is selected.
+  const sortMode=el('my-jobs-sort')?.value||'default';
+  if(sortMode==='readyBy'){
+    myItems.sort((a,b)=>{
+      const aD=a.job.promisedDate||'9999-99-99'; const bD=b.job.promisedDate||'9999-99-99'; // no date = sorts last
+      return aD<bD?-1:aD>bD?1:0;
+    });
+  } else if(sortMode==='newest'){
+    myItems.sort((a,b)=>{
+      const aTime=a.item.assignedAt||'0'; const bTime=b.item.assignedAt||'0';
+      return aTime>bTime?-1:aTime<bTime?1:0;
+    });
+  } else if(sortMode==='customer'){
+    myItems.sort((a,b)=>(a.job.custName||'').localeCompare(b.job.custName||''));
+  } else {
+    myItems.sort((a,b)=>{
+      const aUrgent=a.item.priority==='Express'||a.item.priority==='Urgent';
+      const bUrgent=b.item.priority==='Express'||b.item.priority==='Urgent';
+      if(aUrgent&&!bUrgent)return -1; if(!aUrgent&&bUrgent)return 1;
+      const aTime=a.item.assignedAt||'0'; const bTime=b.item.assignedAt||'0';
+      return aTime<bTime?-1:aTime>bTime?1:0;
+    });
+  }
 
   // A dedicated strip for onsite check-in/out, separate from the item cards below — so the
   // action isn't buried on whichever item happens to land first in the FIFO-sorted list,
@@ -14332,8 +14358,9 @@ function renderNeedsAttention(){
     .filter(it=>it.promisedDate&&new Date(it.promisedDate+'T00:00:00')<today&&it.status!=='Completed'&&it.status!=='KIV'&&it.status!=='Returned - Abnormal').length;
   if(overdueCount) items.push({icon:'🚨',text:`${overdueCount} job item(s) overdue`,view:'equipment'});
 
-  // 2. Sticker low stock (all 4 types)
-  if(typeof STICKER_TYPES!=='undefined'){
+  // 2. Sticker low stock (all 4 types) — company-wide supply, so management only. Staff see
+  // their own sticker situation (pending confirmations, below) rather than company inventory.
+  if(typeof STICKER_TYPES!=='undefined'&&canApproveStickers(currentUser)){
     Object.keys(STICKER_TYPES).forEach(type=>{
       const c=stickerCounts(type);
       if(c.totalPrinted>0){
@@ -16467,16 +16494,23 @@ function renderStickerPage(){
   const box=el('sticker-tab-content');
   if(!box)return;
 
-  let kpiHtml=`<div class="kpi-row">`;
-  kpiHtml+=`<div class="kpi-mini"><div class="kpi-val">${c.totalPrinted}</div><div class="kpi-lbl">Total Printed</div></div>
-    <div class="kpi-mini"><div class="kpi-val">${c.available}</div><div class="kpi-lbl">Available to Issue</div></div>`;
-  kpiHtml+=`<div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)">${c.used}</div><div class="kpi-lbl">Used</div></div>
-    <div class="kpi-mini"><div class="kpi-val" style="color:var(--red)">${c.wasted}</div><div class="kpi-lbl">Wasted</div></div>
-    <div class="kpi-mini"><div class="kpi-val">${c.held}</div><div class="kpi-lbl">Currently Held (all staff)</div></div>
-  </div>`;
+  // Company-wide inventory figures (total printed, available, used, wasted, held across all
+  // staff) are management information — staff only need their own stickers, shown further
+  // down. Same audience as the pending-requests list and per-staff summary on this page.
+  const showInventoryStats=canApproveStickers(currentUser);
+  let kpiHtml='';
+  if(showInventoryStats){
+    kpiHtml=`<div class="kpi-row">`;
+    kpiHtml+=`<div class="kpi-mini"><div class="kpi-val">${c.totalPrinted}</div><div class="kpi-lbl">Total Printed</div></div>
+      <div class="kpi-mini"><div class="kpi-val">${c.available}</div><div class="kpi-lbl">Available to Issue</div></div>`;
+    kpiHtml+=`<div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)">${c.used}</div><div class="kpi-lbl">Used</div></div>
+      <div class="kpi-mini"><div class="kpi-val" style="color:var(--red)">${c.wasted}</div><div class="kpi-lbl">Wasted</div></div>
+      <div class="kpi-mini"><div class="kpi-val">${c.held}</div><div class="kpi-lbl">Currently Held (all staff)</div></div>
+    </div>`;
+  }
 
   let bannerHtml='';
-  if(c.totalPrinted>0){
+  if(showInventoryStats&&c.totalPrinted>0){
     const tcfg=stickerTypeCfg(type);
     const pctRemaining=c.available/c.totalPrinted*100;
     if(pctRemaining<=tcfg.lowPct){
