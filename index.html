@@ -6809,6 +6809,11 @@ function renderSocSection(containerId,item){
   `;
   window._socItemRefs=window._socItemRefs||{};
   window._socItemRefs[containerId]=item;
+  // This section redraws itself (ticking the checkbox, adding a parameter, changing quantity…),
+  // and each redraw creates a brand-new, empty unit dropdown — nothing else fills it in, since
+  // the page-level fill only runs when the whole item list is drawn. Fill it here, just for
+  // this section, so the Unit dropdown always has its options.
+  populateAllUnitPickers(box);
 }
 
 function addExtraEquipment(){
@@ -9364,10 +9369,10 @@ async function deleteEnquiryTemplate(type){
   openEnquiryTemplatesModal();
 }
 const STANDARD_UNITS=['g','kg','mg','°C','°F','K','psi','bar','kPa','MPa','mm','cm','m','V','A','mA','Ω','mL','L','%'];
-function populateAllUnitPickers(){
+function populateAllUnitPickers(root){
   const custom=_settings.customUnits||[];
   const allUnits=[...STANDARD_UNITS,...custom];
-  document.querySelectorAll('.unit-picker-select').forEach(sel=>{
+  (root||document).querySelectorAll('.unit-picker-select').forEach(sel=>{
     sel.innerHTML='<option value="">Unit…</option>'+allUnits.map(u=>`<option value="${u}">${u}</option>`).join('')+'<option value="__other__">+ Other…</option>';
   });
 }
