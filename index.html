@@ -57,6 +57,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .nav-item .nav-icon i{font-size:16px;line-height:1;}
 .nav-item .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;}
 .nav-item.hidden-nav{display:none;}
+.launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
+.launcher-tile{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:14px;padding:18px 16px 16px;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s;font-family:inherit;color:inherit;}
+.launcher-tile:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(15,31,61,.10);border-color:var(--tile);}
+.launcher-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--tile);background:color-mix(in srgb,var(--tile) 12%,transparent);margin-bottom:4px;}
+.launcher-name{font-weight:700;font-size:14px;}
+.launcher-desc{font-size:12px;color:var(--text-muted);line-height:1.35;}
+.launcher-badge{position:absolute;top:12px;right:12px;background:var(--red);color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:1px 8px;}
+.quick-chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:12.5px;cursor:pointer;font-family:inherit;color:inherit;}
+.quick-chip:hover{border-color:var(--blue);color:var(--blue);}
+@media(max-width:768px){ .launcher-grid{grid-template-columns:repeat(2,1fr);gap:10px;} .launcher-tile{padding:14px 12px;} .launcher-desc{display:none;} }
 .sidebar-footer{padding:12px 14px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:8px;overflow:hidden;white-space:nowrap;}
 .sidebar-footer .footer-avatar{width:28px;height:28px;background:var(--blue);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;}
 .sidebar-footer .footer-info{overflow:hidden;}
@@ -485,7 +495,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <option value="HR">Testing as: HR</option>
     </select>
   </div>
-  <div class="sidebar-nav">
+  <div class="sidebar-nav" id="cat-nav"></div>
+  <div class="sidebar-nav" id="legacy-nav" style="display:none;">
     <div class="nav-section-label">Overview</div>
     <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon"><i class="ti ti-layout-dashboard"></i></span><span class="nav-label">Dashboard</span></button>
 
@@ -599,6 +610,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-label">Completed</div><div class="stat-value" id="dash-completed">0</div><div class="stat-sub">approved &amp; closed</div></div>
       </div>
       <!-- Needs Attention (consolidated) -->
+      <div id="quick-access-box"></div>
       <div id="needs-attention-box" style="margin-bottom:16px;"></div>
       <!-- Overdue / SLA breach alert -->
       <div id="dash-overdue-banner" style="display:none;margin-bottom:16px;">
@@ -1200,6 +1212,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </select>
       </div>
       <div id="po-list"></div>
+    </div>
+
+    <!-- ════ MODULE LAUNCHER (opened from a sidebar category) ════ -->
+    <div class="view" id="view-launcher">
+      <div class="page-header"><div><div class="page-title" id="launcher-title"></div><div class="page-sub" id="launcher-sub"></div></div></div>
+      <div id="launcher-grid" class="launcher-grid"></div>
     </div>
 
     <!-- ════ MY DRAFTS ════ -->
@@ -4638,7 +4656,7 @@ const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',complete
   customers:'Customer Database',deleted:'Deleted Jobs',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
   documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Masterlist of Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
-  personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings',
+  personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings',launcher:'Modules',
   'my-drafts':'My Drafts','purchase-orders':'Purchase Orders','external-partners':'Supplier Database'};
 
 function showView(name){
@@ -21153,6 +21171,126 @@ el('dash-date').textContent='Week of '+new Date().toLocaleDateString('en-MY',{da
 </div>
 
 <!-- BOTTOM NAV (mobile only) -->
+
+<script>
+// ═══════════════════════════ CATEGORY SIDEBAR + MODULE LAUNCHER ═══════════════════════════
+// The sidebar shows a short list of categories; clicking one opens a launcher page of tiles.
+// The original per-module buttons are still in the page (hidden, #legacy-nav): every existing
+// permission rule, badge counter and testing-mode role switch keeps updating THEM, and this
+// layer only reads from them — so who-sees-what is never duplicated or re-implemented here.
+const NAV_CATEGORIES=[
+  {id:'lab',label:'Lab Work',icon:'ti-flask-2',color:'#2563eb',sub:'Jobs, approvals and day-to-day calibration work',items:[
+    ['nav-my-jobs','Your assigned calibration items'],['nav-approval','Certificates waiting for review and approval'],
+    ['nav-equipment','All jobs and items in the lab'],['nav-completed','Finished, billed and collected jobs'],
+    ['nav-calendar','On-site visits and due dates'],['nav-receiving-log','Record of items received'],['nav-staff-evaluation','Staff performance and competence']]},
+  {id:'sales',label:'Sales & Customers',icon:'ti-briefcase',color:'#0f766e',sub:'From enquiry to quotation to invoice',items:[
+    ['nav-sales-tracker','Enquiries and their progress'],['nav-capability-review','Technical review of what we can do'],
+    ['nav-quotations-v2','Create, send and track quotations'],['nav-invoices','Invoices and payments'],
+    ['nav-customers','Customer contacts and history'],['nav-price-ref','Standard prices and item codes']]},
+  {id:'purchasing',label:'Purchasing & Suppliers',icon:'ti-shopping-cart',color:'#b45309',sub:'Buying goods and outsourced services',items:[
+    ['nav-purchasing-tracker','Purchase requests and their progress'],['nav-purchase-orders','POs, approvals and delivery orders'],
+    ['nav-outsourcing-queue','Items that need an outside lab'],['nav-external-partners','Supplier and partner records']]},
+  {id:'equipment',label:'Equipment & Stickers',icon:'ti-tag',color:'#7c3aed',sub:'Our reference equipment and calibration labels',items:[
+    ['nav-ref-eq','Master list of our own equipment'],['nav-stickers','Request and track calibration stickers'],['nav-sticker-log','Every sticker used or wasted']]},
+  {id:'quality',label:'Quality System',icon:'ti-shield-check',color:'#be123c',sub:'ISO/IEC 17025 records',items:[
+    ['nav-tests','Test requests and results'],['nav-documents','Controlled documents'],['nav-capa','Nonconformances and corrective actions']]},
+  {id:'workspace',label:'My Workspace',icon:'ti-user-circle',color:'#0369a1',sub:'Your own drafts, requests and time',items:[
+    ['nav-my-drafts','Forms you saved to finish later'],['nav-claims','Expense claims'],['nav-leave','Apply for and track leave'],
+    ['nav-attendance','Clock in, clock out and records'],['nav-my-requests','Status of your requests']]},
+  {id:'admin',label:'Administration',icon:'ti-settings',color:'#475569',sub:'People, records and system settings',items:[
+    ['nav-personnel','Staff accounts, roles and signatures'],['nav-deleted','Deleted jobs (restore or purge)'],
+    ['nav-reports','Reports and the audit trail'],['nav-settings','Company details, numbering and options']]},
+];
+let _navActiveCat='dashboard', _launcherCat=null;
+function navLegacyBtn(id){ return document.getElementById(id); }
+function navAvailable(id){ const b=navLegacyBtn(id); return !!b&&!b.classList.contains('hidden-nav'); }
+function navLabelOf(id){ const b=navLegacyBtn(id); if(!b) return id; return (b.getAttribute('data-label')||b.querySelector('.nav-label,.nav-text')?.childNodes[0]?.textContent||'').replace(/&amp;/g,'&').trim(); }
+function navIconOf(id){ return navLegacyBtn(id)?.querySelector('.nav-icon i')?.className||'ti ti-point'; }
+function navBadgeOf(id){
+  const bd=navLegacyBtn(id)?.querySelector('.nav-badge'); if(!bd) return 0;
+  if(bd.style.display==='none') return 0;
+  const n=parseInt(bd.textContent,10); return isFinite(n)&&n>0?n:0;
+}
+function navViewOf(id){ const m=/showView\('([^']+)'\)/.exec(navLegacyBtn(id)?.getAttribute('onclick')||''); return m?m[1]:null; }
+function navCatOfView(view){ return NAV_CATEGORIES.find(c=>c.items.some(([id])=>navViewOf(id)===view))||null; }
+function navVisibleItems(cat){ return cat.items.filter(([id])=>navAvailable(id)); }
+function renderCategoryNav(){
+  const box=document.getElementById('cat-nav'); if(!box) return;
+  const btn=(id,icon,label,onclick,badge,extra='')=>`<button class="nav-item${_navActiveCat===id?' active':''}" id="navcat-${id}" onclick="${onclick}" data-label="${escapeHtml(label)}" ${extra}><span class="nav-icon"><i class="ti ${icon}"></i></span><span class="nav-text">${escapeHtml(label)}${badge?` <span class="nav-badge">${badge}</span>`:''}</span></button>`;
+  box.innerHTML=btn('dashboard','ti-layout-dashboard','Dashboard',"showView('dashboard')",0)
+    +'<div class="nav-section-label">Modules</div>'
+    +NAV_CATEGORIES.filter(c=>navVisibleItems(c).length).map(c=>btn(c.id,c.icon,c.label,`openNavCategory('${c.id}')`,navVisibleItems(c).reduce((s,[id])=>s+navBadgeOf(id),0))).join('')
+    +`<button class="nav-item" onclick="doLogout()" style="margin-top:8px;color:rgba(255,100,100,.8);" data-label="Logout"><span class="nav-icon"><i class="ti ti-logout"></i></span><span class="nav-label">Logout</span></button>`;
+}
+function openNavCategory(catId){
+  const cat=NAV_CATEGORIES.find(c=>c.id===catId); if(!cat) return;
+  const vis=navVisibleItems(cat);
+  if(vis.length===1){ navTileGo(vis[0][0]); return; } // only one module for this person — go straight in
+  _launcherCat=catId;
+  showView('launcher');
+}
+function navTileGo(navId){
+  const b=navLegacyBtn(navId); if(!b) return;
+  navRecordUse(navId);
+  b.click(); // runs the module's own original action (usually showView, sometimes a pop-up)
+}
+function renderLauncher(){
+  const cat=NAV_CATEGORIES.find(c=>c.id===_launcherCat); const grid=document.getElementById('launcher-grid'); if(!cat||!grid) return;
+  el('launcher-title').innerHTML=`<i class="ti ${cat.icon}" style="color:${cat.color};"></i> ${escapeHtml(cat.label)}`;
+  el('launcher-sub').textContent=cat.sub;
+  const vis=navVisibleItems(cat);
+  grid.innerHTML=vis.map(([id,desc])=>{ const n=navBadgeOf(id);
+    return `<button class="launcher-tile" onclick="navTileGo('${id}')" style="--tile:${cat.color};">
+      ${n?`<span class="launcher-badge">${n}</span>`:''}
+      <span class="launcher-icon"><i class="${navIconOf(id)}"></i></span>
+      <span class="launcher-name">${escapeHtml(navLabelOf(id))}</span>
+      <span class="launcher-desc">${escapeHtml(desc)}</span></button>`; }).join('')
+    ||'<div class="empty-state"><p>Nothing here is available for your role.</p></div>';
+}
+// ── Quick access: the modules this person opens most (remembered on this device) ──
+function navUseKey(){ return 'wl_navuse_'+(currentUser||''); }
+function navRecordUse(navId){ try{ const k=navUseKey(); const m=JSON.parse(localStorage.getItem(k)||'{}'); m[navId]=(m[navId]||0)+1; localStorage.setItem(k,JSON.stringify(m)); }catch(e){} }
+function renderQuickAccess(){
+  const box=document.getElementById('quick-access-box'); if(!box) return;
+  let m={}; try{ m=JSON.parse(localStorage.getItem(navUseKey())||'{}'); }catch(e){}
+  const allIds=NAV_CATEGORIES.flatMap(c=>c.items.map(([id])=>id));
+  const top=Object.entries(m).filter(([id])=>allIds.includes(id)&&navAvailable(id)).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  if(!top.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <span style="font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--text-muted);text-transform:uppercase;margin-right:2px;">Quick access</span>
+    ${top.map(([id])=>{ const n=navBadgeOf(id); return `<button class="quick-chip" onclick="navTileGo('${id}')"><i class="${navIconOf(id)}"></i> ${escapeHtml(navLabelOf(id))}${n?` <span class="nav-badge" style="margin-left:4px;">${n}</span>`:''}</button>`; }).join('')}
+  </div>`;
+}
+// Record use when a module is opened some other way too (links, notifications)
+(function(){
+  const orig=window.showView;
+  window.showView=function(name,...rest){
+    const r=orig.call(this,name,...rest);
+    // Pages without an entry in TITLES used to show their internal name (e.g. "quotations-v2")
+    // in the top bar — use the module's own menu label instead.
+    const tb=el('topbar-title');
+    if(tb&&tb.textContent===name){ const nb=[...document.querySelectorAll('#legacy-nav .nav-item')].find(b=>(b.getAttribute('onclick')||'')===`showView('${name}')`); if(nb) tb.textContent=navLabelOf(nb.id)||name; }
+    const cat=name==='launcher'?NAV_CATEGORIES.find(c=>c.id===_launcherCat):navCatOfView(name);
+    _navActiveCat=name==='dashboard'?'dashboard':(cat?cat.id:_navActiveCat);
+    if(name==='launcher'){ el('topbar-title').textContent=cat?cat.label:'Modules'; renderLauncher(); }
+    else if(cat&&navVisibleItems(cat).length>1){
+      const t=el('topbar-title'); const title=t.textContent;
+      t.innerHTML=`<a href="javascript:void(0)" onclick="openNavCategory('${cat.id}')" style="color:var(--text-muted);text-decoration:none;font-weight:500;">${escapeHtml(cat.label)}</a> <span style="color:var(--text-muted);font-weight:400;">›</span> ${escapeHtml(title)}`;
+    }
+    if(name==='dashboard') renderQuickAccess();
+    renderCategoryNav();
+    return r;
+  };
+})();
+// Whenever the hidden module buttons change (role switch, badge counts), refresh the categories
+(function(){
+  let t=null;
+  const refresh=()=>{ clearTimeout(t); t=setTimeout(()=>{ renderCategoryNav(); if(document.getElementById('view-launcher')?.classList.contains('active')) renderLauncher(); if(document.getElementById('view-dashboard')?.classList.contains('active')) renderQuickAccess(); },60); };
+  const legacy=document.getElementById('legacy-nav');
+  if(legacy) new MutationObserver(refresh).observe(legacy,{subtree:true,attributes:true,attributeFilter:['class','style'],childList:true,characterData:true});
+  renderCategoryNav();
+})();
+</script>
 
 <script>
 // ═══════════════════════════ DOCUMENT NUMBERING (Settings) ═══════════════════════════
