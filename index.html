@@ -57,6 +57,53 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .nav-item .nav-icon i{font-size:16px;line-height:1;}
 .nav-item .nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;}
 .nav-item.hidden-nav{display:none;}
+.st-summary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px;}
+.st-stat{background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:10px 14px;text-align:left;cursor:pointer;font-family:inherit;color:inherit;transition:border-color .12s;}
+.st-stat:hover{border-color:var(--blue);}
+.st-stat-num{font-size:20px;font-weight:700;line-height:1.2;}
+.st-stat-label{font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.3px;}
+.st-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.st-tabs{display:flex;gap:4px;background:var(--bg);border-radius:10px;padding:3px;flex-wrap:wrap;}
+.st-tab{border:none;background:none;padding:6px 12px;border-radius:8px;font-size:12.5px;cursor:pointer;color:var(--text-muted);font-family:inherit;font-weight:600;}
+.st-tab.active{background:var(--bg-card,#fff);color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.st-tab .st-tab-n{font-size:11px;background:var(--border);border-radius:8px;padding:0 6px;margin-left:4px;}
+.st-table td{vertical-align:middle;}
+.st-chip{display:inline-block;font-size:10.5px;font-weight:600;border-radius:10px;padding:1px 7px;margin-left:4px;white-space:nowrap;}
+.st-pill{display:inline-flex;flex-direction:column;gap:3px;border:none;background:none;padding:0;cursor:pointer;text-align:left;font-family:inherit;}
+.st-pill-label{display:inline-block;font-size:11.5px;font-weight:700;border-radius:12px;padding:2px 10px;white-space:nowrap;}
+.st-pill-bar{height:3px;width:120px;background:var(--border);border-radius:2px;overflow:hidden;}
+.st-pill-bar span{display:block;height:100%;}
+.st-pop{position:absolute;z-index:99999;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(15,31,61,.18);padding:5px;min-width:220px;}
+.st-pop button{display:block;width:100%;text-align:left;border:none;background:none;padding:7px 10px;border-radius:6px;font-size:12.5px;cursor:pointer;font-family:inherit;color:inherit;}
+.st-pop button:hover:not(:disabled){background:var(--bg);}
+.st-pop button:disabled{color:var(--text-muted);cursor:not-allowed;}
+.st-pop hr{border:none;border-top:1px solid var(--border);margin:4px 0;}
+@media(max-width:1100px){ .st-summary{grid-template-columns:repeat(3,1fr);} }
+@media(max-width:768px){
+  .st-summary{grid-template-columns:repeat(2,1fr);}
+  .st-table thead{display:none;}
+  .st-table,.st-table tbody,.st-table tr,.st-table td{display:block;width:100%;box-sizing:border-box;}
+  .st-table tr{border-bottom:1px solid var(--border);padding:10px 12px;}
+  .st-table td{border:none!important;padding:3px 0!important;text-align:left!important;}
+  /* phone card: label and value side by side; the customer line needs no label; ⋯ sits top-right */
+  .st-table tr{position:relative;}
+  .st-table td[data-l]{display:flex!important;gap:10px;align-items:flex-start;}
+  .st-table td[data-l]::before{content:attr(data-l);flex:0 0 78px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;padding-top:3px;}
+  .st-table td[data-l="Customer"]{display:block!important;padding-right:44px!important;font-size:14px;}
+  .st-table td[data-l="Customer"]::before{display:none;}
+  .st-table td:last-child{position:absolute;top:10px;right:12px;width:auto;}
+}
+/* Phones: header button rows and filter rows wrap onto a new line instead of running off the right
+   edge (the page deliberately can't scroll sideways, so anything past the edge was unreachable —
+   e.g. "+ New Entry" on the old Sales Tracker on an iPhone). */
+@media(max-width:768px){
+  .page-header{flex-wrap:wrap;}
+  .page-header>*{min-width:0;max-width:100%;}
+  .page-header>div[style*="display:flex"],.card-header>div[style*="display:flex"],.card-header{flex-wrap:wrap;}
+  .card-header{gap:8px;}
+  .card-header>div[style*="display:flex"]{max-width:100%;}
+  .view input.form-control,.view select.form-control,.view .filter-select{max-width:100%;}
+}
 .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
 .launcher-tile{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:14px;padding:18px 16px 16px;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s;font-family:inherit;color:inherit;}
 .launcher-tile:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(15,31,61,.10);border-color:var(--tile);}
@@ -1055,26 +1102,24 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-title">📈 Sales Tracker</div>
           <div class="page-sub">Enquiry-to-collection status pipeline</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline" onclick="openEnquiryTemplatesModal()">📋 Enquiry Templates</button>
-          <button class="btn btn-outline" onclick="openSalesTrackerDashboard()">📊 Performance Dashboard</button>
-          <button class="btn btn-outline" onclick="exportCapabilityReviewPdf()">📄 Capability Review History</button>
-          <button class="btn btn-outline" onclick="exportTrackerExcel('sales')">📊 Excel</button>
-          <button class="btn btn-outline" onclick="exportTrackerPdf('sales')">📄 PDF</button>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-outline" onclick="stOpenMoreMenu(event)">More ▾</button>
           <button class="btn btn-primary" id="sales-new-entry-btn" onclick="openTrackerEntryModal('sales')">+ New Entry</button>
         </div>
       </div>
       <div id="sales-readonly-banner" style="display:none;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 14px;font-size:12px;color:#3730a3;margin-bottom:12px;">👁️ View only — Quality Manager can see Sales Tracker but not create or edit entries.</div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <select class="form-control" id="st-filter-month" onchange="renderSalesTrackerPage()" style="width:auto;">
-          <option value="">All Months</option>
-        </select>
-        <select class="form-control" id="st-filter-status" onchange="renderSalesTrackerPage()" style="width:auto;">
-          <option value="">All Statuses</option>
-        </select>
-        <input class="form-control" id="st-search" placeholder="Search customer…" oninput="renderSalesTrackerPage()" style="width:200px;"/>
+      <div id="st-summary" class="st-summary"></div>
+      <div id="capability-review-queue" style="margin-bottom:14px;"></div>
+      <div class="st-toolbar">
+        <div id="st-tabs" class="st-tabs"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input class="form-control" id="st-search" placeholder="Search customer or item…" oninput="renderSalesTrackerPage()" style="width:210px;"/>
+          <select class="form-control" id="st-filter-person" onchange="renderSalesTrackerPage()" style="width:auto;"><option value="">All sales persons</option></select>
+          <select class="form-control" id="st-filter-month" onchange="renderSalesTrackerPage()" style="width:auto;"><option value="">All Months</option></select>
+          <select class="form-control" id="st-filter-status" onchange="renderSalesTrackerPage()" style="width:auto;display:none;"><option value="">All Statuses</option></select>
+          <a href="javascript:void(0)" id="st-more-filters-link" onclick="stToggleStatusFilter()" style="font-size:12px;white-space:nowrap;">Exact status…</a>
+        </div>
       </div>
-      <div id="capability-review-queue" style="margin-bottom:16px;"></div>
       <div id="sales-tracker-list"></div>
     </div>
 
@@ -10810,9 +10855,9 @@ function renderCapabilityReviewQueue(){
         return `<div style="background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
           <div style="font-size:13px;">
-            <strong>${entry.name}</strong> <span style="font-size:11px;color:var(--text-muted);">— ${escapeHtml(item.eqName)}</span>
+            <strong>${escapeHtml(entry.name||'')}</strong> <span style="font-size:11px;color:var(--text-muted);">— ${escapeHtml(item.eqName)}</span>
             <span style="font-size:10px;font-weight:700;color:${ageColor};margin-left:6px;">${ageLabel}</span><br/>
-            <span style="color:var(--text-muted);">${escapeHtml(item.brand?'Brand: '+item.brand+' · ':'')}${escapeHtml(item.model?'Model: '+item.model+' · ':'')}${item.spec?'Spec: '+item.spec:''}${item.range?' · Range: '+item.range:''}</span>
+            <span style="color:var(--text-muted);">${[item.brand?'Brand: '+escapeHtml(item.brand):'',item.model?'Model: '+escapeHtml(item.model):'',item.spec?'Spec: '+escapeHtml(item.spec):'',item.range?'Range: '+escapeHtml(item.range):''].filter(Boolean).join(' · ')}</span>
             ${item.remark?`<div style="font-size:11px;color:#374151;margin-top:4px;padding:6px 8px;background:var(--bg);border-radius:6px;"><strong>Customer's requirement:</strong> ${escapeHtml(item.remark)}</div>`:''}
             ${reviewer?`<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">Assigned to: ${reviewer.name||reviewer.username}${reviewer.mobile?` · <a href="${buildWhatsAppUrl(reviewer.mobile,nudgeMsg)}" target="_blank" style="color:#16a34a;">📱 Nudge via WhatsApp</a>`:''}</div>`:''}
           </div>
@@ -10824,7 +10869,15 @@ function renderCapabilityReviewQueue(){
       }).join('')}
     </div>
   </div>`;
-  if(box)box.innerHTML=html;
+  // On the Sales Tracker page the queue folds into a slim banner (the full list opens on click);
+  // the separate Capability Review page still shows the full list.
+  if(box){
+    const open=!!window._stQueueOpen;
+    box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:9px 14px;">
+        <span style="font-size:13px;color:#9a3412;"><b>🔍 ${rows.length} item${rows.length!==1?'s':''} waiting for capability review</b></span>
+        <button class="btn btn-sm ${open?'btn-outline':'btn-primary'}" onclick="window._stQueueOpen=!window._stQueueOpen;renderCapabilityReviewQueue()">${open?'Hide':'Review now'}</button>
+      </div>${open?`<div style="margin-top:8px;">${html.replace(/<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">[\s\S]*?<\/button>\s*<\/div>/,'')}</div>`:''}`;
+  }
   if(standaloneBox)standaloneBox.innerHTML=html;
 }
 function openCapabilityEvalModal(entryId,itemIdx){
@@ -11014,6 +11067,7 @@ function renderTrackerPage(type){
     renderCapabilityReviewQueue();
   }
   populateTrackerFilters(type);
+  if(type==='sales'){ renderSalesTrackerList(readOnly); return; }
   const prefix=type==='sales'?'st':'pt';
   const monthFilter=el(`${prefix}-filter-month`)?.value||'';
   const statusFilter=el(`${prefix}-filter-status`)?.value||'';
@@ -11077,6 +11131,166 @@ function renderTrackerPage(type){
     }).join('')}
     </tbody>
   </table></div></div>`;
+}
+
+// ══════════════ SALES TRACKER LIST (tidy layout) ══════════════
+// Same data, stages and rules as before — only the presentation changed: summary counters, quick
+// tabs, one "next step" button per entry, a ⋯ menu for the rest, and a status pill whose menu
+// changes the stage (so a status can't change from a stray click on a dropdown).
+const ST_GROUPS={
+  open:['Enquiry Received','Pending Technical Review','Checking External Capability'],
+  quoted:['Quotation Generated','Pending PO'],
+  won:['PO Received','Job In Progress','Job Completed','Invoice Generated','Payment Pending'],
+  closed:['Closed'],
+};
+let _stTab='all';
+function stGroupOf(status){ return Object.keys(ST_GROUPS).find(g=>ST_GROUPS[g].includes(status))||'open'; }
+function stEntryValue(e){ return (e.items||[]).reduce((s,it)=>s+(parseFloat(it.price)||0)*(parseFloat(it.quantity)||1),0); }
+function stIsLost(e){ const it=e.items||[]; return e.status==='Closed'&&it.length&&it.every(x=>x.outcome==='Lost'); }
+function stStatusStyle(e){
+  if(stIsLost(e)) return ['#fdecec','#b42318'];
+  return {open:['#eff6ff','#1d4ed8'],quoted:['#f3e8ff','#7e22ce'],won:['#e7f5ee','#136f4a'],closed:['#f1f5f9','#475569']}[stGroupOf(e.status)];
+}
+function stCloseMenus(){ document.querySelectorAll('.st-pop').forEach(x=>x.remove()); }
+document.addEventListener('click',ev=>{ if(!ev.target.closest('.st-pop')&&!ev.target.closest('[data-st-menu]')) stCloseMenus(); });
+function stShowMenu(anchor,html){
+  stCloseMenus();
+  const pop=document.createElement('div'); pop.className='st-pop'; pop.innerHTML=html; document.body.appendChild(pop);
+  const r=anchor.getBoundingClientRect();
+  let left=r.left+window.scrollX, top=r.bottom+window.scrollY+4;
+  if(left+pop.offsetWidth>window.innerWidth-8) left=Math.max(8,window.innerWidth-pop.offsetWidth-8);
+  if(r.bottom+pop.offsetHeight+8>window.innerHeight&&r.top>pop.offsetHeight) top=r.top+window.scrollY-pop.offsetHeight-4;
+  pop.style.left=left+'px'; pop.style.top=top+'px';
+}
+function stMenuItem(label,onclick,opts={}){ return `<button ${opts.disabled?'disabled':''} onclick="stCloseMenus();${onclick}" style="${opts.danger?'color:var(--red);':''}${opts.bold?'font-weight:700;':''}">${label}</button>`; }
+function stOpenMoreMenu(ev){
+  ev.stopPropagation(); ev.currentTarget.setAttribute('data-st-menu','1');
+  stShowMenu(ev.currentTarget,
+    stMenuItem('📋 Enquiry Templates','openEnquiryTemplatesModal()')+stMenuItem('📊 Performance Dashboard','openSalesTrackerDashboard()')+
+    stMenuItem('📄 Capability Review History','exportCapabilityReviewPdf()')+'<hr/>'+
+    stMenuItem('📊 Export to Excel',"exportTrackerExcel('sales')")+stMenuItem('📄 Export to PDF',"exportTrackerPdf('sales')"));
+}
+function stToggleStatusFilter(){
+  const sel=el('st-filter-status'), link=el('st-more-filters-link'); if(!sel) return;
+  const show=sel.style.display==='none'; sel.style.display=show?'':'none';
+  if(!show){ sel.value=''; renderSalesTrackerPage(); }
+  if(link) link.textContent=show?'Hide exact status':'Exact status…';
+}
+function stSetTab(t){ _stTab=t; renderSalesTrackerPage(); }
+function stOpenStatusMenu(ev,entryId){
+  ev.stopPropagation(); ev.currentTarget.setAttribute('data-st-menu','1');
+  const e=_salesTracker.find(x=>x.id===entryId); if(!e) return;
+  const anyCleared=(e.items||[]).some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
+  stShowMenu(ev.currentTarget,`<div style="font-size:10.5px;font-weight:700;color:var(--text-muted);padding:4px 10px;letter-spacing:.4px;">CHANGE STATUS</div>`+
+    SALES_STAGES.map((st,i)=>{ const gated=st==='Quotation Generated'&&!anyCleared;
+      return stMenuItem(`${st===e.status?'✓ ':'&nbsp;&nbsp;&nbsp;'}${i+1}. ${escapeHtml(st)}${gated?' 🔒':''}`,st===e.status?'':`updateTrackerStatus('sales','${e.id}','${st}')`,{disabled:gated,bold:st===e.status}); }).join('')
+    +(anyCleared?'':`<div style="font-size:10.5px;color:var(--text-muted);padding:4px 10px;">🔒 Quotation stage unlocks after capability review</div>`));
+}
+function stOpenRowMenu(ev,entryId){
+  ev.stopPropagation(); ev.currentTarget.setAttribute('data-st-menu','1');
+  const e=_salesTracker.find(x=>x.id===entryId); if(!e) return;
+  const items=e.items||[];
+  let html='';
+  if(items.some(it=>it.capabilityVerdict)) html+=stMenuItem('📄 Contract Review Form (PDF)',`exportEntryCapabilityReviewPdf('${e.id}')`);
+  if(e.linkedQuotationId) html+=stMenuItem('📄 Open quotation',`showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')`);
+  else if(items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict))&&!['open','quoted'].includes(stGroupOf(e.status))) html+=stMenuItem('📄 Create quotation',`openQuotationV2Modal(null,'${e.id}')`);
+  if(e.jobNo) html+=stMenuItem('🔧 Open job '+escapeHtml(e.jobNo),`showView('equipment');el('equipment-search').value='${escapeForJsAttr(e.jobNo)}';renderEquipmentTable();`);
+  items.forEach((it,idx)=>{ if(it.capabilityVerdict==='Cannot Do') html+=stMenuItem('🔄 Resubmit for review: '+escapeHtml(it.eqName),`resubmitCapabilityForReview('${e.id}',${idx})`); });
+  html+=(html?'<hr/>':'')+stMenuItem('✏️ Edit entry',`openTrackerEntryModal('sales','${e.id}')`)+stMenuItem('🗑 Delete entry',`deleteTrackerEntry('sales','${e.id}')`,{danger:true});
+  stShowMenu(ev.currentTarget,html);
+}
+// The single most useful next action for an entry (the rest live in the ⋯ menu)
+function stNextStep(e,readOnly){
+  if(readOnly||e.status==='Closed') return ''; // a closed entry has no next step
+  const items=e.items||[];
+  const cannot=items.map((it,idx)=>({it,idx})).filter(x=>x.it.capabilityVerdict==='Cannot Do');
+  if(cannot.length){
+    const {it,idx}=cannot[0];
+    return it.linkedPurchasingTrackerId
+      ?`<button class="btn btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="setExternalCapabilityFound('${e.id}',${idx})" title="Confirm an external vendor can do ${escapeHtml(it.eqName)}">✅ Vendor found${cannot.length>1?' ('+cannot.length+')':''}</button>`
+      :`<button class="btn btn-outline btn-sm" onclick="showView('outsourcing-queue')" title="${escapeHtml(it.eqName)} can't be done in-house — send it for an external check">📤 Send to outsourcing</button>`;
+  }
+  const pendingIdx=items.findIndex(it=>!it.capabilityVerdict);
+  if(pendingIdx>-1&&e.status==='Enquiry Received')
+    return `<button class="btn btn-outline btn-sm" onclick="updateTrackerStatus('sales','${e.id}','Pending Technical Review')" title="Move to Pending Technical Review so the reviewer sees it">📨 Send for review</button>`;
+  if(pendingIdx>-1&&e.status==='Pending Technical Review'){
+    return canReviewCapability(currentUser)
+      ?`<button class="btn btn-primary btn-sm" onclick="openCapabilityEvalModal('${e.id}',${pendingIdx})">🔍 Evaluate</button>`
+      :`<span style="font-size:11.5px;color:var(--text-muted);">⏳ Awaiting review</span>`;
+  }
+  const anyCleared=items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
+  if(anyCleared){
+    if(e.linkedQuotationId){ const qn=(_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||'quotation';
+      return `<button class="btn btn-outline btn-sm" onclick="showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')">📄 View ${escapeHtml(qn)}</button>`; }
+    // Only prompt for a quotation before the PO arrives — later stages are past that point
+    if(['open','quoted'].includes(stGroupOf(e.status))) return `<button class="btn btn-primary btn-sm" onclick="openQuotationV2Modal(null,'${e.id}')">📄 Create Quotation</button>`;
+  }
+  return '';
+}
+function renderSalesTrackerList(readOnly){
+  const box=el('sales-tracker-list'); if(!box) return;
+  const all=_salesTracker.slice();
+  // sales-person filter options
+  const personSel=el('st-filter-person');
+  if(personSel){
+    const cur=personSel.value; const people=[...new Set(all.map(e=>e.salesPersonnel).filter(Boolean))];
+    personSel.innerHTML='<option value="">All sales persons</option>'+people.map(u=>`<option value="${escapeHtml(u)}" ${u===cur?'selected':''}>${escapeHtml(USERS[u]?.name||u)}</option>`).join('');
+  }
+  const month=el('st-filter-month')?.value||'', status=el('st-filter-status')?.value||'', person=personSel?.value||'';
+  const q=(el('st-search')?.value||'').toLowerCase().trim();
+  const base=all.filter(e=>{
+    if(month&&e.month!==month) return false;
+    if(status&&e.status!==status) return false;
+    if(person&&e.salesPersonnel!==person) return false;
+    if(q&&!(String(e.name||'').toLowerCase().includes(q)||(e.items||[]).some(it=>String(it.eqName||'').toLowerCase().includes(q)))) return false;
+    return true;
+  });
+  // summary strip (for the current month / person / search filters)
+  const cnt=g=>base.filter(e=>stGroupOf(e.status)===g).length;
+  const awaiting=base.filter(e=>e.status==='Pending Technical Review'&&(e.items||[]).some(it=>!it.capabilityVerdict)).length;
+  const lost=base.filter(stIsLost).length;
+  const pipeline=base.filter(e=>['open','quoted'].includes(stGroupOf(e.status))).reduce((s,e)=>s+stEntryValue(e),0);
+  const stat=(n,label,color,onclick)=>`<button class="st-stat" onclick="${onclick}"><div class="st-stat-num" style="color:${color};">${n}</div><div class="st-stat-label">${label}</div></button>`;
+  const summ=el('st-summary');
+  if(summ) summ.innerHTML=stat(cnt('open'),'Open','#1d4ed8',"stSetTab('open')")+stat(awaiting,'Awaiting review','#c2410c',"window._stQueueOpen=true;renderCapabilityReviewQueue();document.getElementById('capability-review-queue').scrollIntoView({behavior:'smooth',block:'center'})")
+    +stat(cnt('quoted'),'Quoted','#7e22ce',"stSetTab('quoted')")+stat(cnt('won'),'Won / in progress','#136f4a',"stSetTab('won')")
+    +stat(lost,'Lost','#b42318',"stSetTab('closed')")+stat('RM '+pipeline.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),'Open pipeline value','var(--navy)',"stSetTab('open')");
+  // tabs
+  const tabs=[['all','All',base.length],['open','Open',cnt('open')],['quoted','Quoted',cnt('quoted')],['won','Won / In progress',cnt('won')],['closed','Closed',cnt('closed')]];
+  const tb=el('st-tabs'); if(tb) tb.innerHTML=tabs.map(([k,l,n])=>`<button class="st-tab ${_stTab===k?'active':''}" onclick="stSetTab('${k}')">${l}<span class="st-tab-n">${n}</span></button>`).join('');
+  const list=base.filter(e=>_stTab==='all'||stGroupOf(e.status)===_stTab)
+    .sort((a,b)=>String(b.enquiryDate||b.createdAt||'').localeCompare(String(a.enquiryDate||a.createdAt||'')));
+  if(!list.length){ box.innerHTML=`<div class="empty-state"><div class="empty-icon">📈</div><p>${all.length?'No entries match these filters.':'No entries yet. Click "+ New Entry" to add one.'}</p></div>`; return; }
+  const chip=it=>{
+    if(it.outcome==='Won') return '<span class="st-chip" style="background:#e7f5ee;color:#136f4a;">Won</span>';
+    if(it.outcome==='Lost') return '<span class="st-chip" style="background:#fdecec;color:#b42318;">Lost</span>';
+    const m={'Can Do':['Confirmed','#e7f5ee','#136f4a'],'Can Do (External)':['External','#fff4e0','#9a5b00'],'Cannot Do':["Can't do",'#fdecec','#b42318']}[it.capabilityVerdict]||['Pending review','#f1f5f9','#64748b'];
+    return `<span class="st-chip" style="background:${m[1]};color:${m[2]};">${m[0]}</span>`;
+  };
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table class="st-table">
+    <thead><tr><th>Received</th><th>Customer</th><th>Items</th><th style="text-align:right;">Value (RM)</th><th>Status</th><th>Next step</th><th></th></tr></thead>
+    <tbody>${list.map(e=>{
+      const items=e.items||[]; const [bg,fg]=stStatusStyle(e);
+      const step=SALES_STAGES.indexOf(e.status)+1;
+      const received=fmtDateShort(e.enquiryDate||e.createdAt).replace(/ \d{4}$/,'');
+      const qn=e.linkedQuotationId?((_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||''):'';
+      const tags=[qn?`📄 ${escapeHtml(qn)}`:'',e.jobNo?`🔧 ${escapeHtml(e.jobNo)}`:''].filter(Boolean).map(t=>`<span style="font-size:10.5px;color:var(--text-muted);background:var(--bg);border-radius:6px;padding:1px 6px;margin-right:4px;">${t}</span>`).join('');
+      const person=USERS[e.salesPersonnel]?.name||e.salesPersonnel||'';
+      const val=stEntryValue(e);
+      return `<tr>
+        <td data-l="Received" style="white-space:nowrap;font-size:12.5px;">${received}</td>
+        <td data-l="Customer"><div style="font-weight:700;">${escapeHtml(e.name||'')}${e.remark?` <span title="${escapeHtml(e.remark)}" onclick="showToast(this.title,'info',6000)" style="cursor:pointer;font-size:12px;">💬</span>`:''}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">${person?escapeHtml(person):''}</div>${tags?`<div style="margin-top:3px;">${tags}</div>`:''}</td>
+        <td data-l="Items" style="font-size:12.5px;">${items.map(it=>`<div style="margin:1px 0;">${escapeHtml(it.eqName||'')}${parseFloat(it.quantity)>1?` <span style="color:var(--text-muted);">× ${escapeHtml(it.quantity)}</span>`:''}${chip(it)}</div>`).join('')||'<span style="color:var(--text-muted);">—</span>'}</td>
+        <td data-l="Value (RM)" style="text-align:right;white-space:nowrap;font-weight:600;">${val?val.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:var(--text-muted);font-weight:400;">—</span>'}</td>
+        <td data-l="Status"><button class="st-pill" ${readOnly?'disabled style="cursor:default;"':`onclick="stOpenStatusMenu(event,'${e.id}')" title="Click to change status"`}>
+          <span class="st-pill-label" style="background:${bg};color:${fg};">${escapeHtml(e.status||'')}${stIsLost(e)?' · Lost':''}${readOnly?'':' ▾'}</span>
+          <span class="st-pill-bar"><span style="width:${Math.round(step/SALES_STAGES.length*100)}%;background:${fg};"></span></span>
+          <span style="font-size:10px;color:var(--text-muted);">Step ${step} of ${SALES_STAGES.length}</span></button></td>
+        <td data-l="Next step">${stNextStep(e,readOnly)||'<span style="color:var(--text-muted);">—</span>'}</td>
+        <td style="text-align:right;">${readOnly?(items.some(it=>it.capabilityVerdict)?`<button class="btn btn-outline btn-sm" onclick="exportEntryCapabilityReviewPdf('${e.id}')" title="Contract Review Form">📄</button>`:''):`<button class="btn btn-outline btn-sm" onclick="stOpenRowMenu(event,'${e.id}')" title="More actions" style="padding:4px 10px;">⋯</button>`}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div></div>`;
 }
 
 function openTrackerEntryModal(type,entryId){
@@ -11529,6 +11743,7 @@ async function updateTrackerStatus(type,entryId,newStatus){
   if(!entry.statusHistory) entry.statusHistory=[];
   entry.statusHistory.push({status:newStatus,date:new Date().toISOString(),by:currentUser});
   await trackerSave(type);
+  renderTrackerPage(type); // the status pill, counters, tabs and next-step button all depend on the status
   showToast(`Status updated to "${newStatus}"`,'success',2000);
   addAudit(type==='sales'?'📈':'🛒',`${type==='sales'?'Sales':'Purchasing'} Tracker — ${entry.name} moved to "${newStatus}"`);
 }
