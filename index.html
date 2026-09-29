@@ -132,6 +132,10 @@ th{text-align:left;font-size:11px;font-weight:600;color:var(--text-muted);text-t
 td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;}
 tr:last-child td{border-bottom:none;}
 tbody tr:hover{background:#f8fafc;}
+/* Generated documents (quotation, contract review) must not inherit the app's table styling */
+.pdf-doc table{width:auto;border-collapse:collapse;font-size:inherit;}
+.pdf-doc th,.pdf-doc td{padding:0;border:none;background:none;font-size:inherit;font-weight:inherit;color:inherit;text-transform:none;letter-spacing:normal;text-align:inherit;white-space:normal;}
+.pdf-doc tbody tr:hover{background:none;}
 
 /* ── BADGES ── */
 .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
@@ -3544,10 +3548,18 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div style="display:flex;gap:8px;margin-bottom:12px;">
         <input class="form-control" id="pr-new-name" placeholder="Equipment type (e.g. pH Meter)"/>
         <input class="form-control" type="number" min="0" step="0.01" id="pr-new-price" placeholder="Standard Price (RM)" style="max-width:180px;"/>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <select class="form-control" id="pr-new-acc" style="max-width:200px;"><option value="">Accreditation…</option><option value="SAMM-Accredited">SAMM-Accredited</option><option value="Non-Accredited">Non-Accredited</option></select>
+        <select class="form-control" id="pr-new-caltype" style="max-width:140px;"><option value="Lab">Lab</option><option value="Onsite">On-site</option></select>
+      </div>
+      <textarea class="form-control" id="pr-new-desc" rows="2" placeholder="Description lines printed on quotations (optional), e.g.&#10;Type: Handheld/Benchtop unit with 1 electrode, carrying case" style="margin-bottom:8px;"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-muted);">An item code (WLC-001, WLC-002 …) is given automatically.</span>
         <button class="btn btn-primary" onclick="addPriceReferenceEntry()">+ Add</button>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Equipment Type</th><th>Standard Price (RM)</th><th></th></tr></thead>
+        <thead><tr><th>Code</th><th>Equipment Type</th><th>Service</th><th>Standard Price (RM)</th><th>Description</th><th></th></tr></thead>
         <tbody id="price-reference-tbody"></tbody>
       </table></div>
     </div>
@@ -5706,7 +5718,11 @@ async function openNewJobModal(){
           const endUserEl=el('eq-end-user'); if(endUserEl) endUserEl.value=quo.endUserName;
           const endUserAddrEl=el('eq-end-user-address'); if(endUserAddrEl) endUserAddrEl.value=quo.endUserAddress||'';
         }
-        const first=quo.items[0];
+        // Each quotation line becomes one job item PER UNIT (a line of 2 balances = 2 job items,
+        // 2 certificates), each carrying its own serial/tag/cal points/resolution and the price
+        // after any discount.
+        const _qtUnits=qtExpandToJobUnits(quo.items);
+        const first=_qtUnits[0];
         const nameEl=el('eq-name'); if(nameEl) nameEl.value=first.eqName||'';
         const brandEl=el('eq-brand'); if(brandEl) brandEl.value=first.brand||'';
         const modelEl=el('eq-model'); if(modelEl) modelEl.value=first.model||'';
@@ -5745,11 +5761,11 @@ async function openNewJobModal(){
           if(depHint) depHint.textContent=`🔒 Pulled from ${quo.quotationNo} — not editable here`;
         }
         updateSiteFieldsVisibility();
-        quo.items.slice(1).forEach(it=>{
+        _qtUnits.slice(1).forEach(it=>{
           _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:it.serial||'',tagNo:it.tagNo||'N/A',range:it.range||'',calPoints:it.calPoints||'',spec:it.spec||'',resolution:it.resolution||'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.unitPrice||0):0,priceLocked:true,quotedSocRequested:it.socRequested||false,quotedSocPricePerUnit:it.socPricePerUnit||0,socRequested:it.socRequested||false,socParameters:it.socParameters&&it.socParameters.length?JSON.parse(JSON.stringify(it.socParameters)):undefined});
         });
         renderExtraEquipment();
-        showToast(`✅ Pre-filled from ${quo.quotationNo} — ${quo.items.length} item(s). Please fill in Serial No. and other physical details once the item arrives.`,'success',5000);
+        showToast(`✅ Pre-filled from ${quo.quotationNo} — ${_qtUnits.length} item(s), one per unit. Please check Serial No. and other physical details once the items arrive.`,'success',5000);
       }
     }
 
@@ -6606,8 +6622,11 @@ function calcExtraPromisedDate(idx){
 }
 function fmtDateShort(d){
   if(!d)return'';
-  const dt=new Date(d+'T00:00:00');
-  if(isNaN(dt))return d;
+  // Accepts a plain date ("2026-09-20", read as local midnight) or a full timestamp
+  // ("2026-09-20T09:00:00Z") — timestamps used to come back unformatted.
+  const str=String(d);
+  const dt=/^\d{4}-\d{2}-\d{2}$/.test(str)?new Date(str+'T00:00:00'):new Date(d);
+  if(isNaN(dt))return str;
   return dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 }
 
@@ -9346,14 +9365,150 @@ function addQtv2ItemRow(){
 }
 function removeQtv2ItemRow(idx){ _qtv2DraftItems.splice(idx,1); renderQtv2ItemsList(); }
 function updateQtv2ItemField(idx,field,val){ if(_qtv2DraftItems[idx]) _qtv2DraftItems[idx][field]=val; }
+// ═══ QUOTATION LINE RULES (shared by the form, the list, the PDF and Job Creation) ═══
+// Discount: "10%" or an RM amount such as "50" — applies to the calibration line only.
+// The quotation form used to pre-fill this generic text (which even said "Cash on delivery",
+// contradicting the standard "Net 30 days" terms). It's treated as empty, never printed.
+const QT_LEGACY_DEFAULT_TERMS='1. Prices are in Ringgit Malaysia (RM) and exclude any applicable taxes.\\n2. Payment terms: Cash on delivery / as agreed.\\n3. Validity as stated above from date of issue.';
+function qtIsLegacyDefaultTerms(t){ const norm=v=>String(v||'').replace(/\\n/g,'\n').replace(/\s+/g,' ').trim(); return !!t&&norm(t)===norm(QT_LEGACY_DEFAULT_TERMS); }
+function qtParseDiscount(d,gross){
+  const str=String(d==null?'':d).trim(); if(!str) return 0;
+  const n=parseFloat(str); if(!isFinite(n)||n<=0) return 0;
+  return Math.min(str.endsWith('%')?gross*n/100:n,gross);
+}
+// How many of the line's units need a Statement of Conformity (never more than the quantity).
+function qtSocUnits(it){
+  const qty=Math.max(1,parseInt(it.quantity)||1);
+  const u=parseInt(it.socUnitsNeeded)||qty;
+  return Math.min(Math.max(u,1),qty);
+}
+// SoC is charged per parameter, per unit needing it: 2 parameters × 2 units × RM100 = RM400.
+// Never discounted. Older quotations that only had a single "SoC price per unit" still price
+// the way they did before.
+function qtSocLines(it){
+  if(!it.socRequested) return [];
+  const units=qtSocUnits(it);
+  const params=(it.socParameters||[]).filter(p=>p&&(p.parameterName||parseFloat(p.socPrice)));
+  if(params.some(p=>parseFloat(p.socPrice))||!it.socPricePerUnit)
+    return params.map(p=>{ const price=parseFloat(p.socPrice)||0; return {name:p.parameterName||'Parameter',units,price,amount:units*price}; });
+  const legacyUnits=Math.max(1,parseFloat(it.quantity)||1);
+  return [{name:'',units:legacyUnits,price:it.socPricePerUnit,amount:legacyUnits*it.socPricePerUnit}];
+}
+function qtLineCalc(it){
+  const qty=Math.max(1,parseFloat(it.quantity)||1);
+  const price=parseFloat(it.unitPrice)||0;
+  const gross=qty*price;
+  const disc=qtParseDiscount(it.discount,gross);
+  const net=gross-disc;
+  const soc=qtSocLines(it);
+  const socTotal=soc.reduce((sum,l)=>sum+l.amount,0);
+  return {qty,price,gross,disc,net,soc,socTotal,total:net+socTotal,netUnitPrice:net/qty};
+}
+function qtQuotationTotal(items){ return (items||[]).filter(it=>it&&it.eqName!=='').reduce((sum,it)=>sum+qtLineCalc(it).total,0); }
+// One row of Serial / Tag / Cal Points / Resolution per unit on the line.
+function qtEnsureUnits(it){
+  const n=Math.max(1,Math.min(200,parseInt(it.quantity)||1));
+  if(!Array.isArray(it.units)) it.units=[];
+  if(!it.units.length){ // older quotation: one value for the whole line
+    const first=v=>String(v||'').split(',')[0].trim();
+    it.units.push({serial:first(it.serial),tagNo:first(it.tagNo)==='N/A'?'':first(it.tagNo),calPoints:'',resolution:''});
+  }
+  while(it.units.length<n) it.units.push({serial:'',tagNo:'',calPoints:'',resolution:''});
+  if(it.units.length>n) it.units.length=n;
+  if(it.sameCal===undefined) it.sameCal=true;
+  return it.units;
+}
+function qtUnitDetails(it){
+  qtEnsureUnits(it);
+  const same=it.sameCal!==false;
+  return it.units.map(u=>({serial:u.serial||'',tagNo:u.tagNo||'',calPoints:same?(it.calPoints||''):(u.calPoints||''),resolution:same?(it.resolution||''):(u.resolution||'')}));
+}
+// Keeps the older single-value fields filled in, for anything else that still reads them.
+function qtSyncLegacyFields(it){
+  const d=qtUnitDetails(it);
+  it.serial=d.map(u=>u.serial).filter(Boolean).join(', ');
+  it.tagNo=d.map(u=>u.tagNo).filter(Boolean).join(', ');
+}
+// Splits every quotation line into one job item per unit, each with its own details, the
+// price after discount, and SoC on however many units needed it.
+function qtExpandToJobUnits(items){
+  const out=[];
+  (items||[]).filter(it=>it&&it.eqName).forEach(it=>{
+    const c=qtLineCalc(it);
+    const socN=it.socRequested?qtSocUnits(it):0;
+    qtUnitDetails(it).forEach((u,ui)=>{
+      const unit={...it,serial:u.serial,tagNo:u.tagNo,calPoints:u.calPoints,resolution:u.resolution,quantity:1,
+        unitPrice:Math.round(c.netUnitPrice*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
+        socParameters:(ui<socN&&it.socParameters)?JSON.parse(JSON.stringify(it.socParameters)):undefined};
+      delete unit.units; delete unit.discount;
+      out.push(unit);
+    });
+  });
+  return out;
+}
+function qtAccLabel(acc){ return acc==='SAMM-Accredited'?'Accredited':(acc==='Non-Accredited'?'Non-accredited':''); }
+function qtServiceTag(it){ const acc=qtAccLabel(it.accreditationRequested||it.accreditation); return `[${acc?acc+' ':''}${it.calType==='Onsite'?'Site':'Lab'} Calibration]`; }
+// ── Standard items with automatic item codes (WLC-001, WLC-002 …) ──
+// A code stands for equipment + accreditation + lab/site, since those are priced differently.
+async function nextItemCode(){
+  const d=await apiFetch('/api/seq-next',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'item_code_seq'})});
+  return 'WLC-'+String(d.val).padStart(3,'0');
+}
+function qtFindStandard(eqName,acc,calType){
+  const n=String(eqName||'').trim().toLowerCase(); if(!n) return null;
+  return (_settings.priceReference||[]).find(p=>String(p.eqName||'').trim().toLowerCase()===n&&(p.accreditation||'')===(acc||'')&&(p.calType||'Lab')===(calType||'Lab'))||null;
+}
+let _ensuringItemCodes=false;
+async function ensurePriceRefCodes(){
+  const missing=(_settings.priceReference||[]).filter(p=>!p.itemCode);
+  if(!missing.length||_ensuringItemCodes) return;
+  _ensuringItemCodes=true;
+  try{
+    for(const m of missing){
+      const code=await nextItemCode();
+      await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===m.id); if(e&&!e.itemCode) e.itemCode=code; },{silent:true});
+    }
+  }catch(e){ console.warn('Could not assign item codes yet:',e); }
+  finally{ _ensuringItemCodes=false; }
+}
+function applyStandardItemToQtv2(idx,prId){
+  const it=_qtv2DraftItems[idx]; const p=(_settings.priceReference||[]).find(x=>x.id===prId); if(!it||!p) return;
+  it.eqName=p.eqName; it.unitPrice=p.standardPrice||0; it.itemCode=p.itemCode||''; it.stdDescription=p.description||'';
+  it.accreditationRequested=p.accreditation||''; it.calType=p.calType||'Lab';
+  renderQtv2ItemsList();
+}
+async function saveQtv2LineAsStandardItem(idx){
+  const it=_qtv2DraftItems[idx]; if(!it) return;
+  if(!String(it.eqName||'').trim()){ alert('Enter the equipment name first.'); return; }
+  const existing=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
+  if(existing&&existing.itemCode){ it.itemCode=existing.itemCode; if(!it.stdDescription) it.stdDescription=existing.description||''; renderQtv2ItemsList(); showToast(`This item is already in the Standard Price List as ${existing.itemCode}`,'info',3500); return; }
+  try{
+    const code=await nextItemCode();
+    const entry={id:'PR-'+Date.now(),itemCode:code,eqName:it.eqName.trim(),standardPrice:parseFloat(it.unitPrice)||0,
+      accreditation:it.accreditationRequested||'',calType:it.calType||'Lab',description:it.stdDescription||''};
+    await patchSettings(st=>{ if(!st.priceReference) st.priceReference=[]; st.priceReference.push(entry); });
+    it.itemCode=code; renderQtv2ItemsList();
+    showToast(`💾 Saved to the Standard Price List as ${code}`,'success',3500);
+  }catch(e){ showToast('❌ Could not save standard item: '+e.message,'error',5000); }
+}
+function updateQtv2UnitField(idx,ui,field,val){ const it=_qtv2DraftItems[idx]; if(!it) return; qtEnsureUnits(it); if(it.units[ui]) it.units[ui][field]=val; }
+function toggleQtv2SameCal(idx,same){
+  const it=_qtv2DraftItems[idx]; if(!it) return; qtEnsureUnits(it);
+  it.sameCal=same;
+  if(!same) it.units.forEach(u=>{ if(!u.calPoints) u.calPoints=it.calPoints||''; if(!u.resolution) u.resolution=it.resolution||''; });
+  renderQtv2ItemsList();
+}
+function qtRefreshAllTotals(){ _qtv2DraftItems.forEach((_,i)=>updateQtv2ItemTotal(i)); updateQtv2GrandTotal(); }
 function updateQtv2ItemTotal(idx){
   const it=_qtv2DraftItems[idx]; if(!it)return;
-  const total=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
-  const el2=el(`qtv2-item-total-${idx}`); if(el2) el2.textContent=`RM ${total.toFixed(2)}`;
+  const c=qtLineCalc(it); const total=c.total;
+  const parts=[`calibration RM ${c.net.toFixed(2)}${c.disc?` (after RM ${c.disc.toFixed(2)} discount)`:''}`];
+  if(c.socTotal) parts.push(`SoC RM ${c.socTotal.toFixed(2)}`);
+  const el2=el(`qtv2-item-total-${idx}`); if(el2) el2.textContent=`RM ${total.toFixed(2)}${(c.disc||c.socTotal)?' — '+parts.join(' + '):''}`;
   updateQtv2GrandTotal();
 }
 function updateQtv2GrandTotal(){
-  const grand=_qtv2DraftItems.reduce((s,it)=>s+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
+  const grand=qtQuotationTotal(_qtv2DraftItems);
   const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${grand.toFixed(2)}`;
 }
 const DEFAULT_ENQUIRY_TEMPLATES=[
@@ -9484,26 +9639,34 @@ document.addEventListener('keyup',e=>{
 function openStandardPriceListModal(){
   renderPriceReferenceTable();
   openModal('modal-price-reference');
+  ensurePriceRefCodes().then(renderPriceReferenceTable).catch(()=>{});
 }
 function renderPriceReferenceTable(){
   const body=el('price-reference-tbody'); if(!body)return;
-  const list=(_settings.priceReference||[]).slice().sort((a,b)=>a.eqName.localeCompare(b.eqName));
+  const list=(_settings.priceReference||[]).slice().sort((a,b)=>(a.itemCode||'~').localeCompare(b.itemCode||'~')||a.eqName.localeCompare(b.eqName));
   body.innerHTML=list.map((p,idx)=>`<tr>
+    <td style="white-space:nowrap;font-weight:600;">${escapeHtml(p.itemCode||'…')}</td>
     <td>${escapeHtml(p.eqName)}</td>
+    <td style="white-space:nowrap;font-size:12px;">${escapeHtml(qtServiceTag(p).replace(/[\[\]]/g,''))}</td>
     <td style="text-align:right;">${(p.standardPrice||0).toFixed(2)}</td>
+    <td style="font-size:11.5px;color:var(--text-muted);white-space:pre-line;">${escapeHtml(p.description||'')}</td>
     <td><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deletePriceReferenceEntry('${p.id}')">✕</button></td>
-  </tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No price references yet.</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No price references yet.</td></tr>';
 }
 async function addPriceReferenceEntry(){
   const name=el('pr-new-name').value.trim();
   const price=parseFloat(el('pr-new-price').value)||0;
   if(!name||!price){alert('Please enter both an equipment type and a price.');return;}
-  const priceEntry={id:'PR-'+Date.now(),eqName:name,standardPrice:price}; // built once so the saved copy and local copy match
+  const acc=el('pr-new-acc')?.value||'', calType=el('pr-new-caltype')?.value||'Lab';
+  if(qtFindStandard(name,acc,calType)){ alert('This equipment with the same accreditation and lab/on-site service is already in the list.'); return; }
+  let itemCode='';
+  try{ itemCode=await nextItemCode(); }catch(e){ showToast('⚠️ Item code will be assigned later (server not reachable)','warn',4000); }
+  const priceEntry={id:'PR-'+Date.now(),itemCode,eqName:name,standardPrice:price,accreditation:acc,calType,description:el('pr-new-desc')?.value.trim()||''}; // built once so the saved copy and local copy match
   await patchSettings(st=>{
     if(!st.priceReference) st.priceReference=[];
     st.priceReference.push(priceEntry);
   });
-  el('pr-new-name').value=''; el('pr-new-price').value='';
+  el('pr-new-name').value=''; el('pr-new-price').value=''; if(el('pr-new-desc')) el('pr-new-desc').value='';
   renderPriceReferenceTable();
   showToast('✅ Price reference added','success',2500);
 }
@@ -9531,70 +9694,98 @@ function lookupPriceGuidance(eqName,custId){
 }
 function renderQtv2ItemsList(){
   const box=el('qtv2-items-list'); if(!box)return;
+  const std=(_settings.priceReference||[]).slice().sort((a,b)=>(a.itemCode||'~').localeCompare(b.itemCode||'~')||String(a.eqName).localeCompare(String(b.eqName)));
   box.innerHTML=_qtv2DraftItems.map((it,idx)=>{
-    const total=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
+    qtEnsureUnits(it);
+    const qty=Math.max(1,parseInt(it.quantity)||1);
+    const same=it.sameCal!==false;
+    const unitCols=`${qty>1?'52px ':''}1fr 1fr${same?'':' 1fr 1fr'}`;
+    const unitRows=it.units.map((u,ui)=>`<div style="display:grid;grid-template-columns:${unitCols};gap:6px;margin-bottom:4px;align-items:center;">
+        ${qty>1?`<span style="font-size:11px;color:var(--text-muted);">Unit ${ui+1}</span>`:''}
+        <input class="form-control" placeholder="Serial No." value="${escapeHtml(u.serial||'')}" oninput="updateQtv2UnitField(${idx},${ui},'serial',this.value)"/>
+        <input class="form-control" placeholder="Tag No." value="${escapeHtml(u.tagNo||'')}" oninput="updateQtv2UnitField(${idx},${ui},'tagNo',this.value)"/>
+        ${same?'':`<input class="form-control" placeholder="Cal Points" value="${escapeHtml(u.calPoints||'')}" oninput="updateQtv2UnitField(${idx},${ui},'calPoints',this.value)"/>
+        <input class="form-control" placeholder="Resolution" value="${escapeHtml(u.resolution||'')}" oninput="updateQtv2UnitField(${idx},${ui},'resolution',this.value)"/>`}
+      </div>`).join('');
+    const guidance=(()=>{
+      const g=lookupPriceGuidance(it.eqName,el('qtv2-cust-id')?.value); if(!g) return '';
+      let text='';
+      if(g.standardPrice) text+=`Standard: RM ${g.standardPrice.toFixed(2)}`;
+      if(g.lastCustomerPrice) text+=`${text?' · ':''}Last quoted to this customer: RM ${g.lastCustomerPrice.price.toFixed(2)} (${fmtDateShort(g.lastCustomerPrice.date)})`;
+      const useValue=g.lastCustomerPrice?g.lastCustomerPrice.price:g.standardPrice;
+      return `<div style="font-size:11px;color:var(--blue);margin:-2px 0 6px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateQtv2ItemField(${idx},'unitPrice',${useValue});renderQtv2ItemsList()">use this</a></div>`;
+    })();
     return `<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-        <strong style="font-size:12px;">Item ${idx+1}</strong>
-        <button onclick="removeQtv2ItemRow(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
+        <strong style="font-size:12px;">Item ${idx+1}${it.itemCode?` <span style="background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 6px;font-size:11px;margin-left:4px;">${escapeHtml(it.itemCode)}</span>`:''}</strong>
+        <span style="display:flex;gap:6px;align-items:center;">
+          ${it.itemCode?'':`<button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})" title="Adds this equipment to the Standard Price List and gives it an item code">💾 Save as standard item</button>`}
+          <button onclick="removeQtv2ItemRow(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
+        </span>
       </div>
+      ${std.length?`<select class="form-control" style="margin-bottom:6px;" onchange="if(this.value) applyStandardItemToQtv2(${idx},this.value)">
+        <option value="">⭐ Pick from Standard Price List…</option>
+        ${std.map(p=>`<option value="${p.id}">${escapeHtml((p.itemCode?p.itemCode+' — ':'')+p.eqName+' '+qtServiceTag(p))}</option>`).join('')}
+      </select>`:''}
       <input class="form-control" placeholder="Equipment Name" value="${escapeHtml(it.eqName||'')}" oninput="updateQtv2ItemField(${idx},'eqName',this.value)" style="margin-bottom:6px;"/>
       <div class="form-row">
         <div class="form-group"><input class="form-control" placeholder="Brand" value="${escapeHtml(it.brand||'')}" oninput="updateQtv2ItemField(${idx},'brand',this.value)"/></div>
         <div class="form-group"><input class="form-control" placeholder="Model" value="${escapeHtml(it.model||'')}" oninput="updateQtv2ItemField(${idx},'model',this.value)"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><select class="form-control" onchange="updateQtv2ItemField(${idx},'accreditationRequested',this.value)">
+          ${['','SAMM-Accredited','Non-Accredited'].map(v=>`<option value="${v}" ${(it.accreditationRequested||'')===v?'selected':''}>${v||'Accreditation…'}</option>`).join('')}
+        </select></div>
+        <div class="form-group"><select class="form-control" onchange="updateQtv2ItemField(${idx},'calType',this.value)">
+          <option value="Lab" ${it.calType!=='Onsite'?'selected':''}>Lab</option>
+          <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>On-site</option>
+        </select></div>
       </div>
       <div class="unit-target-group" style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;">
         <select class="form-control unit-picker-select" style="margin-bottom:6px;" onchange="applyUnitFromPicker(this)">
           <option value="">Unit… (applies to Spec + Range)</option>
         </select>
         <div class="form-row">
-          <div class="form-group"><input class="form-control" data-unit-target placeholder="Spec" value="${it.spec||''}" oninput="autoPlusMinus(this);updateQtv2ItemField(${idx},'spec',this.value)"/></div>
-          <div class="form-group"><input class="form-control" data-unit-target placeholder="Range (e.g. 0 – 200)" value="${it.range||''}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/></div>
+          <div class="form-group"><input class="form-control" data-unit-target placeholder="Spec" value="${escapeHtml(it.spec||'')}" oninput="autoPlusMinus(this);updateQtv2ItemField(${idx},'spec',this.value)"/></div>
+          <div class="form-group"><input class="form-control" data-unit-target placeholder="Range (e.g. 0 – 200)" value="${escapeHtml(it.range||'')}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/></div>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><input class="form-control" placeholder="Serial No." value="${escapeHtml(it.serial||'')}" oninput="updateQtv2ItemField(${idx},'serial',this.value)"/></div>
-        <div class="form-group"><input class="form-control" placeholder="Tag No." value="${escapeHtml(it.tagNo||'')}" oninput="updateQtv2ItemField(${idx},'tagNo',this.value)"/></div>
+      <textarea class="form-control" rows="2" placeholder="Description lines printed under the item (optional), e.g.&#10;Type: Handheld/Benchtop unit with 1 electrode, carrying case" oninput="updateQtv2ItemField(${idx},'stdDescription',this.value)" style="margin-bottom:6px;font-size:12px;">${escapeHtml(it.stdDescription||'')}</textarea>
+      <div style="display:grid;grid-template-columns:90px 1fr 120px;gap:6px;margin-bottom:6px;">
+        <input class="form-control" type="number" min="1" placeholder="Qty" title="Quantity" value="${qty}" oninput="updateQtv2ItemField(${idx},'quantity',this.value)" onchange="renderQtv2ItemsList()"/>
+        <input class="form-control" type="number" min="0" step="0.01" placeholder="Unit Price (RM)" value="${it.unitPrice||''}" oninput="updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0)"/>
+        <input class="form-control" placeholder="Disc (10% or 50)" title="Optional discount on this line — type 10% or an RM amount such as 50" value="${escapeHtml(it.discount||'')}" oninput="updateQtv2ItemField(${idx},'discount',this.value)"/>
       </div>
-      <div class="form-row">
-        <div class="form-group"><input class="form-control" placeholder="Calibration Points" value="${escapeHtml(it.calPoints||'')}" oninput="updateQtv2ItemField(${idx},'calPoints',this.value)"/></div>
-        <div class="form-group unit-target-group"><div style="display:flex;gap:6px;"><input class="form-control" data-unit-target placeholder="Resolution" value="${it.resolution||''}" oninput="updateQtv2ItemField(${idx},'resolution',this.value)"/><select class="form-control unit-picker-select" style="max-width:70px;" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <select class="form-control" onchange="updateQtv2ItemField(${idx},'calType',this.value)">
-            <option value="Lab" ${it.calType==='Lab'?'selected':''}>Lab</option>
-            <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
-          </select>
+      ${guidance}
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+          <span style="font-size:11.5px;font-weight:600;">${qty>1?`Unit details (${qty} units)`:'Unit details'}</span>
+          ${qty>1?`<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:normal;cursor:pointer;"><input type="checkbox" ${same?'checked':''} onchange="toggleQtv2SameCal(${idx},this.checked)"/> Same cal points &amp; resolution for all units</label>`:''}
         </div>
-        <div class="form-group"><input class="form-control" type="number" min="1" placeholder="Qty" value="${it.quantity||1}" oninput="updateQtv2ItemField(${idx},'quantity',this.value);updateQtv2ItemTotal(${idx});renderSocSection('qtv2-item-soc-${idx}',_qtv2DraftItems[${idx}]);"/></div>
+        ${same?`<div class="form-row" style="margin-bottom:4px;">
+          <div class="form-group"><input class="form-control" placeholder="Calibration Points" value="${escapeHtml(it.calPoints||'')}" oninput="updateQtv2ItemField(${idx},'calPoints',this.value)"/></div>
+          <div class="form-group unit-target-group"><div style="display:flex;gap:6px;"><input class="form-control" data-unit-target placeholder="Resolution" value="${escapeHtml(it.resolution||'')}" oninput="updateQtv2ItemField(${idx},'resolution',this.value)"/><select class="form-control unit-picker-select" style="max-width:70px;" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div></div>
+        </div>`:''}
+        ${unitRows}
       </div>
-      <input class="form-control" type="number" min="0" step="0.01" placeholder="Unit Price (RM)" value="${it.unitPrice||''}" oninput="updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0);updateQtv2ItemTotal(${idx})" style="margin-bottom:4px;"/>
-      ${(()=>{
-        const custId=el('qtv2-cust-id')?.value;
-        const guidance=lookupPriceGuidance(it.eqName,custId);
-        if(!guidance)return '';
-        let text='';
-        if(guidance.standardPrice) text+=`Standard: RM ${guidance.standardPrice.toFixed(2)}`;
-        if(guidance.lastCustomerPrice) text+=`${text?' · ':''}Last quoted to this customer: RM ${guidance.lastCustomerPrice.price.toFixed(2)} (${fmtDateShort(guidance.lastCustomerPrice.date)})`;
-        const useValue=guidance.lastCustomerPrice?guidance.lastCustomerPrice.price:guidance.standardPrice;
-        return `<div style="font-size:11px;color:var(--blue);margin-bottom:6px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateQtv2ItemField(${idx},'unitPrice',${useValue});renderQtv2ItemsList()">use this</a></div>`;
-      })()}
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:11.5px;margin-bottom:4px;">
         <input type="checkbox" ${it.socRequested?'checked':''} onchange="updateQtv2ItemField(${idx},'socRequested',this.checked);renderQtv2ItemsList()"/>
-        📋 Statement of Conformity requested for this item
+        📋 Statement of Conformity requested for this item <span style="color:var(--text-muted);">(priced per parameter, per unit — enter prices below)</span>
       </label>
-      ${it.socRequested?`<input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Per Unit (RM)" value="${it.socPricePerUnit||''}" oninput="updateQtv2ItemField(${idx},'socPricePerUnit',parseFloat(this.value)||0)" style="margin-bottom:4px;"/>`:''}
       <div class="form-group" id="qtv2-item-soc-${idx}"></div>
-      <div style="font-size:11px;color:var(--text-muted);">Total: <strong id="qtv2-item-total-${idx}">RM ${total.toFixed(2)}</strong></div>
+      <div style="font-size:11px;color:var(--text-muted);">Line total: <strong id="qtv2-item-total-${idx}"></strong></div>
     </div>`;
   }).join('');
   _qtv2DraftItems.forEach((it,idx)=>renderSocSection(`qtv2-item-soc-${idx}`,it));
-  updateQtv2GrandTotal();
-  populateAllUnitPickers();
+  // Any change anywhere in the items (price, discount, quantity, SoC prices) refreshes totals
+  box.oninput=()=>setTimeout(qtRefreshAllTotals,0);
+  box.onchange=()=>setTimeout(qtRefreshAllTotals,0);
+  qtRefreshAllTotals();
+  populateAllUnitPickers(box);
 }
 let _qtv2EditingId=null;
 function openQuotationV2Modal(quotationId,salesTrackerEntryId){
+  ensurePriceRefCodes().then(()=>{ if(document.getElementById('qtv2-overlay')?.style.display!=='none') renderQtv2ItemsList(); }).catch(()=>{});
   if(!canUseQuotationSystem(currentUser)){alert('You do not have access to create quotations.');return;}
   _qtv2EditingId=quotationId||null;
   const existing=quotationId?_quotationsV2.find(q=>q.id===quotationId):null;
@@ -9605,7 +9796,15 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   // (it doesn't even have Tel/Fax fields), so it should never be preferred over the real record.
   const prefillCustomer=prefillEntry?.custId?_customers.find(c=>c.id===prefillEntry.custId):null;
   _qtv2DraftItems=existing?JSON.parse(JSON.stringify(existing.items||[])):
-    prefillEntry?(prefillEntry.items||[]).filter(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict)).map(it=>({id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0,socRequested:it.socRequested||false,socParameters:it.socParameters&&it.socParameters.length?JSON.parse(JSON.stringify(it.socParameters)):undefined})):[];
+    prefillEntry?(prefillEntry.items||[]).filter(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict)).map(it=>{
+      const std=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
+      return {id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,resolution:it.resolution||'',
+        calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0,
+        accreditationRequested:it.accreditationRequested||'',methodRequested:it.methodRequested||'',remark:it.remark||'',
+        itemCode:std?.itemCode||'',stdDescription:std?.description||'',
+        socRequested:it.socRequested||false,socUnitsNeeded:it.socUnitsNeeded||undefined, // per-parameter prices travel inside socParameters
+        socParameters:it.socParameters&&it.socParameters.length?JSON.parse(JSON.stringify(it.socParameters)):undefined};
+    }):[];
   let ov=document.getElementById('qtv2-overlay');
   if(!ov){ov=document.createElement('div');ov.id='qtv2-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:620px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
@@ -9660,7 +9859,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
         <label class="form-label">Deposit Amount (RM)</label>
         <input class="form-control" type="number" min="0" step="0.01" id="qtv2-deposit-amount" value="${existing?.depositAmount||''}"/>
       </div>
-      <div class="form-group"><label class="form-label">Terms &amp; Conditions</label><textarea class="form-control" id="qtv2-terms" rows="3">${existing?.termsConditions||'1. Prices are in Ringgit Malaysia (RM) and exclude any applicable taxes.\n2. Payment terms: Cash on delivery / as agreed.\n3. Validity as stated above from date of issue.'}</textarea></div>
+      <div class="form-group"><label class="form-label">Additional Terms <span style="font-weight:normal;color:var(--text-muted);">(optional — only for this quotation; your standard 16-point Terms &amp; Conditions are always printed)</span></label><textarea class="form-control" id="qtv2-terms" rows="2" placeholder="e.g. Price valid for this batch of items only">${escapeHtml(qtIsLegacyDefaultTerms(existing?.termsConditions)?'':(existing?.termsConditions||''))}</textarea></div>
       <input type="hidden" id="qtv2-linked-sales-entry" value="${existing?.linkedSalesTrackerId||salesTrackerEntryId||''}"/>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('qtv2-overlay').style.display='none'">Cancel</button>
@@ -9713,6 +9912,7 @@ async function saveQuotationV2(quotationId){
   q.endUserAddress=el('qtv2-has-end-user')?.checked?(el('qtv2-end-user-address')?.value.trim()||''):'';
   q.address=el('qtv2-address').value.trim();
   q.items=_qtv2DraftItems.filter(it=>it.eqName);
+  q.items.forEach(qtSyncLegacyFields);
   q.validityDays=parseInt(el('qtv2-validity').value)||30;
   q.termsConditions=el('qtv2-terms').value.trim();
   q.depositRequired=el('qtv2-deposit-required').checked;
@@ -9755,7 +9955,7 @@ function renderQuotationsV2Page(){
   box.innerHTML=`<div class="table-wrap"><table>
     <thead><tr><th>Quotation No.</th><th>Customer</th><th>Items</th><th>Total (RM)</th><th>Status</th><th>Created</th><th>PO</th><th>Actions</th></tr></thead>
     <tbody>${list.map(q=>{
-      const total=(q.items||[]).reduce((s,it)=>s+(it.unitPrice||0)*(parseFloat(it.quantity)||1),0);
+      const total=qtQuotationTotal(q.items);
       return `<tr>
         <td style="font-weight:700;">${q.quotationNo}</td>
         <td>${escapeHtml(q.custName)}</td>
@@ -9917,148 +10117,166 @@ async function respondQuotationV2(quotationId,accepted){
   showToast(`${accepted?'✅':'✗'} ${q.quotationNo} marked ${q.status}`,accepted?'success':'warn',3000);
   addAudit('📄',`Quotation ${q.quotationNo} marked ${q.status}`);
 }
+// ── QUOTATION PDF — laid out like the Westlab quotation template ──
+// Rows are measured in the browser, then placed onto real A4 pages: the letterhead, customer
+// box and "Page X of Y" repeat on every page, totals + signatures sit at the bottom of the last
+// item page, and the Terms & Conditions follow on their own page.
 async function exportQuotationV2Pdf(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   const s=_settings;
-  const subtotal=(q.items||[]).reduce((sum,it)=>{
-    const line=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
-    const socLine=it.socRequested?(it.socPricePerUnit||0)*(parseFloat(it.quantity)||1):0;
-    return sum+line+socLine;
-  },0);
+  const items=(q.items||[]).filter(it=>it&&it.eqName);
+  const subtotal=qtQuotationTotal(items);
   const sstAmount=s.sstEnabled?subtotal*0.08:0;
   const total=subtotal+sstAmount;
-  const validUntil=new Date(q.createdAt); validUntil.setDate(validUntil.getDate()+(q.validityDays||30));
-  // Reuse the same staff signature/certName lookup used on calibration certificates
-  const creatorUsername=q.createdBy;
-  const creatorStaff=(_staff||[]).find(x=>x.username===creatorUsername);
-  const creatorName=creatorStaff?.certName||creatorStaff?.name||USERS[creatorUsername]?.name||creatorUsername||'';
-  const creatorSig=creatorStaff?.signature||'';
-
-  const buildItemDescription=(it)=>{
-    const lines=[`<strong>${escapeHtml(it.eqName||'')}</strong>`];
-    if(it.brand) lines.push(`Brand: ${escapeHtml(it.brand)}`);
-    if(it.model) lines.push(`Model: ${escapeHtml(it.model)}`);
-    if(it.serial) lines.push(`S/N: ${escapeHtml(it.serial)}`);
-    lines.push(`Range / Capacity: ${it.range?escapeHtml(it.range):''}`);
-    lines.push(`Resolution: ${it.resolution?escapeHtml(it.resolution):''}`);
-    lines.push(`Specification: ${it.spec?escapeHtml(it.spec):''}`);
-    lines.push(`Calibration Points: ${escapeHtml(it.calPoints?escapeHtml(it.calPoints):'')}`);
-    lines.push(`Calibration Type: ${it.calType||'Lab'}${it.socRequested?' · Statement of Conformity requested':''}`);
-    return lines.join('<br/>');
-  };
-
-  const itemRows=(q.items||[]).map((it,i)=>{
-    const lineAmount=(it.unitPrice||0)*(parseFloat(it.quantity)||1);
-    const qtyDisplay=`${(parseFloat(it.quantity)||1).toFixed(2)} UNIT`;
-    let rows=`<tr>
-      <td style="padding:6px 4px;text-align:left;border-bottom:0.5px solid #e2e8f0;vertical-align:top;">${i+1}</td>
-      <td style="padding:6px 4px;border-bottom:0.5px solid #e2e8f0;font-size:11px;">${buildItemDescription(it)}</td>
-      <td style="padding:6px 4px;text-align:center;border-bottom:0.5px solid #e2e8f0;vertical-align:top;white-space:nowrap;">${qtyDisplay}</td>
-      <td style="padding:6px 4px;text-align:right;border-bottom:0.5px solid #e2e8f0;vertical-align:top;">${(it.unitPrice||0).toFixed(2)}</td>
-      <td style="padding:6px 4px;text-align:center;border-bottom:0.5px solid #e2e8f0;vertical-align:top;"></td>
-      <td style="padding:6px 4px;text-align:right;border-bottom:0.5px solid #e2e8f0;vertical-align:top;">${lineAmount.toFixed(2)}</td>
-    </tr>`;
-    if(it.socRequested&&it.socPricePerUnit){
-      const socAmount=(it.socPricePerUnit||0)*(parseFloat(it.quantity)||1);
-      rows+=`<tr>
-        <td style="padding:4px;text-align:left;border-bottom:0.5px solid #e2e8f0;color:#64748b;"></td>
-        <td style="padding:4px;border-bottom:0.5px solid #e2e8f0;font-size:11px;color:#64748b;">↳ Statement of Conformity</td>
-        <td style="padding:4px;text-align:center;border-bottom:0.5px solid #e2e8f0;white-space:nowrap;">${(parseFloat(it.quantity)||1).toFixed(2)} UNIT</td>
-        <td style="padding:4px;text-align:right;border-bottom:0.5px solid #e2e8f0;">${(it.socPricePerUnit||0).toFixed(2)}</td>
-        <td style="padding:4px;text-align:center;border-bottom:0.5px solid #e2e8f0;"></td>
-        <td style="padding:4px;text-align:right;border-bottom:0.5px solid #e2e8f0;">${socAmount.toFixed(2)}</td>
-      </tr>`;
-    }
-    return rows;
-  }).join('');
-
-  const logoUrl=s.logoUrl&&!s.logoUrl.startsWith('data:')?s.logoUrl:'';
-  const regNoDisplay=[s.regNo,s.regNoSecondary].filter(Boolean).join(' ');
-  const page1=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;font-size:12px;">
-    <div style="display:flex;align-items:center;gap:16px;margin-bottom:6px;">
-      ${logoUrl?`<img src="${logoUrl}" style="height:44px;object-fit:contain;"/>`:''}
-      <div style="text-align:center;flex:1;">
-        <div style="font-size:16px;font-weight:800;">${s.labName||'WESTLAB (M) SDN BHD'} ${regNoDisplay?`<span style="font-size:11px;font-weight:400;">(${regNoDisplay})</span>`:''}</div>
-        <div style="font-size:11px;color:#333;">${escapeHtml(s.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor.')}</div>
-        <div style="font-size:11px;color:#333;">Phone: ${s.phone||'0162589602'}&nbsp;&nbsp;email: ${s.salesEmail||'sales@westlab.com.my'}</div>
-        ${s.tinNo?`<div style="font-size:11px;color:#333;">(TIN No: ${s.tinNo})</div>`:''}
+  const creatorStaff=(_staff||[]).find(x=>x.username===q.createdBy);
+  const creatorName=creatorStaff?.certName||creatorStaff?.name||USERS[q.createdBy]?.name||q.createdBy||'';
+  let creatorSig=creatorStaff?.signature||'';
+  if(creatorSig&&!creatorSig.startsWith('data:')){ // only use the signature if it actually loads
+    const ok=await new Promise(res=>{ const im=new Image(); im.crossOrigin='anonymous'; im.onload=()=>res(true); im.onerror=()=>res(false); setTimeout(()=>res(im.complete&&im.naturalWidth>0),8000); im.src=creatorSig; });
+    if(!ok) creatorSig='';
+  }
+  const esc=v=>escapeHtml(v==null?'':String(v));
+  const money=v=>v?Number(v).toFixed(2):'';
+  const FONT="Tahoma,Verdana,'DejaVu Sans',Arial,sans-serif";
+  const PAGE_W=794, PAGE_H=1123, PX=38, TOP=30, BOTTOM=40;
+  const logo=(s.logoUrl&&!s.logoUrl.startsWith('data:'))?s.logoUrl:WESTLAB_LETTERHEAD_LOGO;
+  const labName=(s.labName||'Westlab (M) Sdn Bhd').replace(/\./g,'').toUpperCase();
+  const regNo=[s.regNo,s.regNoSecondary].filter(Boolean).join(' ')||'202601005304 (1667402-A)';
+  const addressHtml=s.address?esc(s.address):'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh,<br/>47000 Sungai Buloh, Selangor.';
+  const phone=s.phone||'0162589602', email=s.salesEmail||'sales@westlab.com.my', tin=s.tinNo||'C60571616010';
+  const letterhead=`<div style="display:flex;align-items:center;">
+      <img src="${logo}" crossorigin="anonymous" style="width:88px;height:auto;margin-left:18px;"/>
+      <div style="flex:1;text-align:center;margin-right:106px;font-family:'Times New Roman',Times,serif;font-size:15px;line-height:1.3;">
+        <div><span style="font-size:23px;font-weight:bold;">${esc(labName)}</span> <span style="font-size:10px;">(${esc(regNo)})</span></div>
+        <div style="max-width:420px;margin:0 auto;">${addressHtml}</div>
+        <div>Phone: ${esc(phone)}&nbsp;&nbsp;&nbsp;email: ${esc(email)}</div>
+        <div>(TIN No: ${esc(tin)})</div>
       </div>
     </div>
-    <div style="border-top:2px solid #000;margin:10px 0 14px;"></div>
-    <div style="display:flex;justify-content:space-between;margin-bottom:14px;">
-      <div style="border-left:2px solid #000;padding:2px 0 2px 12px;width:48%;">
-        <div style="font-weight:700;">${escapeHtml(q.custName)}</div>
-        <div style="white-space:pre-line;">${escapeHtml(q.address||'')}</div>
-        <div style="margin-top:4px;">Attn : ${escapeHtml(q.attention||'')}</div>
-        <div>
-          <span>TEL : ${q.tel||q.mobile||''}</span>
-          <span style="margin-left:20px;">FAX : ${q.fax||''}</span>
-        </div>
+    <div style="border-top:1.3px solid #000;margin:10px 0 12px;"></div>`;
+  const dateStr=new Date(q.createdAt||Date.now()).toLocaleDateString('en-GB');
+  const custBlock=(pageNo,pageCount)=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+      <div style="position:relative;width:62%;padding:4px 12px 6px;line-height:1.35;">
+        <div style="position:absolute;left:0;top:0;bottom:0;border-left:1px solid #000;"></div>
+        <div style="position:absolute;left:0;top:0;width:22px;border-top:1px solid #000;"></div>
+        <div style="position:absolute;left:0;bottom:0;width:22px;border-bottom:1px solid #000;"></div>
+        <div style="position:absolute;right:0;top:0;width:38px;height:22px;border-top:1px solid #000;border-right:1px solid #000;"></div>
+        <div style="position:absolute;right:0;bottom:0;width:38px;height:22px;border-bottom:1px solid #000;border-right:1px solid #000;"></div>
+        <div>${esc(q.custName)}</div>
+        <div style="white-space:pre-line;">${esc(q.address||'')}</div>
+        <div>Attn : ${esc(q.attention||'')}</div>
+        <div style="display:flex;"><span style="width:58%;">TEL : ${esc(q.tel||q.mobile||'')}</span><span>FAX : ${esc(q.fax||'')}</span></div>
       </div>
-      <div style="width:48%;">
-        <div style="font-weight:800;text-align:right;margin-bottom:6px;">QUOTATION : ${q.quotationNo}</div>
-        <table style="width:100%;font-size:11px;">
-          <tr><td style="color:#555;">Your Ref.</td><td>:</td><td></td></tr>
-          <tr><td style="color:#555;">Our Ref.</td><td>:</td><td></td></tr>
-          <tr><td style="color:#555;">C. C.</td><td>:</td><td></td></tr>
-          <tr><td style="color:#555;">Date</td><td>:</td><td>${fmtDateShort(q.createdAt)}</td></tr>
-          <tr><td style="color:#555;">Page</td><td>:</td><td>1 of 2</td></tr>
+      <div style="width:33%;">
+        <div style="font-weight:bold;font-size:16.5px;margin-bottom:6px;white-space:nowrap;">QUOTATION : ${esc(q.quotationNo)}</div>
+        <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
+          ${[['Your Ref.',q.yourRef||''],['Our Ref.',''],['C. C.',''],['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:78px;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
         </table>
       </div>
     </div>
-    ${q.endUserName?`<div style="background:#f8fafc;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;"><strong>End User:</strong> ${escapeHtml(q.endUserName)}${escapeHtml(q.endUserAddress?' — '+escapeHtml(q.endUserAddress):'')}</div>`:''}
-    <div style="margin-bottom:10px;">Thank you for your inquiry. We are pleased to submit our quote as follows:</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;">
-      <thead><tr>
-        <th style="padding:6px 4px;border-bottom:1.5px solid #000;text-align:left;">Item</th>
-        <th style="padding:6px 4px;border-bottom:1.5px solid #000;text-align:left;">Description</th>
-        <th style="padding:6px 4px;border-bottom:1.5px solid #000;text-align:center;">Qty</th>
-        <th style="padding:6px 4px;border-bottom:1.5px solid #000;text-align:right;">Unit Price</th>
-        <th style="padding:6px 4px;border-bottom:1.5px solid #000;text-align:center;">Disc</th>
-        <th style="padding:6px 4px;border-bottom:1.5px solid #000;text-align:right;">Amount</th>
-      </tr></thead>
-      <tbody>${itemRows}</tbody>
-    </table>
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
-      <table style="font-size:11px;">
-        <tr><td style="color:#555;padding:2px 0;width:110px;">Validity</td><td>:</td><td style="padding-left:8px;">${q.validityDays||30} Days</td></tr>
-        <tr><td style="color:#555;padding:2px 0;">Delivery Term</td><td>:</td><td style="padding-left:8px;"></td></tr>
-        <tr><td style="color:#555;padding:2px 0;">Payment Term</td><td>:</td><td style="padding-left:8px;">30 Days</td></tr>
-      </table>
-      <table style="font-size:12px;">
-        ${s.sstEnabled?`<tr><td style="padding:4px 16px 4px 0;">Subtotal (MYR)</td><td style="padding:4px 8px;text-align:right;">${subtotal.toFixed(2)}</td></tr>
-        <tr><td style="padding:4px 16px 4px 0;">SST (8%)</td><td style="padding:4px 8px;text-align:right;">${sstAmount.toFixed(2)}</td></tr>`:''}
-        <tr><td style="padding:4px 16px 4px 0;font-weight:700;">Total (MYR)</td><td style="padding:4px 8px;border:1px solid #000;font-weight:700;">${total.toFixed(2)}</td></tr>
-      </table>
-    </div>
-    <div style="font-weight:700;font-size:11px;margin-bottom:16px;">Note : Prices are subjected to change without prior notice.</div>
-    <div style="margin-bottom:20px;">We hope that our quotation is favourable to you and looking forward to receive your valued orders in due course.</div>
-    <div style="margin-bottom:6px;">Thank and regards.</div>
-    <div style="display:flex;justify-content:space-between;margin-top:30px;">
-      <div>
-        <div>Yours faithfully,</div>
-        ${creatorSig?`<img src="${creatorSig}" style="height:50px;margin:8px 0;display:block;"/>`:`<div style="height:58px;"></div>`}
-        <div style="border-top:1px solid #000;padding-top:4px;width:180px;font-weight:700;">${creatorName}</div>
+    ${q.endUserName?`<div style="font-size:12px;margin-bottom:4px;">End User : ${esc(q.endUserName)}${q.endUserAddress?' — '+esc(q.endUserAddress).replace(/\n/g,', '):''}</div>`:''}
+    <div style="margin-bottom:4px;">Thank you for your inquiry. We are pleased to submit our quote as follows:</div>`;
+  const COLS='<colgroup><col style="width:36px"><col style="width:76px"><col><col style="width:78px"><col style="width:74px"><col style="width:48px"><col style="width:80px"></colgroup>';
+  const TH='padding:4px 3px;font-weight:normal;text-align:left;';
+  const tableHead=`<tr style="border-top:1px solid #000;border-bottom:1px solid #000;"><th style="${TH}">Item</th><th style="${TH}">Item Code</th><th style="${TH}">Description</th><th style="${TH}text-align:center;">Qty</th><th style="${TH}">Unit Price</th><th style="${TH}">Disc</th><th style="${TH}text-align:right;">Amount</th></tr>`;
+  const TD='padding:3px 3px 5px;vertical-align:top;';
+  // Build every row (each quotation line, then its SoC lines)
+  const groups=items.map((it,i)=>{
+    const c=qtLineCalc(it);
+    const units=qtUnitDetails(it);
+    const sameCal=it.sameCal!==false;
+    const L=[];
+    String(it.stdDescription||'').split('\n').map(x=>x.trim()).filter(Boolean).forEach(x=>L.push(esc(x)));
+    L.push('Brand: '+esc(it.brand||''));
+    L.push('Model: '+esc(it.model||''));
+    L.push('S/N: '+esc(units.map(u=>u.serial).filter(Boolean).join(', ')));
+    const tags=units.map(u=>u.tagNo).filter(Boolean); if(tags.length) L.push('Tag No.: '+esc(tags.join(', ')));
+    L.push('Range / Capacity: '+esc(it.range||''));
+    if(sameCal||units.length<2){
+      L.push('Resolution: '+esc(units[0]?.resolution||''));
+      if(it.spec) L.push('Specification: '+esc(it.spec));
+      L.push('Calibration Points: '+esc(units[0]?.calPoints||''));
+    }else{
+      if(it.spec) L.push('Specification: '+esc(it.spec));
+      units.forEach((u,ui)=>L.push(`Unit ${ui+1}${u.serial?' (S/N '+esc(u.serial)+')':''}: Resolution ${esc(u.resolution||'—')}; Cal Points ${esc(u.calPoints||'—')}`));
+    }
+    const discTxt=c.disc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.disc.toFixed(2)):'';
+    const rows=[`<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(it.itemCode||'')}</td>
+      <td style="${TD}"><div>${esc(it.eqName)} ${qtServiceTag(it)}</div><div style="padding-left:6px;">${L.join('<br/>')}</div></td>
+      <td style="${TD}text-align:center;white-space:nowrap;">${c.qty.toFixed(2)} UNIT</td><td style="${TD}">${money(c.price)}</td><td style="${TD}">${discTxt}</td><td style="${TD}text-align:right;">${money(c.net)}</td></tr>`];
+    c.soc.forEach(l=>rows.push(`<tr><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"><div style="padding-left:6px;">Statement of Conformity${l.name?' — '+esc(l.name):''}</div></td>
+      <td style="${TD}text-align:center;white-space:nowrap;">${Number(l.units).toFixed(2)} UNIT</td><td style="${TD}">${money(l.price)}</td><td style="${TD}"></td><td style="${TD}text-align:right;">${money(l.amount)}</td></tr>`));
+    return rows;
+  });
+  const totalsRows=(s.sstEnabled?`<tr><td style="padding:2px 8px;font-weight:bold;">Subtotal (MYR)</td><td style="padding:2px 6px;text-align:right;">${subtotal.toFixed(2)}</td></tr>
+      <tr><td style="padding:2px 8px;font-weight:bold;">SST (8%)</td><td style="padding:2px 6px;text-align:right;">${sstAmount.toFixed(2)}</td></tr>`:'')+
+    `<tr><td style="padding:2px 8px;font-weight:bold;">Total (MYR)</td><td style="padding:2px 6px;text-align:right;font-weight:bold;border:1px solid #000;min-width:130px;">${total.toFixed(2)}</td></tr>`;
+  const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <table style="border-collapse:collapse;font-size:12.5px;line-height:1.5;">
+          <tr><td style="font-weight:bold;width:112px;">Validity</td><td style="font-weight:bold;width:16px;">:</td><td>${q.validityDays?esc(q.validityDays)+' Days':''}</td></tr>
+          <tr><td style="font-weight:bold;">Delivery Term</td><td style="font-weight:bold;">:</td><td></td></tr>
+          <tr><td style="font-weight:bold;">Payment Term</td><td style="font-weight:bold;">:</td><td>30 Days</td></tr>
+          ${q.depositRequired?`<tr><td style="font-weight:bold;">Deposit</td><td style="font-weight:bold;">:</td><td>RM ${Number(q.depositAmount||0).toFixed(2)}</td></tr>`:''}
+        </table>
+        <table style="border-collapse:collapse;font-size:12.5px;">${totalsRows}</table>
       </div>
-      <div style="text-align:center;">
-        <div>We confirm the order by accepting the terms<br/>&amp; conditions stated above.</div>
-        <div style="height:50px;"></div>
-        <div style="border-top:1px solid #000;padding-top:4px;width:180px;"><em>chop &amp; sign</em></div>
-        <div style="font-size:11px;margin-top:4px;">Person incharge :<br/>Date :</div>
+      <div style="font-weight:bold;margin:4px 0 12px;">Note : Prices are subjected to change without prior notice.</div>
+      <div>We hope that our quotation is favourable to you and looking forward to receive your valued orders in due course.</div>
+      <div style="margin:12px 0;">Thank and regards.</div>
+      <div style="display:flex;justify-content:space-between;">
+        <div style="width:44%;">
+          <div>Yours faithfully,</div>
+          <div style="height:62px;display:flex;align-items:flex-end;">${creatorSig?`<img src="${creatorSig}" crossorigin="anonymous" style="max-height:58px;max-width:210px;object-fit:contain;"/>`:''}</div>
+          <div style="border-top:1px solid #000;width:250px;padding-top:4px;font-weight:bold;">${esc(creatorName)}</div>
+        </div>
+        <div style="width:48%;">
+          <div>We confirm the order by accepting the terms<br/>&amp; conditions stated above.</div>
+          <div style="height:44px;"></div>
+          <div style="display:flex;align-items:flex-end;gap:6px;"><div style="border-top:1px solid #000;width:220px;"></div><i style="font-size:11px;position:relative;top:-4px;">chop &amp; sign</i></div>
+          <div style="margin-top:4px;">Person incharge :</div><div>Date :</div>
+        </div>
       </div>
-    </div>
-  </div>`;
-
-  const page2=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;font-size:10.5px;">
-    <div style="text-align:center;margin-bottom:6px;">
-      <div style="font-size:14px;font-weight:800;">${s.labName||'WESTLAB (M) SDN BHD'} ${s.regNo?`(${s.regNo})`:''}</div>
-      <div style="font-size:10px;color:#333;">${escapeHtml(s.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor.')}</div>
-      <div style="font-size:10px;color:#333;">Phone: ${s.phone||'0162589602'}&nbsp;&nbsp;email: ${s.salesEmail||'sales@westlab.com.my'}</div>
-      ${s.tinNo?`<div style="font-size:10px;color:#333;">(TIN No: ${s.tinNo})</div>`:''}
-    </div>
-    <div style="border-top:2px solid #000;margin:10px 0 14px;"></div>
-    <div style="text-align:center;font-weight:800;margin-bottom:14px;">Term &amp; Condition</div>
-    <ol style="padding-left:18px;line-height:1.6;">
+    </div>`;
+  const pageStyle=`width:${PAGE_W}px;height:${PAGE_H}px;box-sizing:border-box;padding:${TOP}px ${PX}px ${BOTTOM}px;font-family:${FONT};font-size:12.5px;color:#000;background:#fff;position:relative;overflow:hidden;`;
+  // Measure the header, footer and every row at real page width
+  const meas=document.createElement('div');
+  meas.style.cssText=`position:fixed;left:-20000px;top:0;width:${PAGE_W}px;`;
+  document.body.appendChild(meas);
+  let headH,footH,groupHs;
+  try{
+    meas.innerHTML=`<div class="pdf-doc" style="${pageStyle}height:auto;">${letterhead}${custBlock(1,1)}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${COLS}${tableHead}</table></div>`;
+    await new Promise(r=>setTimeout(r,60));
+    headH=meas.firstElementChild.getBoundingClientRect().height-TOP-BOTTOM;
+    meas.innerHTML=`<div class="pdf-doc" style="width:${PAGE_W-2*PX}px;font-family:${FONT};font-size:12.5px;">${footerBlock}</div>`;
+    footH=meas.firstElementChild.getBoundingClientRect().height;
+    meas.innerHTML=`<div class="pdf-doc"><table style="width:${PAGE_W-2*PX}px;border-collapse:collapse;table-layout:fixed;font-family:${FONT};font-size:12.5px;">${COLS}${groups.flat().join('')}</table></div>`;
+    const trs=[...meas.querySelectorAll('tr')].map(tr=>tr.getBoundingClientRect().height);
+    let k=0; groupHs=groups.map(g=>g.map(()=>trs[k++]));
+  }finally{ meas.remove(); }
+  // Paginate: keep a line with its SoC rows when they fit on one page; leave room for totals on the last page
+  const avail=PAGE_H-TOP-BOTTOM-headH-6;
+  const pages=[[]]; let used=0;
+  groups.forEach((g,gi)=>{
+    const hs=groupHs[gi]; const gh=hs.reduce((a,b)=>a+b,0);
+    if(used>0&&used+gh>avail&&gh<=avail){ pages.push([]); used=0; }
+    g.forEach((row,ri)=>{
+      if(used>0&&used+hs[ri]>avail){ pages.push([]); used=0; }
+      pages[pages.length-1].push(row); used+=hs[ri];
+    });
+  });
+  if(used+footH+10>avail) pages.push([]);
+  const pageCount=pages.length;
+  const pageHtml=pages.map((rows,pi)=>`<div class="pdf-doc" style="${pageStyle}">
+      ${letterhead}${custBlock(pi+1,pageCount)}
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">${COLS}${tableHead}${rows.join('')}</table>
+      ${pi===pageCount-1?`<div style="position:absolute;left:${PX}px;right:${PX}px;bottom:${BOTTOM}px;">${footerBlock}</div>`:''}
+    </div>`);
+  const extraTerms=qtIsLegacyDefaultTerms(q.termsConditions)?'':String(q.termsConditions||'').trim();
+  const termsPage=`<div class="pdf-doc" style="${pageStyle}font-size:12px;">
+      ${letterhead}
+      <div style="text-align:center;font-weight:bold;font-size:13.5px;margin:4px 0 12px;">Term &amp; Condition</div>
+      <ol style="padding-left:20px;margin:0;line-height:1.5;">
       <li>This quotation is valid for 30 days from the date of issue</li>
       <li>Payment Term: Net 30 days from invoice date. Interest of 2% per month will be charged on the total amount due for any overdue payment.</li>
       <li>Currency: MYR. Prices exclude SST unless stated otherwise; SST is charged at the prevailing rate (currently 8%).</li>
@@ -10092,10 +10310,10 @@ async function exportQuotationV2Pdf(quotationId){
       <li>Items are calibrated under SAMM accreditation only within Westlab's accredited scope. Items outside this scope, if calibrated, will be issued on a non-accredited basis and clearly indicated as such.</li>
       <li>Westlab agrees not to disclose confidential information obtained from the customer to any third party, except as required by law.</li>
     </ol>
-    <div style="text-align:center;font-weight:700;margin-top:20px;">This is a computer-generated quotation; no signature is required unless otherwise stated.</div>
-  </div>`;
-
-  await exportHtmlAsPdf(page1+'<div style="page-break-before:always;"></div>'+page2,`${q.quotationNo}.pdf`,'Quotation',(q.items||[]).length,true);
+      ${extraTerms?`<div style="margin-top:10px;"><strong>Additional terms for this quotation:</strong><div style="white-space:pre-line;">${esc(extraTerms)}</div></div>`:''}
+      <div style="text-align:center;font-weight:bold;margin-top:18px;font-size:11.5px;">This is a computer-generated quotation; no signature is required unless otherwise stated.</div>
+    </div>`;
+  await exportPagedPdf([...pageHtml,termsPage],`${q.quotationNo}.pdf`,'Quotation',items.length,true);
 }
 let _startingFromQuotationV2Id=null;
 async function createJobFromQuotationV2(quotationId){
@@ -10232,6 +10450,29 @@ function renderPurchasingTrackerPage(){ renderTrackerPage('purchasing'); }
 function capabilityVerdictLabel(verdict){
   return {'Can Do':'Capability Confirmed','Cannot Do':'Outside Current Capability','Can Do (External)':'Capability Confirmed (External Partner)'}[verdict]||verdict||'';
 }
+// ── WESTLAB LETTERHEAD ── (matches the official Westlab letterhead document; the logo is
+// embedded so documents never depend on a storage link loading)
+const WESTLAB_LETTERHEAD_LOGO='data:image/png;base64,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';
+function westlabLetterheadHeader(){
+  return `<div style="position:absolute;left:0;right:0;top:34px;">
+    <div style="display:flex;align-items:center;padding:0 72px 0 88px;gap:36px;">
+      <img src="${WESTLAB_LETTERHEAD_LOGO}" style="width:76px;height:auto;"/>
+      <div style="font-family:'Times New Roman',Times,serif;color:#000;line-height:1.25;">
+        <div style="font-size:23px;font-weight:bold;color:#2f4f7f;letter-spacing:.2px;">WESTLAB (M) SDN. BHD. <span style="font-size:15px;">(1667402-A)</span></div>
+        <div style="font-size:10.5px;font-weight:bold;">LOT 497, JALAN PERUSAHAAN 3, BANDAR BARU SUNGAI BULOH,<br/>47000 SUNGAI BULOH, SELANGOR DARUL EHSAN, MALAYSIA.</div>
+        <div style="font-size:10.5px;">Tel: 016-258 9602<span style="display:inline-block;width:92px;"></span>Email: sales@westlab.com.my</div>
+        <div style="font-size:10.5px;">&nbsp;Website: www.westlab.com.my</div>
+      </div>
+    </div>
+    <div style="margin:10px 72px 0;border-top:1.5px solid #4a6fa5;"></div>
+  </div>`;
+}
+function westlabLetterheadFooter(){
+  return `<div style="position:absolute;left:72px;right:72px;bottom:22px;border-top:1px solid #ccc;padding-top:5px;text-align:center;font:9px 'Times New Roman',Times,serif;color:#666;line-height:1.4;">
+    Registration No: 202601005304 &nbsp;|&nbsp; Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor, Malaysia<br/>
+    Tel: +60 16-258 9602 &nbsp;|&nbsp; Email: sales@westlab.com.my &nbsp;|&nbsp; www.westlab.com.my
+  </div>`;
+}
 // ── CONTRACT REVIEW FORM (per item) ──
 // Laid out to match the lab's paper Contract Review Form: Sections 1–3 on page 1, Sections 4–5
 // and signatures on page 2. Every box is filled from what the Sales Tracker entry and the
@@ -10248,9 +10489,11 @@ function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   const nameOf=u=>{ if(!u)return ''; const st=staffOf(u); return st?.certName||st?.name||USERS[u]?.name||u; };
   const B='border:1px solid #000;padding:3px 7px;vertical-align:top;';
   const L=B+'background:#e7e7e7;';
-  const pageWrap=(inner,pageNo)=>`<div style="width:794px;min-height:1123px;box-sizing:border-box;padding:70px 96px 60px;font-family:'Times New Roman',Times,serif;font-size:14.5px;line-height:1.35;color:#000;background:#fff;position:relative;">
+  const pageWrap=(inner,pageNo)=>`<div class="pdf-doc" style="width:794px;min-height:1123px;box-sizing:border-box;padding:158px 96px 96px;font-family:'Times New Roman',Times,serif;font-size:14px;line-height:1.32;color:#000;background:#fff;position:relative;">
+    ${westlabLetterheadHeader()}
     ${inner}
-    <div style="position:absolute;left:96px;right:96px;bottom:34px;font:10px Arial,sans-serif;color:#888;display:flex;justify-content:space-between;">
+    ${westlabLetterheadFooter()}
+    <div style="position:absolute;left:96px;right:96px;bottom:64px;font:10px Arial,sans-serif;color:#888;display:flex;justify-content:space-between;">
       <span>Contract Review — ${esc(entry.name)} — Item ${itemNo} of ${itemCount}: ${esc(item.eqName)}</span><span>Page ${pageNo} of 2</span>
     </div>
   </div>`;
@@ -10307,7 +10550,7 @@ function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   const sigImg=url=>url?`<img src="${url}" crossorigin="anonymous" style="max-height:66px;max-width:220px;object-fit:contain;"/>`:'';
 
   const page1=pageWrap(`
-    <div style="text-align:center;font-size:19px;font-weight:bold;margin-bottom:18px;">Contract Review Form</div>
+    <div style="text-align:center;font-size:19px;font-weight:bold;margin-bottom:6px;">Contract Review Form</div>
     ${sectionTitle('Section 1 – Enquiry Details')}
     <table style="width:100%;border-collapse:collapse;">
       ${kv('Company Name',esc(entry.name),238)}
