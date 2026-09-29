@@ -489,6 +489,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="nav-section-label">Overview</div>
     <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon"><i class="ti ti-layout-dashboard"></i></span><span class="nav-label">Dashboard</span></button>
 
+    <button class="nav-item" id="nav-my-drafts" onclick="showView('my-drafts')" data-label="My Drafts"><span class="nav-icon"><i class="ti ti-file-pencil"></i></span><span class="nav-text">My Drafts <span class="nav-badge" id="drafts-badge" style="display:none;">0</span></span></button>
+
     <div class="nav-section-label">Job Management</div>
     <button class="nav-item hidden-nav" id="nav-my-jobs" onclick="showView('my-jobs')"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-text">My Jobs <span class="nav-badge" id="my-jobs-badge" style="display:none;">0</span></span></button>
     <button class="nav-item hidden-nav" id="nav-staff-evaluation" onclick="showView('staff-evaluation')"><span class="nav-icon"><i class="ti ti-chart-dots"></i></span><span class="nav-text">Staff Evaluation</span></button>
@@ -508,8 +510,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item hidden-nav" id="nav-invoices" onclick="showView('invoices')" data-label="Invoices"><span class="nav-icon"><i class="ti ti-receipt"></i></span><span class="nav-label">Invoices</span></button>
     <button class="nav-item hidden-nav" id="nav-capability-review" onclick="showView('capability-review')" data-label="Capability Review"><span class="nav-icon"><i class="ti ti-clipboard-check"></i></span><span class="nav-label">Capability Review</span></button>
     <button class="nav-item hidden-nav" id="nav-purchasing-tracker" onclick="showView('purchasing-tracker')" data-label="Purchasing Tracker"><span class="nav-icon"><i class="ti ti-shopping-cart"></i></span><span class="nav-label">Purchasing Tracker</span></button>
+    <button class="nav-item hidden-nav" id="nav-purchase-orders" onclick="showView('purchase-orders')" data-label="Purchase Orders"><span class="nav-icon"><i class="ti ti-file-dollar"></i></span><span class="nav-text">Purchase Orders <span class="nav-badge" id="po-badge" style="display:none;">0</span></span></button>
     <button class="nav-item hidden-nav" id="nav-outsourcing-queue" onclick="showView('outsourcing-queue')" data-label="Outsourcing Queue"><span class="nav-icon"><i class="ti ti-send"></i></span><span class="nav-label">Outsourcing Queue</span></button>
-    <button class="nav-item hidden-nav" id="nav-external-partners" onclick="showView('external-partners')" data-label="External Partners"><span class="nav-icon"><i class="ti ti-building-factory"></i></span><span class="nav-label">External Partners</span></button>
+    <button class="nav-item hidden-nav" id="nav-external-partners" onclick="showView('external-partners')" data-label="Supplier Database"><span class="nav-icon"><i class="ti ti-building-factory"></i></span><span class="nav-label">Supplier Database</span></button>
     <button class="nav-item hidden-nav" id="nav-receiving-log" onclick="showView('receiving-log')" data-label="Receiving Logbook"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-label">Receiving Logbook</span></button>
     <button class="nav-item hidden-nav" id="nav-sticker-log" onclick="showView('sticker-log')" data-label="Sticker Log"><span class="nav-icon"><i class="ti ti-list-details"></i></span><span class="nav-label">Sticker Log</span></button>
 
@@ -597,7 +600,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <!-- Needs Attention (consolidated) -->
       <div id="needs-attention-box" style="margin-bottom:16px;"></div>
-      <div id="my-drafts-box"></div>
       <!-- Overdue / SLA breach alert -->
       <div id="dash-overdue-banner" style="display:none;margin-bottom:16px;">
         <div class="alert-item" style="background:var(--red-bg);border:1px solid var(--red);border-radius:10px;cursor:pointer;" onclick="showView('equipment')">
@@ -1166,17 +1168,49 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="view" id="view-external-partners">
       <div class="page-header">
         <div>
-          <div class="page-title">🏭 External Partners</div>
-          <div class="page-sub">Vendors and labs you outsource to — capabilities and full price history, building up over time</div>
+          <div class="page-title">🏭 Supplier Database</div>
+          <div class="page-sub">Everyone we buy from — suppliers, calibration partners and service providers — with contact and bank details, capabilities and price history</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary" onclick="openExternalPartnerModal()">+ Add Partner</button>
+          <button class="btn btn-primary" onclick="openExternalPartnerModal()">+ Add Supplier</button>
         </div>
       </div>
-      <div style="margin-bottom:16px;">
-        <input class="form-control" id="ep-search" placeholder="Search name, capability…" oninput="renderExternalPartnersPage()" style="width:280px;"/>
+      <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;">
+        <input class="form-control" id="ep-search" placeholder="Search name, contact, capability…" oninput="renderExternalPartnersPage()" style="width:280px;"/>
+        <select class="form-control" id="ep-type-filter" onchange="renderExternalPartnersPage()" style="width:auto;"><option value="">All types</option></select>
       </div>
       <div id="external-partners-list"></div>
+    </div>
+
+    <!-- ════ PURCHASE ORDERS ════ -->
+    <div class="view" id="view-purchase-orders">
+      <div class="page-header">
+        <div>
+          <div class="page-title">🧾 Purchase Orders</div>
+          <div class="page-sub">Orders to our suppliers — approved by the Managing Director before they go out</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="openPurchaseOrderModal()">+ New Purchase Order</button>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;">
+        <input class="form-control" id="po-search" placeholder="Search PO no., supplier…" oninput="renderPurchaseOrdersPage()" style="width:260px;"/>
+        <select class="form-control" id="po-status-filter" onchange="renderPurchaseOrdersPage()" style="width:auto;">
+          <option value="">All statuses</option><option>Draft</option><option>Pending Approval</option><option>Approved</option><option>Sent</option><option>Received</option><option>Rejected</option><option>Cancelled</option>
+        </select>
+      </div>
+      <div id="po-list"></div>
+    </div>
+
+    <!-- ════ MY DRAFTS ════ -->
+    <div class="view" id="view-my-drafts">
+      <div class="page-header">
+        <div>
+          <div class="page-title">📝 My Drafts</div>
+          <div class="page-sub">Forms you started and saved to finish later — only you can see these</div>
+        </div>
+      </div>
+      <div id="my-drafts-list"></div>
     </div>
 
     <!-- ════ RECEIVING LOGBOOK ════ -->
@@ -1811,6 +1845,17 @@ textarea.form-control{resize:vertical;min-height:70px;}
               <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="cert-counter-preview">Current next: loading…</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="card" id="doc-numbering-card" style="margin-bottom:16px;display:none;">
+        <div class="card-header"><span class="card-title">🔢 Document Numbering</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Quotation, Invoice, Purchase Order and Delivery Order numbers restart every month (for example WQT-2609-0001). If the newest number was deleted or skipped by mistake, set the <strong>next</strong> number here. It can't be set at or below a number that is already in use.</div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Document</th><th>Newest in use</th><th>Next number</th><th>Change next number to</th></tr></thead>
+            <tbody id="doc-numbering-body"><tr><td colspan="4" style="color:var(--text-muted);">Loading…</td></tr></tbody>
+          </table></div>
         </div>
       </div>
     </div>
@@ -4014,6 +4059,7 @@ async function loadAll(){
     await loadExternalPartners();
     await loadQuotationsV2();
     await loadInvoices();
+    await loadPurchaseOrders();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
     await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
@@ -4056,7 +4102,7 @@ function escapeForJsAttr(str){
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;');
 }
-function showToast(msg, type='info', duration=2500){
+function showToast(msg, type='info', duration=2500, action=null){
   let t=document.getElementById('wl-toast');
   if(!t){
     t=document.createElement('div');
@@ -4071,6 +4117,12 @@ function showToast(msg, type='info', duration=2500){
     border-left:4px solid ${colors[type]||colors.info};
     animation:slideInToast .2s ease;max-width:280px;pointer-events:none;`;
   item.textContent=msg;
+  if(action&&action.label){
+    const btn=document.createElement('button'); btn.textContent=action.label;
+    btn.style.cssText='margin-left:12px;background:#fff;color:#1e293b;border:none;border-radius:6px;padding:3px 10px;font-weight:600;font-size:12px;cursor:pointer;';
+    btn.onclick=()=>{ try{ action.onclick(); }catch(e){ console.error(e); } item.remove(); };
+    item.appendChild(btn); item.style.pointerEvents='auto'; item.style.maxWidth='380px';
+  }
   t.appendChild(item);
   setTimeout(()=>{
     item.style.transition='opacity .3s';
@@ -4535,6 +4587,7 @@ function applyRoleUI(){
   el('nav-purchasing-tracker').classList.toggle('hidden-nav', !canUsePurchasingTracker(currentUser));
   el('nav-outsourcing-queue').classList.toggle('hidden-nav', !canUseOutsourcingQueue(currentUser));
   el('nav-external-partners').classList.toggle('hidden-nav', !canUseExternalPartners(currentUser));
+  el('nav-purchase-orders').classList.toggle('hidden-nav', !canUsePurchasingTracker(currentUser));
   el('nav-receiving-log').classList.toggle('hidden-nav', !canCreateJobs(currentUser));
   el('nav-sticker-log').classList.toggle('hidden-nav', !canCreateJobs(currentUser)&&!canApproveStickers(currentUser));
   el('nav-calendar').classList.toggle('hidden-nav', hr);
@@ -4585,7 +4638,8 @@ const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',complete
   customers:'Customer Database',deleted:'Deleted Jobs',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
   documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Masterlist of Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
-  personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings'};
+  personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings',
+  'my-drafts':'My Drafts','purchase-orders':'Purchase Orders','external-partners':'Supplier Database'};
 
 function showView(name){
   closeMobileSidebar();
@@ -4611,7 +4665,7 @@ function showView(name){
   if(name==='personnel') renderPersonnel();
   if(name==='deleted') renderDeletedJobs();
   if(name==='reports') renderReports();
-  if(name==='settings'){ refreshSettingsFromServer(); loadCounterPreviews(); }
+  if(name==='settings'){ refreshSettingsFromServer(); loadCounterPreviews(); renderDocNumbering(); }
   if(name==='my-jobs') renderMyJobs();
   if(name==='staff-evaluation') renderStaffEvaluationPage();
   if(name==='approval'){
@@ -4635,6 +4689,8 @@ function showView(name){
   if(name==='external-partners') renderExternalPartnersPage();
   if(name==='receiving-log') renderReceivingLogPage();
   if(name==='sticker-log') renderStickerLogPage();
+  if(name==='my-drafts') renderMyDrafts();
+  if(name==='purchase-orders') renderPurchaseOrdersPage();
 }
 
 // ── MODALS ──
@@ -4647,6 +4703,10 @@ function openModal(id){
 function closeModal(id){
   const m=document.getElementById(id);
   if(!m)return;
+  // Leaving the New Job form (Cancel, ✕, Save Draft) ends the "started from a quotation" state —
+  // otherwise the NEXT manual New Job kept opening pre-filled with that old quotation. (A
+  // successful save clears it itself just before closing.)
+  if(id==='modal-add-equipment') _startingFromQuotationV2Id=null;
   m.classList.remove('open');
   m.style.display='none';
 }
@@ -5347,10 +5407,22 @@ async function peekJobNo(){
 // Shared helper for safely reusing a deleted document's number — only actually rolls back
 // if nothing newer was issued in that same sequence, checked and applied atomically
 // server-side. Safe to call even if uncertain; it just silently does nothing otherwise.
+// Returns 'freed' (the number is free to be reused), 'kept' (someone else issued a number at
+// the same moment, so it safely stays a gap) or 'failed' (the server couldn't be asked — most
+// likely because the worker file on Cloudflare doesn't have the newest endpoints yet).
 async function tryRollbackSequence(seqId,seqNum){
   try{
-    await apiFetch('/api/seq-rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:seqId,expectedCurrent:seqNum})});
-  }catch(e){ console.error(`Sequence rollback failed for ${seqId} (non-critical, gap just stays as-is):`,e); }
+    const r=await apiFetch('/api/seq-rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:seqId,expectedCurrent:seqNum})});
+    return (r&&r.rolledBack)?'freed':'kept';
+  }catch(e){ console.error(`Sequence rollback failed for ${seqId}:`,e); return 'failed'; }
+}
+// One clear message after deleting a numbered document — never silent about whether the number
+// can be reused.
+function docDeleteToast(no,isHighest,result){
+  if(!isHighest) return showToast(`🗑️ ${no} deleted. Newer numbers already exist, so this number stays a gap.`,'success',5000);
+  if(result==='freed') return showToast(`🗑️ ${no} deleted. That number is free — the next one will reuse it.`,'success',5000);
+  if(result==='kept') return showToast(`🗑️ ${no} deleted. Someone issued a number at the same moment, so it stays a gap.`,'warn',6000);
+  showToast(`🗑️ ${no} deleted, but its number could NOT be freed for reuse — the server needs the latest worker file. You can set the next number in Settings → Document Numbering.`,'warn',9000);
 }
 async function commitJobNo(){
   try{
@@ -5714,6 +5786,7 @@ async function openNewJobModal(){
         const telElQ=el('eq-tel'); if(telElQ) telElQ.value=quo.tel||'';
         const mobileElQ=el('eq-mobile'); if(mobileElQ) mobileElQ.value=quo.mobile||'';
         const faxElQ=el('eq-fax'); if(faxElQ) faxElQ.value=quo.fax||'';
+        const poElQ=el('eq-po'); if(poElQ) poElQ.value=quo.poNumber||''; // the customer's PO captured when the quotation was accepted
         if(quo.endUserName){
           const endUserEl=el('eq-end-user'); if(endUserEl) endUserEl.value=quo.endUserName;
           const endUserAddrEl=el('eq-end-user-address'); if(endUserAddrEl) endUserAddrEl.value=quo.endUserAddress||'';
@@ -10082,6 +10155,7 @@ async function deleteQuotationV2(quotationId){
   // someone else issues a new number in the exact instant between our check and the
   // rollback call, it safely does nothing rather than risk a duplicate.
   const parts=(q.quotationNo||'').split('-');
+  let rollbackResult=null, wasHighest=false;
   if(parts.length===3){
     const [prefix,yymm,seqStr]=parts;
     const seqNum=parseInt(seqStr,10);
@@ -10091,13 +10165,14 @@ async function deleteQuotationV2(quotationId){
         const p2=(other.quotationNo||'').split('-');
         return p2.length===3&&p2[0]===prefix&&p2[1]===yymm&&parseInt(p2[2],10)>seqNum;
       });
-      if(isHighest) await tryRollbackSequence(`${prefix}_${yymm}`,seqNum);
+      rollbackResult=isHighest?await tryRollbackSequence(`${prefix}_${yymm}`,seqNum):null;
+      wasHighest=isHighest;
     }
   }
   _quotationsV2.splice(idx,1);
   await saveQuotationsV2();
   renderQuotationsV2Page();
-  showToast(`🗑️ ${q.quotationNo} permanently deleted`,'success',3000);
+  docDeleteToast(q.quotationNo,wasHighest,rollbackResult);
   addAudit('🗑️',`Quotation ${q.quotationNo} permanently deleted by ${USERS[currentUser]?.name||currentUser}`);
 }
 async function respondQuotationV2(quotationId,accepted){
@@ -10954,8 +11029,8 @@ function renderTrackerPage(type){
           ${externalCheckButtons?`<div style="margin-bottom:4px;">${externalCheckButtons}</div>`:''}
           ${type==='sales'&&anyCleared?(e.linkedQuotationId?`<div style="margin-bottom:4px;"><span style="font-size:11px;color:var(--green);font-weight:600;">✅ ${(_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||'Quotation linked'}</span> <a href="#" onclick="event.preventDefault();showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')" style="font-size:10px;">(view)</a></div>`:`<div style="margin-bottom:4px;"><button class="btn btn-primary btn-sm" onclick="openQuotationV2Modal(null,'${e.id}')">📄 Create Quotation</button></div>`):''}
           ${type==='sales'&&items.some(it=>it.capabilityVerdict)?`<button class="btn btn-outline btn-sm" onclick="exportEntryCapabilityReviewPdf('${e.id}')" title="Export capability review for this entry">📄</button>`:''}
-          ${type==='purchasing'&&e.quotedPrice>0?(e.poNumber?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportPurchaseOrderPdf('${e.id}')">📄 ${e.poNumber}</button>`:`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="issuePurchaseOrder('${e.id}')">🧾 Issue PO</button>`):''}
-          ${readOnly?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
+          ${type==='purchasing'&&e.poNumber?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" title="PO issued with the older, no-approval method" onclick="exportLegacyTrackerPoPdf('${e.id}')">📄 ${e.poNumber}</button>`:''}
+          ${(!readOnly&&type==='purchasing')?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" title="Raise a Purchase Order for this" onclick="openPurchaseOrderModal(null,{entryId:'${e.id}'})">🧾 PO${(_purchaseOrders||[]).some(po=>po.linkedPurchasingEntryId===e.id&&po.status!=='Cancelled')?' ✓':''}</button>`:''}${readOnly?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
           <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>`}
         </td>
       </tr>`;
@@ -10998,6 +11073,7 @@ function openTrackerEntryModal(type,entryId){
         <div id="tk-name-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:180px;overflow-y:auto;margin-top:2px;"></div>
         <input type="hidden" id="tk-cust-id" value="${existing?.custId||''}"/>
         <input type="hidden" id="tk-ref-id" value="${existing?.refEqId||''}"/>
+        <input type="hidden" id="tk-supplier-id" value="${existing?.linkedExternalPartnerId||''}"/>
       </div>
       ${type==='sales'?`
       <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
@@ -11215,11 +11291,16 @@ function suggestTrackerName(type,query){
     if(!matches.length){box.style.display='none';return;}
     box.innerHTML=matches.map(c=>`<div onclick="selectTrackerCustomer('${c.id}','${escapeForJsAttr(c.company)}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">${escapeHtml(c.company)}</div>`).join('');
   } else {
+    const sup=(_externalPartners||[]).filter(x=>x&&x.name&&x.name.toLowerCase().includes(q)).slice(0,4);
     const matches=(_refEq||[]).filter(r=>r&&r.name&&r.name.toLowerCase().includes(q)).slice(0,6);
-    if(!matches.length){box.style.display='none';return;}
-    box.innerHTML=matches.map(r=>`<div onclick="selectTrackerRefEq('${r.id}','${escapeForJsAttr(r.name)}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">🔩 ${r.name}</div>`).join('');
+    if(!matches.length&&!sup.length){box.style.display='none';return;}
+    box.innerHTML=sup.map(x=>`<div onclick="selectTrackerSupplier('${x.id}','${escapeForJsAttr(x.name)}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">🏭 ${escapeHtml(x.name)} <span style="color:var(--text-muted);">— supplier</span></div>`).join('')
+      +matches.map(r=>`<div onclick="selectTrackerRefEq('${r.id}','${escapeForJsAttr(r.name)}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">🔩 ${escapeHtml(r.name)}</div>`).join('');
   }
   box.style.display='block';
+}
+function selectTrackerSupplier(supId,name){
+  el('tk-name').value=name; if(el('tk-supplier-id')) el('tk-supplier-id').value=supId; el('tk-name-suggestions').style.display='none';
 }
 function selectTrackerCustomer(custId,name){
   el('tk-name').value=name; el('tk-cust-id').value=custId; el('tk-name-suggestions').style.display='none';
@@ -11285,6 +11366,7 @@ async function saveTrackerEntry(type,entryId){
   entry.name=name;
   entry.custId=el('tk-cust-id')?.value||null;
   entry.refEqId=el('tk-ref-id')?.value||null;
+  if(type!=='sales'){ const supId=el('tk-supplier-id')?.value; if(supId) entry.linkedExternalPartnerId=supId; }
   if(type==='purchasing'){
     entry.remark=el('tk-remark')?.value.trim()||'';
     const newPrice=parseFloat(el('tk-quoted-price')?.value)||0;
@@ -11576,36 +11658,58 @@ function allKnownCapabilities(){
   _externalPartners.forEach(p=>(p.capabilities||[]).forEach(c=>set.add(c)));
   return [...set].sort();
 }
+// ══════════════════════════════════════════════════
+// SUPPLIER DATABASE — everyone we buy from. This is the old "External Partners" list grown into a
+// full supplier record (same storage, so every existing partner, capability and price history is
+// kept). Existing partners count as "Calibration / Outsourcing Partner" until edited.
+// ══════════════════════════════════════════════════
+const SUPPLIER_TYPES=['Calibration / Outsourcing Partner','Equipment Supplier','Accessories & Consumables','Service Provider','Other'];
+function supplierTypeOf(p){ return p.supplierType||SUPPLIER_TYPES[0]; }
 function renderExternalPartnersPage(){
-  if(!canUseExternalPartners(currentUser)){ el('external-partners-list').innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  const box=el('external-partners-list'); if(!box)return;
+  if(!canUseExternalPartners(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  const typeSel=el('ep-type-filter');
+  if(typeSel&&typeSel.options.length<=1) SUPPLIER_TYPES.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t; typeSel.appendChild(o); });
+  const typeFilter=typeSel?.value||'';
   const q=(el('ep-search')?.value||'').toLowerCase();
   const list=_externalPartners.filter(p=>{
-    if(!q)return true;
-    return (p.name||'').toLowerCase().includes(q)||(p.capabilities||[]).some(c=>c.toLowerCase().includes(q));
+    if(typeFilter&&supplierTypeOf(p)!==typeFilter) return false;
+    if(!q) return true;
+    return [p.name,p.contactPerson,p.email,p.phone,p.mobile,p.notes].some(v=>String(v||'').toLowerCase().includes(q))||(p.capabilities||[]).some(c=>String(c).toLowerCase().includes(q));
   }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  const box=el('external-partners-list'); if(!box)return;
-  if(!list.length){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🏭</div><p>No external partners added yet.</p></div>'; return; }
+  if(!list.length){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🏭</div><p>No suppliers found. Click "+ Add Supplier" to add one.</p></div>'; return; }
+  const showBank=isAdmin(currentUser);
   box.innerHTML=list.map(p=>{
     const history=(p.priceHistory||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-    const avgPrice=history.length?history.reduce((s,h)=>s+(h.price||0),0)/history.length:0;
+    const avgPrice=history.length?history.reduce((sum,h)=>sum+(h.price||0),0)/history.length:0;
+    const pos=(_purchaseOrders||[]).filter(x=>x.supplierId===p.id&&!['Cancelled','Rejected'].includes(x.status));
+    const poTotal=pos.reduce((sum,x)=>sum+poTotals(x).total,0);
+    const contact=[p.contactPerson?escapeHtml(p.contactPerson)+(p.designation?' ('+escapeHtml(p.designation)+')':''):'',p.phone?'Tel '+escapeHtml(p.phone):'',p.mobile?'Mobile '+escapeHtml(p.mobile):'',p.email?escapeHtml(p.email):''].filter(Boolean).join(' · ');
+    const bank=(showBank&&(p.bankName||p.bankAccountNo))?`<div style="margin-top:4px;font-size:11.5px;color:var(--text-muted);">🏦 ${escapeHtml(p.bankName||'')}${p.bankAccountName?' — '+escapeHtml(p.bankAccountName):''}${p.bankAccountNo?' — '+escapeHtml(p.bankAccountNo):''}</div>`:'';
     return `<div class="card" style="margin-bottom:12px;">
       <div style="padding:14px 16px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div>
-            <div style="font-weight:700;font-size:14px;">${p.name}</div>
-            <div style="font-size:12px;color:var(--text-muted);">${p.contactPerson?p.contactPerson+' · ':''}${p.phone||''}${p.email?' · '+p.email:''}</div>
-            <div style="margin-top:6px;">${(p.capabilities||[]).map(c=>`<span class="badge badge-blue" style="margin-right:4px;">${c}</span>`).join('')}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div style="min-width:240px;flex:1;">
+            <div style="font-weight:700;font-size:14px;">${escapeHtml(p.name||'')} <span class="badge badge-slate" style="margin-left:6px;font-weight:600;">${escapeHtml(supplierTypeOf(p))}</span></div>
+            ${contact?`<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${contact}</div>`:''}
+            ${p.address?`<div style="font-size:12px;color:var(--text-muted);white-space:pre-line;margin-top:2px;">${escapeHtml(p.address)}</div>`:''}
+            <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">${[p.paymentTerms?'Payment: '+escapeHtml(p.paymentTerms):'',p.sstNo?'SST Reg. No.: '+escapeHtml(p.sstNo):'',p.tinNo?'TIN: '+escapeHtml(p.tinNo):'',p.website?escapeHtml(p.website):''].filter(Boolean).join(' · ')}</div>
+            ${bank}
+            <div style="margin-top:6px;">${(p.capabilities||[]).map(c=>`<span class="badge badge-blue" style="margin-right:4px;">${escapeHtml(c)}</span>`).join('')}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-size:11px;color:var(--text-muted);">${history.length} quote${history.length!==1?'s':''} recorded</div>
+            <div style="font-size:11px;color:var(--text-muted);">${history.length} quote${history.length!==1?'s':''} recorded${pos.length?` · ${pos.length} PO${pos.length!==1?'s':''} (RM ${poTotal.toFixed(2)})`:''}</div>
             ${history.length?`<div style="font-size:13px;font-weight:700;">Avg RM ${avgPrice.toFixed(2)}</div>`:''}
-            <button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="openExternalPartnerModal('${p.id}')">✏️ Edit</button>
+            <div style="margin-top:4px;display:flex;gap:6px;justify-content:flex-end;">
+              <button class="btn btn-outline btn-sm" onclick="openPurchaseOrderModal(null,{supplierId:'${p.id}'})">🧾 New PO</button>
+              <button class="btn btn-outline btn-sm" onclick="openExternalPartnerModal('${p.id}')">✏️ Edit</button>
+            </div>
           </div>
         </div>
         ${history.length?`<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">RECENT PRICE HISTORY</div>
           ${history.slice(0,5).map(h=>`<div style="font-size:11.5px;display:flex;justify-content:space-between;margin-bottom:2px;">
-            <span>${fmtDateShort(h.date)} — ${h.itemDescription||h.capability||'—'}</span><strong>RM ${(h.price||0).toFixed(2)}</strong>
+            <span>${fmtDateShort(h.date)} — ${escapeHtml(h.itemDescription||h.capability||'—')}</span><strong>RM ${(h.price||0).toFixed(2)}</strong>
           </div>`).join('')}
         </div>`:''}
         ${p.notes?`<div style="margin-top:8px;font-size:11.5px;color:var(--text-muted);">📝 ${escapeHtml(p.notes)}</div>`:''}
@@ -11613,32 +11717,62 @@ function renderExternalPartnersPage(){
     </div>`;
   }).join('');
 }
-function openExternalPartnerModal(partnerId){
+// opts: { name } pre-fills the name; { onSaved(partner) } is called after saving (used when adding a
+// supplier from inside a Purchase Order).
+function openExternalPartnerModal(partnerId,opts){
   if(!canUseExternalPartners(currentUser)){alert('You do not have access to this.');return;}
+  window._epOpts=opts||{};
   const existing=partnerId?_externalPartners.find(p=>p.id===partnerId):null;
   const knownCaps=allKnownCapabilities();
+  const canBank=isAdmin(currentUser);
+  const v=x=>escapeHtml(x==null?'':String(x));
   let ov=document.getElementById('ext-partner-overlay');
   if(!ov){ov=document.createElement('div');ov.id='ext-partner-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:480px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ Add'} External Partner</span>
+      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ Add'} Supplier</span>
       <button onclick="document.getElementById('ext-partner-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
     </div>
     <div style="padding:16px 20px;">
-      <div class="form-group"><label class="form-label">Name <span class="req">*</span></label><input class="form-control" id="ep-name" value="${existing?.name||''}"/></div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Contact Person</label><input class="form-control" id="ep-contact" value="${existing?.contactPerson||''}"/></div>
-        <div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="ep-phone" value="${existing?.phone||''}"/></div>
+        <div class="form-group"><label class="form-label">Supplier Name <span class="req">*</span></label><input class="form-control" id="ep-name" value="${v(existing?.name||opts?.name||'')}"/></div>
+        <div class="form-group"><label class="form-label">Type</label><select class="form-control" id="ep-type">${SUPPLIER_TYPES.map(t=>`<option ${supplierTypeOf(existing||{})===t?'selected':''}>${t}</option>`).join('')}</select></div>
       </div>
-      <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="ep-email" value="${existing?.email||''}"/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Contact Person</label><input class="form-control" id="ep-contact" value="${v(existing?.contactPerson)}"/></div>
+        <div class="form-group"><label class="form-label">Designation</label><input class="form-control" id="ep-designation" value="${v(existing?.designation)}"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="ep-phone" value="${v(existing?.phone)}"/></div>
+        <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="ep-mobile" value="${v(existing?.mobile)}"/></div>
+        <div class="form-group"><label class="form-label">Fax</label><input class="form-control" id="ep-fax" value="${v(existing?.fax)}"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="ep-email" value="${v(existing?.email)}"/></div>
+        <div class="form-group"><label class="form-label">Website</label><input class="form-control" id="ep-website" value="${v(existing?.website)}"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="ep-address" rows="2">${v(existing?.address)}</textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Payment Terms</label><input class="form-control" id="ep-payment-terms" list="ep-terms-list" placeholder="e.g. Net 30 days" value="${v(existing?.paymentTerms)}"/><datalist id="ep-terms-list"><option value="Net 30 days"></option><option value="Net 14 days"></option><option value="Cash on delivery"></option><option value="Advance payment"></option></datalist></div>
+        <div class="form-group"><label class="form-label">SST Registration No.</label><input class="form-control" id="ep-sst-no" value="${v(existing?.sstNo)}"/></div>
+        <div class="form-group"><label class="form-label">TIN No.</label><input class="form-control" id="ep-tin-no" value="${v(existing?.tinNo)}"/></div>
+      </div>
+      ${canBank?`<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">🏦 Bank Details <span style="font-weight:normal;color:var(--text-muted);">(only Admin and the Managing Director can see or change these)</span></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Bank</label><input class="form-control" id="ep-bank-name" value="${v(existing?.bankName)}"/></div>
+          <div class="form-group"><label class="form-label">Account Name</label><input class="form-control" id="ep-bank-acct-name" value="${v(existing?.bankAccountName)}"/></div>
+          <div class="form-group"><label class="form-label">Account No.</label><input class="form-control" id="ep-bank-acct-no" value="${v(existing?.bankAccountNo)}"/></div>
+        </div>
+      </div>`:''}
       <div class="form-group"><label class="form-label">Capabilities <span style="font-weight:normal;color:var(--text-muted);">(comma-separated — e.g. Pressure Calibration, Flow Calibration)</span></label>
-        <input class="form-control" id="ep-capabilities" value="${(existing?.capabilities||[]).join(', ')}" list="ep-cap-suggestions"/>
-        <datalist id="ep-cap-suggestions">${knownCaps.map(c=>`<option value="${c}"></option>`).join('')}</datalist>
+        <input class="form-control" id="ep-capabilities" value="${v((existing?.capabilities||[]).join(', '))}" list="ep-cap-suggestions"/>
+        <datalist id="ep-cap-suggestions">${knownCaps.map(c=>`<option value="${v(c)}"></option>`).join('')}</datalist>
       </div>
-      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="ep-notes" rows="2">${escapeHtml(existing?.notes||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="ep-notes" rows="2">${v(existing?.notes)}</textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('ext-partner-overlay').style.display='none'">Cancel</button>
-        <button class="btn btn-primary" onclick="saveExternalPartner('${partnerId||''}')">${existing?'Save Changes':'Add Partner'}</button>
+        <button class="btn btn-primary" onclick="saveExternalPartner('${partnerId||''}')">${existing?'Save Changes':'Add Supplier'}</button>
       </div>
     </div>
   </div>`;
@@ -11646,21 +11780,41 @@ function openExternalPartnerModal(partnerId){
 }
 async function saveExternalPartner(partnerId){
   const name=el('ep-name').value.trim();
-  if(!name){alert("Please enter the partner's name.");return;}
+  if(!name){alert("Please enter the supplier's name.");return;}
   let partner=partnerId?_externalPartners.find(p=>p.id===partnerId):null;
   const isNew=!partner;
-  if(isNew){ partner={id:'EXT-'+Date.now(),priceHistory:[],createdAt:new Date().toISOString(),createdBy:currentUser}; _externalPartners.push(partner); }
+  if(isNew){
+    const dup=_externalPartners.find(p=>String(p.name||'').trim().toLowerCase()===name.toLowerCase());
+    if(dup){ alert(`"${dup.name}" is already in the Supplier Database. Please use or edit that one.`); return; }
+    partner={id:'EXT-'+Date.now(),priceHistory:[],createdAt:new Date().toISOString(),createdBy:currentUser}; _externalPartners.push(partner);
+  }
   partner.name=name;
+  partner.supplierType=el('ep-type')?.value||SUPPLIER_TYPES[0];
   partner.contactPerson=el('ep-contact').value.trim();
+  partner.designation=el('ep-designation')?.value.trim()||'';
   partner.phone=el('ep-phone').value.trim();
+  partner.mobile=el('ep-mobile')?.value.trim()||'';
+  partner.fax=el('ep-fax')?.value.trim()||'';
   partner.email=el('ep-email').value.trim();
+  partner.website=el('ep-website')?.value.trim()||'';
+  partner.address=el('ep-address')?.value.trim()||'';
+  partner.paymentTerms=el('ep-payment-terms')?.value.trim()||'';
+  partner.sstNo=el('ep-sst-no')?.value.trim()||'';
+  partner.tinNo=el('ep-tin-no')?.value.trim()||'';
+  if(el('ep-bank-name')){ // only present for Admin / MD — anyone else never overwrites these
+    partner.bankName=el('ep-bank-name').value.trim();
+    partner.bankAccountName=el('ep-bank-acct-name').value.trim();
+    partner.bankAccountNo=el('ep-bank-acct-no').value.trim();
+  }
   partner.capabilities=el('ep-capabilities').value.split(',').map(c=>c.trim()).filter(Boolean);
   partner.notes=el('ep-notes').value.trim();
   await saveExternalPartners();
   document.getElementById('ext-partner-overlay').style.display='none';
   renderExternalPartnersPage();
-  showToast(`✅ ${isNew?'Partner added':'Partner updated'}`,'success',2500);
-  addAudit('🏭',`External Partner ${isNew?'added':'updated'}: ${name}`);
+  showToast(`✅ ${isNew?'Supplier added':'Supplier updated'}`,'success',2500);
+  addAudit('🏭',`Supplier ${isNew?'added':'updated'}: ${escapeHtml(name)}`);
+  const cb=window._epOpts&&window._epOpts.onSaved; window._epOpts={};
+  if(typeof cb==='function') cb(partner);
 }
 // Records a price quote against a partner, building their permanent history
 // ══════════════════════════════════════════════════
@@ -15066,6 +15220,7 @@ function refreshAllBadges(){
   if(mb){mb.textContent=myCount;mb.style.display=myCount>0?'inline':'none';}
   const ab=el('approval-badge');
   if(ab){ab.textContent=totalApprovalBadge;ab.style.display=totalApprovalBadge>0?'inline':'none';}
+  if(typeof updatePoBadge==='function') updatePoBadge();
   const sb=el('stickers-badge');
   if(sb){
     const stkPendingApproval=canApproveStickers(currentUser)?_stickerRequests.filter(r=>r.status==='Pending').length:0;
@@ -19455,36 +19610,33 @@ async function confirmMarkCollected(){
 }
 async function exportDeliveryOrderPdf(jobNo){
   const j=getJob(jobNo); if(!j||!j.doNumber){alert('This job has not been marked Collected yet.');return;}
-  const s=_settings;
-  const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
-    <div style="text-align:center;margin-bottom:20px;">
-      <div style="font-size:16px;font-weight:800;color:#0f1f3d;">${s.labName||'Westlab (M) Sdn. Bhd.'}</div>
-      <div style="font-size:11px;color:#64748b;">${escapeHtml(s.address||'')}</div>
+  const esc=v=>escapeHtml(v==null?'':String(v));
+  const sig=j.collectionSignature||'';
+  const loaded=await pdfLoadImages([sig]);
+  const topBlock=(pageNo,pageCount)=>`
+    <div style="text-align:center;font-size:19px;font-weight:bold;letter-spacing:.5px;margin:0 0 8px;">DELIVERY ORDER</div>
+    <div style="display:flex;justify-content:space-between;gap:14px;margin-bottom:10px;">
+      <div style="width:56%;line-height:1.4;"><div style="font-size:10px;color:#666;letter-spacing:.4px;">DELIVER TO</div>
+        <div style="font-weight:bold;">${esc(j.custName)}</div>
+        ${j.address?`<div style="white-space:pre-line;">${esc(j.address)}</div>`:''}
+        ${j.attention?`<div>Attn: ${esc(j.attention)}</div>`:''}
+        ${(j.tel||j.mobile)?`<div>Tel: ${esc(j.tel||j.mobile)}</div>`:''}</div>
+      <div style="width:40%;"><table style="border-collapse:collapse;line-height:1.55;">
+        ${[['DO No.',j.doNumber],['Date',fmtDateShort(j.collectedAt)],['Page',`${pageNo} of ${pageCount}`],['Job No.',j.jobNo],['Your PO No.',j.po||'']].map(([k,v])=>`<tr><td style="width:84px;color:#555;">${k}</td><td style="width:10px;">:</td><td style="${k==='DO No.'?'font-weight:bold;':''}">${esc(v)}</td></tr>`).join('')}
+      </table></div>
     </div>
-    <div style="text-align:center;font-size:15px;font-weight:800;text-decoration:underline;margin-bottom:20px;">DELIVERY ORDER</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
-      <tr><td style="padding:5px 8px;color:#64748b;width:160px;">DO Number</td><td style="padding:5px 8px;font-weight:600;">${j.doNumber}</td></tr>
-      <tr><td style="padding:5px 8px;color:#64748b;">Job No.</td><td style="padding:5px 8px;font-weight:600;">${j.jobNo}</td></tr>
-      <tr><td style="padding:5px 8px;color:#64748b;">Customer</td><td style="padding:5px 8px;font-weight:600;">${escapeHtml(j.custName||'')}</td></tr>
-      <tr><td style="padding:5px 8px;color:#64748b;">Collected By</td><td style="padding:5px 8px;font-weight:600;">${j.collectedBy||''}</td></tr>
-      <tr><td style="padding:5px 8px;color:#64748b;">Date Collected</td><td style="padding:5px 8px;font-weight:600;">${fmtDateShort(j.collectedAt)}</td></tr>
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:20px;">
-      <thead><tr>
-        <th style="padding:6px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;text-align:left;">Description</th>
-        <th style="padding:6px;background:#0f1f3d;color:#fff;">Cert No.</th><th style="padding:6px;background:#0f1f3d;color:#fff;">Serial No.</th>
-      </tr></thead>
-      <tbody>${(j.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
-        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${i+1}</td>
-        <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(it.eqName||'')} ${escapeHtml(it.brand||'')} ${escapeHtml(it.model||'')}</td>
-        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.certNo||''}</td>
-        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${escapeHtml(it.serial||'N/A')}</td>
-      </tr>`).join('')}</tbody>
-    </table>
-    ${j.collectionSignature?`<div style="margin-bottom:16px;"><div style="font-size:11px;color:#64748b;margin-bottom:4px;">Signature</div><img src="${j.collectionSignature}" style="max-width:250px;border:1px solid #e2e8f0;border-radius:4px;"/></div>`:''}
-    <div style="margin-top:24px;font-size:10.5px;color:#94a3b8;">This Delivery Order confirms the item(s) listed above were returned to the customer on the date stated.</div>
-  </div>`;
-  await exportHtmlAsPdf(html,`${j.doNumber}.pdf`,'Delivery Order',(j.items||[]).length);
+    <div style="margin-bottom:8px;">The following calibrated item(s) are returned to you:</div>`;
+  const colsHtml='<colgroup><col style="width:34px"><col><col style="width:120px"><col style="width:130px"><col style="width:40px"></colgroup>';
+  const headRow=`<tr><th style="${PDF_TH}">No.</th><th style="${PDF_TH}">Description</th><th style="${PDF_TH}">Serial No.</th><th style="${PDF_TH}">Certificate No.</th><th style="${PDF_TH}text-align:center;">Qty</th></tr>`;
+  const rows=(j.items||[]).map((it,i)=>`<tr><td style="${PDF_TD}">${i+1}</td><td style="${PDF_TD}">${esc([it.eqName,it.brand,it.model].filter(Boolean).join(' '))}${it.tagNo&&it.tagNo!=='N/A'?`<div style="font-size:11px;color:#555;">Tag No.: ${esc(it.tagNo)}</div>`:''}</td><td style="${PDF_TD}">${esc(it.serial||'N/A')}</td><td style="${PDF_TD}">${esc(it.certNo||'')}</td><td style="${PDF_TD}text-align:center;">1</td></tr>`);
+  const footerBlock=`<div style="font-size:11px;color:#555;margin-bottom:14px;">Please check the item(s) on receipt. Any shortfall or damage must be reported within 5 working days.</div>
+    <div style="display:flex;justify-content:space-between;">
+      <div style="width:47%;"><div style="font-size:11px;color:#555;">Issued by (Westlab)</div><div style="height:56px;"></div><div style="border-top:1px solid #000;padding-top:3px;"><b>${esc(staffNameOf(j.history?.slice().reverse().find(h=>/Marked Collected/.test(h.action||''))?.by||''))}</b>&nbsp;<div style="font-size:11px;color:#444;">Date: ${fmtDateShort(j.collectedAt)}</div></div></div>
+      <div style="width:47%;"><div style="font-size:11px;color:#555;">Received by (customer)</div>
+        <div style="height:56px;display:flex;align-items:flex-end;">${(sig&&loaded.has(sig))?`<img src="${sig}" crossorigin="anonymous" style="max-height:52px;max-width:200px;object-fit:contain;"/>`:''}</div>
+        <div style="border-top:1px solid #000;padding-top:3px;"><b>${esc(j.collectedBy||'')}</b>&nbsp;<div style="font-size:11px;color:#444;">Date: ${fmtDateShort(j.collectedAt)}</div></div></div>
+    </div>`;
+  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${j.doNumber}.pdf`,label:'Delivery Order',count:(j.items||[]).length});
 }
 async function generateInvoiceFromJob(jobNo){
   const j=getJob(jobNo); if(!j)return null;
@@ -19517,6 +19669,7 @@ async function deleteInvoice(invoiceId){
   const idx=_invoices.findIndex(x=>x.id===invoiceId);
   if(idx===-1)return;
   const parts=(inv.invoiceNo||'').split('-');
+  let rollbackResult=null, wasHighest=false;
   if(parts.length===3){
     const [prefix,yymm,seqStr]=parts;
     const seqNum=parseInt(seqStr,10);
@@ -19526,13 +19679,14 @@ async function deleteInvoice(invoiceId){
         const p2=(other.invoiceNo||'').split('-');
         return p2.length===3&&p2[0]===prefix&&p2[1]===yymm&&parseInt(p2[2],10)>seqNum;
       });
-      if(isHighest) await tryRollbackSequence(`${prefix}_${yymm}`,seqNum);
+      rollbackResult=isHighest?await tryRollbackSequence(`${prefix}_${yymm}`,seqNum):null;
+      wasHighest=isHighest;
     }
   }
   _invoices.splice(idx,1);
   await saveInvoices();
   renderInvoicesPage();
-  showToast(`🗑️ ${inv.invoiceNo} permanently deleted`,'success',3000);
+  docDeleteToast(inv.invoiceNo,wasHighest,rollbackResult);
   addAudit('🗑️',`Invoice ${inv.invoiceNo} permanently deleted by ${USERS[currentUser]?.name||currentUser}`);
 }
 function renderInvoicesPage(){
@@ -19606,7 +19760,10 @@ async function confirmRecordPayment(invoiceId){
 // (which is the customer's PO number to Westlab, a separate existing field).
 // Available once a Purchasing Tracker entry has a quoted price recorded.
 // ══════════════════════════════════════════════════
-async function issuePurchaseOrder(entryId){
+// The old one-click "Issue PO" (no approval) is retired — POs now go through the Purchase Orders
+// page and need the Managing Director's approval. Anything still calling this lands there instead.
+async function issuePurchaseOrder(entryId){ openPurchaseOrderModal(null,{entryId}); }
+async function issuePurchaseOrderLegacyUnused(entryId){
   const e=_purchasingTracker.find(x=>x.id===entryId); if(!e)return;
   if(e.poNumber){alert(`A PO has already been issued for this: ${e.poNumber}`);return;}
   if(!e.quotedPrice||e.quotedPrice<=0){alert('Please record a quoted price before issuing a PO.');return;}
@@ -19620,7 +19777,8 @@ async function issuePurchaseOrder(entryId){
   showToast(`🧾 Purchase Order ${poNumber} issued to ${e.name}`,'success',4000);
   addAudit('🧾',`Purchase Order ${poNumber} issued to ${e.name} — RM ${e.quotedPrice.toFixed(2)}`);
 }
-async function exportPurchaseOrderPdf(entryId){
+// PDF for POs issued the old way (stored on the Purchasing Tracker entry) — kept so they stay viewable.
+async function exportLegacyTrackerPoPdf(entryId){
   const e=_purchasingTracker.find(x=>x.id===entryId); if(!e||!e.poNumber){alert('No PO has been issued for this entry yet.');return;}
   const partner=e.linkedExternalPartnerId?_externalPartners.find(p=>p.id===e.linkedExternalPartnerId):null;
   const salesEntry=e.linkedSalesTrackerId?_salesTracker.find(se=>se.id===e.linkedSalesTrackerId):null;
@@ -20931,6 +21089,588 @@ el('dash-date').textContent='Week of '+new Date().toLocaleDateString('en-MY',{da
 <!-- BOTTOM NAV (mobile only) -->
 
 <script>
+// ═══════════════════════════ DOCUMENT NUMBERING (Settings) ═══════════════════════════
+const DOC_SERIES=[
+  {prefix:'WQT',label:'Quotation',used:()=>(_quotationsV2||[]).map(q=>q.quotationNo)},
+  {prefix:'WIV',label:'Invoice',used:()=>(_invoices||[]).map(i=>i.invoiceNo)},
+  {prefix:'WPO',label:'Purchase Order',used:()=>(_purchaseOrders||[]).map(p=>p.poNumber).concat((_purchasingTracker||[]).map(e=>e.poNumber).filter(Boolean))},
+  {prefix:'WDO',label:'Delivery Order',used:()=>docAllDoNumbers()},
+];
+function docYymm(){ const n=new Date(); return String(n.getFullYear()).slice(-2)+String(n.getMonth()+1).padStart(2,'0'); }
+function docAllDoNumbers(){
+  const out=[]; (_jobs||[]).forEach(j=>{ if(j.doNumber) out.push(j.doNumber); });
+  (_purchaseOrders||[]).forEach(po=>(po.deliveryOrders||[]).forEach(d=>out.push(d.doNumber)));
+  return out;
+}
+function docHighestUsed(series,yymm){
+  const re=new RegExp('^'+series.prefix+'-'+yymm+'-(\\d+)$'); let max=0;
+  series.used().forEach(no=>{ const m=re.exec(no||''); if(m) max=Math.max(max,parseInt(m[1],10)); });
+  return max;
+}
+async function renderDocNumbering(){
+  const card=el('doc-numbering-card'), body=el('doc-numbering-body'); if(!card||!body) return;
+  if(!isAdmin(currentUser)){ card.style.display='none'; return; }
+  card.style.display='';
+  const yymm=docYymm();
+  const rows=await Promise.all(DOC_SERIES.map(async ser=>{
+    let val=null; try{ const d=await apiFetch('/api/seq/'+encodeURIComponent(`${ser.prefix}_${yymm}`)); val=(d&&d.val)||0; }catch(e){ val=null; }
+    return {ser,val,highest:docHighestUsed(ser,yymm)};
+  }));
+  body.innerHTML=rows.map(({ser,val,highest})=>{
+    const fmt=n=>`${ser.prefix}-${yymm}-${String(n).padStart(4,'0')}`;
+    const behind=val!==null&&val<highest;
+    return `<tr>
+      <td style="font-weight:600;">${ser.label}</td>
+      <td>${highest?fmt(highest):'<span style="color:var(--text-muted);">none this month</span>'}</td>
+      <td>${val===null?'<span style="color:var(--red);">Could not load</span>':fmt(val+1)}${behind?`<div style="font-size:11px;color:var(--red);">⚠️ Counter is behind existing documents — set it to ${highest+1}</div>`:''}</td>
+      <td><div style="display:flex;gap:6px;align-items:center;"><span style="color:var(--text-muted);font-size:12px;white-space:nowrap;">${ser.prefix}-${yymm}-</span>
+        <input class="form-control" type="number" min="1" max="9999" id="docnum-${ser.prefix}" placeholder="${val===null?'':val+1}" style="width:100px;"/>
+        <button class="btn btn-primary btn-sm" ${val===null?'disabled':''} onclick="setDocSequence('${ser.prefix}',${val===null?0:val})">Set</button></div></td>
+    </tr>`;
+  }).join('');
+}
+async function setDocSequence(prefix,seenCounter){
+  if(!isAdmin(currentUser)) return;
+  const ser=DOC_SERIES.find(x=>x.prefix===prefix); if(!ser) return;
+  const yymm=docYymm();
+  const wanted=parseInt(el('docnum-'+prefix)?.value,10);
+  if(!Number.isInteger(wanted)||wanted<1||wanted>9999){ alert('Enter the next number as a whole number from 1 to 9999.'); return; }
+  const highest=docHighestUsed(ser,yymm);
+  if(wanted<=highest){ alert(`${ser.prefix}-${yymm}-${String(highest).padStart(4,'0')} is already in use, so the next number must be ${highest+1} or higher.`); return; }
+  const label=`${ser.prefix}-${yymm}-${String(wanted).padStart(4,'0')}`;
+  if(!confirm(`Set the next ${ser.label} number to ${label}?`)) return;
+  try{
+    const r=await apiFetch('/api/seq-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`${ser.prefix}_${yymm}`,value:wanted-1,expectedCurrent:seenCounter})});
+    if(r&&r.set){ showToast(`✅ Next ${ser.label} number is now ${label}`,'success',4000); addAudit('🔢',`Next ${ser.label} number set to ${label}`); }
+    else showToast('A document was issued while you were on this screen, so nothing was changed. Please check the numbers and try again.','warn',6000);
+  }catch(e){ showToast('❌ Could not set the number — the server needs the latest worker file (seq-set). '+e.message,'error',8000); }
+  renderDocNumbering();
+}
+
+// ═══════════════════════════ A4 PAGING FOR LETTERHEAD DOCUMENTS ═══════════════════════════
+async function pdfLoadImages(urls){
+  const ok=new Set();
+  await Promise.all([...new Set((urls||[]).filter(Boolean))].map(url=>new Promise(res=>{
+    if(url.startsWith('data:')){ ok.add(url); return res(); }
+    const im=new Image(); im.crossOrigin='anonymous';
+    const done=g=>{ if(g) ok.add(url); res(); };
+    im.onload=()=>done(true); im.onerror=()=>done(false);
+    setTimeout(()=>done(im.complete&&im.naturalWidth>0),8000);
+    im.src=url;
+  })));
+  return ok;
+}
+// Lays a table out across as many real A4 pages as it needs, under the Westlab letterhead, repeating
+// the top block (title, addresses, page x of y) and column headings on every page and putting the
+// footer block (totals / signatures) straight after the last row.
+async function pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename,label,count}){
+  const PAGE_W=794,PAGE_H=1123,PX=72,TOP=158,BOTTOM=100;
+  const FONT="Tahoma,Verdana,'DejaVu Sans',Arial,sans-serif";
+  const contentW=PAGE_W-2*PX;
+  const pageStyle=`width:${PAGE_W}px;height:${PAGE_H}px;box-sizing:border-box;padding:${TOP}px ${PX}px ${BOTTOM}px;font-family:${FONT};font-size:12px;color:#000;background:#fff;position:relative;overflow:hidden;`;
+  const meas=document.createElement('div'); meas.style.cssText=`position:fixed;left:-20000px;top:0;width:${PAGE_W}px;`; document.body.appendChild(meas);
+  let headH,footH,rowHs;
+  try{
+    meas.innerHTML=`<div class="pdf-doc" style="width:${contentW}px;font-family:${FONT};font-size:12px;">${topBlock(1,1)}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${colsHtml}${headRow}</table></div>`;
+    await new Promise(r=>setTimeout(r,60));
+    headH=meas.firstElementChild.getBoundingClientRect().height;
+    meas.innerHTML=`<div class="pdf-doc" style="width:${contentW}px;font-family:${FONT};font-size:12px;">${footerBlock}</div>`;
+    footH=meas.firstElementChild.getBoundingClientRect().height;
+    meas.innerHTML=`<div class="pdf-doc"><table style="width:${contentW}px;border-collapse:collapse;table-layout:fixed;font-family:${FONT};font-size:12px;">${colsHtml}${rows.join('')}</table></div>`;
+    rowHs=[...meas.querySelectorAll('tr')].map(tr=>tr.getBoundingClientRect().height);
+  }finally{ meas.remove(); }
+  const avail=PAGE_H-TOP-BOTTOM-headH;
+  const pages=[[]]; let used=0;
+  rows.forEach((row,i)=>{ if(used>0&&used+rowHs[i]>avail){ pages.push([]); used=0; } pages[pages.length-1].push(row); used+=rowHs[i]; });
+  if(used+footH+14>avail) pages.push([]);
+  const n=pages.length;
+  const html=pages.map((rs,pi)=>`<div class="pdf-doc" style="${pageStyle}">${westlabLetterheadHeader()}${topBlock(pi+1,n)}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${colsHtml}${headRow}${rs.join('')}</table>${pi===n-1?`<div style="margin-top:14px;">${footerBlock}</div>`:''}${westlabLetterheadFooter()}</div>`);
+  await exportPagedPdf(html,filename,label,count,true);
+}
+const PDF_TH='padding:5px 4px;font-weight:bold;text-align:left;background:#eef2f7;border-top:1px solid #000;border-bottom:1px solid #000;';
+const PDF_TD='padding:5px 4px;vertical-align:top;border-bottom:.5px solid #d5dbe3;';
+function pdfSigBlock(title,name,sigUrl,dateText,loaded){
+  const usable=sigUrl&&(!loaded||loaded.has(sigUrl));
+  return `<div style="width:47%;"><div style="font-size:11px;color:#555;margin-bottom:2px;">${title}</div>
+    <div style="height:56px;display:flex;align-items:flex-end;">${usable?`<img src="${sigUrl}" crossorigin="anonymous" style="max-height:52px;max-width:200px;object-fit:contain;"/>`:''}</div>
+    <div style="border-top:1px solid #000;padding-top:3px;min-height:34px;">${name?`<b>${escapeHtml(name)}</b>`:'&nbsp;'}<div style="font-size:11px;color:#444;">Date: ${dateText?escapeHtml(dateText):''}</div></div></div>`;
+}
+function staffNameOf(u){ if(!u) return ''; const st=(_staff||[]).find(x=>x.username===u); return st?.certName||st?.name||USERS[u]?.name||u; }
+function staffSigOf(u){ return (_staff||[]).find(x=>x.username===u)?.signature||''; }
+
+// ═══════════════════════════ PURCHASE ORDERS ═══════════════════════════
+const PURCHASE_ORDERS_KEY='wl_purchase_orders';
+let _purchaseOrders=[];
+async function loadPurchaseOrders(){ try{ const r=await SB.get('wl_settings',PURCHASE_ORDERS_KEY); _purchaseOrders=Array.isArray(r)?r:[]; }catch(e){ _purchaseOrders=[]; } }
+// Every change re-reads the current list from the server, changes just its own PO, and writes it
+// back (changes from one browser are queued) — so two people working on different POs at the same
+// time can't overwrite each other, and a stale screen can't undo someone else's approval.
+let _poPatchQueue=Promise.resolve();
+function patchPurchaseOrders(mutator){
+  const run=async()=>{
+    let fresh; try{ fresh=await apiFetch('/api/row/wl_settings/'+PURCHASE_ORDERS_KEY); }
+    catch(e){ throw new Error('Could not reach the server — nothing was saved.'); }
+    const arr=Array.isArray(fresh)?fresh:[];
+    const result=mutator(arr);
+    await SB.upsert('wl_settings',PURCHASE_ORDERS_KEY,arr);
+    _purchaseOrders=arr;
+    return result;
+  };
+  const p=_poPatchQueue.then(run,run); _poPatchQueue=p.catch(()=>{}); return p;
+}
+function canApprovePO(u){ return isAdmin(u||currentUser); } // Admin and the Managing Director
+function poPurposeLabel(p){ return p==='outsource'?'Outsourced calibration / service':'Goods & other purchases'; }
+function poTotals(po){
+  const subtotal=(po.items||[]).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0),0);
+  const sst=po.sstApplied?subtotal*0.08:0;
+  return {subtotal,sst,total:subtotal+sst};
+}
+function poBadgeClass(st){ return {Draft:'badge-slate','Pending Approval':'badge-amber',Approved:'badge-green',Sent:'badge-blue',Received:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate'}[st]||'badge-slate'; }
+function updatePoBadge(){
+  const b=document.getElementById('po-badge'); if(!b) return;
+  const n=canApprovePO(currentUser)?(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length:0;
+  b.textContent=n; b.style.display=n>0?'inline':'none';
+}
+function renderPurchaseOrdersPage(){
+  const box=el('po-list'); if(!box) return;
+  updatePoBadge();
+  if(!canUsePurchasingTracker(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
+  const q=(el('po-search')?.value||'').toLowerCase(), sf=el('po-status-filter')?.value||'';
+  const list=(_purchaseOrders||[]).filter(p=>(!sf||p.status===sf)&&(!q||String(p.poNumber||'').toLowerCase().includes(q)||String(p.supplierName||'').toLowerCase().includes(q)))
+    .sort((a,b)=>String(b.poNumber||'').localeCompare(String(a.poNumber||'')));
+  if(!list.length){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🧾</div><p>No purchase orders yet. Click "+ New Purchase Order" to create one.</p></div>'; return; }
+  const admin=isAdmin(currentUser), approver=canApprovePO(currentUser);
+  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
+    <thead><tr><th>PO No.</th><th>Date</th><th>Supplier</th><th>For</th><th style="text-align:right;">Total (RM)</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>${list.map(p=>{
+      const t=poTotals(p); const dos=p.deliveryOrders||[];
+      const canDo=p.purpose==='outsource'&&['Approved','Sent','Received'].includes(p.status);
+      const btn=(label,fn,style='')=>`<button class="btn btn-outline btn-sm" style="margin:2px;${style}" onclick="${fn}">${label}</button>`;
+      const actions=[
+        btn('📄 PDF',`exportPurchaseOrderPdf('${p.id}')`),
+        ['Draft','Rejected'].includes(p.status)?btn('✏️ Edit',`openPurchaseOrderModal('${p.id}')`)+btn('📨 Submit',`poSubmit('${p.id}')`):'',
+        (approver&&['Draft','Pending Approval'].includes(p.status))?btn('✅ Approve',`poApprove('${p.id}')`,'color:var(--green);')+(p.status==='Pending Approval'?btn('❌ Reject',`poReject('${p.id}')`,'color:var(--red);'):''):'',
+        (!approver&&p.status==='Pending Approval')?'<span style="font-size:11px;color:var(--text-muted);">waiting for MD</span>':'',
+        p.status==='Approved'?btn('📤 Mark Sent',`poMarkSent('${p.id}')`):'',
+        p.status==='Sent'?btn('📥 Mark Received',`poMarkReceived('${p.id}')`):'',
+        canDo?btn(`🚚 Delivery Order${dos.length?' ('+dos.length+')':''}`,`openPoDoModal('${p.id}')`):'',
+        (admin&&['Approved','Sent'].includes(p.status))?btn('Cancel PO',`poCancel('${p.id}')`,'color:var(--red);'):'',
+        (admin&&['Draft','Rejected','Cancelled','Pending Approval'].includes(p.status))?btn('🗑️',`poDelete('${p.id}')`,'color:var(--red);'):'',
+      ].join('');
+      const doRows=dos.length?`<tr><td colspan="7" style="background:#f8fafc;padding:6px 14px 8px 30px;font-size:12px;">
+        ${dos.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:2px 0;">
+          <span>🚚 <b>${escapeHtml(d.doNumber)}</b> · ${fmtDateShort(d.date||d.createdAt)} · ${(d.items||[]).length} item(s)${d.deliveredBy?' · by '+escapeHtml(d.deliveredBy):''} ·
+            ${d.returnedAt?`<span style="color:var(--green);">returned ${fmtDateShort(d.returnedAt)}${d.returnNote?' — '+escapeHtml(d.returnNote):''}</span>`:'<span style="color:var(--amber);">with supplier</span>'}</span>
+          <span>${btn('📄 PDF',`exportSupplierDoPdf('${p.id}','${d.doNumber}')`)}${!d.returnedAt?btn('↩️ Mark returned',`poDoMarkReturned('${p.id}','${d.doNumber}')`):''}${(admin&&!d.returnedAt)?btn('🗑️',`poDoDelete('${p.id}','${d.doNumber}')`,'color:var(--red);'):''}</span></div>`).join('')}</td></tr>`:'';
+      return `<tr>
+        <td style="font-weight:600;white-space:nowrap;">${escapeHtml(p.poNumber||'')}</td>
+        <td style="white-space:nowrap;">${fmtDateShort(p.createdAt)}</td>
+        <td>${escapeHtml(p.supplierName||'')}</td>
+        <td style="font-size:12px;">${poPurposeLabel(p.purpose)}</td>
+        <td style="text-align:right;">${t.total.toFixed(2)}</td>
+        <td><span class="badge ${poBadgeClass(p.status)}">${p.status==='Draft'?'Draft (not submitted)':p.status}</span>${p.status==='Rejected'&&p.rejectReason?`<div style="font-size:11px;color:var(--red);">${escapeHtml(p.rejectReason)}</div>`:''}${p.approvedBy&&['Approved','Sent','Received'].includes(p.status)?`<div style="font-size:11px;color:var(--text-muted);">by ${escapeHtml(staffNameOf(p.approvedBy))}</div>`:''}</td>
+        <td>${actions}</td></tr>${doRows}`;
+    }).join('')}</tbody></table></div></div>`;
+}
+
+// ── PO form ──
+let _poLines=[]; let _poEditingId=null;
+function openPurchaseOrderModal(poId,opts){
+  if(!canUsePurchasingTracker(currentUser)){ alert('You do not have access to this.'); return; }
+  opts=opts||{};
+  const ex=poId?(_purchaseOrders||[]).find(p=>p.id===poId):null;
+  if(ex&&!['Draft','Rejected'].includes(ex.status)){ alert(`This purchase order is ${ex.status} and can no longer be edited.`); return; }
+  _poEditingId=ex?ex.id:null;
+  const entry=(ex?.linkedPurchasingEntryId||opts.entryId)?(_purchasingTracker||[]).find(e=>e.id===(ex?.linkedPurchasingEntryId||opts.entryId)):null;
+  let sup=ex?(_externalPartners||[]).find(p=>p.id===ex.supplierId):(opts.supplierId?(_externalPartners||[]).find(p=>p.id===opts.supplierId):null);
+  if(!sup&&entry){ sup=(_externalPartners||[]).find(p=>p.id===entry.linkedExternalPartnerId)||(_externalPartners||[]).find(p=>String(p.name||'').toLowerCase()===String(entry.name||'').toLowerCase())||null; }
+  const purpose=ex?ex.purpose:((entry&&entry.linkedSalesTrackerId)?'outsource':'goods');
+  _poLines=ex?JSON.parse(JSON.stringify(ex.items||[])):[{description:entry?String(entry.remark||entry.name||'').slice(0,240):'',serial:'',qty:1,unitPrice:parseFloat(entry?.quotedPrice)||0}];
+  const v=x=>escapeHtml(x==null?'':String(x));
+  const deliverDefault=ex?.deliverTo||[(_settings.labName||'Westlab (M) Sdn. Bhd.'),(_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor.')].join('\n');
+  const jobs=(_jobs||[]).filter(j=>j&&!j.deleted&&j.status!=='Deleted'&&(j.items||[]).length).sort((a,b)=>String(b.jobNo).localeCompare(String(a.jobNo))).slice(0,80);
+  let ov=document.getElementById('po-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='po-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:820px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🧾 ${ex?'Edit Purchase Order '+v(ex.poNumber):'New Purchase Order'}</span>
+      <button onclick="document.getElementById('po-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <input type="hidden" id="po-entry-id" value="${v(entry?entry.id:(ex?.linkedPurchasingEntryId||''))}"/>
+      <input type="hidden" id="po-supplier-id" value="${v(sup?.id||'')}"/>
+      ${entry?`<div style="background:#eff6ff;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;">Linked to Purchasing Tracker entry: <b>${v(entry.name)}</b></div>`:''}
+      <div class="form-row">
+        <div class="form-group" style="position:relative;flex:2;">
+          <label class="form-label">Supplier <span class="req">*</span></label>
+          <input class="form-control" id="po-supplier-name" autocomplete="off" placeholder="Type to search the Supplier Database…" value="${v(sup?.name||'')}" oninput="poSupplierInput(this.value)"/>
+          <div id="po-supplier-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:200px;overflow-y:auto;margin-top:2px;"></div>
+          <div id="po-supplier-summary" style="font-size:11.5px;color:var(--text-muted);margin-top:4px;"></div>
+        </div>
+        <div class="form-group" style="flex:2;"><label class="form-label">This order is for</label>
+          <select class="form-control" id="po-purpose" onchange="poPurposeChanged()">
+            <option value="goods" ${purpose==='goods'?'selected':''}>Goods, accessories or other purchase (nothing is sent to the supplier)</option>
+            <option value="outsource" ${purpose==='outsource'?'selected':''}>Outsourced calibration / service (we send items to the supplier)</option>
+          </select></div>
+      </div>
+      <div id="po-outsource-box" style="display:none;background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Items being sent out <span style="font-weight:normal;color:var(--text-muted);">(optional — pick the customer job so the items and serial numbers fill in, and the job's history records that they went to the supplier)</span></div>
+        <select class="form-control" id="po-job" onchange="poJobChanged()"><option value="">— Choose a customer job (optional) —</option>
+          ${jobs.map(j=>`<option value="${v(j.jobNo)}">${v(j.jobNo)} — ${v(j.custName||'')}</option>`).join('')}</select>
+        <div id="po-job-items" style="margin-top:8px;"></div>
+      </div>
+      <div style="font-size:12px;font-weight:700;margin:6px 0;">Order lines</div>
+      <div id="po-lines"></div>
+      <button type="button" class="btn btn-outline btn-sm" style="margin:6px 0 12px;" onclick="poAddLine()">+ Add line</button>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Required by</label><input class="form-control" type="date" id="po-required-date" value="${v(ex?.requiredDate||'')}"/></div>
+        <div class="form-group"><label class="form-label">Payment terms</label><input class="form-control" id="po-payment-terms" placeholder="e.g. Net 30 days" value="${v(ex?.paymentTerms||sup?.paymentTerms||'')}"/></div>
+        <div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="po-sst" ${ex?.sstApplied?'checked':''} onchange="poRecalc()"/> Supplier charges SST (8%)</label></div>
+      </div>
+      <div class="form-group"><label class="form-label">Deliver to</label><textarea class="form-control" id="po-deliver-to" rows="2">${v(deliverDefault)}</textarea></div>
+      <div class="form-group"><label class="form-label">Remarks / special instructions</label><textarea class="form-control" id="po-remarks" rows="2">${v(ex?.remarks||'')}</textarea></div>
+      <div id="po-totals" style="text-align:right;font-size:13px;margin-bottom:12px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-outline" onclick="document.getElementById('po-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-outline" onclick="savePurchaseOrder(false)">Save</button>
+        <button class="btn btn-primary" onclick="savePurchaseOrder(true)">Save &amp; Submit for Approval</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);text-align:right;margin-top:6px;">"Save" keeps it as a draft you can still edit. Only the Managing Director (or Admin) can approve it.</div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+  poPurposeChanged(); poShowSupplierSummary();
+}
+function poShowSupplierSummary(){
+  const sup=(_externalPartners||[]).find(p=>p.id===el('po-supplier-id')?.value);
+  const box=el('po-supplier-summary'); if(!box) return;
+  box.textContent=sup?[sup.contactPerson,sup.phone||sup.mobile,sup.email,sup.paymentTerms?'Payment: '+sup.paymentTerms:''].filter(Boolean).join(' · '):'';
+}
+function poSupplierInput(val){
+  const box=el('po-supplier-suggestions'); if(!box) return;
+  el('po-supplier-id').value=''; poShowSupplierSummary();
+  const q=String(val||'').trim().toLowerCase();
+  if(q.length<1){ box.style.display='none'; return; }
+  const exact=(_externalPartners||[]).find(p=>String(p.name||'').trim().toLowerCase()===q);
+  if(exact){ poSelectSupplier(exact.id,true); return; }
+  const matches=(_externalPartners||[]).filter(p=>String(p.name||'').toLowerCase().includes(q)).slice(0,6);
+  box.innerHTML=matches.map(p=>`<div onclick="poSelectSupplier('${p.id}')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;">🏭 ${escapeHtml(p.name)} <span style="color:var(--text-muted);">— ${escapeHtml(supplierTypeOf(p))}</span></div>`).join('')
+    +`<div onclick="poAddNewSupplier()" style="padding:8px 12px;cursor:pointer;font-size:12px;color:var(--blue);">+ Add "${escapeHtml(val.trim())}" to the Supplier Database</div>`;
+  box.style.display='block';
+}
+function poSelectSupplier(id,keepBox){
+  const sup=(_externalPartners||[]).find(p=>p.id===id); if(!sup) return;
+  el('po-supplier-id').value=sup.id; el('po-supplier-name').value=sup.name;
+  if(!keepBox&&el('po-supplier-suggestions')) el('po-supplier-suggestions').style.display='none';
+  else if(el('po-supplier-suggestions')) el('po-supplier-suggestions').style.display='none';
+  if(el('po-payment-terms')&&!el('po-payment-terms').value.trim()) el('po-payment-terms').value=sup.paymentTerms||'';
+  poShowSupplierSummary();
+}
+function poAddNewSupplier(){
+  const name=el('po-supplier-name').value.trim();
+  el('po-supplier-suggestions').style.display='none';
+  openExternalPartnerModal(null,{name,onSaved:p=>poSelectSupplier(p.id)});
+}
+function poPurposeChanged(){
+  const outsource=el('po-purpose')?.value==='outsource';
+  const box=el('po-outsource-box'); if(box) box.style.display=outsource?'block':'none';
+  renderPoLines(); poJobChanged();
+}
+function poJobChanged(){
+  const box=el('po-job-items'); if(!box) return;
+  const jobNo=el('po-job')?.value; const job=(_jobs||[]).find(j=>j.jobNo===jobNo);
+  if(!job){ box.innerHTML=''; return; }
+  box.innerHTML=(job.items||[]).map((it,i)=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:normal;cursor:pointer;margin-bottom:3px;"><input type="checkbox" class="po-job-item" value="${i}"/> Item ${it.itemNo||i+1}: ${escapeHtml(it.eqName||'')} ${escapeHtml(it.brand||'')} ${escapeHtml(it.model||'')} — S/N ${escapeHtml(it.serial||'N/A')}</label>`).join('')
+    +`<button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="poAddJobItems()">Add ticked items as order lines</button>`;
+}
+function poAddJobItems(){
+  const job=(_jobs||[]).find(j=>j.jobNo===el('po-job')?.value); if(!job) return;
+  const picked=[...document.querySelectorAll('#po-job-items .po-job-item:checked')].map(c=>parseInt(c.value,10));
+  if(!picked.length){ alert('Tick at least one item first.'); return; }
+  if(_poLines.length===1&&!String(_poLines[0].description||'').trim()) _poLines=[];
+  picked.forEach(i=>{ const it=job.items[i]; _poLines.push({description:`Calibration of ${[it.eqName,it.brand,it.model].filter(Boolean).join(' ')}`,serial:it.serial||'',qty:1,unitPrice:0,jobNo:job.jobNo,itemNo:it.itemNo||i+1}); });
+  renderPoLines();
+}
+function poAddLine(){ _poLines.push({description:'',serial:'',qty:1,unitPrice:0}); renderPoLines(); }
+function poRemoveLine(i){ _poLines.splice(i,1); if(!_poLines.length) _poLines.push({description:'',serial:'',qty:1,unitPrice:0}); renderPoLines(); }
+function poUpdateLine(i,f,val){
+  const l=_poLines[i]; if(!l) return;
+  l[f]=(f==='qty'||f==='unitPrice')?(parseFloat(val)||0):val;
+  poRecalc();
+}
+function poRecalc(){
+  const t=poTotals({items:_poLines,sstApplied:!!el('po-sst')?.checked});
+  const box=el('po-totals'); if(box) box.innerHTML=`Subtotal: <b>RM ${t.subtotal.toFixed(2)}</b>${t.sst?` &nbsp; SST 8%: <b>RM ${t.sst.toFixed(2)}</b>`:''} &nbsp; Total: <b style="font-size:15px;">RM ${t.total.toFixed(2)}</b>`;
+  _poLines.forEach((l,i)=>{ const a=el('po-line-amt-'+i); if(a) a.textContent=((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)).toFixed(2); });
+}
+function renderPoLines(){
+  const box=el('po-lines'); if(!box) return;
+  const outsource=el('po-purpose')?.value==='outsource';
+  const cols=outsource?'1fr 130px 60px 96px 84px 24px':'1fr 60px 96px 84px 24px';
+  box.innerHTML=`<div style="display:grid;grid-template-columns:${cols};gap:6px;font-size:11px;color:var(--text-muted);margin-bottom:2px;"><span>Description</span>${outsource?'<span>Serial No.</span>':''}<span>Qty</span><span>Unit price (RM)</span><span style="text-align:right;">Amount</span><span></span></div>`
+  +_poLines.map((l,i)=>`<div style="display:grid;grid-template-columns:${cols};gap:6px;margin-bottom:5px;align-items:center;">
+    <input class="form-control" placeholder="Description" value="${escapeHtml(l.description||'')}" oninput="poUpdateLine(${i},'description',this.value)"/>
+    ${outsource?`<input class="form-control" placeholder="S/N" value="${escapeHtml(l.serial||'')}" oninput="poUpdateLine(${i},'serial',this.value)"/>`:''}
+    <input class="form-control" type="number" min="0" step="any" value="${l.qty??1}" oninput="poUpdateLine(${i},'qty',this.value)"/>
+    <input class="form-control" type="number" min="0" step="0.01" value="${l.unitPrice||''}" oninput="poUpdateLine(${i},'unitPrice',this.value)"/>
+    <span id="po-line-amt-${i}" style="text-align:right;font-size:12.5px;"></span>
+    <button type="button" onclick="poRemoveLine(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button></div>`).join('');
+  poRecalc();
+}
+function poAfterRestore(){ poPurposeChanged(); poShowSupplierSummary(); }
+async function savePurchaseOrder(submit){
+  const sup=(_externalPartners||[]).find(p=>p.id===el('po-supplier-id')?.value);
+  if(!sup){ alert('Please choose a supplier from the Supplier Database (or add a new one).'); return; }
+  const lines=_poLines.filter(l=>String(l.description||'').trim());
+  if(!lines.length){ alert('Add at least one order line with a description.'); return; }
+  if(lines.some(l=>!(parseFloat(l.qty)>0))){ alert('Every line needs a quantity above zero.'); return; }
+  const purpose=el('po-purpose').value; const now=new Date().toISOString();
+  const fields={supplierId:sup.id,supplierName:sup.name,supplierAddress:sup.address||'',
+    supplierContact:[sup.contactPerson,sup.designation?'('+sup.designation+')':''].filter(Boolean).join(' '),
+    supplierPhone:sup.phone||sup.mobile||'',supplierEmail:sup.email||'',purpose,
+    linkedPurchasingEntryId:el('po-entry-id').value||null,
+    items:lines.map(l=>({description:String(l.description).trim(),serial:purpose==='outsource'?String(l.serial||'').trim():'',qty:parseFloat(l.qty)||0,unitPrice:parseFloat(l.unitPrice)||0,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined})),
+    sstApplied:!!el('po-sst').checked,deliverTo:el('po-deliver-to').value.trim(),requiredDate:el('po-required-date').value||'',
+    paymentTerms:el('po-payment-terms').value.trim(),remarks:el('po-remarks').value.trim()};
+  let saved=null, newNumber=null;
+  try{
+    if(_poEditingId){
+      await patchPurchaseOrders(arr=>{
+        const p=arr.find(x=>x.id===_poEditingId); if(!p) throw new Error('This purchase order no longer exists.');
+        if(!['Draft','Rejected'].includes(p.status)) throw new Error(`This purchase order is already ${p.status} and can no longer be edited.`);
+        Object.assign(p,fields); p.status=submit?'Pending Approval':'Draft'; p.updatedAt=now; p.updatedBy=currentUser;
+        if(submit){ p.submittedAt=now; p.submittedBy=currentUser; } delete p.rejectReason; saved=p;
+      });
+    }else{
+      newNumber=await getNextDocNumber('WPO');
+      try{
+        await patchPurchaseOrders(arr=>{
+          const p={id:'PO-'+Date.now(),poNumber:newNumber,status:submit?'Pending Approval':'Draft',createdBy:currentUser,createdAt:now,deliveryOrders:[],...fields};
+          if(submit){ p.submittedAt=now; p.submittedBy=currentUser; } arr.push(p); saved=p;
+        });
+      }catch(e){ await tryRollbackSequence('WPO_'+docYymm(),parseInt(newNumber.split('-')[2],10)); throw e; } // don't burn a number on a failed save
+    }
+  }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  document.getElementById('po-overlay').style.display='none';
+  renderPurchaseOrdersPage();
+  showToast(submit?`✅ ${saved.poNumber} submitted — waiting for the Managing Director's approval`:`✅ ${saved.poNumber} saved as a draft`,'success',4000);
+  addAudit('🧾',`Purchase Order ${saved.poNumber} ${newNumber?'created':'updated'} for ${escapeHtml(saved.supplierName)}${submit?' and submitted for approval':''}`);
+}
+
+// ── PO status changes ──
+async function poChange(id,fromStatuses,mutator,okMsg,auditMsg){
+  try{
+    let updated=null;
+    await patchPurchaseOrders(arr=>{
+      const p=arr.find(x=>x.id===id); if(!p) throw new Error('This purchase order no longer exists.');
+      if(!fromStatuses.includes(p.status)) throw new Error(`This PO is already "${p.status}", so nothing was changed. Refresh to see the latest.`);
+      mutator(p); updated=p;
+    });
+    renderPurchaseOrdersPage(); if(okMsg) showToast(okMsg,'success',3500); if(auditMsg) addAudit('🧾',auditMsg);
+    return updated;
+  }catch(e){ showToast('❌ '+e.message,'error',6000); return null; }
+}
+async function poAdvanceEntry(po,stage,note){
+  try{
+    if(!po||!po.linkedPurchasingEntryId) return;
+    const e=(_purchasingTracker||[]).find(x=>x.id===po.linkedPurchasingEntryId); if(!e) return;
+    if(PURCHASING_STAGES.indexOf(stage)<=PURCHASING_STAGES.indexOf(e.status)) return; // never move backwards
+    e.status=stage; (e.statusHistory=e.statusHistory||[]).push({status:stage,date:new Date().toISOString(),by:currentUser,note});
+    await savePurchasingTracker();
+  }catch(err){ console.warn('Could not update the linked purchasing entry:',err); }
+}
+function poSubmit(id){ return poChange(id,['Draft','Rejected'],p=>{ p.status='Pending Approval'; p.submittedAt=new Date().toISOString(); p.submittedBy=currentUser; delete p.rejectReason; },'📨 Submitted — waiting for the Managing Director','Purchase Order submitted for approval'); }
+async function poApprove(id){
+  if(!canApprovePO(currentUser)){ alert('Only the Managing Director (or Admin) can approve a purchase order.'); return; }
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  if(!confirm(`Approve ${po.poNumber} to ${po.supplierName} — RM ${poTotals(po).total.toFixed(2)}?`)) return;
+  const r=await poChange(id,['Draft','Pending Approval'],p=>{ p.status='Approved'; p.approvedBy=currentUser; p.approvedAt=new Date().toISOString(); delete p.rejectReason; },`✅ ${po.poNumber} approved`,`Purchase Order ${po.poNumber} approved`);
+  return r;
+}
+async function poReject(id){
+  if(!canApprovePO(currentUser)){ alert('Only the Managing Director (or Admin) can reject a purchase order.'); return; }
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  const reason=prompt(`Why is ${po.poNumber} being rejected? (the person who raised it will see this)`); if(reason===null) return;
+  if(!reason.trim()){ alert('Please give a reason.'); return; }
+  return poChange(id,['Pending Approval'],p=>{ p.status='Rejected'; p.rejectReason=reason.trim(); p.rejectedBy=currentUser; p.rejectedAt=new Date().toISOString(); },`❌ ${po.poNumber} rejected`,`Purchase Order ${po.poNumber} rejected: ${escapeHtml(reason.trim())}`);
+}
+async function poMarkSent(id){
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  if(!confirm(`Mark ${po.poNumber} as sent to ${po.supplierName}?`)) return;
+  const r=await poChange(id,['Approved'],p=>{ p.status='Sent'; p.sentAt=new Date().toISOString(); p.sentBy=currentUser; },`📤 ${po.poNumber} marked as sent`,`Purchase Order ${po.poNumber} sent to ${escapeHtml(po.supplierName)}`);
+  if(r) await poAdvanceEntry(r,'PO Sent',`PO ${r.poNumber} sent to ${r.supplierName}`);
+}
+async function poMarkReceived(id){
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  if(!confirm(`Mark ${po.poNumber} as received (goods or service delivered)?`)) return;
+  const r=await poChange(id,['Sent','Approved'],p=>{ p.status='Received'; p.receivedAt=new Date().toISOString(); p.receivedBy=currentUser; },`📥 ${po.poNumber} marked as received`,`Purchase Order ${po.poNumber} received`);
+  if(r) await poAdvanceEntry(r,'Item/Service Delivered',`PO ${r.poNumber} received`);
+}
+async function poCancel(id){
+  if(!isAdmin(currentUser)) return;
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  const reason=prompt(`Cancel ${po.poNumber}? Its number stays on record as cancelled. Reason:`); if(reason===null) return;
+  if(!reason.trim()){ alert('Please give a reason.'); return; }
+  return poChange(id,['Draft','Pending Approval','Approved','Sent'],p=>{ p.status='Cancelled'; p.cancelReason=reason.trim(); p.cancelledBy=currentUser; p.cancelledAt=new Date().toISOString(); },`${po.poNumber} cancelled`,`Purchase Order ${po.poNumber} cancelled: ${escapeHtml(reason.trim())}`);
+}
+async function poDelete(id){
+  if(!isAdmin(currentUser)) return;
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  if(!['Draft','Rejected','Cancelled','Pending Approval'].includes(po.status)){ alert('An approved or sent PO can only be cancelled, not deleted.'); return; }
+  if(!confirm(`Permanently delete ${po.poNumber}? This cannot be undone.`)) return;
+  const parts=String(po.poNumber||'').split('-'); let wasHighest=false, rb=null;
+  if(parts.length===3){
+    const [prefix,yymm,seqStr]=parts; const seqNum=parseInt(seqStr,10);
+    wasHighest=!(_purchaseOrders||[]).some(o=>{ if(o.id===id) return false; const p2=String(o.poNumber||'').split('-'); return p2.length===3&&p2[0]===prefix&&p2[1]===yymm&&parseInt(p2[2],10)>seqNum; });
+    if(wasHighest) rb=await tryRollbackSequence(`${prefix}_${yymm}`,seqNum);
+  }
+  try{ await patchPurchaseOrders(arr=>{ const i=arr.findIndex(x=>x.id===id); if(i>-1) arr.splice(i,1); }); }
+  catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  renderPurchaseOrdersPage(); docDeleteToast(po.poNumber,wasHighest,rb);
+  addAudit('🗑️',`Purchase Order ${po.poNumber} deleted`);
+}
+
+// ── Delivery Orders for items sent to a supplier (created from the PO) ──
+function openPoDoModal(poId){
+  const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
+  if(po.purpose!=='outsource'||!['Approved','Sent','Received'].includes(po.status)){ alert('A Delivery Order can be created once an outsourced-calibration PO has been approved.'); return; }
+  const sentSoFar=new Set((po.deliveryOrders||[]).flatMap(d=>(d.items||[]).map(x=>x.lineKey)));
+  let ov=document.getElementById('po-do-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='po-do-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🚚 New Delivery Order — ${escapeHtml(po.poNumber)}</span>
+      <button onclick="document.getElementById('po-do-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Items going to <b>${escapeHtml(po.supplierName)}</b>. Tick what is being handed over now.</div>
+      ${(po.items||[]).map((l,i)=>{ const key=`${i}:${l.description}:${l.serial||''}`; const done=sentSoFar.has(key);
+        return `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:normal;margin-bottom:5px;${done?'opacity:.55;':'cursor:pointer;'}"><input type="checkbox" class="po-do-line" value="${i}" ${done?'disabled':'checked'}/> ${escapeHtml(l.description)}${l.serial?' — S/N '+escapeHtml(l.serial):''} (qty ${l.qty})${done?' <i>already on a Delivery Order</i>':''}</label>`; }).join('')}
+      <div class="form-row" style="margin-top:10px;">
+        <div class="form-group"><label class="form-label">Date</label><input class="form-control" type="date" id="po-do-date" value="${toLocalDateStr(new Date())}"/></div>
+        <div class="form-group"><label class="form-label">Delivered by</label><input class="form-control" id="po-do-by" placeholder="Staff name, or courier / lorry"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Remarks <span style="font-weight:normal;color:var(--text-muted);">(condition, accessories included, special handling)</span></label><textarea class="form-control" id="po-do-remarks" rows="2"></textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('po-do-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" id="po-do-create-btn" onclick="createPoDeliveryOrder('${po.id}')">Create Delivery Order</button>
+      </div>
+    </div>
+  </div>`;
+  ov.style.display='flex';
+}
+async function createPoDeliveryOrder(poId){
+  const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
+  const picked=[...document.querySelectorAll('#po-do-overlay .po-do-line:checked')].map(c=>parseInt(c.value,10));
+  if(!picked.length){ alert('Tick at least one item to send.'); return; }
+  const btn=el('po-do-create-btn'); if(btn){ btn.disabled=true; btn.textContent='⏳ Creating…'; }
+  const now=new Date().toISOString();
+  let doNumber=null;
+  try{
+    doNumber=await getNextDocNumber('WDO');
+    const rec={doNumber,createdAt:now,createdBy:currentUser,date:el('po-do-date').value||toLocalDateStr(new Date()),deliveredBy:el('po-do-by').value.trim(),remarks:el('po-do-remarks').value.trim(),returnedAt:null,
+      items:picked.map(i=>{ const l=po.items[i]; return {lineKey:`${i}:${l.description}:${l.serial||''}`,description:l.description,serial:l.serial||'',qty:l.qty,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined}; })};
+    try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); if(!p) throw new Error('This purchase order no longer exists.'); (p.deliveryOrders=p.deliveryOrders||[]).push(rec); }); }
+    catch(e){ await tryRollbackSequence('WDO_'+docYymm(),parseInt(doNumber.split('-')[2],10)); throw e; }
+    for(const it of rec.items){ if(it.jobNo){ try{ await updateJob(it.jobNo,j=>{ j.history.push({action:`📤 Item ${it.itemNo||''} (${escapeHtml(it.description)}) sent to supplier ${escapeHtml(po.supplierName)} — Delivery Order ${doNumber} (PO ${po.poNumber})`,by:currentUser,time:now}); }); }catch(e){ console.warn('Could not add job history:',e); } } }
+    document.getElementById('po-do-overlay').style.display='none';
+    renderPurchaseOrdersPage();
+    showToast(`🚚 Delivery Order ${doNumber} created`,'success',4000);
+    addAudit('🚚',`Delivery Order ${doNumber} created for PO ${po.poNumber} (to ${escapeHtml(po.supplierName)})`);
+    exportSupplierDoPdf(poId,doNumber);
+  }catch(e){ showToast('❌ '+e.message,'error',6000); if(btn){ btn.disabled=false; btn.textContent='Create Delivery Order'; } }
+}
+async function poDoMarkReturned(poId,doNumber){
+  const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
+  const note=prompt(`Mark ${doNumber} as returned from ${po.supplierName}.\n\nNote (e.g. "with supplier's certificate no. 123") — optional:`); if(note===null) return;
+  const now=new Date().toISOString(); let rec=null;
+  try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); const d=(p?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!d) throw new Error('That Delivery Order no longer exists.'); d.returnedAt=now; d.returnedBy=currentUser; d.returnNote=note.trim(); rec=d; }); }
+  catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  for(const it of (rec.items||[])){ if(it.jobNo){ try{ await updateJob(it.jobNo,j=>{ j.history.push({action:`📥 Item ${it.itemNo||''} (${escapeHtml(it.description)}) returned from supplier ${escapeHtml(po.supplierName)} (${doNumber})${note.trim()?' — '+escapeHtml(note.trim()):''}`,by:currentUser,time:now}); }); }catch(e){} } }
+  renderPurchaseOrdersPage(); showToast(`↩️ ${doNumber} marked as returned`,'success',3500);
+  addAudit('↩️',`Delivery Order ${doNumber} returned from ${escapeHtml(po.supplierName)}`);
+}
+async function poDoDelete(poId,doNumber){
+  if(!isAdmin(currentUser)) return;
+  if(!confirm(`Delete Delivery Order ${doNumber}? This cannot be undone.`)) return;
+  const parts=doNumber.split('-'); let wasHighest=false, rb=null;
+  if(parts.length===3){
+    const seqNum=parseInt(parts[2],10);
+    wasHighest=!docAllDoNumbers().some(no=>{ if(no===doNumber) return false; const p2=String(no).split('-'); return p2.length===3&&p2[0]===parts[0]&&p2[1]===parts[1]&&parseInt(p2[2],10)>seqNum; });
+    if(wasHighest) rb=await tryRollbackSequence(`${parts[0]}_${parts[1]}`,seqNum);
+  }
+  try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); if(p) p.deliveryOrders=(p.deliveryOrders||[]).filter(d=>d.doNumber!==doNumber); }); }
+  catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  renderPurchaseOrdersPage(); docDeleteToast(doNumber,wasHighest,rb); addAudit('🗑️',`Delivery Order ${doNumber} deleted`);
+}
+
+// ── PDFs ──
+async function exportPurchaseOrderPdf(poId){
+  const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
+  const esc=v=>escapeHtml(v==null?'':String(v));
+  const money=n=>Number(n||0).toFixed(2);
+  const t=poTotals(po); const outsource=po.purpose==='outsource';
+  const approved=['Approved','Sent','Received'].includes(po.status);
+  const sigs=await pdfLoadImages([staffSigOf(po.createdBy),approved?staffSigOf(po.approvedBy):'']);
+  const ref=(()=>{ const e=po.linkedPurchasingEntryId?(_purchasingTracker||[]).find(x=>x.id===po.linkedPurchasingEntryId):null; const jobs=[...new Set((po.items||[]).map(i=>i.jobNo).filter(Boolean))]; return [...jobs.map(j=>'Job '+j),e?e.name:''].filter(Boolean).join(', '); })();
+  const topBlock=(pageNo,pageCount)=>`
+    <div style="text-align:center;font-size:19px;font-weight:bold;letter-spacing:.5px;margin:0 0 6px;">PURCHASE ORDER</div>
+    ${approved?'':`<div style="text-align:center;color:#b91c1c;font-weight:bold;border:1.5px solid #b91c1c;padding:3px;margin-bottom:8px;">${po.status==='Cancelled'?'CANCELLED':'NOT APPROVED — DO NOT SEND TO SUPPLIER'}</div>`}
+    <div style="display:flex;justify-content:space-between;gap:14px;margin-bottom:8px;">
+      <div style="width:56%;line-height:1.4;"><div style="font-size:10px;color:#666;letter-spacing:.4px;">TO (SUPPLIER)</div>
+        <div style="font-weight:bold;">${esc(po.supplierName)}</div>
+        ${po.supplierAddress?`<div style="white-space:pre-line;">${esc(po.supplierAddress)}</div>`:''}
+        ${po.supplierContact?`<div>Attn: ${esc(po.supplierContact)}</div>`:''}
+        <div>${[po.supplierPhone?'Tel: '+esc(po.supplierPhone):'',po.supplierEmail?esc(po.supplierEmail):''].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div></div>
+      <div style="width:40%;"><table style="border-collapse:collapse;line-height:1.55;">
+        ${[['PO No.',po.poNumber],['Date',fmtDateShort(po.approvedAt||po.createdAt)],['Page',`${pageNo} of ${pageCount}`],['Required by',po.requiredDate?fmtDateShort(po.requiredDate):''],['Payment',po.paymentTerms||''],['Our ref.',ref]].map(([k,v])=>`<tr><td style="width:74px;color:#555;vertical-align:top;">${k}</td><td style="width:10px;vertical-align:top;">:</td><td style="${k==='PO No.'?'font-weight:bold;':''}">${esc(v)}</td></tr>`).join('')}
+      </table></div>
+    </div>
+    <div style="margin-bottom:8px;line-height:1.35;"><span style="font-size:10px;color:#666;letter-spacing:.4px;">DELIVER TO</span><div style="white-space:pre-line;">${esc(po.deliverTo||'')}</div></div>`;
+  const colsHtml=outsource?'<colgroup><col style="width:34px"><col><col style="width:110px"><col style="width:44px"><col style="width:84px"><col style="width:88px"></colgroup>':'<colgroup><col style="width:34px"><col><col style="width:50px"><col style="width:92px"><col style="width:92px"></colgroup>';
+  const headRow=`<tr><th style="${PDF_TH}">No.</th><th style="${PDF_TH}">Description</th>${outsource?`<th style="${PDF_TH}">Serial No.</th>`:''}<th style="${PDF_TH}text-align:center;">Qty</th><th style="${PDF_TH}text-align:right;">Unit Price</th><th style="${PDF_TH}text-align:right;">Amount</th></tr>`;
+  const rows=(po.items||[]).map((l,i)=>`<tr><td style="${PDF_TD}">${i+1}</td><td style="${PDF_TD}">${esc(l.description)}</td>${outsource?`<td style="${PDF_TD}">${esc(l.serial||'')}</td>`:''}<td style="${PDF_TD}text-align:center;">${esc(l.qty)}</td><td style="${PDF_TD}text-align:right;">${money(l.unitPrice)}</td><td style="${PDF_TD}text-align:right;">${money((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0))}</td></tr>`);
+  const footerBlock=`<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><table style="border-collapse:collapse;min-width:230px;">
+      <tr><td style="padding:2px 8px;">Subtotal (MYR)</td><td style="padding:2px 6px;text-align:right;">${money(t.subtotal)}</td></tr>
+      ${po.sstApplied?`<tr><td style="padding:2px 8px;">SST (8%)</td><td style="padding:2px 6px;text-align:right;">${money(t.sst)}</td></tr>`:''}
+      <tr><td style="padding:2px 8px;font-weight:bold;">Total (MYR)</td><td style="padding:2px 6px;text-align:right;font-weight:bold;border:1px solid #000;">${money(t.total)}</td></tr></table></div>
+    ${po.remarks?`<div style="margin-bottom:8px;"><b>Remarks:</b> <span style="white-space:pre-line;">${esc(po.remarks)}</span></div>`:''}
+    <div style="font-size:11px;color:#555;margin-bottom:12px;">Please quote this PO number on all delivery orders, invoices and correspondence.${outsource?' Please return the item(s) with the calibration certificate.':''}</div>
+    <div style="display:flex;justify-content:space-between;">
+      ${pdfSigBlock('Prepared by',staffNameOf(po.createdBy),staffSigOf(po.createdBy),fmtDateShort(po.createdAt),sigs)}
+      ${pdfSigBlock('Approved by',approved?staffNameOf(po.approvedBy):'',approved?staffSigOf(po.approvedBy):'',approved&&po.approvedAt?fmtDateShort(po.approvedAt):'',sigs)}
+    </div>`;
+  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${po.poNumber}.pdf`,label:'Purchase Order',count:(po.items||[]).length});
+}
+async function exportSupplierDoPdf(poId,doNumber){
+  const po=(_purchaseOrders||[]).find(p=>p.id===poId); const d=(po?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!po||!d) return;
+  const esc=v=>escapeHtml(v==null?'':String(v));
+  const topBlock=(pageNo,pageCount)=>`
+    <div style="text-align:center;font-size:19px;font-weight:bold;letter-spacing:.5px;margin:0 0 8px;">DELIVERY ORDER</div>
+    <div style="display:flex;justify-content:space-between;gap:14px;margin-bottom:10px;">
+      <div style="width:56%;line-height:1.4;"><div style="font-size:10px;color:#666;letter-spacing:.4px;">DELIVER TO</div>
+        <div style="font-weight:bold;">${esc(po.supplierName)}</div>
+        ${po.supplierAddress?`<div style="white-space:pre-line;">${esc(po.supplierAddress)}</div>`:''}
+        ${po.supplierContact?`<div>Attn: ${esc(po.supplierContact)}</div>`:''}
+        ${po.supplierPhone?`<div>Tel: ${esc(po.supplierPhone)}</div>`:''}</div>
+      <div style="width:40%;"><table style="border-collapse:collapse;line-height:1.55;">
+        ${[['DO No.',d.doNumber],['Date',fmtDateShort(d.date||d.createdAt)],['Page',`${pageNo} of ${pageCount}`],['Our PO No.',po.poNumber],['Purpose','Calibration / service']].map(([k,v])=>`<tr><td style="width:78px;color:#555;">${k}</td><td style="width:10px;">:</td><td style="${k==='DO No.'?'font-weight:bold;':''}">${esc(v)}</td></tr>`).join('')}
+      </table></div>
+    </div>
+    <div style="margin-bottom:8px;">Please receive the following item(s) for the service stated on the purchase order above:</div>`;
+  const colsHtml='<colgroup><col style="width:34px"><col><col style="width:120px"><col style="width:44px"><col style="width:150px"></colgroup>';
+  const headRow=`<tr><th style="${PDF_TH}">No.</th><th style="${PDF_TH}">Description</th><th style="${PDF_TH}">Serial No.</th><th style="${PDF_TH}text-align:center;">Qty</th><th style="${PDF_TH}">Remarks</th></tr>`;
+  const rows=(d.items||[]).map((l,i)=>`<tr><td style="${PDF_TD}">${i+1}</td><td style="${PDF_TD}">${esc(l.description)}</td><td style="${PDF_TD}">${esc(l.serial||'N/A')}</td><td style="${PDF_TD}text-align:center;">${esc(l.qty)}</td><td style="${PDF_TD}">${i===0?esc(d.remarks||''):''}</td></tr>`);
+  const footerBlock=`<div style="font-size:11px;color:#555;margin-bottom:14px;">Please sign and return a copy to acknowledge receipt. Please return the item(s) with the calibration certificate.</div>
+    <div style="display:flex;justify-content:space-between;">
+      <div style="width:47%;"><div style="font-size:11px;color:#555;">Delivered by (Westlab)</div><div style="height:56px;"></div><div style="border-top:1px solid #000;padding-top:3px;"><b>${esc(d.deliveredBy||'')}</b>&nbsp;<div style="font-size:11px;color:#444;">Date: ${fmtDateShort(d.date||d.createdAt)}</div></div></div>
+      <div style="width:47%;"><div style="font-size:11px;color:#555;">Received by (supplier — name, signature, chop)</div><div style="height:56px;"></div><div style="border-top:1px solid #000;padding-top:3px;">&nbsp;<div style="font-size:11px;color:#444;">Date:</div></div></div>
+    </div>`;
+  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${d.doNumber}.pdf`,label:'Delivery Order',count:(d.items||[]).length});
+}
+</script>
+
+<script>
 // ═══════════════════════════════ SAVE DRAFT ═══════════════════════════════
 // One shared draft system for every long data-entry form. It attaches from outside: it
 // wraps each form's existing open function (to offer / restore a draft) and submit function
@@ -20963,6 +21703,7 @@ async function loadDrafts(force){
     const d=await apiFetch('/api/row/wl_settings/'+encodeURIComponent(draftsRowId()));
     _draftsCache=(d&&typeof d==='object'&&!Array.isArray(d))?d:{};
   }catch(e){ if(!_draftsCache) _draftsCache={}; }
+  updateDraftsBadge();
   return _draftsCache;
 }
 // Per-user row, but the same person can have two tabs/devices open — so re-read, change only
@@ -20976,6 +21717,7 @@ function writeDrafts(mutator){
     mutator(fresh);
     await SB.upsert('wl_settings',draftsRowId(),fresh);
     _draftsCache=fresh;
+    updateDraftsBadge();
   };
   const p=_draftWriteQueue.then(run,run); _draftWriteQueue=p.catch(()=>{}); return p;
 }
@@ -21015,6 +21757,19 @@ const DRAFT_FORMS={
       renderPhotoPreviews(); renderExtraEquipment(); renderSocSection('eq-soc-section',_item1Soc);
     },
     afterRestore:()=>{ updateSiteFieldsVisibility(); toggleInternalCalibrationMode(); },
+    // A job draft started from a quotation must reopen linked to that quotation (otherwise the
+    // form opened blank, and saving wouldn't mark the quotation as turned into a job).
+    resume:async d=>{
+      const key=String(d.recordKey||'');
+      if(key.startsWith('fromQuotation:')){
+        const qid=key.slice('fromQuotation:'.length);
+        const q=(_quotationsV2||[]).find(x=>x.id===qid);
+        if(q&&q.createdJobNo){ showToast(`A job (${q.createdJobNo}) was already created from ${q.quotationNo} — this draft is no longer needed.`,'warn',6000); return; }
+        _startingFromQuotationV2Id=q?qid:null;
+      }
+      showView('equipment');
+      await openNewJobModal();
+    },
     uploadPending:async()=>{
       const all=[..._item1Photos,...(_extraEquipment||[]).flatMap(e=>e.photos||[])];
       for(const p of all){ if(p&&p._file&&!p.url){ p.url=await draftUploadBlob(p._file,p.name,p._file.type||'image/jpeg'); delete p._file; } }
@@ -21090,6 +21845,11 @@ const DRAFT_FORMS={
       _claimReceiptDraft={url,name:f.name}; if(_claimReceiptFile===f) _claimReceiptFile=null;
     }},
   travel:{ title:'Travel & Expenses', container:'modal-travel-expenses', label:a=>a.args[0]||'' },
+  po:{ title:'Purchase Order', container:'po-overlay',
+    label:()=>draftFieldVal('po-supplier-name'),
+    getState:()=>({lines:_poLines}),
+    setState:s=>{ if(s.lines){ _poLines=s.lines; } },
+    afterRestore:()=>poAfterRestore() },
 };
 
 // ── UI inside each form: status line, "Save Draft & Close", and the continue/discard offer ──
@@ -21196,7 +21956,7 @@ async function draftSaveAndClose(formId){
   if(btn){ btn.disabled=true; btn.textContent='⏳ Saving draft…'; }
   try{
     await draftSave(formId,{force:true,loud:true});
-    showToast('💾 Draft saved — continue it any time from "My Drafts" on the Dashboard','success',4000);
+    showToast('💾 Draft saved — continue it any time from My Drafts','success',7000,{label:'View drafts',onclick:()=>showView('my-drafts')});
     draftCloseForm(formId);
   }catch(e){
     showToast('❌ Draft not saved: '+e.message,'error',6000);
@@ -21296,6 +22056,7 @@ draftWrapOpen('openExternalPartnerModal','partner',a=>a[0]||'new');
 draftWrapOpen('openNewClaimModal','claim',()=>'new');
 draftWrapOpen('editClaim','claim',a=>a[0]);
 draftWrapOpen('openTravelExpenses','travel',a=>a[0]);
+draftWrapOpen('openPurchaseOrderModal','po',a=>a[0]||(a[1]&&a[1].entryId?'entry:'+a[1].entryId:'new'));
 draftWrapSubmit('saveEquipment',['job']);
 draftWrapSubmit('submitCalibration',['cal']);
 draftWrapSubmit('submitCannotCalibrate',['cannotCal','cal']);
@@ -21310,26 +22071,30 @@ draftWrapSubmit('saveRefEquipment',['refEq']);
 draftWrapSubmit('saveExternalPartner',['partner']);
 draftWrapSubmit('saveClaim',['claim']);
 draftWrapSubmit('saveTravelExpenses',['travel']);
+draftWrapSubmit('savePurchaseOrder',['po']);
 
 // ── "My Drafts" on the Dashboard ──
+function updateDraftsBadge(){
+  const b=document.getElementById('drafts-badge'); if(!b) return;
+  const n=Object.values(_draftsCache||{}).filter(d=>d&&DRAFT_FORMS[d.formId]).length;
+  b.textContent=n; b.style.display=n>0?'inline':'none';
+}
 async function renderMyDrafts(){
-  const box=document.getElementById('my-drafts-box'); if(!box) return;
-  if(!currentUser){ box.innerHTML=''; return; }
   const all=await loadDrafts();
+  updateDraftsBadge();
+  const box=document.getElementById('my-drafts-list'); if(!box) return;
+  if(!currentUser){ box.innerHTML=''; return; }
   const list=Object.entries(all||{}).map(([k,d])=>({k,...d})).filter(d=>DRAFT_FORMS[d.formId]).sort((a,b)=>(b.savedAt||'').localeCompare(a.savedAt||''));
-  if(!list.length){ box.innerHTML=''; return; }
-  box.innerHTML=`<div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><span class="card-title">📝 My Drafts (${list.length})</span></div>
-    <div class="card-body" style="padding:0;">${list.map(d=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+  if(!list.length){ box.innerHTML='<div class="empty-state"><div class="empty-icon">📝</div><p>No drafts. When you press "💾 Save Draft &amp; Close" on a form, it appears here.</p></div>'; return; }
+  box.innerHTML=`<div class="card"><div class="card-body" style="padding:0;">${list.map(d=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
         <div style="font-size:13px;"><strong>${escapeHtml(d.title||'Draft')}</strong>${d.label?' — '+escapeHtml(d.label):''}
           <div style="font-size:11px;color:var(--text-muted);">Last saved ${draftWhen(d.savedAt)}</div></div>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-primary btn-sm" onclick="draftResume('${escapeForJsAttr(d.k)}')">Continue</button>
           <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="draftDiscardByKey('${escapeForJsAttr(d.k)}')">Discard</button>
         </div>
-      </div>`).join('')}</div>
-  </div>`;
+      </div>`).join('')}</div></div>`;
 }
 async function draftResume(key){
   const d=(await loadDrafts(true))[key];
@@ -21348,11 +22113,9 @@ async function draftDiscardByKey(key){
   catch(e){ showToast('❌ '+e.message,'error',5000); }
 }
 (function(){
-  const origDash=window.renderDashboard;
-  if(typeof origDash==='function') window.renderDashboard=function(...a){ const r=origDash.apply(this,a); renderMyDrafts(); return r; };
   const origSet=window.setCurrentUser;
   if(typeof origSet==='function') window.setCurrentUser=function(...a){
-    Object.keys(_draftActive).forEach(k=>delete _draftActive[k]); _draftsCache=null;
+    Object.keys(_draftActive).forEach(k=>delete _draftActive[k]); _draftsCache=null; updateDraftsBadge();
     const r=origSet.apply(this,a);
     Promise.resolve(r).then(()=>migrateOldLocalJobDraft()).then(()=>renderMyDrafts()).catch(()=>{});
     return r;
@@ -21360,7 +22123,8 @@ async function draftDiscardByKey(key){
   const origPoll=window.pollForLiveUpdates;
   if(typeof origPoll==='function') window.pollForLiveUpdates=async function(...a){
     const r=await origPoll.apply(this,a);
-    if(document.getElementById('view-dashboard')?.classList.contains('active')){ await loadDrafts(true); renderMyDrafts(); } // drafts saved on another device
+    await loadDrafts(true); // keeps the sidebar count right when a draft is saved on another device
+    if(document.getElementById('view-my-drafts')?.classList.contains('active')) renderMyDrafts();
     return r;
   };
 })();
