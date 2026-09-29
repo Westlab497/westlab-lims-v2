@@ -593,6 +593,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <!-- Needs Attention (consolidated) -->
       <div id="needs-attention-box" style="margin-bottom:16px;"></div>
+      <div id="my-drafts-box"></div>
       <!-- Overdue / SLA breach alert -->
       <div id="dash-overdue-banner" style="display:none;margin-bottom:16px;">
         <div class="alert-item" style="background:var(--red-bg);border:1px solid var(--red);border-radius:10px;cursor:pointer;" onclick="showView('equipment')">
@@ -4048,7 +4049,7 @@ function showToast(msg, type='info', duration=2500){
   if(!t){
     t=document.createElement('div');
     t.id='wl-toast';
-    t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:99998;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+    t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:1000010;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
     document.body.appendChild(t);
   }
   const item=document.createElement('div');
@@ -4636,7 +4637,6 @@ function closeModal(id){
   if(!m)return;
   m.classList.remove('open');
   m.style.display='none';
-  if(id==='modal-add-equipment') stopJobDraftAutoSave();
 }
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 // Prevent accidental value changes when scrolling past a focused number input — a known
@@ -5753,13 +5753,9 @@ async function openNewJobModal(){
       }
     }
 
-    // Only offer a restored draft when not starting fresh from a quotation, so the two
-    // pre-fill sources never fight each other.
-    if(!_startingFromQuotationV2Id) checkForJobDraft();
-
+    // Drafts are handled by the shared Save Draft system (see "SAVE DRAFT" at the end of the file).
     openModal('modal-add-equipment');
     switchJobTab('customer');
-    startJobDraftAutoSave();
   }catch(err){
     console.error('openNewJobModal error:',err);
     alert('Error opening new job form: '+err.message+'\n\nPlease refresh the page and try again.');
@@ -7919,7 +7915,7 @@ function openCannotCalibrateModal(){
   const voidRec=null; // not required for abnormal — separate from void
   const abnormalRec=getStickerCountRec(currentUser,'abnormal');
   let ov=document.getElementById('cannot-cal-overlay');
-  if(!ov){ov=document.createElement('div');ov.id='cannot-cal-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1100;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
+  if(!ov){ov=document.createElement('div');ov.id='cannot-cal-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999995;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
   const engineerCertName=(_staff&&_staff.find(x=>x.username===currentUser))?.certName||USERS[currentUser]?.name||currentUser;
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:560px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);background:#fef2f2;border-radius:16px 16px 0 0;">
@@ -10241,7 +10237,7 @@ function capabilityVerdictLabel(verdict){
 // and signatures on page 2. Every box is filled from what the Sales Tracker entry and the
 // Technical Manager's capability review actually recorded; boxes the system doesn't capture
 // (e.g. how the enquiry was received) are left blank to be completed by hand, never guessed.
-function buildContractReviewPages(entry,item,itemNo,itemCount){
+function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   const ev=item.capabilityEvaluation||{};
   const cust=entry.custId?(_customers||[]).find(c=>c.id===entry.custId):null;
   const labShort=(_settings.labName||'Westlab').split(/\s*\(|\s+Sdn\b/i)[0].trim()||'Westlab';
@@ -10263,9 +10259,13 @@ function buildContractReviewPages(entry,item,itemNo,itemCount){
 
   // Section 1
   const address=cust?.address||entry.prospectAddress||'';
-  const contact=entry.prospectAttention||cust?.attention||'';
-  const enquiryDate=entry.createdAt?fmtDateShort(entry.createdAt):'';
-  const reviewerName=nameOf(item.capabilityReviewedBy);
+  const contact=[entry.prospectAttention||cust?.attention||'',entry.prospectDesignation||''].filter(Boolean).join(' / ');
+  const enquiryDate=entry.enquiryDate?fmtDateShort(entry.enquiryDate+'T00:00:00'):(entry.createdAt?fmtDateShort(entry.createdAt):'');
+  // Reviewed By = the sales person who took the enquiry and reviewed the request;
+  // Approved By = the Technical Manager (or whoever) who approved the capability review.
+  const contractReviewer=entry.salesPersonnel||entry.createdBy||'';
+  const reviewerName=nameOf(contractReviewer);
+  const approverName=nameOf(item.capabilityReviewedBy);
 
   // Section 2
   const rangeBits=[item.range?'Range: '+esc(item.range):'',item.resolution?'Resolution: '+esc(item.resolution):'',
@@ -10299,7 +10299,12 @@ function buildContractReviewPages(entry,item,itemNo,itemCount){
   // Section 5
   const outcome={'Can Do':'accepted','Can Do (External)':'outsource','Cannot Do':'declined'}[item.capabilityVerdict]||'';
   const declineReason=outcome==='declined'?esc(ev.notes||'Outside current capability'):'';
-  const sig=staffOf(item.capabilityReviewedBy)?.signature||'';
+  // Only use a signature that actually loaded (checked before rendering) — a link that fails
+  // would otherwise leave a broken/blank image on a signed-looking form.
+  const usableSig=u=>{ const url=staffOf(u)?.signature||''; return url&&(!loadedSigs||loadedSigs.has(url))?url:''; };
+  const reviewerSig=usableSig(contractReviewer);
+  const approverSig=item.capabilityVerdict?usableSig(item.capabilityReviewedBy):''; // only once the capability review is done
+  const sigImg=url=>url?`<img src="${url}" crossorigin="anonymous" style="max-height:66px;max-width:220px;object-fit:contain;"/>`:'';
 
   const page1=pageWrap(`
     <div style="text-align:center;font-size:19px;font-weight:bold;margin-bottom:18px;">Contract Review Form</div>
@@ -10309,7 +10314,7 @@ function buildContractReviewPages(entry,item,itemNo,itemCount){
       ${kv('Company Address',esc(address).replace(/\n/g,'<br/>'),238)}
       ${kv('Contact Person / Designation',esc(contact),238)}
       ${kv('Date Enquiry Received',enquiryDate,238)}
-      ${kv('Received Via (Email / Call / WhatsApp / Walk-in)','',238)}
+      ${kv('Received Via (Email / Call / WhatsApp / Walk-in)',esc(entry.receivedVia||''),238)}
       ${kv('Reviewed By',esc(reviewerName),238)}
     </table>
     ${sectionTitle('Section 2 – Scope of Calibration / Testing')}
@@ -10320,7 +10325,7 @@ function buildContractReviewPages(entry,item,itemNo,itemCount){
       ${kv('Range / Resolution / Test Parameters',rangeBits,280)}
       ${kv('Quantity',esc(item.quantity||''),280)}
       ${kv('Location (Lab / On-site)',location,280)}
-      ${kv('Accreditation Status Requested (SAMM-Accredited / Non-Accredited)','',280)}
+      ${kv('Accreditation Status Requested (SAMM-Accredited / Non-Accredited)',esc(item.accreditationRequested||''),280)}
     </table>
     ${sectionTitle('Section 3 – Capability &amp; Resource Review')}
     <table style="width:100%;border-collapse:collapse;">
@@ -10335,10 +10340,10 @@ function buildContractReviewPages(entry,item,itemNo,itemCount){
   const page2=pageWrap(`
     ${sectionTitle('Section 4 – Requirement Review')}
     <table style="width:100%;border-collapse:collapse;">
-      ${kv('Calibration / Test Method or Standard Requested','',330)}
+      ${kv('Calibration / Test Method or Standard Requested',esc(item.methodRequested||''),330)}
       ${kv('Target Uncertainty / Tolerance / Acceptance Criteria Specified',toleranceBits,330)}
       ${kv('Sample / Item Condition Requirements (if testing)','N/A — calibration',330)}
-      ${kv('Turnaround Time Requested','',330)}
+      ${kv('Turnaround Time Requested',esc(entry.turnaroundRequested||''),330)}
       ${kv('Special Condition (site access, environmental, urgency)',special,330)}
       ${kv(`Any difference between enquiry and what ${esc(labShort)} can offer? If yes, describe and confirm resolution with client before quotation issued.`,`${box(diff==='Yes')}Yes &nbsp;&nbsp; ${box(diff==='No')}No${diffText}`,330)}
     </table>
@@ -10348,8 +10353,8 @@ function buildContractReviewPages(entry,item,itemNo,itemCount){
     <div style="margin-bottom:26px;display:flex;align-items:flex-end;">${box(outcome==='declined')}<span style="white-space:nowrap;">Declined (reason):&nbsp;</span><span style="flex:1;border-bottom:1px solid #000;min-height:18px;">${declineReason}</span></div>
     <table style="width:100%;border-collapse:collapse;">
       <tr><td style="${L}text-align:center;width:50%;">Reviewed By</td><td style="${L}text-align:center;">Approved By</td></tr>
-      <tr><td style="${B}height:78px;text-align:center;vertical-align:middle;">${sig?`<img src="${sig}" style="max-height:66px;max-width:220px;object-fit:contain;"/>`:''}</td><td style="${B}"></td></tr>
-      <tr><td style="${B}">Name: ${esc(reviewerName)}<br/>Date: ${item.capabilityReviewedAt?fmtDateShort(item.capabilityReviewedAt):''}</td><td style="${B}">Name:<br/>Date:</td></tr>
+      <tr><td style="${B}height:78px;text-align:center;vertical-align:middle;">${sigImg(reviewerSig)}</td><td style="${B}height:78px;text-align:center;vertical-align:middle;">${sigImg(approverSig)}</td></tr>
+      <tr><td style="${B}">Name: ${esc(reviewerName)}<br/>Date: ${entry.createdAt?fmtDateShort(entry.createdAt):''}</td><td style="${B}">Name: ${esc(approverName)}<br/>Date: ${item.capabilityReviewedAt?fmtDateShort(item.capabilityReviewedAt):''}</td></tr>
     </table>`,2);
   return [page1,page2];
 }
@@ -10357,7 +10362,20 @@ async function exportEntryCapabilityReviewPdf(entryId){
   const entry=_salesTracker.find(e=>e.id===entryId); if(!entry){alert('Entry not found.');return;}
   const reviewedItems=(entry.items||[]).filter(it=>it.capabilityVerdict);
   if(!reviewedItems.length){alert('No items in this entry have been reviewed yet.');return;}
-  const pages=reviewedItems.flatMap((item,i)=>buildContractReviewPages(entry,item,i+1,reviewedItems.length));
+  // Load every signature first, so each one is fully in place before the page is captured
+  // (and so one that can't load is left out cleanly instead of rendering as a broken image).
+  const sigUrls=new Set();
+  const sigOf=u=>(_staff||[]).find(x=>x.username===u)?.signature||'';
+  [entry.salesPersonnel||entry.createdBy,...reviewedItems.map(it=>it.capabilityReviewedBy)].forEach(u=>{ const url=sigOf(u); if(url) sigUrls.add(url); });
+  const loadedSigs=new Set();
+  await Promise.all([...sigUrls].map(url=>new Promise(res=>{
+    const img=new Image(); img.crossOrigin='anonymous';
+    const done=ok=>{ if(ok) loadedSigs.add(url); res(); };
+    img.onload=()=>done(true); img.onerror=()=>done(false);
+    setTimeout(()=>done(img.complete&&img.naturalWidth>0),8000);
+    img.src=url;
+  })));
+  const pages=reviewedItems.flatMap((item,i)=>buildContractReviewPages(entry,item,i+1,reviewedItems.length,loadedSigs));
   await exportPagedPdf(pages,`Contract_Review_${entry.name.replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`,'Contract Review Form',reviewedItems.length,true);
 }
 async function exportCapabilityReviewPdf(){
@@ -10740,12 +10758,34 @@ function openTrackerEntryModal(type,entryId){
       </div>
       ${type==='sales'?`
       <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Enquiry Details <span style="font-weight:normal;color:var(--text-muted);">(printed on the Contract Review Form)</span></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Date Enquiry Received</label><input class="form-control" type="date" id="tk-enquiry-date" value="${existing?.enquiryDate||(existing?.createdAt?toLocalDateStr(new Date(existing.createdAt)):toLocalDateStr(new Date()))}"/></div>
+          <div class="form-group"><label class="form-label">Received Via</label>
+            <select class="form-control" id="tk-received-via">
+              ${['','Email','Call','WhatsApp','Walk-in'].map(v=>`<option value="${v}" ${(existing?.receivedVia||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Turnaround Time Requested</label>
+            <select class="form-control" id="tk-turnaround" onchange="el('tk-turnaround-other').style.display=this.value==='Other'?'':'none'">
+              ${['','Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)','Other'].map(v=>`<option value="${v}" ${(existing?.turnaroundRequested||'')===v||(v==='Other'&&existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested))?'selected':''}>${v||'— Select —'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">&nbsp;</label>
+            <input class="form-control" id="tk-turnaround-other" placeholder="e.g. Before 15 Oct, or 10 working days" value="${escapeHtml(existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?existing.turnaroundRequested:'')}" style="${existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?'':'display:none;'}"/>
+          </div>
+        </div>
+      </div>
+      <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
         <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Prospect Details (fill in if not yet an existing customer)</div>
         <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="tk-prospect-address" rows="2">${escapeHtml(existing?.prospectAddress||'')}</textarea></div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="tk-prospect-attention" value="${escapeHtml(existing?.prospectAttention||'')}"/></div>
-          <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="tk-prospect-phone" value="${existing?.prospectPhone||''}"/></div>
+          <div class="form-group"><label class="form-label">Designation</label><input class="form-control" id="tk-prospect-designation" placeholder="e.g. QA Manager" value="${escapeHtml(existing?.prospectDesignation||'')}"/></div>
         </div>
+        <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="tk-prospect-phone" value="${existing?.prospectPhone||''}"/></div>
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="tk-prospect-email" value="${existing?.prospectEmail||''}"/></div>
         <div class="form-group">
           <label class="form-label">Customer Type</label>
@@ -10867,6 +10907,14 @@ function renderSalesItemsList(){
         </div>
       </div>
       <div class="form-group"><label class="form-label">Remark <span style="font-weight:normal;color:var(--text-muted);">(customer's stated requirement for this item)</span></label><textarea class="form-control" rows="2" oninput="updateSalesItemField(${idx},'remark',this.value)">${escapeHtml(it.remark||'')}</textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Accreditation Requested</label>
+          <select class="form-control" onchange="updateSalesItemField(${idx},'accreditationRequested',this.value)">
+            ${['','SAMM-Accredited','Non-Accredited'].map(v=>`<option value="${v}" ${(it.accreditationRequested||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Method / Standard Requested <span style="font-weight:normal;color:var(--text-muted);">(if any)</span></label><input class="form-control" placeholder="e.g. OIML R76, EURAMET cg-18" value="${escapeHtml(it.methodRequested||'')}" oninput="updateSalesItemField(${idx},'methodRequested',this.value)"/></div>
+      </div>
       <div class="form-group" id="sales-item-soc-${idx}"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Calibration Type</label>
@@ -11007,6 +11055,11 @@ async function saveTrackerEntry(type,entryId){
     entry.jobNo=el('tk-jobno')?.value.trim()||null;
     entry.prospectAddress=el('tk-prospect-address')?.value.trim()||'';
     entry.prospectAttention=el('tk-prospect-attention')?.value.trim()||'';
+    entry.prospectDesignation=el('tk-prospect-designation')?.value.trim()||'';
+    entry.enquiryDate=el('tk-enquiry-date')?.value||entry.enquiryDate||'';
+    entry.receivedVia=el('tk-received-via')?.value||'';
+    const turnaroundSel=el('tk-turnaround')?.value||'';
+    entry.turnaroundRequested=turnaroundSel==='Other'?(el('tk-turnaround-other')?.value.trim()||''):turnaroundSel;
     entry.prospectPhone=el('tk-prospect-phone')?.value.trim()||'';
     entry.prospectEmail=el('tk-prospect-email')?.value.trim()||'';
     entry.prospectTypes=[
@@ -12560,6 +12613,8 @@ async function saveClaim(){
         receiptUrl=r2.url||'';
         receiptName=_claimReceiptFile.name;
       }
+    } else if(typeof _claimReceiptDraft!=='undefined'&&_claimReceiptDraft){
+      receiptUrl=_claimReceiptDraft.url; receiptName=_claimReceiptDraft.name; // already uploaded when the draft saved
     }
 
     const editId=el('claim-edit-id').value;
@@ -13262,7 +13317,9 @@ async function confirmConditionCapture(){
   if(btn){btn.disabled=true;btn.textContent='Saving…';}
   try{
     let photoUrl='';
-    if(_condCaptureDataUrl){
+    if(_condCaptureDataUrl&&/^https?:/.test(_condCaptureDataUrl)){
+      photoUrl=_condCaptureDataUrl; // already uploaded when the draft saved
+    } else if(_condCaptureDataUrl){
       try{
         const blob=await fetch(_condCaptureDataUrl).then(r=>r.blob());
         const path=`${isTestingModeOn()?'condition_test':'condition'}/${_condCaptureJobNo}_item${_condCaptureItemIdx}_${Date.now()}.jpg`;
@@ -20629,6 +20686,457 @@ el('dash-date').textContent='Week of '+new Date().toLocaleDateString('en-MY',{da
 </div>
 
 <!-- BOTTOM NAV (mobile only) -->
+
+<script>
+// ═══════════════════════════════ SAVE DRAFT ═══════════════════════════════
+// One shared draft system for every long data-entry form. It attaches from outside: it
+// wraps each form's existing open function (to offer / restore a draft) and submit function
+// (to delete the draft once the form is really submitted), so no form's own logic changed.
+//
+// • Drafts are personal and live in the database (wl_settings row "drafts_<username>"), so a
+//   draft started on the office PC can be finished on a phone.
+// • Each draft is keyed by form + record ("new", or the job/entry/customer being edited), so a
+//   draft for editing job A never collides with one for job B or with a brand-new job.
+// • Auto-saves every 15s (and when the phone/tab is put away) — only when something actually
+//   changed since the form was opened, so just opening and closing a form never makes a draft.
+// • Attachments are uploaded when the draft saves and kept as links, so they survive too.
+const DRAFT_TICK_MS=15000;
+let _draftsCache=null;
+const _draftActive={};            // formId -> {recordKey,args,openFn,baseline,lastSaved}
+let _draftWriteQueue=Promise.resolve();
+let _draftTicker=null;
+let _draftResumeRequest=null;     // store key of a draft being resumed from "My Drafts"
+let _claimReceiptDraft=null;      // {url,name} — a claim receipt already uploaded with a draft
+
+function draftsRowId(){ return 'drafts_'+(currentUser||'anon')+((typeof isTestingModeOn==='function'&&isTestingModeOn())?'_test':''); }
+function draftStoreKey(formId,recordKey){ return formId+'|'+recordKey; }
+function draftFieldVal(id){ const e=document.getElementById(id); return e?(e.value||'').trim():''; }
+function draftWhen(iso){ try{ const d=new Date(iso); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+
+async function loadDrafts(force){
+  if(!currentUser) return {};
+  if(_draftsCache&&!force) return _draftsCache;
+  try{
+    const d=await apiFetch('/api/row/wl_settings/'+encodeURIComponent(draftsRowId()));
+    _draftsCache=(d&&typeof d==='object'&&!Array.isArray(d))?d:{};
+  }catch(e){ if(!_draftsCache) _draftsCache={}; }
+  return _draftsCache;
+}
+// Per-user row, but the same person can have two tabs/devices open — so re-read, change only
+// this one draft, write back, and queue writes so they can't overwrite each other.
+function writeDrafts(mutator){
+  const run=async()=>{
+    let fresh;
+    try{ fresh=await apiFetch('/api/row/wl_settings/'+encodeURIComponent(draftsRowId())); }
+    catch(e){ throw new Error('Could not reach the server — check your connection.'); }
+    if(!fresh||typeof fresh!=='object'||Array.isArray(fresh)) fresh={};
+    mutator(fresh);
+    await SB.upsert('wl_settings',draftsRowId(),fresh);
+    _draftsCache=fresh;
+  };
+  const p=_draftWriteQueue.then(run,run); _draftWriteQueue=p.catch(()=>{}); return p;
+}
+async function draftDelete(formId,recordKey){
+  const key=draftStoreKey(formId,recordKey);
+  const all=await loadDrafts(true);
+  if(!all[key]) return;
+  await writeDrafts(a=>{ delete a[key]; });
+}
+async function draftUploadBlob(blob,name,type){
+  const path=`drafts/${currentUser}/${Date.now()}_${sanitizeFilenameForPath(name||'file')}`;
+  const res=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':type||blob.type||'application/octet-stream'},body:blob});
+  if(!res.ok) throw new Error('upload failed ('+res.status+')');
+  const r=await res.json(); if(!r||!r.url) throw new Error('upload returned no link');
+  return r.url;
+}
+// Raw files and big base64 previews never go into the database — only uploaded links do.
+function draftClean(v){
+  return JSON.parse(JSON.stringify(v===undefined?null:v,(k,x)=>{
+    if(k==='_file'||k==='_certFile'||k==='dataUrl') return undefined;
+    if((typeof File!=='undefined'&&x instanceof File)||(typeof Blob!=='undefined'&&x instanceof Blob)) return undefined;
+    return x;
+  }));
+}
+const draftKeepPhotos=arr=>(arr||[]).filter(p=>p&&(p.url||p.dataUrl));
+
+// ── Form registry ──
+const DRAFT_FORMS={
+  job:{ title:'New Calibration Job', container:'modal-add-equipment',
+    label:()=>draftFieldVal('eq-company')||draftFieldVal('eq-name'),
+    getState:()=>({extra:_extraEquipment,photos:_item1Photos,soc:_item1Soc,internalRef:_selectedInternalRefEqId,cust:_custSelected}),
+    setState:s=>{
+      _item1Photos=draftKeepPhotos(s.photos);
+      _extraEquipment=(s.extra||[]).map(e=>({...e,photos:draftKeepPhotos(e.photos)}));
+      _item1Soc=s.soc||{socRequested:false,socParameters:[]};
+      _selectedInternalRefEqId=s.internalRef||null; _custSelected=s.cust||null;
+      renderPhotoPreviews(); renderExtraEquipment(); renderSocSection('eq-soc-section',_item1Soc);
+    },
+    afterRestore:()=>{ updateSiteFieldsVisibility(); toggleInternalCalibrationMode(); },
+    uploadPending:async()=>{
+      const all=[..._item1Photos,...(_extraEquipment||[]).flatMap(e=>e.photos||[])];
+      for(const p of all){ if(p&&p._file&&!p.url){ p.url=await draftUploadBlob(p._file,p.name,p._file.type||'image/jpeg'); delete p._file; } }
+    }},
+  cal:{ title:'Calibration', container:'modal-perform-cal',
+    label:a=>{ const j=getJob(a.args[0]); const it=j?.items?.[a.args[1]||0]; return `${a.args[0]} · Item ${(a.args[1]||0)+1}${it?.eqName?' — '+it.eqName:''}`; },
+    getState:()=>({excel:currentExcel,trace:_traceSelected}),
+    setState:s=>{
+      _excelFile=null; currentExcel=s.excel||null;
+      if(currentExcel) showExcelAttached(); else { el('excel-attached').style.display='none'; el('excel-drop-zone').style.display='block'; }
+      _traceSelected=s.trace||[]; renderTraceCards();
+    },
+    afterRestore:()=>{ if(typeof populateCalStickerDropdown==='function') populateCalStickerDropdown(); },
+    uploadPending:async()=>{
+      if(!_excelFile) return;
+      const f=_excelFile;
+      const url=await SB.uploadFile('westlab-files',`drafts/${currentUser}/${Date.now()}_${sanitizeFilenameForPath(f.name)}`,f);
+      if(url){ currentExcel={name:f.name,size:f.size,url}; if(_excelFile===f) _excelFile=null; }
+    }},
+  cannotCal:{ title:'Cannot Calibrate Report', container:'cannot-cal-overlay',
+    argsOf:()=>[calJobNo,calItemIdx],
+    label:a=>`${a.args[0]} · Item ${(a.args[1]||0)+1}`,
+    resume:async d=>{ await openCalModal(d.args[0],d.args[1]||0); openCannotCalibrateModal(); }},
+  editJob:{ title:'Edit Job', container:'modal-edit-job', label:a=>`${a.args[0]} · Item ${(a.args[1]||0)+1}` },
+  condition:{ title:'Record Item Details', container:'modal-condition-capture',
+    label:a=>`${a.args[0]} · Item ${(a.args[1]||0)+1}`,
+    getState:()=>({photo:(typeof _condCaptureDataUrl==='string'&&/^https?:/.test(_condCaptureDataUrl))?_condCaptureDataUrl:null}),
+    setState:s=>{
+      if(!s.photo) return;
+      _condCaptureDataUrl=s.photo;
+      const pv=el('cond-capture-preview'); if(pv){ pv.src=s.photo; pv.style.display='block'; }
+      const vid=el('cond-capture-video'); if(vid) vid.style.display='none';
+      const btns=el('cond-capture-buttons'); if(btns) btns.innerHTML=`<button class="btn btn-outline btn-sm" onclick="retakeConditionPhoto()">🔄 Retake</button>`;
+    },
+    uploadPending:async()=>{
+      if(typeof _condCaptureDataUrl==='string'&&_condCaptureDataUrl.startsWith('data:')){
+        const src=_condCaptureDataUrl; const blob=await fetch(src).then(r=>r.blob());
+        const url=await draftUploadBlob(blob,'condition.jpg','image/jpeg');
+        if(_condCaptureDataUrl===src) _condCaptureDataUrl=url;
+      }
+    },
+    onClose:()=>{ if(_condCaptureStream){ _condCaptureStream.getTracks().forEach(t=>t.stop()); _condCaptureStream=null; } }},
+  abnormal:{ title:'Abnormal Report', container:'abnormal-cause-overlay', label:a=>`${a.args[0]} · Item ${(a.args[1]||0)+1}` },
+  tracker:{ title:'Tracker Entry', container:'tracker-entry-overlay',
+    titleOf:a=>a.args[0]==='sales'?'Sales Entry':'Purchasing Entry',
+    label:()=>draftFieldVal('tk-name'),
+    getState:a=>a.args[0]==='sales'?{items:_salesDraftItems}:{},
+    setState:(s,d)=>{ if(d.args[0]==='sales'&&s.items){ _salesDraftItems=s.items; renderSalesItemsList(); } },
+    afterRestore:()=>{ const o=el('tk-turnaround-other'); if(o) o.style.display=el('tk-turnaround')?.value==='Other'?'':'none'; }},
+  quotation:{ title:'Quotation', container:'qtv2-overlay',
+    label:()=>draftFieldVal('qtv2-cust-name'),
+    getState:()=>({items:_qtv2DraftItems}),
+    setState:s=>{ if(s.items){ _qtv2DraftItems=s.items; renderQtv2ItemsList(); } }},
+  capability:{ title:'Capability Review', container:'capability-eval-overlay',
+    label:a=>{ const e=_salesTracker.find(x=>x.id===a.args[0]); const it=e?.items?.[a.args[1]]; return [e?.name,it?.eqName].filter(Boolean).join(' — '); }},
+  customer:{ title:'Customer', container:'modal-add-customer', label:()=>draftFieldVal('cust-company') },
+  refEq:{ title:'Reference Equipment', container:'modal-add-ref-eq',
+    label:()=>draftFieldVal('ref-eq-name'),
+    getState:()=>({params:_refEqParams}),
+    setState:s=>{ if(s.params){ _refEqParams=s.params; renderRefEqParams(); } },
+    uploadPending:async()=>{
+      for(const p of (_refEqParams||[])){ if(p&&p._certFile){ p.certFileUrl=await draftUploadBlob(p._certFile,p._certFile.name,p._certFile.type||'application/pdf'); p.certFileName=p._certFile.name; delete p._certFile; } }
+    }},
+  partner:{ title:'External Partner', container:'ext-partner-overlay', label:()=>draftFieldVal('ep-name') },
+  claim:{ title:'Claim', container:'modal-new-claim',
+    label:()=>[draftFieldVal('claim-type'),draftFieldVal('claim-amount')?'RM '+draftFieldVal('claim-amount'):''].filter(Boolean).join(' · '),
+    onOpen:()=>{ _claimReceiptDraft=null; },
+    getState:()=>({receipt:_claimReceiptDraft}),
+    setState:s=>{ _claimReceiptDraft=s.receipt||null; if(_claimReceiptDraft){ const st=el('claim-receipt-status'); if(st) st.innerHTML=`✅ <strong>${escapeHtml(_claimReceiptDraft.name)}</strong> — saved with your draft`; } },
+    uploadPending:async()=>{
+      if(!_claimReceiptFile) return;
+      const f=_claimReceiptFile; const url=await draftUploadBlob(f,f.name,f.type);
+      _claimReceiptDraft={url,name:f.name}; if(_claimReceiptFile===f) _claimReceiptFile=null;
+    }},
+  travel:{ title:'Travel & Expenses', container:'modal-travel-expenses', label:a=>a.args[0]||'' },
+};
+
+// ── UI inside each form: status line, "Save Draft & Close", and the continue/discard offer ──
+function draftContainer(formId){ return document.getElementById(DRAFT_FORMS[formId].container); }
+function draftIsOpen(formId){ const c=draftContainer(formId); return !!c&&getComputedStyle(c).display!=='none'; }
+function draftBar(formId){ return draftContainer(formId)?.querySelector('.draft-bar'); }
+function draftSetStatus(formId,text){ const s=draftBar(formId)?.querySelector('.draft-status'); if(s) s.textContent=text; }
+function draftInjectBar(formId){
+  const c=draftContainer(formId); const box=c?.firstElementChild; if(!box) return;
+  let bar=box.querySelector(':scope > .draft-bar');
+  if(!bar){
+    bar=document.createElement('div'); bar.className='draft-bar';
+    bar.style.cssText='padding:8px 20px;background:#f8fafc;border-bottom:1px solid var(--border);';
+    const header=box.firstElementChild;
+    if(header&&header.nextSibling) box.insertBefore(bar,header.nextSibling); else box.appendChild(bar);
+  }
+  bar.innerHTML=`<div class="draft-offer" style="display:none;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px;color:#92400e;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span class="draft-status" style="color:var(--text-muted);font-size:11.5px;">Auto-saves as a draft while you work</span>
+      <button type="button" class="btn btn-outline btn-sm draft-save-btn" onclick="draftSaveAndClose('${formId}')">💾 Save Draft &amp; Close</button>
+    </div>`;
+}
+function draftShowOffer(formId,d){
+  const off=draftBar(formId)?.querySelector('.draft-offer'); if(!off) return;
+  off.style.display='flex';
+  off.innerHTML=`<span>📝 You have a saved draft of this from <strong>${draftWhen(d.savedAt)}</strong>.</span>
+    <span style="display:flex;gap:6px;"><button type="button" class="btn btn-primary btn-sm" onclick="draftContinue('${formId}')">Continue draft</button>
+    <button type="button" class="btn btn-outline btn-sm" onclick="draftDiscardOpen('${formId}')">Discard</button></span>`;
+}
+function draftHideOffer(formId){ const off=draftBar(formId)?.querySelector('.draft-offer'); if(off){ off.style.display='none'; off.innerHTML=''; } }
+
+// ── Capture / restore ──
+function draftCaptureFields(c){
+  const f={};
+  c.querySelectorAll('input[id],select[id],textarea[id]').forEach(e=>{
+    if(e.closest('.draft-bar')) return;
+    const t=(e.type||'').toLowerCase();
+    if(t==='file'||t==='button'||t==='submit'||t==='password') return;
+    f[e.id]=(t==='checkbox'||t==='radio')?e.checked:e.value;
+  });
+  // Radio-button choices that have no id (e.g. the Abnormal Report's cause) — remember which
+  // option in each named group was picked.
+  c.querySelectorAll('input[type=radio][name]:not([id])').forEach(e=>{
+    if(e.closest('.draft-bar')) return;
+    const k='radio:'+e.name;
+    if(!(k in f)) f[k]=null;
+    if(e.checked) f[k]=e.value;
+  });
+  return f;
+}
+function draftApplyFields(c,fields){
+  Object.entries(fields||{}).forEach(([id,v])=>{
+    if(id.startsWith('radio:')){
+      const name=id.slice(6);
+      c.querySelectorAll('input[type=radio][name]:not([id])').forEach(r=>{ if(r.name===name) r.checked=(v!==null&&r.value===v); });
+      return;
+    }
+    const e=document.getElementById(id); if(!e||!c.contains(e)) return;
+    const t=(e.type||'').toLowerCase();
+    if(t==='checkbox'||t==='radio') e.checked=!!v;
+    else if(e.tagName==='SELECT'){ if([...e.options].some(o=>o.value===v)) e.value=v; }
+    else e.value=v;
+  });
+}
+function draftSnapshot(formId){
+  const def=DRAFT_FORMS[formId]; const act=_draftActive[formId];
+  return {fields:draftCaptureFields(draftContainer(formId)),state:def.getState?draftClean(def.getState(act)):null};
+}
+function draftRestore(formId,d){
+  const def=DRAFT_FORMS[formId]; const c=draftContainer(formId); if(!c) return;
+  try{
+    if(def.setState&&d.state) def.setState(d.state,d);
+    draftApplyFields(c,d.fields);
+    if(def.afterRestore) def.afterRestore(d);
+    draftApplyFields(c,d.fields); // again, for dropdowns whose options depend on another field
+  }catch(e){ console.error('Draft restore error:',e); showToast('⚠️ Part of the draft could not be restored: '+e.message,'warn',5000); }
+  const act=_draftActive[formId]; if(act) act.lastSaved=JSON.stringify(draftSnapshot(formId));
+  draftHideOffer(formId);
+  draftSetStatus(formId,`Continuing your draft from ${draftWhen(d.savedAt)}`);
+  showToast('📝 Draft restored — carry on where you left off','success',3000);
+}
+
+// ── Save ──
+async function draftSave(formId,{force=false,loud=false}={}){
+  const act=_draftActive[formId]; const def=DRAFT_FORMS[formId];
+  if(!act||!def||act.baseline===null) return false;
+  if(!draftIsOpen(formId)&&!force) return false;
+  if(!force&&JSON.stringify(draftSnapshot(formId))===(act.lastSaved||act.baseline)) return false; // nothing new
+  if(def.uploadPending){
+    try{ await def.uploadPending(act); }
+    catch(e){ console.warn('Draft attachment upload failed:',e); if(loud) showToast('⚠️ An attachment could not be uploaded — it will need to be re-attached.','warn',5000); }
+  }
+  const snap=draftSnapshot(formId); const json=JSON.stringify(snap);
+  const rec={formId,recordKey:act.recordKey,openFn:act.openFn,args:act.args,
+    title:(def.titleOf?def.titleOf(act):def.title),label:(()=>{ try{ return def.label?def.label(act):''; }catch(e){ return ''; } })()||'',
+    savedAt:new Date().toISOString(),...snap};
+  await writeDrafts(all=>{ all[draftStoreKey(formId,act.recordKey)]=rec; });
+  act.lastSaved=json;
+  draftSetStatus(formId,`Draft saved at ${new Date().toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}`);
+  return true;
+}
+async function draftSaveAndClose(formId){
+  const btn=draftBar(formId)?.querySelector('.draft-save-btn');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Saving draft…'; }
+  try{
+    await draftSave(formId,{force:true,loud:true});
+    showToast('💾 Draft saved — continue it any time from "My Drafts" on the Dashboard','success',4000);
+    draftCloseForm(formId);
+  }catch(e){
+    showToast('❌ Draft not saved: '+e.message,'error',6000);
+    if(btn){ btn.disabled=false; btn.textContent='💾 Save Draft & Close'; }
+  }
+}
+function draftCloseForm(formId){
+  const def=DRAFT_FORMS[formId]; const c=draftContainer(formId);
+  if(def.onClose){ try{ def.onClose(); }catch(e){} }
+  delete _draftActive[formId];
+  if(c){ if(c.classList.contains('modal-overlay')) closeModal(def.container); else c.style.display='none'; }
+  renderMyDrafts();
+}
+async function draftContinue(formId){
+  const act=_draftActive[formId]; if(!act) return;
+  const d=(await loadDrafts(true))[draftStoreKey(formId,act.recordKey)];
+  if(d) draftRestore(formId,d); else { draftHideOffer(formId); showToast('That draft no longer exists','warn',3000); }
+}
+async function draftDiscardOpen(formId){
+  const act=_draftActive[formId]; if(!act) return;
+  if(!confirm('Discard this saved draft? This cannot be undone.')) return;
+  try{ await draftDelete(formId,act.recordKey); draftHideOffer(formId); act.lastSaved=null; showToast('Draft discarded','success',2500); renderMyDrafts(); }
+  catch(e){ showToast('❌ '+e.message,'error',5000); }
+}
+
+// ── Auto-save ──
+async function draftTick(){
+  for(const formId of Object.keys(_draftActive)){
+    if(!draftIsOpen(formId)){ delete _draftActive[formId]; continue; }
+    try{ await draftSave(formId); }
+    catch(e){ draftSetStatus(formId,'⚠️ Draft not saved just now (connection?) — will try again'); }
+  }
+}
+function draftEnsureTicker(){ if(!_draftTicker) _draftTicker=setInterval(draftTick,DRAFT_TICK_MS); }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') draftTick(); }); // phone locked / app switched
+
+// ── Hooks onto the existing forms ──
+async function draftOnOpen(formId,openFn,args,recordKey){
+  const def=DRAFT_FORMS[formId];
+  if(!def||!currentUser||!draftIsOpen(formId)) return; // form didn't actually open (e.g. permission blocked)
+  const storedArgs=draftClean(def.argsOf?def.argsOf(args):Array.from(args||[]));
+  if(def.onOpen){ try{ def.onOpen(storedArgs); }catch(e){} }
+  const act={recordKey,openFn,args:storedArgs,baseline:null,lastSaved:null};
+  _draftActive[formId]=act;
+  draftInjectBar(formId);
+  await new Promise(r=>setTimeout(r,350)); // let the form finish filling itself in
+  if(_draftActive[formId]!==act) return;
+  act.baseline=JSON.stringify(draftSnapshot(formId));
+  const key=draftStoreKey(formId,recordKey);
+  const existing=(await loadDrafts(true))[key];
+  if(existing){
+    if(_draftResumeRequest===key){ _draftResumeRequest=null; draftRestore(formId,existing); }
+    else draftShowOffer(formId,existing);
+  }
+  draftEnsureTicker();
+}
+function draftWrapOpen(fnName,formId,keyOf){
+  const orig=window[fnName]; if(typeof orig!=='function'){ console.warn('Draft: no function',fnName); return; }
+  window[fnName]=function(...args){
+    let recordKey='new';
+    try{ recordKey=String(keyOf?keyOf(args):'new'); }catch(e){}
+    const r=orig.apply(this,args);
+    Promise.resolve(r).then(()=>draftOnOpen(formId,fnName,args,recordKey)).catch(()=>{});
+    return r;
+  };
+}
+function draftWrapSubmit(fnName,formIds){
+  const orig=window[fnName]; if(typeof orig!=='function'){ console.warn('Draft: no function',fnName); return; }
+  window[fnName]=async function(...args){
+    const before={}; formIds.forEach(f=>{ if(_draftActive[f]) before[f]=_draftActive[f].recordKey; });
+    const r=await orig.apply(this,args);
+    // Only a form that actually closed was really submitted — if validation stopped it, the
+    // form is still open and the draft is kept.
+    for(const f of Object.keys(before)){
+      if(!draftIsOpen(f)){ if(_draftActive[f]&&_draftActive[f].recordKey===before[f]) delete _draftActive[f]; try{ await draftDelete(f,before[f]); }catch(e){} }
+    }
+    renderMyDrafts();
+    return r;
+  };
+}
+const _jk=a=>`${a[0]}#${a[1]||0}`;
+draftWrapOpen('openNewJobModal','job',()=>(typeof _startingFromQuotationV2Id!=='undefined'&&_startingFromQuotationV2Id)?'fromQuotation:'+_startingFromQuotationV2Id:'new');
+draftWrapOpen('openCalModal','cal',_jk);
+draftWrapOpen('openCannotCalibrateModal','cannotCal',()=>`${calJobNo}#${calItemIdx||0}`);
+draftWrapOpen('openEditJobModal','editJob',_jk);
+draftWrapOpen('openConditionCaptureModal','condition',_jk);
+draftWrapOpen('openAbnormalCauseModal','abnormal',_jk);
+draftWrapOpen('openTrackerEntryModal','tracker',a=>`${a[0]}:${a[1]||'new'}`);
+draftWrapOpen('openQuotationV2Modal','quotation',a=>`${a[0]||'new'}:${a[1]||''}`);
+draftWrapOpen('openCapabilityEvalModal','capability',a=>`${a[0]}#${a[1]}`);
+draftWrapOpen('openAddCustomerModal','customer',()=>'new');
+draftWrapOpen('prefillNewCustomerModal','customer',()=>'new');
+draftWrapOpen('openEditCustomerModal','customer',a=>a[0]);
+draftWrapOpen('openAddRefEqModal','refEq',()=>'new');
+draftWrapOpen('openEditRefEqModal','refEq',a=>a[0]);
+draftWrapOpen('openExternalPartnerModal','partner',a=>a[0]||'new');
+draftWrapOpen('openNewClaimModal','claim',()=>'new');
+draftWrapOpen('editClaim','claim',a=>a[0]);
+draftWrapOpen('openTravelExpenses','travel',a=>a[0]);
+draftWrapSubmit('saveEquipment',['job']);
+draftWrapSubmit('submitCalibration',['cal']);
+draftWrapSubmit('submitCannotCalibrate',['cannotCal','cal']);
+draftWrapSubmit('saveEditJob',['editJob']);
+draftWrapSubmit('confirmConditionCapture',['condition']);
+draftWrapSubmit('confirmAbnormalCause',['abnormal']);
+draftWrapSubmit('saveTrackerEntry',['tracker']);
+draftWrapSubmit('saveQuotationV2',['quotation']);
+draftWrapSubmit('saveCapabilityEvaluation',['capability']);
+draftWrapSubmit('saveCustomer',['customer']);
+draftWrapSubmit('saveRefEquipment',['refEq']);
+draftWrapSubmit('saveExternalPartner',['partner']);
+draftWrapSubmit('saveClaim',['claim']);
+draftWrapSubmit('saveTravelExpenses',['travel']);
+
+// ── "My Drafts" on the Dashboard ──
+async function renderMyDrafts(){
+  const box=document.getElementById('my-drafts-box'); if(!box) return;
+  if(!currentUser){ box.innerHTML=''; return; }
+  const all=await loadDrafts();
+  const list=Object.entries(all||{}).map(([k,d])=>({k,...d})).filter(d=>DRAFT_FORMS[d.formId]).sort((a,b)=>(b.savedAt||'').localeCompare(a.savedAt||''));
+  if(!list.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><span class="card-title">📝 My Drafts (${list.length})</span></div>
+    <div class="card-body" style="padding:0;">${list.map(d=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+        <div style="font-size:13px;"><strong>${escapeHtml(d.title||'Draft')}</strong>${d.label?' — '+escapeHtml(d.label):''}
+          <div style="font-size:11px;color:var(--text-muted);">Last saved ${draftWhen(d.savedAt)}</div></div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-primary btn-sm" onclick="draftResume('${escapeForJsAttr(d.k)}')">Continue</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="draftDiscardByKey('${escapeForJsAttr(d.k)}')">Discard</button>
+        </div>
+      </div>`).join('')}</div>
+  </div>`;
+}
+async function draftResume(key){
+  const d=(await loadDrafts(true))[key];
+  if(!d){ showToast('That draft no longer exists','warn',3000); renderMyDrafts(); return; }
+  const def=DRAFT_FORMS[d.formId];
+  _draftResumeRequest=key;
+  try{
+    if(def.resume) await def.resume(d);
+    else await window[d.openFn](...(d.args||[]));
+  }catch(e){ _draftResumeRequest=null; showToast('❌ Could not open this draft: '+e.message,'error',5000); }
+  setTimeout(()=>{ if(_draftResumeRequest===key){ _draftResumeRequest=null; } },5000);
+}
+async function draftDiscardByKey(key){
+  if(!confirm('Discard this draft? This cannot be undone.')) return;
+  try{ await writeDrafts(a=>{ delete a[key]; }); showToast('Draft discarded','success',2500); renderMyDrafts(); }
+  catch(e){ showToast('❌ '+e.message,'error',5000); }
+}
+(function(){
+  const origDash=window.renderDashboard;
+  if(typeof origDash==='function') window.renderDashboard=function(...a){ const r=origDash.apply(this,a); renderMyDrafts(); return r; };
+  const origSet=window.setCurrentUser;
+  if(typeof origSet==='function') window.setCurrentUser=function(...a){
+    Object.keys(_draftActive).forEach(k=>delete _draftActive[k]); _draftsCache=null;
+    const r=origSet.apply(this,a);
+    Promise.resolve(r).then(()=>migrateOldLocalJobDraft()).then(()=>renderMyDrafts()).catch(()=>{});
+    return r;
+  };
+  const origPoll=window.pollForLiveUpdates;
+  if(typeof origPoll==='function') window.pollForLiveUpdates=async function(...a){
+    const r=await origPoll.apply(this,a);
+    if(document.getElementById('view-dashboard')?.classList.contains('active')){ await loadDrafts(true); renderMyDrafts(); } // drafts saved on another device
+    return r;
+  };
+})();
+// A job draft saved by the old browser-only version is moved into the new system once.
+async function migrateOldLocalJobDraft(){
+  try{
+    const raw=localStorage.getItem('wl_job_draft'); if(!raw||!currentUser) return;
+    const old=JSON.parse(raw);
+    const key=draftStoreKey('job','new');
+    const all=await loadDrafts(true);
+    if(!all[key]){
+      await writeDrafts(a=>{ a[key]={formId:'job',recordKey:'new',openFn:'openNewJobModal',args:[],title:'New Calibration Job',
+        label:old.fields?.['eq-company']||old.fields?.['eq-name']||'',savedAt:old.savedAt||new Date().toISOString(),
+        fields:old.fields||{},state:{extra:draftClean(old.extraEquipment||[]),photos:[],soc:{socRequested:false,socParameters:[]},internalRef:null,cust:null}}; });
+    }
+    localStorage.removeItem('wl_job_draft');
+  }catch(e){ console.warn('Old job draft migration skipped:',e); }
+}
+</script>
 
 </body>
 </html>
