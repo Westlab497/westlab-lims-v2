@@ -7485,6 +7485,41 @@ async function exportHtmlAsPdf(html,filename,auditLabel,rowCount,previewMode=fal
     showToast('❌ PDF export failed: '+e.message,'error',4000);
   }
 }
+// Renders each page (an A4-width HTML string) as its own real A4 PDF page — unlike
+// exportHtmlAsPdf, which draws everything as one tall page. Used for fixed-layout forms that
+// should print exactly like their paper version. A page that runs longer than A4 (e.g. a very
+// long remark) is scaled down to fit its sheet rather than being cut off.
+async function exportPagedPdf(pagesHtml,filename,auditLabel,rowCount,previewMode=false){
+  const frame=el('receipt-print-frame');
+  try{
+    const {PDFDocument}=PDFLib;
+    const pdf=await PDFDocument.create();
+    const A4W=595.28, A4H=841.89;
+    frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
+    for(const pageHtml of pagesHtml){
+      frame.innerHTML=pageHtml;
+      await new Promise(res=>setTimeout(res,120));
+      const target=frame.firstElementChild||frame;
+      const canvas=await html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+      const imgBytes=await fetch(canvas.toDataURL('image/jpeg',0.92)).then(x=>x.arrayBuffer());
+      const img=await pdf.embedJpg(imgBytes);
+      let w=A4W, h=A4W*(canvas.height/canvas.width);
+      if(h>A4H){ w=w*(A4H/h); h=A4H; }
+      const page=pdf.addPage([A4W,A4H]);
+      page.drawImage(img,{x:(A4W-w)/2,y:A4H-h,width:w,height:h});
+    }
+    const bytes=await pdf.save();
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    if(previewMode){ openPdfPreviewModal(url,filename); }
+    else{ const a=document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
+    addAudit('📄',`${auditLabel} exported to PDF — ${rowCount} item(s)`);
+  }catch(e){
+    console.error('exportPagedPdf error:',e);
+    showToast('❌ PDF export failed: '+e.message,'error',4000);
+  }finally{
+    frame.style.display='none'; frame.style.position=''; frame.style.left=''; frame.innerHTML='';
+  }
+}
 function openPdfPreviewModal(url,filename){
   _pdfPreviewUrl=url; _pdfPreviewFilename=filename;
   el('pdf-preview-frame').src=url;
@@ -10201,50 +10236,129 @@ function renderPurchasingTrackerPage(){ renderTrackerPage('purchasing'); }
 function capabilityVerdictLabel(verdict){
   return {'Can Do':'Capability Confirmed','Cannot Do':'Outside Current Capability','Can Do (External)':'Capability Confirmed (External Partner)'}[verdict]||verdict||'';
 }
+// ── CONTRACT REVIEW FORM (per item) ──
+// Laid out to match the lab's paper Contract Review Form: Sections 1–3 on page 1, Sections 4–5
+// and signatures on page 2. Every box is filled from what the Sales Tracker entry and the
+// Technical Manager's capability review actually recorded; boxes the system doesn't capture
+// (e.g. how the enquiry was received) are left blank to be completed by hand, never guessed.
+function buildContractReviewPages(entry,item,itemNo,itemCount){
+  const ev=item.capabilityEvaluation||{};
+  const cust=entry.custId?(_customers||[]).find(c=>c.id===entry.custId):null;
+  const labShort=(_settings.labName||'Westlab').split(/\s*\(|\s+Sdn\b/i)[0].trim()||'Westlab';
+  const labPossessive=labShort+(/s$/i.test(labShort)?"'":"'s");
+  const esc=v=>escapeHtml(v==null?'':String(v));
+  const box=on=>`<span style="display:inline-block;width:12px;height:12px;border:1px solid #000;vertical-align:-2px;margin-right:5px;text-align:center;line-height:12px;font:bold 11px Arial,sans-serif;">${on?'X':'&nbsp;'}</span>`; // &nbsp; keeps empty and ticked boxes on the same baseline
+  const staffOf=u=>(_staff||[]).find(x=>x.username===u);
+  const nameOf=u=>{ if(!u)return ''; const st=staffOf(u); return st?.certName||st?.name||USERS[u]?.name||u; };
+  const B='border:1px solid #000;padding:3px 7px;vertical-align:top;';
+  const L=B+'background:#e7e7e7;';
+  const pageWrap=(inner,pageNo)=>`<div style="width:794px;min-height:1123px;box-sizing:border-box;padding:70px 96px 60px;font-family:'Times New Roman',Times,serif;font-size:14.5px;line-height:1.35;color:#000;background:#fff;position:relative;">
+    ${inner}
+    <div style="position:absolute;left:96px;right:96px;bottom:34px;font:10px Arial,sans-serif;color:#888;display:flex;justify-content:space-between;">
+      <span>Contract Review — ${esc(entry.name)} — Item ${itemNo} of ${itemCount}: ${esc(item.eqName)}</span><span>Page ${pageNo} of 2</span>
+    </div>
+  </div>`;
+  const kv=(label,value,labelW)=>`<tr><td style="${L}width:${labelW}px;">${label}</td><td style="${B}">${value||''}</td></tr>`;
+  const sectionTitle=t=>`<div style="margin:22px 0 10px;">${t}</div>`;
+
+  // Section 1
+  const address=cust?.address||entry.prospectAddress||'';
+  const contact=entry.prospectAttention||cust?.attention||'';
+  const enquiryDate=entry.createdAt?fmtDateShort(entry.createdAt):'';
+  const reviewerName=nameOf(item.capabilityReviewedBy);
+
+  // Section 2
+  const rangeBits=[item.range?'Range: '+esc(item.range):'',item.resolution?'Resolution: '+esc(item.resolution):'',
+    (item.socParameters||[]).filter(p=>p.parameterName).length?'Parameter(s): '+esc(item.socParameters.filter(p=>p.parameterName).map(p=>p.parameterName).join(', ')):''].filter(Boolean).join('<br/>');
+  const location=item.calType==='Onsite'?'On-site':(item.calType?'Lab':'');
+
+  // Section 3
+  const yesNoRow=(label,val,remark)=>`<tr>
+    <td style="${B}">${label}</td>
+    <td style="${B}text-align:center;width:44px;">${box(val==='Yes')}</td>
+    <td style="${B}text-align:center;width:44px;">${box(val==='No')}</td>
+    <td style="${B}width:200px;">${remark||''}</td></tr>`;
+  let cmc='';
+  if(ev.rangeCapable==='No'||ev.accuracyAchievable==='No') cmc='No';
+  else if(ev.rangeCapable==='Yes'&&ev.accuracyAchievable==='Yes') cmc='Yes';
+  const cmcRemark=(ev.rangeCapable||ev.accuracyAchievable)?`Range: ${ev.rangeCapable||'—'}<br/>Uncertainty (TUR): ${ev.accuracyAchievable||'—'}`:'';
+  const outsource=item.capabilityVerdict==='Can Do (External)'?'Yes':(item.capabilityVerdict?'No':'');
+  const outsourceRemark=`If yes, to: ${outsource==='Yes'?esc(item.outsourcedTo||''):''}`;
+
+  // Section 4
+  const toleranceBits=[item.spec?'Specification: '+esc(item.spec):'',
+    ...(item.socParameters||[]).filter(p=>p.parameterName||p.limitValue).map(p=>`SoC — ${esc(p.parameterName||'Parameter')}: ${esc(p.limitValue||'')}${p.specType?' ('+esc(p.specType==='Other'&&p.specTypeOther?p.specTypeOther:p.specType)+')':''}${p.decisionRule?'<br/>&nbsp;&nbsp;Decision rule: '+esc(p.decisionRule)+(p.decisionRuleRisk?' — '+esc(p.decisionRuleRisk):''):''}`)].filter(Boolean).join('<br/>');
+  const special=[item.calType==='Onsite'?'On-site calibration'+(ev.onsiteLogistics==='No'?' — site logistics not suitable':''):'',
+    ev.environmentSuitable==='No'?'Environmental conditions not suitable':'',
+    ev.specialHandling==='No'?'Special handling / safety not manageable':'',
+    ev.turnaroundRealistic==='No'?'Requested turnaround not achievable':'',
+    item.remark?"Customer's requirement: "+esc(item.remark):''].filter(Boolean).join('<br/>');
+  const diff=ev.meetsRequirement==='Yes'?'No':((ev.meetsRequirement==='Partially'||ev.meetsRequirement==='No')?'Yes':'');
+  const diffText=diff==='Yes'?`<div style="margin-top:4px;">${ev.meetsRequirement==='Partially'?'Partially meets requirement. ':''}${esc(ev.notes||'')}</div>`:'';
+
+  // Section 5
+  const outcome={'Can Do':'accepted','Can Do (External)':'outsource','Cannot Do':'declined'}[item.capabilityVerdict]||'';
+  const declineReason=outcome==='declined'?esc(ev.notes||'Outside current capability'):'';
+  const sig=staffOf(item.capabilityReviewedBy)?.signature||'';
+
+  const page1=pageWrap(`
+    <div style="text-align:center;font-size:19px;font-weight:bold;margin-bottom:18px;">Contract Review Form</div>
+    ${sectionTitle('Section 1 – Enquiry Details')}
+    <table style="width:100%;border-collapse:collapse;">
+      ${kv('Company Name',esc(entry.name),238)}
+      ${kv('Company Address',esc(address).replace(/\n/g,'<br/>'),238)}
+      ${kv('Contact Person / Designation',esc(contact),238)}
+      ${kv('Date Enquiry Received',enquiryDate,238)}
+      ${kv('Received Via (Email / Call / WhatsApp / Walk-in)','',238)}
+      ${kv('Reviewed By',esc(reviewerName),238)}
+    </table>
+    ${sectionTitle('Section 2 – Scope of Calibration / Testing')}
+    <table style="width:100%;border-collapse:collapse;">
+      ${kv('Type of Service Requested',`${box(true)}Calibration &nbsp;&nbsp; ${box(false)}Testing`,280)}
+      ${kv('Equipment / Sample',esc(item.eqName),280)}
+      ${kv('Brand / Model',[item.brand,item.model].filter(Boolean).map(esc).join(' / '),280)}
+      ${kv('Range / Resolution / Test Parameters',rangeBits,280)}
+      ${kv('Quantity',esc(item.quantity||''),280)}
+      ${kv('Location (Lab / On-site)',location,280)}
+      ${kv('Accreditation Status Requested (SAMM-Accredited / Non-Accredited)','',280)}
+    </table>
+    ${sectionTitle('Section 3 – Capability &amp; Resource Review')}
+    <table style="width:100%;border-collapse:collapse;">
+      <tr><td style="${L}">Check Item</td><td style="${L}text-align:center;">Yes</td><td style="${L}text-align:center;">No</td><td style="${L}text-align:center;">Remarks</td></tr>
+      ${yesNoRow(`Within ${esc(labPossessive)} current SAMM accreditation scope`,ev.inScope,'')}
+      ${yesNoRow('Best Measurement Capability (CMC) adequate for range / uncertainty required',cmc,cmcRemark)}
+      ${yesNoRow('Reference standards / equipment available and in-cal',ev.refAvailable,'')}
+      ${yesNoRow('Personnel competent for this parameter',ev.personnelAvailable,'')}
+      ${yesNoRow('Outsource required?',outsource,outsourceRemark)}
+    </table>`,1);
+
+  const page2=pageWrap(`
+    ${sectionTitle('Section 4 – Requirement Review')}
+    <table style="width:100%;border-collapse:collapse;">
+      ${kv('Calibration / Test Method or Standard Requested','',330)}
+      ${kv('Target Uncertainty / Tolerance / Acceptance Criteria Specified',toleranceBits,330)}
+      ${kv('Sample / Item Condition Requirements (if testing)','N/A — calibration',330)}
+      ${kv('Turnaround Time Requested','',330)}
+      ${kv('Special Condition (site access, environmental, urgency)',special,330)}
+      ${kv(`Any difference between enquiry and what ${esc(labShort)} can offer? If yes, describe and confirm resolution with client before quotation issued.`,`${box(diff==='Yes')}Yes &nbsp;&nbsp; ${box(diff==='No')}No${diffText}`,330)}
+    </table>
+    ${sectionTitle('Section 5 – Review Outcome')}
+    <div style="margin-bottom:12px;">${box(outcome==='accepted')}Accepted as requested</div>
+    <div style="margin-bottom:12px;">${box(outcome==='outsource')}Referred for outsource${outcome==='outsource'&&item.outsourcedTo?' — '+esc(item.outsourcedTo):''}</div>
+    <div style="margin-bottom:26px;display:flex;align-items:flex-end;">${box(outcome==='declined')}<span style="white-space:nowrap;">Declined (reason):&nbsp;</span><span style="flex:1;border-bottom:1px solid #000;min-height:18px;">${declineReason}</span></div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr><td style="${L}text-align:center;width:50%;">Reviewed By</td><td style="${L}text-align:center;">Approved By</td></tr>
+      <tr><td style="${B}height:78px;text-align:center;vertical-align:middle;">${sig?`<img src="${sig}" style="max-height:66px;max-width:220px;object-fit:contain;"/>`:''}</td><td style="${B}"></td></tr>
+      <tr><td style="${B}">Name: ${esc(reviewerName)}<br/>Date: ${item.capabilityReviewedAt?fmtDateShort(item.capabilityReviewedAt):''}</td><td style="${B}">Name:<br/>Date:</td></tr>
+    </table>`,2);
+  return [page1,page2];
+}
 async function exportEntryCapabilityReviewPdf(entryId){
   const entry=_salesTracker.find(e=>e.id===entryId); if(!entry){alert('Entry not found.');return;}
   const reviewedItems=(entry.items||[]).filter(it=>it.capabilityVerdict);
   if(!reviewedItems.length){alert('No items in this entry have been reviewed yet.');return;}
-  const VERDICT_COLOR={'Can Do':'#166534','Cannot Do':'#991b1b','Can Do (External)':'#166534'};
-  const row=(l,v)=>`<tr><td style="padding:5px 8px;color:#64748b;width:180px;font-size:11px;vertical-align:top;">${l}</td><td style="padding:5px 8px;font-size:12px;font-weight:600;">${v||'—'}</td></tr>`;
-  const itemBlocks=reviewedItems.map(item=>{
-    const ev=item.capabilityEvaluation||{};
-    return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-bottom:14px;page-break-inside:avoid;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-        <div>
-          <div style="font-size:14px;font-weight:700;">${escapeHtml(item.eqName)}</div>
-          <div style="font-size:11px;color:#64748b;">${item.brand?'Brand: '+escapeHtml(item.brand)+' · ':''}${item.model?'Model: '+escapeHtml(item.model)+' · ':''}${item.spec?'Spec: '+escapeHtml(item.spec):''}${item.range?' · Range: '+escapeHtml(item.range):''}${item.calType?' · '+item.calType:''}</div>
-        </div>
-        <div style="text-align:center;background:${item.capabilityVerdict==='Cannot Do'?'#fef2f2':'#f0fdf4'};border-radius:8px;padding:6px 14px;">
-          <div style="font-size:9px;color:#64748b;">VERDICT</div>
-          <div style="font-size:14px;font-weight:800;color:${VERDICT_COLOR[item.capabilityVerdict]||'#374151'};">${capabilityVerdictLabel(item.capabilityVerdict)}</div>
-        </div>
-      </div>
-      ${item.remark?`<div style="background:#eff6ff;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:11px;"><strong>Customer's Requirement:</strong> ${escapeHtml(item.remark)}</div>`:''}
-      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
-        ${row('Within Accredited Scope?',ev.inScope)}
-        ${row('Measurement Range Within Capability?',ev.rangeCapable)}
-        ${row('Accuracy/Uncertainty Achievable (TUR)?',ev.accuracyAchievable)}
-        ${row('Reference Standard Available &amp; Valid?',ev.refAvailable)}
-        ${row('Method/Procedure Exists?',ev.methodExists)}
-        ${row('Trained &amp; Authorized Personnel Available?',ev.personnelAvailable)}
-        ${row('Environmental Conditions Suitable?',ev.environmentSuitable)}
-        ${row('Special Handling/Safety Manageable?',ev.specialHandling)}
-        ${item.calType==='Onsite'?row('Onsite Logistics Suitable?',ev.onsiteLogistics):''}
-        ${row('Realistic Turnaround Achievable?',ev.turnaroundRealistic)}
-        ${row("Meets Customer's Stated Requirement?",ev.meetsRequirement)}
-      </table>
-      ${ev.notes?`<div style="font-size:11px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-bottom:8px;"><strong>Notes:</strong> ${escapeHtml(ev.notes)}</div>`:''}
-      <div style="font-size:10px;color:#94a3b8;">Reviewed by ${USERS[item.capabilityReviewedBy]?.name||item.capabilityReviewedBy||'—'} on ${item.capabilityReviewedAt?fmtDateShort(item.capabilityReviewedAt):'—'}</div>
-    </div>`;
-  }).join('');
-  const html=`<div style="width:800px;padding:28px;font-family:Arial,sans-serif;background:#fff;">
-    <div style="font-size:18px;font-weight:800;color:#0f1f3d;margin-bottom:2px;">${_settings.labName||'Westlab'}</div>
-    <div style="font-size:14px;font-weight:700;color:#374151;margin-bottom:4px;">Capability Review — ${entry.name}</div>
-    <div style="font-size:11px;color:#64748b;margin-bottom:16px;">${reviewedItems.length} item${reviewedItems.length!==1?'s':''} reviewed · Generated ${new Date().toLocaleDateString('en-MY')}</div>
-    ${itemBlocks}
-  </div>`;
-  await exportHtmlAsPdf(html,`Westlab_Capability_Review_${entry.name.replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`,'Capability Review (Entry)',reviewedItems.length,true);
+  const pages=reviewedItems.flatMap((item,i)=>buildContractReviewPages(entry,item,i+1,reviewedItems.length));
+  await exportPagedPdf(pages,`Contract_Review_${entry.name.replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`,'Contract Review Form',reviewedItems.length,true);
 }
 async function exportCapabilityReviewPdf(){
   const rows=[];
@@ -10462,9 +10576,13 @@ async function resubmitCapabilityForReview(entryId,itemIdx){
 async function setExternalCapabilityFound(entryId,itemIdx){
   const entry=_salesTracker.find(e=>e.id===entryId); if(!entry||!entry.items||!entry.items[itemIdx])return;
   const item=entry.items[itemIdx];
-  if(!confirm(`Mark external capability found for "${item.eqName}"? This unlocks moving to Quotation Generated.`))return;
+  const knownPartners=(_externalPartners||[]).map(p=>p.name||p.company).filter(Boolean);
+  const partner=prompt(`Mark external capability found for "${item.eqName}"?\n\nWhich external partner will do it? (shown on the Contract Review Form under "Outsource required — to")${knownPartners.length?'\n\nKnown partners: '+knownPartners.join(', '):''}`,item.outsourcedTo||'');
+  if(partner===null)return; // cancelled
   item.capabilityVerdict='Can Do (External)';
-  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:`External partner found (${escapeHtml(item.eqName)})`});
+  item.outsourcedTo=partner.trim();
+  if(!entry.statusHistory) entry.statusHistory=[];
+  entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser,note:`External partner found (${escapeHtml(item.eqName)})${item.outsourcedTo?' — '+escapeHtml(item.outsourcedTo):''}`});
   await saveSalesTracker();
   renderTrackerPage('sales');
   showToast('✅ External capability confirmed — you can now move this to Quotation Generated','success',4000);
