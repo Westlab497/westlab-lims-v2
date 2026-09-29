@@ -11078,6 +11078,88 @@ function openTrackerEntryModal(type,entryId){
       <button onclick="document.getElementById('tracker-entry-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
     </div>
     <div style="padding:16px 20px;">
+      ${type==='sales'?`
+      <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">1</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Customer</span></div>
+      <div class="form-group" style="position:relative;">
+        <label class="form-label">${nameLabel} <span class="req">*</span></label>
+        <input class="form-control" id="tk-name" value="${existing?.name||''}" autocomplete="off"
+          oninput="suggestTrackerName('${type}',this.value)" onfocus="suggestTrackerName('${type}',this.value)"/>
+        <div id="tk-name-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:180px;overflow-y:auto;margin-top:2px;"></div>
+        <input type="hidden" id="tk-cust-id" value="${existing?.custId||''}"/>
+        <input type="hidden" id="tk-ref-id" value="${existing?.refEqId||''}"/>
+        <input type="hidden" id="tk-supplier-id" value="${existing?.linkedExternalPartnerId||''}"/>
+      </div>
+      <div class="form-group">
+          <label class="form-label">Customer Type</label>
+          <div style="display:flex;gap:14px;">
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-dealer" ${(existing?.prospectTypes||[]).includes('Dealer')?'checked':''}/> Dealer</label>
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-direct" ${(existing?.prospectTypes||[]).includes('Direct')?'checked':''}/> Direct</label>
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-enduser-only" ${(existing?.prospectTypes||[]).includes('EndUserOnly')?'checked':''}/> End User Only</label>
+          </div>
+        </div>
+      <div id="tk-contact-summary" style="display:none;background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12.5px;"></div>
+      <div id="tk-contact-fields" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">Contact details — for a new prospect; filled in automatically when you pick an existing customer</div>
+        <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="tk-prospect-address" rows="2">${escapeHtml(existing?.prospectAddress||'')}</textarea></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="tk-prospect-attention" value="${escapeHtml(existing?.prospectAttention||'')}"/></div>
+          <div class="form-group"><label class="form-label">Designation</label><input class="form-control" id="tk-prospect-designation" placeholder="e.g. QA Manager" value="${escapeHtml(existing?.prospectDesignation||'')}"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="tk-prospect-phone" value="${escapeHtml(existing?.prospectPhone||'')}"/></div>
+          <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="tk-prospect-email" value="${escapeHtml(existing?.prospectEmail||'')}"/></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">2</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Enquiry</span><span style="font-size:11px;color:var(--text-muted);">printed on the Contract Review Form</span></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Date Enquiry Received</label><input class="form-control" type="date" id="tk-enquiry-date" onchange="tkSyncMonth(this.value)" value="${existing?.enquiryDate||(existing?.createdAt?toLocalDateStr(new Date(existing.createdAt)):toLocalDateStr(new Date()))}"/></div>
+          <div class="form-group"><label class="form-label">Received Via</label>
+            <select class="form-control" id="tk-received-via">
+              ${['','Email','Call','WhatsApp','Walk-in'].map(v=>`<option value="${v}" ${(existing?.receivedVia||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Turnaround Time Requested</label>
+            <select class="form-control" id="tk-turnaround" onchange="el('tk-turnaround-other').style.display=this.value==='Other'?'':'none'">
+              ${['','Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)','Other'].map(v=>`<option value="${v}" ${(existing?.turnaroundRequested||'')===v||(v==='Other'&&existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested))?'selected':''}>${v||'— Select —'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">&nbsp;</label>
+            <input class="form-control" id="tk-turnaround-other" placeholder="e.g. Before 15 Oct, or 10 working days" value="${escapeHtml(existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?existing.turnaroundRequested:'')}" style="${existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?'':'display:none;'}"/>
+          </div>
+        </div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">3</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Items Enquired</span></div>
+      <div id="sales-items-list"></div>
+      <button class="btn btn-outline btn-sm" onclick="addSalesItemRow()">+ Add Item</button>
+      <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">4</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Internal</span></div>
+      <div class="form-row">
+      <div class="form-group"><label class="form-label">Assigned Sales Personnel</label>
+        <select class="form-control" id="tk-sales-personnel">
+          <option value="">— Unassigned —</option>
+          ${salesStaff.map(s=>`<option value="${s.username}" ${(existing?.salesPersonnel||currentUser)===s.username?'selected':''}>${s.name||s.username}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Assigned Reviewer <span style="font-weight:normal;color:var(--text-muted);">(who should check capability)</span></label>
+        <select class="form-control" id="tk-reviewer">
+          <option value="">— Unassigned —</option>
+          ${reviewStaff.map(s=>`<option value="${s.username}" ${existing?.assignedReviewer===s.username?'selected':''}>${s.name||s.username}</option>`).join('')}
+        </select>
+      </div>
+      </div>
+      <div class="form-group"><label class="form-label">Linked Job No. (optional)</label><input class="form-control" id="tk-jobno" value="${existing?.jobNo||''}" placeholder="e.g. WL26-00123"/></div>
+      ${existing?`      <div class="form-row">
+        <div class="form-group"><label class="form-label">Month <span class="req">*</span></label><input class="form-control" type="month" id="tk-month" value="${existing?.month||toLocalDateStr(new Date()).slice(0,7)}"/></div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select class="form-control" id="tk-status">${stages.map(s=>{
+            const anyCleared=type==='sales'&&existing&&(existing.items||[]).some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
+            const isGated=type==='sales'&&s==='Quotation Generated'&&!anyCleared;
+            return `<option value="${s}" ${existing?.status===s?'selected':''} ${isGated?'disabled':''}>${s}${isGated?' 🔒 (needs capability review)':''}</option>`;
+          }).join('')}</select>
+        </div>
+      </div>
+`:`<input type="hidden" id="tk-month" value="${toLocalDateStr(new Date()).slice(0,7)}"/><input type="hidden" id="tk-status" value="${stages[0]}"/>`}
+      `:`
       <div class="form-row">
         <div class="form-group"><label class="form-label">Month <span class="req">*</span></label><input class="form-control" type="month" id="tk-month" value="${existing?.month||toLocalDateStr(new Date()).slice(0,7)}"/></div>
         <div class="form-group"><label class="form-label">Status</label>
@@ -11097,65 +11179,9 @@ function openTrackerEntryModal(type,entryId){
         <input type="hidden" id="tk-ref-id" value="${existing?.refEqId||''}"/>
         <input type="hidden" id="tk-supplier-id" value="${existing?.linkedExternalPartnerId||''}"/>
       </div>
-      ${type==='sales'?`
-      <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Enquiry Details <span style="font-weight:normal;color:var(--text-muted);">(printed on the Contract Review Form)</span></div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Date Enquiry Received</label><input class="form-control" type="date" id="tk-enquiry-date" value="${existing?.enquiryDate||(existing?.createdAt?toLocalDateStr(new Date(existing.createdAt)):toLocalDateStr(new Date()))}"/></div>
-          <div class="form-group"><label class="form-label">Received Via</label>
-            <select class="form-control" id="tk-received-via">
-              ${['','Email','Call','WhatsApp','Walk-in'].map(v=>`<option value="${v}" ${(existing?.receivedVia||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Turnaround Time Requested</label>
-            <select class="form-control" id="tk-turnaround" onchange="el('tk-turnaround-other').style.display=this.value==='Other'?'':'none'">
-              ${['','Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)','Other'].map(v=>`<option value="${v}" ${(existing?.turnaroundRequested||'')===v||(v==='Other'&&existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested))?'selected':''}>${v||'— Select —'}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group"><label class="form-label">&nbsp;</label>
-            <input class="form-control" id="tk-turnaround-other" placeholder="e.g. Before 15 Oct, or 10 working days" value="${escapeHtml(existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?existing.turnaroundRequested:'')}" style="${existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?'':'display:none;'}"/>
-          </div>
-        </div>
-      </div>
-      <div class="form-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Prospect Details (fill in if not yet an existing customer)</div>
-        <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="tk-prospect-address" rows="2">${escapeHtml(existing?.prospectAddress||'')}</textarea></div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="tk-prospect-attention" value="${escapeHtml(existing?.prospectAttention||'')}"/></div>
-          <div class="form-group"><label class="form-label">Designation</label><input class="form-control" id="tk-prospect-designation" placeholder="e.g. QA Manager" value="${escapeHtml(existing?.prospectDesignation||'')}"/></div>
-        </div>
-        <div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="tk-prospect-phone" value="${existing?.prospectPhone||''}"/></div>
-        <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="tk-prospect-email" value="${existing?.prospectEmail||''}"/></div>
-        <div class="form-group">
-          <label class="form-label">Customer Type</label>
-          <div style="display:flex;gap:14px;">
-            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-dealer" ${(existing?.prospectTypes||[]).includes('Dealer')?'checked':''}/> Dealer</label>
-            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-direct" ${(existing?.prospectTypes||[]).includes('Direct')?'checked':''}/> Direct</label>
-            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tk-type-enduser-only" ${(existing?.prospectTypes||[]).includes('EndUserOnly')?'checked':''}/> End User Only</label>
-          </div>
-        </div>
-      </div>
-      <div class="form-group"><label class="form-label">Assigned Sales Personnel</label>
-        <select class="form-control" id="tk-sales-personnel">
-          <option value="">— Unassigned —</option>
-          ${salesStaff.map(s=>`<option value="${s.username}" ${(existing?.salesPersonnel||currentUser)===s.username?'selected':''}>${s.name||s.username}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group"><label class="form-label">Assigned Reviewer <span style="font-weight:normal;color:var(--text-muted);">(who should check capability)</span></label>
-        <select class="form-control" id="tk-reviewer">
-          <option value="">— Unassigned —</option>
-          ${reviewStaff.map(s=>`<option value="${s.username}" ${existing?.assignedReviewer===s.username?'selected':''}>${s.name||s.username}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group"><label class="form-label">Linked Job No. (optional)</label><input class="form-control" id="tk-jobno" value="${existing?.jobNo||''}" placeholder="e.g. WL26-00123"/></div>
-      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
-      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Items Enquired</div>
-      <div id="sales-items-list"></div>
-      <button class="btn btn-outline btn-sm" onclick="addSalesItemRow()">+ Add Item</button>
-      `:`<div class="form-group"><label class="form-label">Quoted Price (RM) <span style="font-weight:normal;color:var(--text-muted);">(optional — records into the vendor's price history)</span></label><input class="form-control" type="number" min="0" step="0.01" id="tk-quoted-price" value="${existing?.quotedPrice||''}"/></div>
-      <div class="form-group"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${escapeHtml(existing?.remark||'')}</textarea></div>`}
+<div class="form-group"><label class="form-label">Quoted Price (RM) <span style="font-weight:normal;color:var(--text-muted);">(optional — records into the vendor's price history)</span></label><input class="form-control" type="number" min="0" step="0.01" id="tk-quoted-price" value="${existing?.quotedPrice||''}"/></div>
+      <div class="form-group"><label class="form-label">Remark</label><textarea class="form-control" id="tk-remark">${escapeHtml(existing?.remark||'')}</textarea></div>
+      `}
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('tracker-entry-overlay').style.display='none'">Cancel</button>
         <button class="btn btn-primary" onclick="saveTrackerEntry('${type}','${entryId||''}')">${existing?'Save Changes':'Add Entry'}</button>
@@ -11166,6 +11192,7 @@ function openTrackerEntryModal(type,entryId){
   if(type==='sales'){
     if(!_salesDraftItems.length) addSalesItemRow();
     else renderSalesItemsList();
+    tkRefreshContactView();
   }
 }
 
@@ -11237,35 +11264,33 @@ function renderSalesItemsList(){
         <div class="form-group"><label class="form-label">Brand</label><input class="form-control" value="${escapeHtml(it.brand||'')}" oninput="updateSalesItemField(${idx},'brand',this.value)"/></div>
         <div class="form-group"><label class="form-label">Model</label><input class="form-control" value="${escapeHtml(it.model||'')}" oninput="updateSalesItemField(${idx},'model',this.value)"/></div>
       </div>
-      <div class="unit-target-group" style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;">
-        <label class="form-label" style="margin-bottom:4px;">Unit <span style="font-weight:normal;color:var(--text-muted);">(applies to both Spec and Range below)</span></label>
-        <select class="form-control unit-picker-select" style="margin-bottom:6px;" onchange="applyUnitFromPicker(this)">
-          <option value="">Unit…</option>
-        </select>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Spec <span style="font-weight:normal;color:var(--text-muted);">(± added automatically)</span></label><input class="form-control" data-unit-target value="${it.spec||''}" oninput="updateSalesItemSpec(${idx},this)"/></div>
-          <div class="form-group"><label class="form-label">Range</label><input class="form-control" data-unit-target placeholder="e.g. 0 – 200" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/></div>
+      <div style="display:grid;grid-template-columns:90px 1fr 1.3fr;gap:10px;">
+        <div class="form-group"><label class="form-label">Quantity</label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);updateSalesItemTotal(${idx});renderSocSection('sales-item-soc-${idx}',_salesDraftItems[${idx}]);"/></div>
+        <div class="form-group"><label class="form-label">Lab / On-site</label>
+          <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value)">
+            <option value="Lab" ${it.calType!=='Onsite'?'selected':''}>Lab</option>
+            <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>On-site</option>
+          </select>
         </div>
-      </div>
-      <div class="form-group"><label class="form-label">Remark <span style="font-weight:normal;color:var(--text-muted);">(customer's stated requirement for this item)</span></label><textarea class="form-control" rows="2" oninput="updateSalesItemField(${idx},'remark',this.value)">${escapeHtml(it.remark||'')}</textarea></div>
-      <div class="form-row">
         <div class="form-group"><label class="form-label">Accreditation Requested</label>
           <select class="form-control" onchange="updateSalesItemField(${idx},'accreditationRequested',this.value)">
             ${['','SAMM-Accredited','Non-Accredited'].map(v=>`<option value="${v}" ${(it.accreditationRequested||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Method / Standard Requested <span style="font-weight:normal;color:var(--text-muted);">(if any)</span></label><input class="form-control" placeholder="e.g. OIML R76, EURAMET cg-18" value="${escapeHtml(it.methodRequested||'')}" oninput="updateSalesItemField(${idx},'methodRequested',this.value)"/></div>
       </div>
-      <div class="form-group" id="sales-item-soc-${idx}"></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Calibration Type</label>
-          <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value)">
-            <option value="Lab" ${it.calType==='Lab'?'selected':''}>Lab</option>
-            <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>Onsite</option>
-          </select>
+      <div class="unit-target-group" style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;">
+        <label class="form-label" style="margin-bottom:4px;">Unit <span style="font-weight:normal;color:var(--text-muted);">(applies to both Range and Spec below)</span></label>
+        <select class="form-control unit-picker-select" style="margin-bottom:6px;" onchange="applyUnitFromPicker(this)">
+          <option value="">Unit…</option>
+        </select>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Range</label><input class="form-control" data-unit-target placeholder="e.g. 0 – 200" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/></div>
+          <div class="form-group"><label class="form-label">Spec <span style="font-weight:normal;color:var(--text-muted);">(± added automatically)</span></label><input class="form-control" data-unit-target value="${it.spec||''}" oninput="updateSalesItemSpec(${idx},this)"/></div>
         </div>
-        <div class="form-group"><label class="form-label">Quantity</label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);updateSalesItemTotal(${idx});renderSocSection('sales-item-soc-${idx}',_salesDraftItems[${idx}]);"/></div>
       </div>
+      <div class="form-group"><label class="form-label">Method / Standard Requested <span style="font-weight:normal;color:var(--text-muted);">(if any)</span></label><input class="form-control" placeholder="e.g. OIML R76, EURAMET cg-18" value="${escapeHtml(it.methodRequested||'')}" oninput="updateSalesItemField(${idx},'methodRequested',this.value)"/></div>
+      <div class="form-group" id="sales-item-soc-${idx}"></div>
+      <div class="form-group"><label class="form-label">Remark <span style="font-weight:normal;color:var(--text-muted);">(customer's stated requirement for this item)</span></label><textarea class="form-control" rows="2" oninput="updateSalesItemField(${idx},'remark',this.value)">${escapeHtml(it.remark||'')}</textarea></div>
       <div class="form-group">
         <label class="form-label">Unit Price (RM)</label>
         <input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});"/>
@@ -11324,6 +11349,23 @@ function suggestTrackerName(type,query){
 function selectTrackerSupplier(supId,name){
   el('tk-name').value=name; if(el('tk-supplier-id')) el('tk-supplier-id').value=supId; el('tk-name-suggestions').style.display='none';
 }
+// New sales entries take their Month from "Date Enquiry Received" (Month is only shown, and
+// editable, when editing an existing entry).
+function tkSyncMonth(dateStr){ const m=el('tk-month'); if(m&&m.type==='hidden'&&/^\d{4}-\d{2}/.test(dateStr||'')) m.value=dateStr.slice(0,7); }
+// When an existing customer is linked, their contact details are already filled in from the
+// Customer Database — fold them into a one-line summary (with "Edit details" to open them again).
+function tkRefreshContactView(forceOpen){
+  const box=el('tk-contact-fields'), sum=el('tk-contact-summary'); if(!box||!sum) return;
+  const linked=!!(el('tk-cust-id')?.value);
+  if(!linked||forceOpen){ box.style.display=''; sum.style.display=linked?'':'none'; if(linked) sum.innerHTML=`🔗 Existing customer — contact details shown below <a href="javascript:void(0)" style="float:right;" onclick="tkRefreshContactView()">Hide</a>`; return; }
+  const v=id=>(el(id)?.value||'').trim();
+  const who=[v('tk-prospect-attention'),v('tk-prospect-designation')].filter(Boolean).join(', ');
+  const bits=[who,v('tk-prospect-phone'),v('tk-prospect-email')].filter(Boolean).map(escapeHtml);
+  const addr=v('tk-prospect-address').split('\n')[0];
+  sum.innerHTML=`🔗 <b>Existing customer</b>${bits.length?' — '+bits.join(' · '):''}${addr?`<div style="color:var(--text-muted);font-size:11.5px;margin-top:2px;">${escapeHtml(addr)}</div>`:''}
+    <a href="javascript:void(0)" style="float:right;margin-top:-16px;" onclick="tkRefreshContactView(true)">Edit details</a>`;
+  sum.style.display=''; box.style.display='none';
+}
 function selectTrackerCustomer(custId,name){
   el('tk-name').value=name; el('tk-cust-id').value=custId; el('tk-name-suggestions').style.display='none';
   const c=_customers.find(x=>x.id===custId); if(!c)return;
@@ -11334,6 +11376,8 @@ function selectTrackerCustomer(custId,name){
   if(el('tk-type-dealer')) el('tk-type-dealer').checked=(c.custTypes||[]).includes('Dealer');
   if(el('tk-type-direct')) el('tk-type-direct').checked=(c.custTypes||[]).includes('Direct');
   if(el('tk-type-enduser-only')) el('tk-type-enduser-only').checked=(c.custTypes||[]).includes('EndUserOnly');
+  if(el('tk-prospect-designation')&&!el('tk-prospect-designation').value) el('tk-prospect-designation').value=c.designation||'';
+  tkRefreshContactView();
 }
 function selectTrackerRefEq(refId,name){
   el('tk-name').value=name; el('tk-ref-id').value=refId; el('tk-name-suggestions').style.display='none';
@@ -21840,7 +21884,7 @@ const DRAFT_FORMS={
     label:()=>draftFieldVal('tk-name'),
     getState:a=>a.args[0]==='sales'?{items:_salesDraftItems}:{},
     setState:(s,d)=>{ if(d.args[0]==='sales'&&s.items){ _salesDraftItems=s.items; renderSalesItemsList(); } },
-    afterRestore:()=>{ const o=el('tk-turnaround-other'); if(o) o.style.display=el('tk-turnaround')?.value==='Other'?'':'none'; }},
+    afterRestore:()=>{ const o=el('tk-turnaround-other'); if(o) o.style.display=el('tk-turnaround')?.value==='Other'?'':'none'; if(typeof tkRefreshContactView==='function') tkRefreshContactView(); }},
   quotation:{ title:'Quotation', container:'qtv2-overlay',
     label:()=>draftFieldVal('qtv2-cust-name'),
     getState:()=>({items:_qtv2DraftItems}),
