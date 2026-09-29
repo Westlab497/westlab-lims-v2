@@ -345,6 +345,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
   #sidebar{transform:translateX(-100%);transition:transform .25s ease;width:240px;min-width:240px;z-index:200;}
   #sidebar.mobile-open{transform:translateX(0);box-shadow:0 0 24px rgba(0,0,0,.35);}
   #sidebar.collapsed{width:240px;min-width:240px;} /* the icon-only collapse mode doesn't apply on mobile — it's an overlay either way */
+  #sidebar.collapsed .nav-item .nav-label,#sidebar.collapsed .nav-item .nav-text{display:block!important;} /* undo the desktop collapse's icon-only mode: the width rule above already keeps this an overlay either way, but never restored the text itself */
+  #sidebar.collapsed .nav-item{padding:8px 10px!important;justify-content:flex-start!important;}
+  #sidebar.collapsed .nav-section-label{display:block!important;}
+  #sidebar.collapsed .sidebar-logo-text{display:block!important;}
+  #sidebar.collapsed .sidebar-logo>div:first-child{display:block!important;}
+  #sidebar.collapsed #sidebar-logo-collapsed{display:none!important;}
+  #sidebar.collapsed .sidebar-footer{display:block!important;}
   #main{margin-left:0!important;}
   #mobile-menu-btn{display:inline-block!important;}
   #sidebar-toggle-btn{display:none;} /* the desktop collapse-to-icon toggle is meaningless once the sidebar is an overlay */
@@ -14724,6 +14731,11 @@ function closeMobileSidebar(){
 
 function initSidebarCollapse(){
   try{
+    // This is a desktop-only preference (the icon-only rail) — on a mobile-width viewport the
+    // sidebar is always a full overlay, so applying it here left icons with no text and no
+    // easy way to fix it (there's no mouse to hover for the tooltip, and no visible way to
+    // untoggle it, since the desktop collapse button is itself hidden on mobile).
+    if(window.innerWidth<=768) return;
     if(localStorage.getItem('sb_collapsed')==='1'){
       const sb=document.getElementById('sidebar');
       const main=document.getElementById('main');
