@@ -4461,6 +4461,10 @@ function canViewPriceReference(u){ const r=getUserRole(u||currentUser); return [
 function canLogQuotation(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator','Sales'].includes(r); }
 function canUseSalesTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator','Sales'].includes(r); }
 function canViewSalesTrackerReadOnly(u){ const r=getUserRole(u||currentUser); return r==='Quality Manager'; }
+// Sales Tracker money: per-entry values for the people who quote (not the view-only Quality
+// Manager); win/loss counts, pipeline value and the performance dashboard for Admin + MD only.
+function canSeeSalesMoney(u){ return canUseSalesTracker(u); }
+function canSeeSalesPerformance(u){ return isAdmin(u||currentUser); }
 function canSeeSalesTrackerPage(u){ return canUseSalesTracker(u)||canViewSalesTrackerReadOnly(u); }
 function canReviewCapability(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager'].includes(r); }
 function canUsePurchasingTracker(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
@@ -10413,7 +10417,7 @@ async function exportQuotationV2Pdf(quotationId){
   const sstAmount=s.sstEnabled?subtotal*0.08:0;
   const total=subtotal+sstAmount;
   const creatorStaff=(_staff||[]).find(x=>x.username===q.createdBy);
-  const creatorName=creatorStaff?.certName||creatorStaff?.name||USERS[q.createdBy]?.name||q.createdBy||'';
+  const creatorName=creatorStaff?.name||USERS[q.createdBy]?.name||creatorStaff?.certName||q.createdBy||''; // full name (the certificate name is only for certificates)
   const creatorSigRes=await pdfStaffSignature(q.createdBy);
   const creatorSig=creatorSigRes.data;
   if(!creatorSig&&q.createdBy) pdfSignatureWarning(creatorSigRes.why==='blocked'?[]:[creatorName],creatorSigRes.why==='blocked'?[creatorName]:[]);
@@ -11308,7 +11312,7 @@ function stMenuItem(label,onclick,opts={}){ return `<button ${opts.disabled?'dis
 function stOpenMoreMenu(ev){
   ev.stopPropagation(); ev.currentTarget.setAttribute('data-st-menu','1');
   stShowMenu(ev.currentTarget,
-    stMenuItem('📋 Enquiry Templates','openEnquiryTemplatesModal()')+stMenuItem('📊 Performance Dashboard','openSalesTrackerDashboard()')+
+    stMenuItem('📋 Enquiry Templates','openEnquiryTemplatesModal()')+(canSeeSalesPerformance(currentUser)?stMenuItem('📊 Performance Dashboard','openSalesTrackerDashboard()'):'')+
     stMenuItem('📄 Capability Review History','exportCapabilityReviewPdf()')+'<hr/>'+
     stMenuItem('📊 Export to Excel',"exportTrackerExcel('sales')")+stMenuItem('📄 Export to PDF',"exportTrackerPdf('sales')"));
 }
@@ -11395,11 +11399,13 @@ function renderSalesTrackerList(readOnly){
   const stat=(n,label,color,onclick)=>`<button class="st-stat" onclick="${onclick}"><div class="st-stat-num" style="color:${color};">${n}</div><div class="st-stat-label">${label}</div></button>`;
   const summ=el('st-summary');
   if(summ) summ.innerHTML=stat(cnt('open'),'Open','#1d4ed8',"stSetTab('open')")+stat(awaiting,'Awaiting review','#c2410c',"window._stQueueOpen=true;renderCapabilityReviewQueue();document.getElementById('capability-review-queue').scrollIntoView({behavior:'smooth',block:'center'})")
-    +stat(cnt('quoted'),'Quoted','#7e22ce',"stSetTab('quoted')")+stat(cnt('won'),'Won / in progress','#136f4a',"stSetTab('won')")
-    +stat(lost,'Lost','#b42318',"stSetTab('closed')")+stat('RM '+pipeline.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),'Open pipeline value','var(--navy)',"stSetTab('open')");
+    +stat(cnt('quoted'),'Quoted','#7e22ce',"stSetTab('quoted')")
+    +(canSeeSalesPerformance(currentUser)?stat(cnt('won'),'Won / in progress','#136f4a',"stSetTab('won')")
+      +stat(lost,'Lost','#b42318',"stSetTab('closed')")+stat('RM '+pipeline.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),'Open pipeline value','var(--navy)',"stSetTab('open')"):'');
   // tabs
-  const tabs=[['all','All',base.length],['open','Open',cnt('open')],['quoted','Quoted',cnt('quoted')],['won','Won / In progress',cnt('won')],['closed','Closed',cnt('closed')]];
-  const tb=el('st-tabs'); if(tb) tb.innerHTML=tabs.map(([k,l,n])=>`<button class="st-tab ${_stTab===k?'active':''}" onclick="stSetTab('${k}')">${l}<span class="st-tab-n">${n}</span></button>`).join('');
+  const perf=canSeeSalesPerformance(currentUser);
+  const tabs=[['all','All',base.length],['open','Open',cnt('open')],['quoted','Quoted',cnt('quoted')],['won','Won / In progress',perf?cnt('won'):null],['closed','Closed',perf?cnt('closed'):null]];
+  const tb=el('st-tabs'); if(tb) tb.innerHTML=tabs.map(([k,l,n])=>`<button class="st-tab ${_stTab===k?'active':''}" onclick="stSetTab('${k}')">${l}${n===null?'':`<span class="st-tab-n">${n}</span>`}</button>`).join('');
   const list=base.filter(e=>_stTab==='all'||stGroupOf(e.status)===_stTab)
     .sort((a,b)=>String(b.enquiryDate||b.createdAt||'').localeCompare(String(a.enquiryDate||a.createdAt||'')));
   if(!list.length){ box.innerHTML=`<div class="empty-state"><div class="empty-icon">📈</div><p>${all.length?'No entries match these filters.':'No entries yet. Click "+ New Entry" to add one.'}</p></div>`; return; }
@@ -11410,7 +11416,7 @@ function renderSalesTrackerList(readOnly){
     return `<span class="st-chip" style="background:${m[1]};color:${m[2]};">${m[0]}</span>`;
   };
   box.innerHTML=`<div class="card"><div class="table-wrap"><table class="st-table">
-    <thead><tr><th>Received</th><th>Customer</th><th>Items</th><th style="text-align:right;">Value (RM)</th><th>Status</th><th>Next step</th><th></th></tr></thead>
+    <thead><tr><th>Received</th><th>Customer</th><th>Items</th>${canSeeSalesMoney(currentUser)?'<th style="text-align:right;">Value (RM)</th>':''}<th>Status</th><th>Next step</th><th></th></tr></thead>
     <tbody>${list.map(e=>{
       const items=e.items||[]; const [bg,fg]=stStatusStyle(e);
       const step=SALES_STAGES.indexOf(e.status)+1;
@@ -11424,7 +11430,7 @@ function renderSalesTrackerList(readOnly){
         <td data-l="Customer"><div style="font-weight:700;">${escapeHtml(e.name||'')}${e.remark?` <span title="${escapeHtml(e.remark)}" onclick="showToast(this.title,'info',6000)" style="cursor:pointer;font-size:12px;">💬</span>`:''}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">${person?escapeHtml(person):''}</div>${tags?`<div style="margin-top:3px;">${tags}</div>`:''}</td>
         <td data-l="Items" style="font-size:12.5px;">${items.map(it=>`<div style="margin:1px 0;">${escapeHtml(it.eqName||'')}${parseFloat(it.quantity)>1?` <span style="color:var(--text-muted);">× ${escapeHtml(it.quantity)}</span>`:''}${chip(it)}</div>`).join('')||'<span style="color:var(--text-muted);">—</span>'}</td>
-        <td data-l="Value (RM)" style="text-align:right;white-space:nowrap;font-weight:600;">${val?val.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:var(--text-muted);font-weight:400;">—</span>'}</td>
+        ${canSeeSalesMoney(currentUser)?`<td data-l="Value (RM)" style="text-align:right;white-space:nowrap;font-weight:600;">${val?val.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:var(--text-muted);font-weight:400;">—</span>'}</td>`:''}
         <td data-l="Status"><button class="st-pill" ${readOnly?'disabled style="cursor:default;"':`onclick="stOpenStatusMenu(event,'${e.id}')" title="Click to change status"`}>
           <span class="st-pill-label" style="background:${bg};color:${fg};">${escapeHtml(e.status||'')}${stIsLost(e)?' · Lost':''}${readOnly?'':' ▾'}</span>
           <span class="st-pill-bar"><span style="width:${Math.round(step/SALES_STAGES.length*100)}%;background:${fg};"></span></span>
@@ -11950,6 +11956,10 @@ function exportTrackerExcel(type){
   if(type==='sales'){
     rows=getSalesTrackerExportRows(list);
     colWidths=[{wch:10},{wch:22},{wch:18},{wch:16},{wch:16},{wch:20},{wch:14},{wch:14},{wch:14},{wch:14},{wch:10},{wch:6},{wch:12},{wch:12},{wch:16},{wch:10},{wch:16},{wch:26},{wch:14},{wch:16},{wch:12}];
+    if(!canSeeSalesMoney(currentUser)&&rows.length){ // Quality Manager: no prices in the export
+      const keys=Object.keys(rows[0]); colWidths=colWidths.filter((_,k)=>!['Unit Price (RM)','Total (RM)'].includes(keys[k]));
+      rows.forEach(r=>{ delete r['Unit Price (RM)']; delete r['Total (RM)']; });
+    }
   } else {
     rows=list.map(e=>({
       Month:e.month||'',[nameLabel]:e.name||'',Status:e.status||'',Remark:e.remark||'',
@@ -11989,7 +11999,7 @@ async function exportTrackerPdf(type){
         <div style="font-size:11px;color:#64748b;margin-bottom:16px;">Generated ${new Date().toLocaleDateString('en-MY')} ${monthFilter?'· Month: '+monthFilter:''} ${statusFilter?'· Status: '+statusFilter:''}</div>
         <table style="width:100%;border-collapse:collapse;font-size:8.5px;">
           <thead><tr>
-            ${['Month','Customer','Status','Sales Person','Reviewer','Equipment','Brand','Model','Spec','Cal Type','Qty','Unit Price','Total','Verdict','Outcome','Lost Reason','Item Remark','Linked Job'].map(h=>`<th style="padding:5px 5px;text-align:left;background:#0f1f3d;color:#fff;">${h}</th>`).join('')}
+            ${['Month','Customer','Status','Sales Person','Reviewer','Equipment','Brand','Model','Spec','Cal Type','Qty'].concat(canSeeSalesMoney(currentUser)?['Unit Price','Total']:[],['Verdict','Outcome','Lost Reason','Item Remark','Linked Job']).map(h=>`<th style="padding:5px 5px;text-align:left;background:#0f1f3d;color:#fff;">${h}</th>`).join('')}
           </tr></thead>
           <tbody>
             ${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
@@ -12004,8 +12014,8 @@ async function exportTrackerPdf(type){
               <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Spec}</td>
               <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Cal Type']}</td>
               <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Qty}</td>
-              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Unit Price (RM)']}</td>
-              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Total (RM)']}</td>
+              ${canSeeSalesMoney(currentUser)?`<td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Unit Price (RM)']}</td>
+              <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Total (RM)']}</td>`:''}
               <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Capability Verdict']}</td>
               <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r.Outcome}</td>
               <td style="padding:4px 5px;border-bottom:1px solid #e2e8f0;">${r['Lost Reason']}</td>
@@ -18704,7 +18714,7 @@ function renderQtDashboardContent(){
 // ── Sales Tracker Performance Dashboard — replaces the old Quotation Dashboard,
 // pulling the same metrics from Sales Tracker's item-level data instead. ──
 function openSalesTrackerDashboard(){
-  if(!canViewQuotationDashboard(currentUser)){alert('You do not have access to this dashboard.');return;}
+  if(!canSeeSalesPerformance(currentUser)){alert('The sales performance dashboard is for the Managing Director and Admin.');return;}
   let ov=document.getElementById('st-dashboard-overlay');
   if(!ov){ov=document.createElement('div');ov.id='st-dashboard-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:900px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
@@ -21839,7 +21849,8 @@ function pdfSigBlock(title,name,sigUrl,dateText,loaded){
     <div style="height:56px;display:flex;align-items:flex-end;">${usable?`<img src="${sigUrl}" crossorigin="anonymous" style="max-height:52px;max-width:200px;object-fit:contain;"/>`:''}</div>
     <div style="border-top:1px solid #000;padding-top:3px;min-height:34px;">${name?`<b>${escapeHtml(name)}</b>`:'&nbsp;'}<div style="font-size:11px;color:#444;">Date: ${dateText?escapeHtml(dateText):''}</div></div></div>`;
 }
-function staffNameOf(u){ if(!u) return ''; const st=(_staff||[]).find(x=>x.username===u); return st?.certName||st?.name||USERS[u]?.name||u; }
+// Full name, for business documents (PO, delivery orders). Certificates keep using the certificate name.
+function staffNameOf(u){ if(!u) return ''; const st=(_staff||[]).find(x=>x.username===u); return st?.name||USERS[u]?.name||st?.certName||u; }
 function staffSigOf(u){ return (_staff||[]).find(x=>x.username===u)?.signature||''; }
 
 // ═══════════════════════════ PURCHASE ORDERS ═══════════════════════════
