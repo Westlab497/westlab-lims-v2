@@ -114,6 +114,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .qt-grid{display:grid;gap:10px;margin-bottom:10px;}
 .qt-price{display:grid;grid-template-columns:90px 1fr 1fr 1fr;gap:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:8px;}
 .qt-sub-sec{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;}
+.qt-flag{border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600;white-space:nowrap;}
+.qt-flag.warn{background:#fff4e0;color:#9a5b00;} .qt-flag.info{background:#e8f1ff;color:#1d4ed8;}
+.qt-note{border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;line-height:1.5;}
+.qt-note.warn{background:#fff7e6;border-left:4px solid #d98e04;color:#7a4f01;} .qt-note.info{background:#eef5ff;border-left:4px solid #3b82f6;color:#1e3a8a;}
 .qt-footer{position:sticky;bottom:-30px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;background:#fff;border-top:1px solid var(--border);border-radius:0 0 16px 16px;box-shadow:0 -6px 16px rgba(15,31,61,.06);margin-top:14px;}
 @media(max-width:768px){ .qt-grid{grid-template-columns:1fr 1fr!important;} .qt-price{grid-template-columns:1fr 1fr;} }
 .dash-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px;}
@@ -9599,11 +9603,54 @@ function qtExpandToJobUnits(items){
       const unit={...it,serial:u.serial,tagNo:u.tagNo,calPoints:u.calPoints,resolution:u.resolution,quantity:1,
         unitPrice:Math.round(c.netUnitPrice*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
         socParameters:(ui<socN&&it.socParameters)?JSON.parse(JSON.stringify(it.socParameters)):undefined};
-      delete unit.units; delete unit.discount;
+      delete unit.units; delete unit.discount; delete unit.srcIdx;
       out.push(unit);
     });
   });
   return out;
+}
+// ── QUOTATION vs ENQUIRY ──
+// A quotation starts as a COPY of its Sales Tracker enquiry. Editing the quotation never changes
+// the enquiry (that stays the record of what the customer asked for — ISO/IEC 17025 7.1), but any
+// difference is shown, and anything the capability review didn't cover is flagged.
+const QT_DIFF_FIELDS=[ // [field, label, affects capability?]
+  ['eqName','Equipment',true],['brand','Brand',false],['model','Model',false],['quantity','Quantity',false],
+  ['range','Range',true],['spec','Specification',true],['calType','Lab / On-site',true],['accreditationRequested','Accreditation',true]];
+function qtNorm(v){ return String(v==null?'':v).trim().replace(/\s+/g,' ').toLowerCase(); }
+function qtSocSig(it){ return it&&it.socRequested?(it.socParameters||[]).filter(p=>p&&(p.parameterName||p.limitValue)).map(p=>qtNorm(p.parameterName)+'='+qtNorm(p.limitValue)).sort().join('|'):''; }
+function qtSocText(it){ if(!it||!it.socRequested) return 'none'; const ps=(it.socParameters||[]).filter(p=>p&&(p.parameterName||p.limitValue)); return ps.length?ps.map(p=>`${p.parameterName||'Parameter'} ${p.limitValue||''}`.trim()).join(', '):'requested'; }
+// Pairs each quotation item with the enquiry item it came from (by the index remembered when the
+// quotation was created; older quotations fall back to matching the equipment name).
+function qtMatchEnquiryItems(qItems,entry){
+  const eItems=(entry&&entry.items)||[]; const used=new Set();
+  return (qItems||[]).map(qi=>{
+    let idx=(Number.isInteger(qi.srcIdx)&&eItems[qi.srcIdx]&&!used.has(qi.srcIdx))?qi.srcIdx:-1;
+    if(idx<0) idx=eItems.findIndex((ei,k)=>!used.has(k)&&qtNorm(ei.eqName)===qtNorm(qi.eqName));
+    if(idx>=0){ used.add(idx); return {ei:eItems[idx],idx}; }
+    return {ei:null,idx:-1};
+  });
+}
+function qtCompareToEnquiry(qi,ei){
+  if(!ei) return {added:true,changes:[],needsReview:true};
+  const disp=(f,v)=>f==='calType'?((v||'Lab')==='Onsite'?'On-site':'Lab'):(f==='quantity'?String(parseFloat(v)||1):(String(v==null?'':v).trim()||'—'));
+  const val=(f,v)=>f==='quantity'?String(parseFloat(v)||1):(f==='calType'?(v||'Lab'):qtNorm(v));
+  const changes=[]; let needsReview=false;
+  QT_DIFF_FIELDS.forEach(([f,label,cap])=>{ if(val(f,ei[f])!==val(f,qi[f])){ changes.push({label,from:disp(f,ei[f]),to:disp(f,qi[f]),cap}); if(cap) needsReview=true; } });
+  if(qtSocSig(ei)!==qtSocSig(qi)){ changes.push({label:'Statement of Conformity',from:qtSocText(ei),to:qtSocText(qi),cap:true}); needsReview=true; }
+  if(!['Can Do','Can Do (External)'].includes(ei.capabilityVerdict)) needsReview=true;
+  return {added:false,changes,needsReview};
+}
+function qtChangesText(changes){ return changes.map(c=>`${c.label}: ${c.from} → ${c.to}`).join(' · '); }
+// For the Contract Review Form: how the quotation differs from ONE enquiry item.
+function qtQuotationDiffForEnquiryItem(entry,itemIdx){
+  const q=(_quotationsV2||[]).find(x=>x.id===entry.linkedQuotationId)
+    ||(_quotationsV2||[]).filter(x=>x.linkedSalesTrackerId===entry.id).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0];
+  if(!q) return null;
+  const m=qtMatchEnquiryItems(q.items,entry);
+  const k=m.findIndex(x=>x.idx===itemIdx);
+  if(k<0) return {quotationNo:q.quotationNo,removed:true,changes:[]};
+  const r=qtCompareToEnquiry(q.items[k],entry.items[itemIdx]);
+  return {quotationNo:q.quotationNo,removed:false,changes:r.changes};
 }
 function qtAccLabel(acc){ return acc==='SAMM-Accredited'?'Accredited':(acc==='Non-Accredited'?'Non-accredited':''); }
 function qtServiceTag(it){ const acc=qtAccLabel(it.accreditationRequested||it.accreditation); return `[${acc?acc+' ':''}${it.calType==='Onsite'?'Site':'Lab'} Calibration]`; }
@@ -9657,7 +9704,7 @@ function toggleQtv2SameCal(idx,same){
   if(!same) it.units.forEach(u=>{ if(!u.calPoints) u.calPoints=it.calPoints||''; if(!u.resolution) u.resolution=it.resolution||''; });
   renderQtv2ItemsList();
 }
-function qtRefreshAllTotals(){ _qtv2DraftItems.forEach((_,i)=>updateQtv2ItemTotal(i)); updateQtv2GrandTotal(); }
+function qtRefreshAllTotals(){ _qtv2DraftItems.forEach((_,i)=>updateQtv2ItemTotal(i)); updateQtv2GrandTotal(); if(typeof qtRefreshDiffs==='function') qtRefreshDiffs(); }
 function updateQtv2ItemTotal(idx){
   const it=_qtv2DraftItems[idx]; if(!it)return;
   const c=qtLineCalc(it); const total=c.total;
@@ -9857,6 +9904,30 @@ function lookupPriceGuidance(eqName,custId){
   return {standardPrice:standard?.standardPrice,lastCustomerPrice};
 }
 let _qtv2Folded=new Set(), _qtv2DetailsOpen=new Set(); // screen-only state, by item id
+let _qtv2SourceEntry=null; // the Sales Tracker enquiry this quotation was made from (if any)
+function qtItemFlags(){
+  if(!_qtv2SourceEntry) return _qtv2DraftItems.map(()=>null);
+  const m=qtMatchEnquiryItems(_qtv2DraftItems,_qtv2SourceEntry);
+  return _qtv2DraftItems.map((qi,i)=>qtCompareToEnquiry(qi,m[i].ei));
+}
+function qtFlagBadge(r){
+  if(!r) return '';
+  if(r.added) return '<span class="qt-flag warn">➕ Not in enquiry</span>';
+  if(r.needsReview) return '<span class="qt-flag warn">⚠ Check capability</span>';
+  if(r.changes.length) return '<span class="qt-flag info">✎ Changed from enquiry</span>';
+  return '';
+}
+function qtFlagNote(r){
+  if(!r) return '';
+  if(r.added) return `<div class="qt-note warn">⚠ <b>Not in the enquiry</b> — this item wasn't covered by the capability review. Check it can be done before sending.</div>`;
+  const ch=r.changes.length?`<div><b>Changed from enquiry:</b> ${escapeHtml(qtChangesText(r.changes))}</div>`:'';
+  if(r.needsReview) return `<div class="qt-note warn">${ch}<div>⚠ ${r.changes.some(c=>c.cap)?'These changes weren\'t covered by the capability review':'This enquiry item hasn\'t passed capability review'} — check before sending.</div></div>`;
+  return ch?`<div class="qt-note info">${ch}</div>`:'';
+}
+function qtRefreshDiffs(){
+  const flags=qtItemFlags();
+  flags.forEach((r,i)=>{ const a=el(`qtv2-item-flag-${i}`); if(a) a.innerHTML=qtFlagBadge(r); const b=el(`qtv2-item-diff-${i}`); if(b) b.innerHTML=qtFlagNote(r); });
+}
 function qtItemKey(it){ if(!it.id) it.id='QI-'+Date.now()+'-'+Math.floor(Math.random()*100000); return it.id; }
 function qtToggleFold(id){ _qtv2Folded.has(id)?_qtv2Folded.delete(id):_qtv2Folded.add(id); renderQtv2ItemsList(); }
 function qtToggleFoldAll(){ const ids=_qtv2DraftItems.map(qtItemKey); const allFolded=ids.every(id=>_qtv2Folded.has(id)); _qtv2Folded=allFolded?new Set():new Set(ids); renderQtv2ItemsList(); }
@@ -9880,6 +9951,7 @@ function renderQtv2ItemsList(){
         <b>${idx+1}</b><span style="font-weight:600;">${escapeHtml(it.eqName||'New item')}</span>
         ${it.itemCode?`<span class="qt-chip">${escapeHtml(it.itemCode)}</span>`:''}
         <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(service)}${qty>1?` · ×${qty}`:''}</span>
+        <span id="qtv2-item-flag-${idx}"></span>
         <span style="margin-left:auto;font-weight:700;" id="qtv2-item-head-total-${idx}">RM ${c.total.toFixed(2)}</span>
         ${it.itemCode?'':`<button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})" title="Adds this equipment to the Standard Price List and gives it an item code">💾 Save as standard item</button>`}
         <button type="button" onclick="removeQtv2ItemRow(${idx})" title="Remove item" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;">✕</button>
@@ -9901,6 +9973,7 @@ function renderQtv2ItemsList(){
         <input class="form-control" placeholder="Resolution" value="${escapeHtml(u.resolution||'')}" oninput="updateQtv2UnitField(${idx},${ui},'resolution',this.value)"/>`}
       </div>`).join('');
     return `<div class="qt-card">${head}<div class="qt-card-body">
+      <div id="qtv2-item-diff-${idx}"></div>
       ${std.length?`<div class="form-group">${L('Fill from Standard Price List','(optional)')}<select class="form-control" onchange="if(this.value) applyStandardItemToQtv2(${idx},this.value)">
         <option value="">⭐ Choose a standard item…</option>
         ${std.map(p=>`<option value="${p.id}">${escapeHtml((p.itemCode?p.itemCode+' — ':'')+p.eqName+' '+qtServiceTag(p))}</option>`).join('')}
@@ -9969,9 +10042,9 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   // (it doesn't even have Tel/Fax fields), so it should never be preferred over the real record.
   const prefillCustomer=prefillEntry?.custId?_customers.find(c=>c.id===prefillEntry.custId):null;
   _qtv2DraftItems=existing?JSON.parse(JSON.stringify(existing.items||[])):
-    prefillEntry?(prefillEntry.items||[]).filter(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict)).map(it=>{
+    prefillEntry?(prefillEntry.items||[]).map((it,srcIdx)=>({it,srcIdx})).filter(({it})=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict)).map(({it,srcIdx})=>{
       const std=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
-      return {id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,resolution:it.resolution||'',
+      return {id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),srcIdx,eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,resolution:it.resolution||'',
         calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0,
         accreditationRequested:it.accreditationRequested||'',methodRequested:it.methodRequested||'',remark:it.remark||'',
         itemCode:std?.itemCode||'',stdDescription:std?.description||'',
@@ -9981,6 +10054,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   let ov=document.getElementById('qtv2-overlay');
   if(!ov){ov=document.createElement('div');ov.id='qtv2-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
   const fromEntry=prefillEntry||(existing?.linkedSalesTrackerId?_salesTracker.find(e=>e.id===existing.linkedSalesTrackerId):null);
+  _qtv2SourceEntry=fromEntry||null;
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:920px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
       <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} Quotation ${existing?.quotationNo?'— '+existing.quotationNo:''}${fromEntry?`<span style="display:block;font-weight:500;font-size:12px;color:var(--text-muted);margin-top:2px;">From enquiry: ${escapeHtml(fromEntry.name||'')} · ${(fromEntry.items||[]).length} item${(fromEntry.items||[]).length===1?'':'s'}</span>`:''}</span>
@@ -10194,6 +10268,12 @@ async function advanceLinkedTrackerStageByJobNo(jobNo,newStage,note){
 }
 async function sendQuotationV2(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  const srcEntry=q.linkedSalesTrackerId?_salesTracker.find(e=>e.id===q.linkedSalesTrackerId):null;
+  if(srcEntry){
+    const m=qtMatchEnquiryItems(q.items,srcEntry);
+    const risky=(q.items||[]).map((qi,i)=>({qi,r:qtCompareToEnquiry(qi,m[i].ei)})).filter(x=>x.r.needsReview);
+    if(risky.length&&!confirm(`${q.quotationNo} has ${risky.length} item${risky.length>1?'s':''} the capability review didn't cover:\n\n${risky.map(x=>'• '+(x.qi.eqName||'Item')+(x.r.added?' — not in the enquiry':(x.r.changes.some(c=>c.cap)?' — '+qtChangesText(x.r.changes.filter(c=>c.cap)):' — its enquiry item has not passed capability review'))).join('\n')}\n\nSend it anyway?`)) return;
+  }
   if(!confirm(`Mark ${q.quotationNo} as sent to the customer?`))return;
   q.status='Sent'; q.sentAt=new Date().toISOString();
   await saveQuotationsV2();
@@ -10709,7 +10789,10 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
     ev.specialHandling==='No'?'Special handling / safety not manageable':'',
     ev.turnaroundRealistic==='No'?'Requested turnaround not achievable':'',
     item.remark?"Customer's requirement: "+esc(item.remark):''].filter(Boolean).join('<br/>');
-  const diff=ev.meetsRequirement==='Yes'?'No':((ev.meetsRequirement==='Partially'||ev.meetsRequirement==='No')?'Yes':'');
+  const evDiff=ev.meetsRequirement==='Yes'?'No':((ev.meetsRequirement==='Partially'||ev.meetsRequirement==='No')?'Yes':'');
+  const qd=qtQuotationDiffForEnquiryItem(entry,(entry.items||[]).indexOf(item));
+  const quoteDiff=qd&&(qd.removed||qd.changes.length);
+  const diff=quoteDiff?'Yes':evDiff;
   const outcome={'Can Do':'accepted','Can Do (External)':'outsource','Cannot Do':'declined'}[item.capabilityVerdict]||'';
   const declineReason=outcome==='declined'?esc(ev.notes||'Outside current capability'):'';
   const usableSig=u=>(loadedSigs&&loadedSigs[u])||''; // embedded signature data, fetched before drawing
@@ -10783,7 +10866,9 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
     field('Target Uncertainty / Tolerance / Acceptance Criteria Specified',toleranceBits,true)+
     field('Sample / Item Condition Requirements (if testing)','N/A — calibration')+field('Special Condition (site access, environmental, urgency)',special)+
     field(`Any difference between enquiry and what ${esc(labShort)} can offer? (If yes, describe and confirm resolution with client before quotation is issued)`,
-      `${chk(diff==='Yes')}Yes &nbsp;&nbsp; ${chk(diff==='No')}No`+(diff==='Yes'?callout('warn',`<b>${ev.meetsRequirement==='Partially'?'Partially meets requirement.':'Does not fully meet the requirement.'}</b> ${esc(ev.notes||'')}`):''),true));
+      `${chk(diff==='Yes')}Yes &nbsp;&nbsp; ${chk(diff==='No')}No`
+        +(evDiff==='Yes'?callout('warn',`<b>${ev.meetsRequirement==='Partially'?'Partially meets requirement.':'Does not fully meet the requirement.'}</b> ${esc(ev.notes||'')}`):'')
+        +(quoteDiff?callout('warn',`<b>Quotation ${esc(qd.quotationNo)} differs from the enquiry:</b> ${qd.removed?'this item is not included in the quotation.':esc(qtChangesText(qd.changes))}<div style="margin-top:6px;">Resolution with client: <span style="display:inline-block;min-width:60%;border-bottom:1px dotted #9a7b3a;">&nbsp;</span></div>`):''),true));
   const sec5=bar(5,'REVIEW OUTCOME')+`<div style="border:1px solid ${LINE};border-radius:0 0 3px 3px;padding:8px 10px;">
       <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:11.5px;">
         <span style="${outcome==='accepted'?'font-weight:bold;':''}">${chk(outcome==='accepted')}Accepted as requested</span>
