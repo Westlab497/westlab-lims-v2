@@ -9741,6 +9741,12 @@ function qtFindStandard(eqName,acc,calType){
   const n=qtNameKey(eqName); if(!n) return null;
   return (_settings.priceReference||[]).find(p=>qtStdNames(p).includes(n)&&(p.accreditation||'')===(acc||'')&&(p.calType||'Lab')===(calType||'Lab'))||null;
 }
+// Suggests a clean standard name from the typed equipment name: drops brand / model / serial details.
+function qtSuggestStdName(name){
+  let n=String(name||'').replace(/[,;(\[]?\s*\b(brand|model|make|s\/?n|serial(\s*no\.?)?|tag(\s*no\.?)?)\b\s*[:：-].*$/i,'');
+  n=n.replace(/[\s,;:\-–—(\[]+$/,'').trim();
+  return n||String(name||'').trim();
+}
 function qtStdByCode(code){ return (_settings.priceReference||[]).find(p=>p.itemCode===code)||null; }
 // Suggestions while typing an equipment name (standard names + their other names). Free typing is
 // still allowed — the customer's own wording is kept.
@@ -9791,9 +9797,19 @@ async function saveQtv2LineAsStandardItem(idx){
   if(!String(it.eqName||'').trim()){ alert('Enter the equipment name first.'); return; }
   const existing=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
   if(existing&&existing.itemCode){ it.itemCode=existing.itemCode; delete it._noAutoCode; if(!it.stdDescription) it.stdDescription=existing.description||''; renderQtv2ItemsList(); showToast(`This item is already in the Standard Price List as ${existing.itemCode}`,'info',3500); return; }
+  // The standard name is what the code stands for (e.g. "Analytical Balance"), so it's confirmed first —
+  // details typed into the equipment name (brand, model, serial) don't belong in it.
+  const wording=String(it.eqName).trim().replace(/\s+/g,' ');
+  const suggested=qtSuggestStdName(wording);
+  const nameIn=prompt(`Name for the new standard item (${qtServiceTag({accreditation:it.accreditationRequested,calType:it.calType})}):\n\nThe quotation keeps the customer's wording ("${wording}").`,suggested);
+  if(nameIn===null) return;
+  const stdName=nameIn.trim().replace(/\s+/g,' ');
+  if(!stdName){ alert('Please enter a name.'); return; }
+  const clash=qtFindStandard(stdName,it.accreditationRequested,it.calType);
+  if(clash&&clash.itemCode){ await qtLinkStandard(idx,clash.id); return; } // that name already has a code — link to it instead
   try{
     const code=await nextItemCode();
-    const entry={id:'PR-'+Date.now(),itemCode:code,eqName:it.eqName.trim(),standardPrice:parseFloat(it.unitPrice)||0,
+    const entry={id:'PR-'+Date.now(),itemCode:code,eqName:stdName,aliases:qtNameKey(wording)!==qtNameKey(stdName)?[wording]:[],standardPrice:parseFloat(it.unitPrice)||0,
       accreditation:it.accreditationRequested||'',calType:it.calType||'Lab',description:it.stdDescription||''};
     await patchSettings(st=>{ if(!st.priceReference) st.priceReference=[]; st.priceReference.push(entry); });
     it.itemCode=code; delete it._noAutoCode; renderQtv2ItemsList(); refreshStdNameSuggestions();
@@ -9964,7 +9980,7 @@ function renderPriceReferenceTable(){
     <td style="white-space:nowrap;font-size:12px;">${escapeHtml(qtServiceTag(p).replace(/[\[\]]/g,''))}</td>
     <td style="text-align:right;">${(p.standardPrice||0).toFixed(2)}</td>
     <td style="font-size:11.5px;color:var(--text-muted);white-space:pre-line;">${escapeHtml(p.description||'')}</td>
-    <td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" title="Other names customers use for this item" onclick="editPriceRefAliases('${p.id}')">✏️ Names</button> <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deletePriceReferenceEntry('${p.id}')">✕</button></td>
+    <td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" title="Rename, other names, price, description" onclick="openPriceRefEditor('${p.id}')">✏️ Edit</button> <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deletePriceReferenceEntry('${p.id}')">✕</button></td>
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No price references yet.</td></tr>';
 }
 async function addPriceReferenceEntry(){
@@ -9986,7 +10002,49 @@ async function addPriceReferenceEntry(){
   renderPriceReferenceTable();
   showToast('✅ Price reference added','success',2500);
 }
-async function editPriceRefAliases(id){
+function openPriceRefEditor(id){
+  const p=(_settings.priceReference||[]).find(x=>x.id===id); if(!p) return;
+  const v=x=>escapeHtml(x==null?'':String(x));
+  let ov=document.getElementById('pr-edit-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='pr-edit-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999995;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:540px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">✏️ Edit standard item <span style="color:#3730a3;">${v(p.itemCode||'')}</span></span>
+      <button onclick="document.getElementById('pr-edit-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+    </div>
+    <div style="padding:14px 18px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Service: <b>${v(qtServiceTag(p).replace(/[\[\]]/g,''))}</b>. The code number stays the same — earlier quotations and jobs refer to it. For a different service, create a new item.</div>
+      <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="pr-edit-name" value="${v(p.eqName)}"/></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:-4px 0 10px;cursor:pointer;"><input type="checkbox" id="pr-edit-keep-old" checked/> Keep the old name “${v(p.eqName)}” as another name (so items typed that way still match)</label>
+      <div class="form-group"><label class="form-label">Also known as <span style="font-weight:normal;color:var(--text-muted);">(comma-separated)</span></label><input class="form-control" id="pr-edit-aliases" value="${v((p.aliases||[]).join(', '))}"/></div>
+      <div class="form-group"><label class="form-label">Standard price (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-price" value="${v(p.standardPrice||0)}" style="max-width:180px;"/></div>
+      <div class="form-group"><label class="form-label">Description lines printed on quotations</label><textarea class="form-control" id="pr-edit-desc" rows="2">${v(p.description||'')}</textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('pr-edit-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="savePriceRefEdit('${p.id}')">Save</button>
+      </div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function savePriceRefEdit(id){
+  const p=(_settings.priceReference||[]).find(x=>x.id===id); if(!p) return;
+  const name=el('pr-edit-name').value.trim().replace(/\s+/g,' ');
+  if(!name){ alert('Please enter a name.'); return; }
+  let aliases=el('pr-edit-aliases').value.split(',').map(x=>x.trim().replace(/\s+/g,' ')).filter(Boolean);
+  if(el('pr-edit-keep-old').checked&&qtNameKey(p.eqName)!==qtNameKey(name)) aliases.push(p.eqName);
+  const seen=new Set([qtNameKey(name)]); aliases=aliases.filter(a=>{ const k=qtNameKey(a); if(seen.has(k)) return false; seen.add(k); return true; });
+  // no two standard items of the same service may answer to the same name
+  const clash=(_settings.priceReference||[]).find(o=>o.id!==id&&(o.accreditation||'')===(p.accreditation||'')&&(o.calType||'Lab')===(p.calType||'Lab')&&qtStdNames(o).some(k=>seen.has(k)));
+  if(clash){ alert(`“${[...seen].find(k=>qtStdNames(clash).includes(k))}” is already used by ${clash.itemCode} ${clash.eqName} for the same service. Remove it from one of them first.`); return; }
+  const price=parseFloat(el('pr-edit-price').value)||0, desc=el('pr-edit-desc').value.trim();
+  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e){ e.eqName=name; e.aliases=aliases; e.standardPrice=price; e.description=desc; } });
+  document.getElementById('pr-edit-overlay').style.display='none';
+  renderPriceReferenceTable(); refreshStdNameSuggestions();
+  showToast(`✅ ${p.itemCode} updated`,'success',2500);
+  addAudit('🏷️',`Standard item ${escapeHtml(p.itemCode||'')} edited${qtNameKey(p.eqName)!==qtNameKey(name)?` — renamed “${escapeHtml(p.eqName)}” → “${escapeHtml(name)}”`:''}`);
+}
+async function editPriceRefAliases(id){ return openPriceRefEditor(id); }
+async function editPriceRefAliasesOld(id){
   const p=(_settings.priceReference||[]).find(x=>x.id===id); if(!p) return;
   const v=prompt(`Other names customers use for "${p.eqName}" (${p.itemCode||''}) — separate with commas:`,(p.aliases||[]).join(', '));
   if(v===null) return;
