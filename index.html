@@ -5890,10 +5890,23 @@ async function openNewJobModal(){
           const depHint=el('eq-deposit-quote-hint');
           if(depHint) depHint.textContent=`🔒 Pulled from ${quo.quotationNo} — not editable here`;
         }
+        // Schedule, site and customer requirements agreed in the quotation
+        const prioMap={'Standard (5–7 working days)':'Normal','Urgent (3–4 working days)':'Urgent','Express (1–2 working days)':'Express'};
+        const prioEl=el('eq-priority'); if(prioEl&&prioMap[quo.turnaroundRequested]) prioEl.value=prioMap[quo.turnaroundRequested];
+        const promEl=el('eq-promised-date'); if(promEl&&quo.reqDate) promEl.value=quo.reqDate;
+        [['eq-appointment-date','onsiteStart'],['eq-visit-end-date','onsiteEnd'],['eq-site-area','siteArea'],['eq-site-address','siteAddress'],['eq-site-contact','siteContact'],['eq-site-mobile','siteMobile']]
+          .forEach(([id,k])=>{ const f=el(id); if(f&&quo[k]) f.value=quo[k]; });
+        const noteEl=el('eq-assign-note'); if(noteEl&&quo.siteAccess&&!noteEl.value) noteEl.value='Site access: '+quo.siteAccess.replace(/\n/g,'; ');
+        const intEl=el('eq-cal-interval'); if(intEl) intEl.value=qtJobCalInterval(first);
+        const remEl=el('eq-remarks'); if(remEl) remEl.value=qtJobRemark(first);
         updateSiteFieldsVisibility();
         _qtUnits.slice(1).forEach(it=>{
           _extraEquipment.push({eqName:it.eqName||'',brand:it.brand||'',model:it.model||'',serial:it.serial||'',tagNo:it.tagNo||'N/A',range:it.range||'',calPoints:it.calPoints||'',spec:it.spec||'',resolution:it.resolution||'',nextDue:'',condition:'Good',accessories:'',remarks:'',calType:it.calType||'Lab',assignTo:'',promisedDate:'',assignNote:'',price:canViewPrice(currentUser)?(it.unitPrice||0):0,priceLocked:true,quotedSocRequested:it.socRequested||false,quotedSocPricePerUnit:it.socPricePerUnit||0,socRequested:it.socRequested||false,socParameters:it.socParameters&&it.socParameters.length?JSON.parse(JSON.stringify(it.socParameters)):undefined});
         });
+        _qtUnits.slice(1).forEach((it,k)=>{ const x=_extraEquipment[_extraEquipment.length-(_qtUnits.length-1)+k]; if(!x) return;
+          x.calInterval=qtJobCalInterval(it); x.remarks=qtJobRemark(it);
+          if(prioMap[quo.turnaroundRequested]) x.priority=prioMap[quo.turnaroundRequested];
+          if(quo.reqDate) x.promisedDate=quo.reqDate; });
         renderExtraEquipment();
         showToast(`✅ Pre-filled from ${quo.quotationNo} — ${_qtUnits.length} item(s), one per unit. Please check Serial No. and other physical details once the items arrive.`,'success',5000);
       }
@@ -9622,7 +9635,8 @@ function qtExpandToJobUnits(items){
 // difference is shown, and anything the capability review didn't cover is flagged.
 const QT_DIFF_FIELDS=[ // [field, label, affects capability?]
   ['eqName','Equipment',true],['brand','Brand',false],['model','Model',false],['quantity','Quantity',false],
-  ['range','Range',true],['spec','Specification',true],['calType','Lab / On-site',true],['accreditationRequested','Accreditation',true]];
+  ['range','Range',true],['spec','Specification',true],['calType','Lab / On-site',true],['accreditationRequested','Accreditation',true],
+  ['calPoints','Calibration points','ifSet'],['resolution','Resolution','ifSet']];
 function qtNorm(v){ return String(v==null?'':v).trim().replace(/\s+/g,' ').toLowerCase(); }
 function qtSocSig(it){ return it&&it.socRequested?(it.socParameters||[]).filter(p=>p&&(p.parameterName||p.limitValue)).map(p=>qtNorm(p.parameterName)+'='+qtNorm(p.limitValue)).sort().join('|'):''; }
 function qtSocText(it){ if(!it||!it.socRequested) return 'none'; const ps=(it.socParameters||[]).filter(p=>p&&(p.parameterName||p.limitValue)); return ps.length?ps.map(p=>`${p.parameterName||'Parameter'} ${p.limitValue||''}`.trim()).join(', '):'requested'; }
@@ -9642,7 +9656,10 @@ function qtCompareToEnquiry(qi,ei){
   const disp=(f,v)=>f==='calType'?((v||'Lab')==='Onsite'?'On-site':'Lab'):(f==='quantity'?String(parseFloat(v)||1):(String(v==null?'':v).trim()||'—'));
   const val=(f,v)=>f==='quantity'?String(parseFloat(v)||1):(f==='calType'?(v||'Lab'):qtNorm(v));
   const changes=[]; let needsReview=false;
-  QT_DIFF_FIELDS.forEach(([f,label,cap])=>{ if(val(f,ei[f])!==val(f,qi[f])){ changes.push({label,from:disp(f,ei[f]),to:disp(f,qi[f]),cap}); if(cap) needsReview=true; } });
+  QT_DIFF_FIELDS.forEach(([f,label,capRule])=>{ if(val(f,ei[f])!==val(f,qi[f])){
+    // cal points / resolution: filling in what the enquiry left blank is normal; changing a stated value needs a check
+    const cap=capRule==='ifSet'?!!String(ei[f]||'').trim():capRule;
+    changes.push({label,from:disp(f,ei[f]),to:disp(f,qi[f]),cap}); if(cap) needsReview=true; } });
   if(qtSocSig(ei)!==qtSocSig(qi)){ changes.push({label:'Statement of Conformity',from:qtSocText(ei),to:qtSocText(qi),cap:true}); needsReview=true; }
   if(!['Can Do','Can Do (External)'].includes(ei.capabilityVerdict)) needsReview=true;
   return {added:false,changes,needsReview};
@@ -9659,6 +9676,35 @@ function qtQuotationDiffForEnquiryItem(entry,itemIdx){
   const r=qtCompareToEnquiry(q.items[k],entry.items[itemIdx]);
   return {quotationNo:q.quotationNo,removed:false,changes:r.changes};
 }
+// ── CUSTOMER REQUIREMENTS PER ITEM ──
+// Recalibration: the customer's interval/date, or 12 months by default. The quotation always
+// prints it, so acceptance of the quotation is the customer's agreement (ISO/IEC 17025 7.8.4.3).
+const QT_RECAL_OPTS=[['12','12 months (1 year)'],['6','6 months'],['3','3 months'],['24','24 months (2 years)'],['36','36 months (3 years)'],['date','A specific date'],['open','No recalibration date']];
+function qtRecalOf(it){ return it.recalInterval||'12'; }
+function qtRecalText(it){
+  const v=qtRecalOf(it);
+  if(v==='open') return 'Recalibration: no recalibration date';
+  if(v==='date') return it.recalDate?`Recalibration date: ${fmtDateShort(it.recalDate)} (as requested)`:'Recalibration date: as requested (date to be confirmed)';
+  return `Recalibration interval: ${v} months${it.recalInterval?'':' (standard — please tell us if you need a different interval)'}`;
+}
+// Adjustment = what the customer wants + whether Westlab can adjust that item.
+// Results follow from it: no adjustment -> As found; adjustment -> As left (or As found & as left).
+function qtAdjust(it){
+  const req=it.adjustReq||'Ask first';
+  const can=(it.adjustPossible||'Yes')==='Yes';
+  const effective=can&&req!=='No';
+  const results=effective?(it.resultsReport||(req==='Yes'?'As left':'As found & as left')):'As found';
+  const text=!can?(req==='No'?'Not requested':'Not available for this item'):(req==='Yes'?'If required (charged separately)':(req==='No'?'Not requested':'We will consult you before any adjustment (charged separately)'));
+  return {req,can,effective,results,text};
+}
+function qtRequirementLines(it){ const a=qtAdjust(it); return [qtRecalText(it),`Adjustment: ${a.text}`,`Results reported: ${a.results}`]; }
+// For Job Creation
+function qtJobCalInterval(it){ const v=qtRecalOf(it); return ['3','6','12','24','36','open'].includes(v)?v:''; }
+function qtJobRemark(it){
+  const a=qtAdjust(it);
+  return [it.remark||'',`Adjustment: ${a.text}`,`Results: ${a.results}`,qtRecalOf(it)==='date'?`Customer's requested recalibration date: ${it.recalDate?fmtDateShort(it.recalDate):'to be confirmed'}`:''].filter(Boolean).join(' · ');
+}
+const QT_TURNAROUNDS=['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'];
 function qtAccLabel(acc){ return acc==='SAMM-Accredited'?'Accredited':(acc==='Non-Accredited'?'Non-accredited':''); }
 function qtServiceTag(it){ const acc=qtAccLabel(it.accreditationRequested||it.accreditation); return `[${acc?acc+' ':''}${it.calType==='Onsite'?'Site':'Lab'} Calibration]`; }
 // ── Standard items with automatic item codes (WLC-001, WLC-002 …) ──
@@ -10018,6 +10064,22 @@ function renderQtv2ItemsList(){
           <div>${L('Unit')}<select class="form-control unit-picker-select" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div>
         </div>`:`<div style="font-size:11.5px;color:var(--text-muted);">Different cal points &amp; resolution per unit — fill them in below.</div>`}
       </div>
+      ${(()=>{ const a=qtAdjust(it); const rv=qtRecalOf(it);
+        return `<div class="qt-sub-sec">
+        <span class="qt-l" style="margin-bottom:6px;">Customer requirements</span>
+        <div class="qt-grid" style="grid-template-columns:1.3fr 1fr 1fr 1.2fr;margin-bottom:0;">
+          <div>${L('Recalibration')}<select class="form-control" onchange="updateQtv2ItemField(${idx},'recalInterval',this.value);renderQtv2ItemsList()">
+            ${QT_RECAL_OPTS.map(([v,t])=>`<option value="${v}" ${rv===v?'selected':''}>${t}${v==='12'&&!it.recalInterval?' — standard':''}</option>`).join('')}</select>
+            ${rv==='date'?`<input class="form-control" type="date" style="margin-top:6px;" value="${escapeHtml(it.recalDate||'')}" onchange="updateQtv2ItemField(${idx},'recalDate',this.value)"/>`:''}</div>
+          <div>${L('Adjustment wanted?')}<select class="form-control" onchange="updateQtv2ItemField(${idx},'adjustReq',this.value);updateQtv2ItemField(${idx},'resultsReport','');renderQtv2ItemsList()">
+            ${['Ask first','Yes','No'].map(v=>`<option value="${v}" ${a.req===v?'selected':''}>${v==='Ask first'?'Ask customer first':v}</option>`).join('')}</select></div>
+          <div>${L('Can Westlab adjust it?')}<select class="form-control" onchange="updateQtv2ItemField(${idx},'adjustPossible',this.value);renderQtv2ItemsList()">
+            ${['Yes','No'].map(v=>`<option value="${v}" ${(a.can?'Yes':'No')===v?'selected':''}>${v}</option>`).join('')}</select></div>
+          <div>${L('Results reported')}${a.effective?`<select class="form-control" onchange="updateQtv2ItemField(${idx},'resultsReport',this.value)">
+            ${['As left','As found & as left'].map(v=>`<option value="${v}" ${a.results===v?'selected':''}>${v}</option>`).join('')}</select>`:`<div style="padding:8px 2px;font-size:13px;font-weight:600;">As found <span style="font-weight:normal;color:var(--text-muted);font-size:11.5px;">(no adjustment)</span></div>`}</div>
+        </div>
+        ${!a.can&&a.req!=='No'?`<div class="qt-note warn" style="margin:8px 0 0;">The customer ${a.req==='Yes'?'wants':'may want'} adjustment, but Westlab can't adjust this item — results will be <b>as found</b>. The quotation will say so; please tell the customer.</div>`:''}
+      </div>`; })()}
       <div class="qt-sub-sec" id="qtv2-item-soc-${idx}"></div>
       <div class="qt-sub-sec" style="padding:0;">
         <div onclick="${same?`qtToggleDetails('${key}')`:''}" style="padding:9px 12px;cursor:${same?'pointer':'default'};font-size:12.5px;font-weight:600;">
@@ -10029,6 +10091,10 @@ function renderQtv2ItemsList(){
     </div></div>`;
   }).join('');
   _qtv2DraftItems.forEach((it,idx)=>{ if(!_qtv2Folded.has(qtItemKey(it))) renderSocSection(`qtv2-item-soc-${idx}`,it); });
+  // show the lab / on-site blocks only when an item needs them (fields stay in the form, so nothing typed is lost)
+  const hasOnsite=_qtv2DraftItems.some(it=>it.calType==='Onsite'), hasLab=!_qtv2DraftItems.length||_qtv2DraftItems.some(it=>it.calType!=='Onsite');
+  const onb=el('qtv2-req-onsite'); if(onb) onb.style.display=hasOnsite?'':'none';
+  const lb=el('qtv2-req-lab'); if(lb) lb.style.display=hasLab?'':'none';
   const fa=el('qtv2-foldall'); if(fa){ const all=_qtv2DraftItems.length&&_qtv2DraftItems.every(it=>_qtv2Folded.has(qtItemKey(it))); fa.textContent=_qtv2DraftItems.length>1?(all?'Expand all':'Fold all'):''; }
   box.oninput=()=>setTimeout(qtRefreshAllTotals,0);
   box.onchange=()=>setTimeout(qtRefreshAllTotals,0);
@@ -10054,6 +10120,10 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       return {id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),srcIdx,eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,resolution:it.resolution||'',
         calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0,
         accreditationRequested:it.accreditationRequested||'',methodRequested:it.methodRequested||'',remark:it.remark||'',
+        calPoints:it.calPoints||'',
+        adjustReq:it.adjustReq==='Yes'?'Yes':(it.adjustReq==='No'?'No':undefined), // not stated / not sure -> ask first
+        adjustPossible:it.capabilityEvaluation?.canAdjust||undefined,
+        recalInterval:it.recalInterval||undefined, recalDate:it.recalDate||undefined,
         itemCode:std?.itemCode||'',stdDescription:std?.description||'',
         socRequested:it.socRequested||false,socUnitsNeeded:it.socUnitsNeeded||undefined, // per-parameter prices travel inside socParameters
         socParameters:it.socParameters&&it.socParameters.length?JSON.parse(JSON.stringify(it.socParameters)):undefined};
@@ -10101,7 +10171,38 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       <div class="qt-sec" style="justify-content:space-between;"><span><span class="qt-sec-n">2</span>Items</span><a href="javascript:void(0)" id="qtv2-foldall" onclick="qtToggleFoldAll()" style="font-size:12px;font-weight:500;"></a></div>
       <div id="qtv2-items-list"></div>
       <button class="btn btn-outline btn-sm" onclick="addQtv2ItemRow()">+ Add Item</button>
-      <div class="qt-sec"><span class="qt-sec-n">3</span>Terms</div>
+      <div class="qt-sec"><span class="qt-sec-n">3</span>Schedule &amp; site</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Turnaround requested</label>
+          <select class="form-control" id="qtv2-turnaround" onchange="el('qtv2-turnaround-other').style.display=this.value==='Other'?'':'none'">
+            ${(()=>{ const cur=existing?.turnaroundRequested??(prefillEntry?.turnaroundRequested||''); const other=cur&&!QT_TURNAROUNDS.includes(cur);
+              return ['',...QT_TURNAROUNDS,'Other'].map(v=>`<option value="${v}" ${(v===cur||(v==='Other'&&other))?'selected':''}>${v||'— Select —'}</option>`).join(''); })()}
+          </select></div>
+        <div class="form-group"><label class="form-label">&nbsp;</label>
+          ${(()=>{ const cur=existing?.turnaroundRequested??(prefillEntry?.turnaroundRequested||''); const other=cur&&!QT_TURNAROUNDS.includes(cur);
+            return `<input class="form-control" id="qtv2-turnaround-other" placeholder="e.g. before 15 Oct" value="${other?escapeHtml(cur):''}" style="${other?'':'display:none;'}"/>`; })()}</div>
+      </div>
+      <div id="qtv2-req-lab" class="form-row">
+        <div class="form-group"><label class="form-label">Required by <span style="font-weight:normal;color:var(--text-muted);">(lab items — date the customer needs them back)</span></label><input class="form-control" type="date" id="qtv2-req-date" value="${escapeHtml(existing?.reqDate||prefillEntry?.requiredBy||'')}"/></div>
+        <div class="form-group"><label class="form-label">Items delivered &amp; returned by</label>
+          <select class="form-control" id="qtv2-logistics">${['','Customer drops off & collects','Courier (arranged by customer)','Westlab pickup & delivery'].map(v=>`<option value="${v}" ${(existing?.logistics||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}</select></div>
+      </div>
+      <div id="qtv2-req-onsite" style="background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">📍 On-site visit</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Preferred date — from</label><input class="form-control" type="date" id="qtv2-onsite-start" value="${escapeHtml(existing?.onsiteStart||prefillEntry?.onsiteStart||'')}"/></div>
+          <div class="form-group"><label class="form-label">to <span style="font-weight:normal;color:var(--text-muted);">(if more than one day)</span></label><input class="form-control" type="date" id="qtv2-onsite-end" value="${escapeHtml(existing?.onsiteEnd||prefillEntry?.onsiteEnd||'')}"/></div>
+          <div class="form-group"><label class="form-label">Area</label><input class="form-control" id="qtv2-site-area" placeholder="e.g. Shah Alam" value="${escapeHtml(existing?.siteArea||prefillEntry?.siteArea||'')}"/></div>
+        </div>
+        <div class="form-group"><label class="form-label" style="display:flex;justify-content:space-between;">Site address <a href="javascript:void(0)" style="font-weight:normal;text-transform:none;letter-spacing:0;" onclick="el('qtv2-site-address').value=el('qtv2-address').value">Same as customer address</a></label>
+          <textarea class="form-control" id="qtv2-site-address" rows="2">${escapeHtml(existing?.siteAddress||prefillEntry?.siteAddress||'')}</textarea></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Site contact person</label><input class="form-control" id="qtv2-site-contact" value="${escapeHtml(existing?.siteContact||prefillEntry?.siteContact||'')}"/></div>
+          <div class="form-group"><label class="form-label">Site contact mobile</label><input class="form-control" id="qtv2-site-mobile" value="${escapeHtml(existing?.siteMobile||prefillEntry?.siteMobile||'')}"/></div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;"><label class="form-label">Site access notes</label><textarea class="form-control" id="qtv2-site-access" rows="2" placeholder="e.g. safety induction, PPE, work permit, working hours, parking">${escapeHtml(existing?.siteAccess||prefillEntry?.siteAccess||'')}</textarea></div>
+      </div>
+      <div class="qt-sec"><span class="qt-sec-n">4</span>Terms</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Validity (days)</label><input class="form-control" type="number" id="qtv2-validity" value="${existing?.validityDays||30}"/></div>
       </div>
@@ -10188,6 +10289,13 @@ async function saveQuotationV2(quotationId){
   q.address=el('qtv2-address').value.trim();
   q.items=_qtv2DraftItems.filter(it=>it.eqName);
   q.items.forEach(qtSyncLegacyFields);
+  const tsel=el('qtv2-turnaround')?.value||'';
+  q.turnaroundRequested=tsel==='Other'?(el('qtv2-turnaround-other')?.value.trim()||''):tsel;
+  const hasOnsite=q.items.some(it=>it.calType==='Onsite'), hasLab=q.items.some(it=>it.calType!=='Onsite');
+  q.reqDate=hasLab?(el('qtv2-req-date')?.value||''):'';
+  q.logistics=hasLab?(el('qtv2-logistics')?.value||''):'';
+  ['onsiteStart:qtv2-onsite-start','onsiteEnd:qtv2-onsite-end','siteArea:qtv2-site-area','siteAddress:qtv2-site-address','siteContact:qtv2-site-contact','siteMobile:qtv2-site-mobile','siteAccess:qtv2-site-access']
+    .forEach(pair=>{ const [k,id]=pair.split(':'); q[k]=hasOnsite?(el(id)?.value.trim()||''):''; });
   q.validityDays=parseInt(el('qtv2-validity').value)||30;
   q.termsConditions=el('qtv2-terms').value.trim();
   q.depositRequired=el('qtv2-deposit-required').checked;
@@ -10486,6 +10594,7 @@ async function exportQuotationV2Pdf(quotationId){
       if(it.spec) L.push('Specification: '+esc(it.spec));
       units.forEach((u,ui)=>L.push(`Unit ${ui+1}${u.serial?' (S/N '+esc(u.serial)+')':''}: Resolution ${esc(u.resolution||'—')}; Cal Points ${esc(u.calPoints||'—')}`));
     }
+    qtRequirementLines(it).forEach(x=>L.push(esc(x)));
     const discTxt=c.disc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.disc.toFixed(2)):'';
     const rows=[`<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(it.itemCode||'')}</td>
       <td style="${TD}"><div>${esc(it.eqName)} ${qtServiceTag(it)}</div><div style="padding-left:6px;">${L.join('<br/>')}</div></td>
@@ -10497,7 +10606,16 @@ async function exportQuotationV2Pdf(quotationId){
   const totalsRows=(s.sstEnabled?`<tr><td style="padding:2px 8px;font-weight:bold;">Subtotal (MYR)</td><td style="padding:2px 6px;text-align:right;">${subtotal.toFixed(2)}</td></tr>
       <tr><td style="padding:2px 8px;font-weight:bold;">SST (8%)</td><td style="padding:2px 6px;text-align:right;">${sstAmount.toFixed(2)}</td></tr>`:'')+
     `<tr><td style="padding:2px 8px;font-weight:bold;">Total (MYR)</td><td style="padding:2px 6px;text-align:right;font-weight:bold;border:1px solid #000;min-width:130px;">${total.toFixed(2)}</td></tr>`;
-  const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;">
+  const siteLines=[
+    q.turnaroundRequested?['Turnaround requested',q.turnaroundRequested]:null,
+    q.reqDate?['Required by',fmtDateShort(q.reqDate)]:null,
+    q.logistics?['Items delivered & returned by',q.logistics]:null,
+    (q.onsiteStart||q.onsiteEnd)?['On-site visit',[q.onsiteStart?fmtDateShort(q.onsiteStart):'',q.onsiteEnd&&q.onsiteEnd!==q.onsiteStart?fmtDateShort(q.onsiteEnd):''].filter(Boolean).join(' – ')]:null,
+    q.siteAddress?['Site',[q.siteAddress.replace(/\n/g,', '),q.siteArea?'('+q.siteArea+')':''].filter(Boolean).join(' ')]:null,
+    (q.siteContact||q.siteMobile)?['Site contact',[q.siteContact,q.siteMobile].filter(Boolean).join(' · ')]:null,
+    q.siteAccess?['Site access',q.siteAccess.replace(/\n/g,'; ')]:null].filter(Boolean);
+  const siteBlock=siteLines.length?`<table style="border-collapse:collapse;font-size:11.5px;margin:0 0 8px;">${siteLines.map(([k,v])=>`<tr><td style="font-weight:bold;width:170px;vertical-align:top;padding:1px 0;">${esc(k)}</td><td style="width:14px;vertical-align:top;">:</td><td style="vertical-align:top;">${esc(v)}</td></tr>`).join('')}</table>`:'';
+  const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;">${siteBlock}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.5;">
           <tr><td style="font-weight:bold;width:112px;">Validity</td><td style="font-weight:bold;width:16px;">:</td><td>${q.validityDays?esc(q.validityDays)+' Days':''}</td></tr>
@@ -10781,7 +10899,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   const enquiryDate=entry.enquiryDate?fmtDateShort(entry.enquiryDate+'T00:00:00'):(entry.createdAt?fmtDateShort(entry.createdAt):'');
   const contractReviewer=entry.salesPersonnel||entry.createdBy||'';
   const reviewerName=nameOf(contractReviewer), approverName=nameOf(item.capabilityReviewedBy);
-  const rangeBits=[item.range?'Range: '+esc(item.range):'',item.resolution?'Resolution: '+esc(item.resolution):'',
+  const rangeBits=[item.range?'Range: '+esc(item.range):'',item.resolution?'Resolution: '+esc(item.resolution):'',item.calPoints?'Cal points: '+esc(item.calPoints):'',
     (item.socParameters||[]).filter(p=>p.parameterName).length?'Parameter(s): '+esc(item.socParameters.filter(p=>p.parameterName).map(p=>p.parameterName).join(', ')):''].filter(Boolean).join('<br/>');
   const location=item.calType==='Onsite'?'On-site':(item.calType?'Lab':'');
   let cmc='';
@@ -10866,6 +10984,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
       ${checkRow('Best Measurement Capability (CMC) adequate for range / uncertainty required',cmc,cmcRemark)}
       ${checkRow('Reference standards / equipment available and in-cal',ev.refAvailable,'')}
       ${checkRow('Personnel competent for this parameter',ev.personnelAvailable,'')}
+      ${checkRow('Adjustment possible, if the customer wants it',ev.canAdjust||'',item.adjustReq?'Customer: '+esc(item.adjustReq):'')}
       ${checkRow('Outsource required?',outsource,`If yes, to: ${outsource==='Yes'?esc(item.outsourcedTo||''):''}`,true)}
     </table>`;
   const sec4=bar(4,'REQUIREMENT REVIEW')+grid(
@@ -11048,6 +11167,11 @@ function openCapabilityEvalModal(entryId,itemIdx){
         <strong>${entry.name}</strong> — ${escapeHtml(item.eqName)}<br/>
         <span style="font-size:12px;color:var(--text-muted);">${escapeHtml(item.brand?'Brand: '+item.brand+' · ':'')}${escapeHtml(item.model?'Model: '+item.model+' · ':'')}${item.spec?'Spec: '+item.spec:''}${item.range?' · Range: '+item.range:''}${item.calType?' · '+item.calType:''}</span>
         ${item.remark?`<div style="font-size:12px;color:#374151;margin-top:6px;"><strong>Customer's requirement:</strong> ${escapeHtml(item.remark)}</div>`:''}
+        ${(()=>{ const bits=[item.resolution?'Resolution: '+item.resolution:'',item.calPoints?'Cal points: '+item.calPoints:'',item.adjustReq?'Adjustment wanted: '+item.adjustReq:'',
+            item.recalInterval?('Recalibration: '+(item.recalInterval==='date'?(item.recalDate?fmtDateShort(item.recalDate):'specific date'):(item.recalInterval==='open'?'no date':item.recalInterval+' months'))):'',
+            entry.requiredBy?'Required by: '+fmtDateShort(entry.requiredBy):'',entry.turnaroundRequested?'Turnaround: '+entry.turnaroundRequested:'',
+            item.calType==='Onsite'&&(entry.siteArea||entry.onsiteStart)?'On-site: '+[entry.siteArea,entry.onsiteStart?fmtDateShort(entry.onsiteStart):''].filter(Boolean).join(', '):''].filter(Boolean);
+          return bits.length?`<div style="font-size:12px;color:#374151;margin-top:6px;">${bits.map(escapeHtml).join(' · ')}</div>`:''; })()}
       </div>
       ${item.capabilityHistory&&item.capabilityHistory.length?`<div style="background:#fefce8;border-radius:8px;padding:10px 12px;margin-bottom:14px;">
         <div style="font-size:11px;font-weight:700;color:#854d0e;margin-bottom:6px;">📜 Previous Review History</div>
@@ -11070,6 +11194,7 @@ function openCapabilityEvalModal(entryId,itemIdx){
       ${item.calType==='Onsite'?yn('eval-onsite-logistics','Onsite Logistics Suitable? (access, travel, permits)'):''}
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin:14px 0 6px;">Delivery &amp; Fit</div>
       ${yn('eval-turnaround-realistic','Realistic Turnaround Achievable?')}
+      ${yn('eval-can-adjust','Can Westlab adjust this item if needed?'+(item.adjustReq?' (customer: '+escapeHtml(item.adjustReq)+')':''))}
       <div class="form-group" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <label class="form-label" style="margin-bottom:0;flex:1;">Meets Customer's Stated Requirement?</label>
         <select class="form-control" id="eval-meets-requirement" style="width:150px;">
@@ -11097,6 +11222,7 @@ async function saveCapabilityEvaluation(entryId,itemIdx,verdict){
     specialHandling:el('eval-special-handling').value,
     onsiteLogistics:el('eval-onsite-logistics')?.value||'',
     turnaroundRealistic:el('eval-turnaround-realistic').value,
+    canAdjust:el('eval-can-adjust')?.value||'',
     meetsRequirement:el('eval-meets-requirement').value,
     notes:el('eval-notes').value.trim()
   };
@@ -11509,9 +11635,24 @@ function openTrackerEntryModal(type,entryId){
             <input class="form-control" id="tk-turnaround-other" placeholder="e.g. Before 15 Oct, or 10 working days" value="${escapeHtml(existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?existing.turnaroundRequested:'')}" style="${existing?.turnaroundRequested&&!['Standard (5–7 working days)','Urgent (3–4 working days)','Express (1–2 working days)'].includes(existing.turnaroundRequested)?'':'display:none;'}"/>
           </div>
         </div>
+      <div class="form-group"><label class="form-label">Required by <span style="font-weight:normal;color:var(--text-muted);">(optional — only if the customer gave a deadline)</span></label><input class="form-control" type="date" id="tk-required-by" value="${escapeHtml(existing?.requiredBy||'')}" style="max-width:220px;"/></div>
       <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">3</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Items Enquired</span></div>
       <div id="sales-items-list"></div>
       <button class="btn btn-outline btn-sm" onclick="addSalesItemRow()">+ Add Item</button>
+      <div id="tk-onsite-block" style="display:none;background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:10px 12px;margin:10px 0;">
+        <div style="font-size:12.5px;font-weight:700;">📍 On-site visit <span style="font-weight:normal;color:var(--text-muted);">— fill in whatever the customer has told you; it carries into the quotation</span></div>
+        <div class="form-row" style="margin-top:8px;">
+          <div class="form-group"><label class="form-label">Preferred date — from</label><input class="form-control" type="date" id="tk-onsite-start" value="${escapeHtml(existing?.onsiteStart||'')}"/></div>
+          <div class="form-group"><label class="form-label">to</label><input class="form-control" type="date" id="tk-onsite-end" value="${escapeHtml(existing?.onsiteEnd||'')}"/></div>
+          <div class="form-group"><label class="form-label">Area</label><input class="form-control" id="tk-site-area" placeholder="e.g. Shah Alam" value="${escapeHtml(existing?.siteArea||'')}"/></div>
+        </div>
+        <div class="form-group"><label class="form-label">Site address</label><textarea class="form-control" id="tk-site-address" rows="2">${escapeHtml(existing?.siteAddress||'')}</textarea></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Site contact person</label><input class="form-control" id="tk-site-contact" value="${escapeHtml(existing?.siteContact||'')}"/></div>
+          <div class="form-group"><label class="form-label">Site contact mobile</label><input class="form-control" id="tk-site-mobile" value="${escapeHtml(existing?.siteMobile||'')}"/></div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;"><label class="form-label">Site access notes</label><textarea class="form-control" id="tk-site-access" rows="2" placeholder="e.g. safety induction, PPE, work permit, working hours, parking">${escapeHtml(existing?.siteAccess||'')}</textarea></div>
+      </div>
       <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">4</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Internal</span></div>
       <div class="form-row">
       <div class="form-group"><label class="form-label">Assigned Sales Personnel</label>
@@ -11647,7 +11788,7 @@ function renderSalesItemsList(){
       <div style="display:grid;grid-template-columns:90px 1fr 1.3fr;gap:10px;">
         <div class="form-group"><label class="form-label">Quantity</label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);updateSalesItemTotal(${idx});renderSocSection('sales-item-soc-${idx}',_salesDraftItems[${idx}]);"/></div>
         <div class="form-group"><label class="form-label">Lab / On-site</label>
-          <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value)">
+          <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value);tkRefreshOnsiteBlock()">
             <option value="Lab" ${it.calType!=='Onsite'?'selected':''}>Lab</option>
             <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>On-site</option>
           </select>
@@ -11659,14 +11800,27 @@ function renderSalesItemsList(){
         </div>
       </div>
       <div class="unit-target-group" style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;">
-        <label class="form-label" style="margin-bottom:4px;">Unit <span style="font-weight:normal;color:var(--text-muted);">(applies to both Range and Spec below)</span></label>
+        <label class="form-label" style="margin-bottom:4px;">Unit <span style="font-weight:normal;color:var(--text-muted);">(applies to Range, Spec and Resolution below)</span></label>
         <select class="form-control unit-picker-select" style="margin-bottom:6px;" onchange="applyUnitFromPicker(this)">
           <option value="">Unit…</option>
         </select>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Range</label><input class="form-control" data-unit-target placeholder="e.g. 0 – 200" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/></div>
           <div class="form-group"><label class="form-label">Spec <span style="font-weight:normal;color:var(--text-muted);">(± added automatically)</span></label><input class="form-control" data-unit-target value="${it.spec||''}" oninput="updateSalesItemSpec(${idx},this)"/></div>
+          <div class="form-group"><label class="form-label">Resolution / readability</label><input class="form-control" data-unit-target placeholder="e.g. 0.1" value="${escapeHtml(it.resolution||'')}" oninput="updateSalesItemField(${idx},'resolution',this.value)"/></div>
         </div>
+      </div>
+      <div class="form-group"><label class="form-label">Calibration points <span style="font-weight:normal;color:var(--text-muted);">(if the customer has said)</span></label><input class="form-control" placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateSalesItemField(${idx},'calPoints',this.value)"/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Adjustment wanted?</label>
+          <select class="form-control" onchange="updateSalesItemField(${idx},'adjustReq',this.value)">
+            ${[['','Not stated'],['Yes','Yes — adjust if needed'],['No','No adjustment'],['Not sure','Not sure — ask first']].map(([v,t])=>`<option value="${v}" ${(it.adjustReq||'')===v?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="form-group"><label class="form-label">Recalibration interval</label>
+          <select class="form-control" onchange="updateSalesItemField(${idx},'recalInterval',this.value);renderSalesItemsList()">
+            ${[['','Not stated (12 months standard)'],['3','3 months'],['6','6 months'],['12','12 months'],['24','24 months'],['36','36 months'],['date','A specific date'],['open','No recalibration date']].map(([v,t])=>`<option value="${v}" ${(it.recalInterval||'')===v?'selected':''}>${t}</option>`).join('')}
+          </select>
+          ${it.recalInterval==='date'?`<input class="form-control" type="date" style="margin-top:6px;" value="${escapeHtml(it.recalDate||'')}" onchange="updateSalesItemField(${idx},'recalDate',this.value)"/>`:''}</div>
       </div>
       <div class="form-group"><label class="form-label">Method / Standard Requested <span style="font-weight:normal;color:var(--text-muted);">(if any)</span></label><input class="form-control" placeholder="e.g. OIML R76, EURAMET cg-18" value="${escapeHtml(it.methodRequested||'')}" oninput="updateSalesItemField(${idx},'methodRequested',this.value)"/></div>
       <div class="form-group" id="sales-item-soc-${idx}"></div>
@@ -11708,6 +11862,7 @@ function renderSalesItemsList(){
   }).join('');
   _salesDraftItems.forEach((it,idx)=>renderSocSection(`sales-item-soc-${idx}`,it));
   populateAllUnitPickers();
+  tkRefreshOnsiteBlock();
 }
 function suggestTrackerName(type,query){
   const box=el('tk-name-suggestions'); if(!box)return;
@@ -11726,6 +11881,9 @@ function suggestTrackerName(type,query){
   }
   box.style.display='block';
 }
+// Sales entry: the on-site block only shows when an item is on-site (its fields always stay in the
+// form, so nothing typed is lost when switching an item between Lab and On-site).
+function tkRefreshOnsiteBlock(){ const b=el('tk-onsite-block'); if(b) b.style.display=(_salesDraftItems||[]).some(it=>it.calType==='Onsite')?'':'none'; }
 function selectTrackerSupplier(supId,name){
   el('tk-name').value=name; if(el('tk-supplier-id')) el('tk-supplier-id').value=supId; el('tk-name-suggestions').style.display='none';
 }
@@ -11831,6 +11989,10 @@ async function saveTrackerEntry(type,entryId){
     entry.receivedVia=el('tk-received-via')?.value||'';
     const turnaroundSel=el('tk-turnaround')?.value||'';
     entry.turnaroundRequested=turnaroundSel==='Other'?(el('tk-turnaround-other')?.value.trim()||''):turnaroundSel;
+    entry.requiredBy=el('tk-required-by')?.value||'';
+    const anyOnsite=(_salesDraftItems||[]).some(it=>it.calType==='Onsite');
+    ['onsiteStart:tk-onsite-start','onsiteEnd:tk-onsite-end','siteArea:tk-site-area','siteAddress:tk-site-address','siteContact:tk-site-contact','siteMobile:tk-site-mobile','siteAccess:tk-site-access']
+      .forEach(pair=>{ const [k,id]=pair.split(':'); entry[k]=anyOnsite?(el(id)?.value.trim()||''):''; });
     entry.prospectPhone=el('tk-prospect-phone')?.value.trim()||'';
     entry.prospectEmail=el('tk-prospect-email')?.value.trim()||'';
     entry.prospectTypes=[
@@ -22475,7 +22637,7 @@ const DRAFT_FORMS={
     label:()=>draftFieldVal('tk-name'),
     getState:a=>a.args[0]==='sales'?{items:_salesDraftItems}:{},
     setState:(s,d)=>{ if(d.args[0]==='sales'&&s.items){ _salesDraftItems=s.items; renderSalesItemsList(); } },
-    afterRestore:()=>{ const o=el('tk-turnaround-other'); if(o) o.style.display=el('tk-turnaround')?.value==='Other'?'':'none'; if(typeof tkRefreshContactView==='function') tkRefreshContactView(); }},
+    afterRestore:()=>{ const o=el('tk-turnaround-other'); if(o) o.style.display=el('tk-turnaround')?.value==='Other'?'':'none'; if(typeof tkRefreshContactView==='function') tkRefreshContactView(); if(typeof tkRefreshOnsiteBlock==='function') tkRefreshOnsiteBlock(); }},
   quotation:{ title:'Quotation', container:'qtv2-overlay',
     label:()=>draftFieldVal('qtv2-cust-name'),
     getState:()=>({items:_qtv2DraftItems}),
