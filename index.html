@@ -104,6 +104,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
   .card-header>div[style*="display:flex"]{max-width:100%;}
   .view input.form-control,.view select.form-control,.view .filter-select{max-width:100%;}
 }
+.dash-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px;}
+.dash-kpi{text-align:left;background:var(--bg-card,#fff);border:1px solid var(--border);border-top:3px solid var(--k);border-radius:12px;padding:14px 16px;cursor:pointer;font-family:inherit;color:inherit;transition:box-shadow .12s,transform .12s;}
+.dash-kpi:hover{box-shadow:0 6px 18px rgba(15,31,61,.08);transform:translateY(-1px);}
+.dash-kpi-label{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);}
+.dash-kpi-num{font-size:30px;font-weight:800;line-height:1.15;margin-top:4px;color:var(--k);}
+.dash-kpi-sub{font-size:11.5px;color:var(--text-muted);}
+.dash-kpi.zero .dash-kpi-num{color:var(--text-muted);}
+.dash-grid{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;}
+.dash-dl{width:100%;border-collapse:collapse;}
+.dash-dl td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:top;}
+.dash-dl tr{cursor:pointer;} .dash-dl tr:hover td{background:#f8fafc;}
+.dash-dl tr:last-child td{border-bottom:none;}
+.dash-due{display:inline-block;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap;}
+.dash-wl-row{margin-bottom:12px;} .dash-wl-row:last-child{margin-bottom:0;}
+.dash-wl-bar{height:7px;border-radius:4px;background:#e2e8f0;overflow:hidden;margin-top:4px;}
+.dash-wl-bar>span{display:block;height:100%;background:var(--blue);border-radius:4px;}
+.dash-attn{background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.dash-attn-row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);}
+.dash-attn-row:last-child{border-bottom:none;}
+.dash-attn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+@media(max-width:900px){ .dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr));} .dash-grid{grid-template-columns:1fr;} }
+@media(max-width:768px){ .dash-dl td.dash-hide-m{display:none;} .dash-kpi-num{font-size:24px;} }
 .launcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
 .launcher-tile{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:14px;padding:18px 16px 16px;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s;font-family:inherit;color:inherit;}
 .launcher-tile:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(15,31,61,.10);border-color:var(--tile);}
@@ -644,83 +666,26 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-sub" id="dash-date">—</div>
         </div>
         <div style="display:flex;gap:10px;" id="dash-admin-btns">
-          <button class="btn btn-outline" onclick="testSupabaseWrite()" style="font-size:11px;">🔍 Test DB</button>
-          <button class="btn btn-outline" onclick="showView('approval')">📬 Approval Queue</button>
           <button class="btn btn-primary" onclick="openNewJobModal()">+ New Job</button>
         </div>
       </div>
-      <!-- KPI Cards -->
-      <div class="stats-grid" id="dash-stats-grid">
-        <div class="stat-card blue"><div class="stat-icon">🔧</div><div class="stat-label">Total Jobs</div><div class="stat-value" id="dash-total">0</div><div class="stat-sub" id="dash-total-sub">in system</div></div>
-        <div class="stat-card amber"><div class="stat-icon">⏳</div><div class="stat-label">Unassigned</div><div class="stat-value" id="dash-unassigned">0</div><div class="stat-sub">awaiting assignment</div></div>
-        <div class="stat-card purple"><div class="stat-icon">🔬</div><div class="stat-label">In Progress</div><div class="stat-value" id="dash-inprogress">0</div><div class="stat-sub">calibration ongoing</div></div>
-        <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-label">Completed</div><div class="stat-value" id="dash-completed">0</div><div class="stat-sub">approved &amp; closed</div></div>
-      </div>
-      <!-- Needs Attention (consolidated) -->
       <div id="quick-access-box"></div>
+      <!-- KPI cards — every number counts ITEMS (each calibration / certificate) -->
+      <div class="dash-kpis" id="dash-stats-grid"></div>
       <div id="needs-attention-box" style="margin-bottom:16px;"></div>
-      <!-- Overdue / SLA breach alert -->
-      <div id="dash-overdue-banner" style="display:none;margin-bottom:16px;">
-        <div class="alert-item" style="background:var(--red-bg);border:1px solid var(--red);border-radius:10px;cursor:pointer;" onclick="showView('equipment')">
-          <span class="alert-icon">🚨</span>
-          <div class="alert-text">
-            <strong id="dash-overdue-title">Jobs overdue!</strong>
-            <span id="dash-overdue-text">Past promised ready date — action required.</span>
-          </div>
-          <button class="btn btn-danger btn-sm" style="margin-left:auto;">View Jobs</button>
+      <div class="dash-grid" id="dash-grid">
+        <div class="card" id="dash-deadlines-card">
+          <div class="card-header"><span class="card-title">📅 Deadlines</span><span style="font-size:11.5px;color:var(--text-muted);" id="dash-deadlines-sub">Overdue and due in the next 7 days</span></div>
+          <div id="dash-deadlines"></div>
+        </div>
+        <div class="card" id="dash-workload-card">
+          <div class="card-header"><span class="card-title">👥 Team workload</span><span style="font-size:11.5px;color:var(--text-muted);">Items in progress per person</span></div>
+          <div class="card-body" id="dash-workload"></div>
         </div>
       </div>
-      <!-- Signatory approval banner -->
-      <div id="jay-approval-banner" style="display:none;margin-bottom:16px;">
-        <div class="alert-item warn" style="border-radius:10px;cursor:pointer;" onclick="showView('approval')">
-          <span class="alert-icon">📬</span>
-          <div class="alert-text">
-            <strong>You have jobs pending your approval</strong>
-            <span id="jay-approval-count-text">Click to review the approval queue.</span>
-          </div>
-          <button class="btn btn-amber btn-sm" style="margin-left:auto;">Review Now</button>
-        </div>
-      </div>
-      <!-- Engineer my jobs banner -->
-      <div id="my-jobs-banner" style="display:none;margin-bottom:16px;">
-        <div class="alert-item info" style="border-radius:10px;cursor:pointer;" onclick="showView('my-jobs')">
-          <span class="alert-icon">📋</span>
-          <div class="alert-text">
-            <strong>You have jobs assigned to you</strong>
-            <span id="my-jobs-count-text">Click to view your job queue.</span>
-          </div>
-          <button class="btn btn-primary btn-sm" style="margin-left:auto;">View My Jobs</button>
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-header"><span class="card-title">🕐 Recent Activity</span></div>
-          <div class="card-body"><div class="activity-list" id="dash-activity">
-            <div class="activity-item"><div class="activity-dot blue">📋</div><div><div class="activity-text">System ready</div><div class="activity-time">Now</div></div></div>
-          </div></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">📊 Job Status Overview</span></div>
-          <div class="card-body" id="dash-status-overview">
-            <div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Unassigned</span><span id="ov-unassigned" style="font-size:13px;font-weight:700;color:var(--navy);">0</span></div><div class="progress-bar-wrap"><div class="progress-bar" id="pb-unassigned" style="width:0%;background:var(--amber);"></div></div></div>
-            <div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Assigned / In Progress</span><span id="ov-inprog" style="font-size:13px;font-weight:700;color:var(--navy);">0</span></div><div class="progress-bar-wrap"><div class="progress-bar" id="pb-inprog" style="width:0%;background:var(--blue);"></div></div></div>
-            <div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Pending Approval</span><span id="ov-approval" style="font-size:13px;font-weight:700;color:var(--navy);">0</span></div><div class="progress-bar-wrap"><div class="progress-bar" id="pb-approval" style="width:0%;background:var(--purple);"></div></div></div>
-            <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">Completed</span><span id="ov-done" style="font-size:13px;font-weight:700;color:var(--navy);">0</span></div><div class="progress-bar-wrap"><div class="progress-bar" id="pb-done" style="width:0%;background:var(--green);"></div></div></div>
-          </div>
-        </div>
-      </div>
-      <!-- Overdue jobs list (admin only) -->
-      <div class="card" id="dash-overdue-card" style="display:none;margin-top:16px;border:1px solid var(--red);border-radius:12px;">
-        <div class="card-header" style="background:var(--red-bg);">
-          <span class="card-title" style="color:var(--red);">🚨 Overdue Jobs</span>
-          <span id="dash-overdue-count" class="badge badge-red">0</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Job No.</th><th>Customer</th><th>Equipment</th><th>Promised Date</th><th>Days Overdue</th><th>Assigned To</th><th>Status</th></tr></thead>
-            <tbody id="dash-overdue-tbody"></tbody>
-          </table>
-        </div>
+      <div class="card" id="dash-activity-card" style="margin-top:16px;">
+        <div class="card-header"><span class="card-title">🕐 Recent activity</span><a href="javascript:void(0)" onclick="showView('reports')" style="font-size:12px;">Full audit log →</a></div>
+        <div class="card-body"><div class="activity-list" id="dash-activity"></div></div>
       </div>
     </div>
 
@@ -1908,6 +1873,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
               <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="cert-counter-preview">Current next: loading…</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="card" id="system-check-card" style="margin-bottom:16px;display:none;">
+        <div class="card-header"><span class="card-title">🔧 System check</span></div>
+        <div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:12.5px;color:var(--text-muted);flex:1;">Checks that the LIMS can write to the database.</span>
+          <button class="btn btn-outline btn-sm" onclick="testSupabaseWrite()">🔍 Test database connection</button>
         </div>
       </div>
 
@@ -4123,6 +4096,7 @@ async function loadAll(){
     await loadQuotationsV2();
     await loadInvoices();
     await loadPurchaseOrders();
+    await healOrphanedQuotationLinks();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
     await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
@@ -9471,11 +9445,45 @@ const ABNORMAL_REPORTS_KEY='wl_abnormal_reports';
 const QUOTATIONS_KEY='wl_quotations';
 const QUOTATIONS_V2_KEY='wl_quotations_v2';
 let _quotationsV2=[];
+let _quotationsV2Loaded=false;
 async function loadQuotationsV2(){
   try{
-    const q=await SB.get('wl_settings',QUOTATIONS_V2_KEY);
+    // apiFetch (not SB.get) so a server error is a real error — SB.get turns errors into
+    // "nothing", which looked the same as "no quotations yet" to the automatic repair.
+    const q=await apiFetch('/api/row/wl_settings/'+encodeURIComponent(QUOTATIONS_V2_KEY));
     _quotationsV2=Array.isArray(q)?q:[];
-  }catch(e){_quotationsV2=[];}
+    _quotationsV2Loaded=true;
+  }catch(e){_quotationsV2=[]; _quotationsV2Loaded=false;}
+}
+// When a quotation made from a Sales Tracker enquiry is deleted, undo what it did to that
+// enquiry: unlink it (or point at another quotation still made for it), clear the automatic
+// "Lost — awaiting response" set when it was sent, and move a quotation-stage enquiry back so
+// a new quotation can be made. Anything past the quotation stage (PO received, job…) keeps its
+// status — only the link is cleared. Returns true if the entry changed.
+function unlinkDeletedQuotationFromEntry(entry,quotationNo){
+  if(!entry) return false;
+  const others=(_quotationsV2||[]).filter(q=>q.linkedSalesTrackerId===entry.id).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  if(others.length){ if(entry.linkedQuotationId===others[0].id) return false; entry.linkedQuotationId=others[0].id; return true; }
+  delete entry.linkedQuotationId;
+  (entry.items||[]).forEach(it=>{ if(it.outcome==='Lost'&&it.lostReason==='Quotation Sent — Awaiting Response'){ delete it.outcome; delete it.lostReason; } });
+  if(['Quotation Generated','Pending PO'].includes(entry.status)){
+    const hist=entry.statusHistory||(entry.statusHistory=[]);
+    let prev=null;
+    for(let i=hist.length-1;i>=0;i--){ if(!['Quotation Generated','Pending PO'].includes(hist[i].status)){ prev=hist[i].status; break; } }
+    const back=(prev&&SALES_STAGES.indexOf(prev)>-1&&SALES_STAGES.indexOf(prev)<SALES_STAGES.indexOf('Quotation Generated'))?prev:'Pending Technical Review';
+    entry.status=back;
+    hist.push({status:back,date:new Date().toISOString(),by:currentUser,note:`Quotation ${quotationNo||''} deleted — moved back so a new quotation can be made`});
+  }
+  return true;
+}
+// Repairs enquiries still pointing at a quotation that no longer exists (e.g. deleted before this
+// clean-up existed). Only runs when BOTH lists are known to have loaded properly.
+async function healOrphanedQuotationLinks(){
+  if(!_quotationsV2Loaded||!_salesTrackerLoaded) return;
+  const ids=new Set((_quotationsV2||[]).map(q=>q.id));
+  let changed=0;
+  (_salesTracker||[]).forEach(e=>{ if(e.linkedQuotationId&&!ids.has(e.linkedQuotationId)&&unlinkDeletedQuotationFromEntry(e,'')) changed++; });
+  if(changed){ try{ await saveSalesTracker(); addAudit('🔧',`${changed} Sales Tracker enquir${changed===1?'y was':'ies were'} still linked to a deleted quotation — unlinked and moved back`); }catch(e){ console.warn('Could not save the repaired enquiries:',e); } }
 }
 async function saveQuotationsV2(){ await SB.upsert('wl_settings',QUOTATIONS_V2_KEY,_quotationsV2); }
 function canUseQuotationSystem(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Sales','Coordinator'].includes(r); }
@@ -9923,6 +9931,7 @@ let _qtv2EditingId=null;
 function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   ensurePriceRefCodes().then(()=>{ if(document.getElementById('qtv2-overlay')?.style.display!=='none') renderQtv2ItemsList(); }).catch(()=>{});
   if(!canUseQuotationSystem(currentUser)){alert('You do not have access to create quotations.');return;}
+  if(quotationId&&!_quotationsV2.some(q=>q.id===quotationId)){ alert('This quotation no longer exists — it may have been deleted.'); return; }
   _qtv2EditingId=quotationId||null;
   const existing=quotationId?_quotationsV2.find(q=>q.id===quotationId):null;
   let prefillEntry=null;
@@ -10208,7 +10217,8 @@ async function confirmAcceptQuotation(){
 }
 async function deleteQuotationV2(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
-  if(!confirm(`Permanently delete ${q.quotationNo}? This cannot be undone — it will be completely removed, not just hidden.`))return;
+  const linkedEntries=(_salesTracker||[]).filter(e=>e.linkedQuotationId===q.id||(q.linkedSalesTrackerId&&e.id===q.linkedSalesTrackerId));
+  if(!confirm(`Permanently delete ${q.quotationNo}? This cannot be undone — it will be completely removed, not just hidden.${linkedEntries.length?`\n\nIt was made from the Sales Tracker enquiry for ${linkedEntries.map(e=>e.name).join(', ')}. That enquiry will be unlinked and moved back so a new quotation can be made.`:''}`))return;
   const idx=_quotationsV2.findIndex(x=>x.id===quotationId);
   if(idx===-1)return;
   // If this was the most recently issued number this month (nothing higher exists), it's
@@ -10234,7 +10244,11 @@ async function deleteQuotationV2(quotationId){
   }
   _quotationsV2.splice(idx,1);
   await saveQuotationsV2();
+  let entriesFixed=0;
+  linkedEntries.forEach(e=>{ if(e.linkedQuotationId===q.id||!e.linkedQuotationId){ if(unlinkDeletedQuotationFromEntry(e,q.quotationNo)) entriesFixed++; } });
+  if(entriesFixed){ try{ await saveSalesTracker(); }catch(e){ showToast('⚠️ The quotation was deleted, but its Sales Tracker enquiry could not be updated — it will be repaired next time the LIMS loads.','warn',8000); } }
   renderQuotationsV2Page();
+  if(document.getElementById('view-sales-tracker')?.classList.contains('active')) renderSalesTrackerPage();
   docDeleteToast(q.quotationNo,wasHighest,rollbackResult);
   addAudit('🗑️',`Quotation ${q.quotationNo} permanently deleted by ${USERS[currentUser]?.name||currentUser}`);
 }
@@ -10268,11 +10282,9 @@ async function exportQuotationV2Pdf(quotationId){
   const total=subtotal+sstAmount;
   const creatorStaff=(_staff||[]).find(x=>x.username===q.createdBy);
   const creatorName=creatorStaff?.certName||creatorStaff?.name||USERS[q.createdBy]?.name||q.createdBy||'';
-  let creatorSig=creatorStaff?.signature||'';
-  if(creatorSig&&!creatorSig.startsWith('data:')){ // only use the signature if it actually loads
-    const ok=await new Promise(res=>{ const im=new Image(); im.crossOrigin='anonymous'; im.onload=()=>res(true); im.onerror=()=>res(false); setTimeout(()=>res(im.complete&&im.naturalWidth>0),8000); im.src=creatorSig; });
-    if(!ok) creatorSig='';
-  }
+  const creatorSigRes=await pdfStaffSignature(q.createdBy);
+  const creatorSig=creatorSigRes.data;
+  if(!creatorSig&&q.createdBy) pdfSignatureWarning(creatorSigRes.why==='blocked'?[]:[creatorName],creatorSigRes.why==='blocked'?[creatorName]:[]);
   const esc=v=>escapeHtml(v==null?'':String(v));
   const money=v=>v?Number(v).toFixed(2):'';
   const FONT="Tahoma,Verdana,'DejaVu Sans',Arial,sans-serif";
@@ -10623,7 +10635,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   const labPossessive=labShort+(/s$/i.test(labShort)?"'":"'s");
   const esc=v=>escapeHtml(v==null?'':String(v));
   const staffOf=u=>(_staff||[]).find(x=>x.username===u);
-  const nameOf=u=>{ if(!u)return ''; const st=staffOf(u); return st?.certName||st?.name||USERS[u]?.name||u; };
+  const nameOf=u=>{ if(!u)return ''; const st=staffOf(u); return st?.name||USERS[u]?.name||st?.certName||u; }; // full name (not the name printed on certificates)
   const roleOf=u=>{ if(!u)return ''; const st=staffOf(u); return st?.role||USERS[u]?.role||''; };
   const NAVY='#1f3a5f', LINE='#b8c2cf', MUTED='#5b6776';
 
@@ -10651,7 +10663,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   const diff=ev.meetsRequirement==='Yes'?'No':((ev.meetsRequirement==='Partially'||ev.meetsRequirement==='No')?'Yes':'');
   const outcome={'Can Do':'accepted','Can Do (External)':'outsource','Cannot Do':'declined'}[item.capabilityVerdict]||'';
   const declineReason=outcome==='declined'?esc(ev.notes||'Outside current capability'):'';
-  const usableSig=u=>{ const url=staffOf(u)?.signature||''; return url&&(!loadedSigs||loadedSigs.has(url))?url:''; };
+  const usableSig=u=>(loadedSigs&&loadedSigs[u])||''; // embedded signature data, fetched before drawing
   const reviewerSig=usableSig(contractReviewer);
   const approverSig=item.capabilityVerdict?usableSig(item.capabilityReviewedBy):'';
 
@@ -10693,7 +10705,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;">
       <div><div style="font-size:18px;font-weight:bold;color:${NAVY};letter-spacing:.3px;">CONTRACT REVIEW FORM</div>
         <div style="font-size:10px;color:${MUTED};">Review of requests, tenders and contracts — ISO/IEC 17025:2017 Clause 7.1</div></div>
-      <div style="font-size:10px;color:${MUTED};text-align:right;">Item ${itemNo} of ${itemCount}<br/>Enquiry ref.: ${esc(entry.id||'')}</div>
+      <div style="font-size:10px;color:${MUTED};text-align:right;">Item ${itemNo} of ${itemCount}</div>
     </div>
     <div style="display:grid;grid-template-columns:1.3fr 1.3fr .9fr 1.1fr;border:1px solid ${NAVY};border-radius:4px;background:#f3f6fa;">
       ${[['Customer',esc(entry.name)],['Equipment',`${esc(item.eqName)}${item.quantity?` <span style="color:${MUTED};">× ${esc(item.quantity)}</span>`:''}`],['Enquiry received',enquiryDate||'—'],['Outcome',outcomeBadge]].map(([l,v],i)=>`<div style="padding:5px 9px;${i<3?`border-right:1px solid ${LINE};`:''}"><div style="font-size:8.5px;font-weight:bold;letter-spacing:.5px;color:${MUTED};text-transform:uppercase;">${l}</div><div style="font-size:11.5px;font-weight:bold;margin-top:2px;">${v}</div></div>`).join('')}
@@ -10764,19 +10776,12 @@ async function exportEntryCapabilityReviewPdf(entryId){
   const entry=_salesTracker.find(e=>e.id===entryId); if(!entry){alert('Entry not found.');return;}
   const reviewedItems=(entry.items||[]).filter(it=>it.capabilityVerdict);
   if(!reviewedItems.length){alert('No items in this entry have been reviewed yet.');return;}
-  // Load every signature first, so each one is fully in place before the page is captured
-  // (and so one that can't load is left out cleanly instead of rendering as a broken image).
-  const sigUrls=new Set();
-  const sigOf=u=>(_staff||[]).find(x=>x.username===u)?.signature||'';
-  [entry.salesPersonnel||entry.createdBy,...reviewedItems.map(it=>it.capabilityReviewedBy)].forEach(u=>{ const url=sigOf(u); if(url) sigUrls.add(url); });
-  const loadedSigs=new Set();
-  await Promise.all([...sigUrls].map(url=>new Promise(res=>{
-    const img=new Image(); img.crossOrigin='anonymous';
-    const done=ok=>{ if(ok) loadedSigs.add(url); res(); };
-    img.onload=()=>done(true); img.onerror=()=>done(false);
-    setTimeout(()=>done(img.complete&&img.naturalWidth>0),8000);
-    img.src=url;
-  })));
+  // Every signature is fetched and embedded before the pages are drawn
+  const people=[...new Set([entry.salesPersonnel||entry.createdBy,...reviewedItems.map(it=>it.capabilityReviewedBy)].filter(Boolean))];
+  const fullName=u=>(_staff||[]).find(x=>x.username===u)?.name||USERS[u]?.name||u;
+  const loadedSigs={}, missing=[], blocked=[];
+  await Promise.all(people.map(async u=>{ const r=await pdfStaffSignature(u); if(r.data) loadedSigs[u]=r.data; else (r.why==='blocked'?blocked:missing).push(fullName(u)); }));
+  pdfSignatureWarning(missing,blocked);
   const pages=[];
   for(let i=0;i<reviewedItems.length;i++) pages.push(...await buildContractReviewPages(entry,reviewedItems[i],i+1,reviewedItems.length,loadedSigs));
   await exportPagedPdf(pages,`F033_Contract_Review_${entry.name.replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`,'Contract Review Form (F033)',reviewedItems.length,true);
@@ -11192,7 +11197,7 @@ function stOpenRowMenu(ev,entryId){
   const items=e.items||[];
   let html='';
   if(items.some(it=>it.capabilityVerdict)) html+=stMenuItem('📄 Contract Review Form (PDF)',`exportEntryCapabilityReviewPdf('${e.id}')`);
-  if(e.linkedQuotationId) html+=stMenuItem('📄 Open quotation',`showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')`);
+  if(e.linkedQuotationId&&_quotationsV2.some(q=>q.id===e.linkedQuotationId)) html+=stMenuItem('📄 Open quotation',`showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')`);
   else if(items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict))&&!['open','quoted'].includes(stGroupOf(e.status))) html+=stMenuItem('📄 Create quotation',`openQuotationV2Modal(null,'${e.id}')`);
   if(e.jobNo) html+=stMenuItem('🔧 Open job '+escapeHtml(e.jobNo),`showView('equipment');el('equipment-search').value='${escapeForJsAttr(e.jobNo)}';renderEquipmentTable();`);
   items.forEach((it,idx)=>{ if(it.capabilityVerdict==='Cannot Do') html+=stMenuItem('🔄 Resubmit for review: '+escapeHtml(it.eqName),`resubmitCapabilityForReview('${e.id}',${idx})`); });
@@ -11220,7 +11225,7 @@ function stNextStep(e,readOnly){
   }
   const anyCleared=items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
   if(anyCleared){
-    if(e.linkedQuotationId){ const qn=(_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||'quotation';
+    if(e.linkedQuotationId&&_quotationsV2.some(q=>q.id===e.linkedQuotationId)){ const qn=(_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||'quotation';
       return `<button class="btn btn-outline btn-sm" onclick="showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')">📄 View ${escapeHtml(qn)}</button>`; }
     // Only prompt for a quotation before the PO arrives — later stages are past that point
     if(['open','quoted'].includes(stGroupOf(e.status))) return `<button class="btn btn-primary btn-sm" onclick="openQuotationV2Modal(null,'${e.id}')">📄 Create Quotation</button>`;
@@ -11924,11 +11929,13 @@ async function exportTrackerPdf(type){
   }
 }
 
+let _salesTrackerLoaded=false;
 async function loadSalesTracker(){
   try{
-    const s=await SB.get('wl_settings',SALES_TRACKER_KEY);
+    const s=await apiFetch('/api/row/wl_settings/'+encodeURIComponent(SALES_TRACKER_KEY)); // real errors, not "empty"
     _salesTracker=Array.isArray(s)?s:[];
-  }catch(e){_salesTracker=[];}
+    _salesTrackerLoaded=true;
+  }catch(e){_salesTracker=[]; _salesTrackerLoaded=false;}
 }
 async function saveSalesTracker(){ await SB.upsert('wl_settings',SALES_TRACKER_KEY,_salesTracker); }
 
@@ -15321,7 +15328,7 @@ function renderNeedsAttention(){
   // 1. Overdue jobs (Lab or Onsite, promised date passed, not yet done)
   const overdueCount=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal).flatMap(j=>j.items||[])
     .filter(it=>it.promisedDate&&new Date(it.promisedDate+'T00:00:00')<today&&it.status!=='Completed'&&it.status!=='KIV'&&it.status!=='Returned - Abnormal').length;
-  if(overdueCount) items.push({icon:'🚨',text:`${overdueCount} job item(s) overdue`,view:'equipment'});
+  if(overdueCount) items.push({icon:'🚨',text:`${overdueCount} item${overdueCount>1?'s':''} overdue — past the promised date`,view:'equipment'});
 
   // 2. Sticker low stock (all 4 types) — company-wide supply, so management only. Staff see
   // their own sticker situation (pending confirmations, below) rather than company inventory.
@@ -15399,7 +15406,31 @@ function renderNeedsAttention(){
     });
   }
 
-  if(!items.length){ box.innerHTML=''; return; }
+  // Personal and approval items that used to be separate coloured banners
+  const liveItems=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal).flatMap(j=>(j.items||[]).filter(i=>i.status!=='Deleted'));
+  if(typeof canApprove==='function'&&canApprove(currentUser)){
+    const mine=liveItems.filter(i=>i.status==='Pending Approval'&&(i.calData?.approvedByUsername||'')===currentUser).length;
+    if(mine) items.unshift({icon:'📬',text:`${mine} certificate${mine>1?'s':''} waiting for your approval`,view:'approval',level:'high'});
+  }
+  const myQueue=liveItems.filter(i=>i.assignedTo===currentUser&&['Assigned','In Progress','On-Site'].includes(i.status)).length;
+  if(myQueue) items.push({icon:'📋',text:`${myQueue} item${myQueue>1?'s':''} assigned to you`,view:'my-jobs'});
+  if(isAdmin(currentUser)){
+    const pc=(_claims||[]).filter(c=>c.status==='Pending').length;
+    if(pc) items.push({icon:'🧾',text:`${pc} staff claim${pc>1?'s':''} waiting for approval`,view:'claims'});
+    const pl=(_leaveRecords||[]).filter(r=>r.status==='Pending').length;
+    if(pl) items.push({icon:'🌴',text:`${pl} leave request${pl>1?'s':''} waiting for approval`,view:'leave'});
+  }
+  items.forEach(i=>{ if(i.icon==='🚨') i.level='high'; });
+  const rank=i=>i.icon==='🚨'?0:(i.level==='high'?1:2); // overdue first, then approvals, then everything else
+  items.sort((a,b)=>rank(a)-rank(b));
+  if(!items.length){ box.innerHTML='<div class="dash-attn" style="padding:11px 16px;font-size:13px;color:var(--text-muted);">✅ Nothing needs your attention right now.</div>'; return; }
+  box.innerHTML=`<div class="dash-attn">
+    <div style="padding:9px 16px;font-weight:700;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border);">Needs your attention</div>
+    ${items.map(i=>`<div class="dash-attn-row"><span class="dash-attn-dot" style="background:${i.level==='high'?'#dc2626':'#f59e0b'};"></span>
+      <span style="font-size:15px;">${i.icon}</span><span style="flex:1;font-size:13px;">${i.text}</span>
+      <button class="btn btn-outline btn-sm" onclick="${i.onclick||`showView('${i.view}')`}">Open</button></div>`).join('')}
+  </div>`;
+  return;
   box.innerHTML=`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 16px;">
     <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:8px;">⚠️ Needs Attention</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -15408,102 +15439,114 @@ function renderNeedsAttention(){
   </div>`;
 }
 
+// Opens the Equipment & Calibration list filtered to one item status (from a dashboard card)
+function dashOpenStatus(status){
+  showView('equipment');
+  const f=el('eq-filter-status'); if(f){ f.value=status; }
+  const q=el('eq-search'); if(q) q.value='';
+  if(typeof renderEquipmentTable==='function') renderEquipmentTable();
+}
+function dashOpenJob(jobNo){
+  showView('equipment');
+  const f=el('eq-filter-status'); if(f) f.value='';
+  const q=el('eq-search'); if(q) q.value=jobNo;
+  if(typeof renderEquipmentTable==='function') renderEquipmentTable();
+}
+function dashTimeAgo(iso){
+  const t=new Date(iso).getTime(); if(!isFinite(t)) return '';
+  const m=Math.round((Date.now()-t)/60000);
+  if(m<1) return 'just now'; if(m<60) return m+' min ago';
+  const h=Math.round(m/60); if(h<24) return h+' h ago';
+  const d=Math.round(h/24); if(d<7) return d+' day'+(d>1?'s':'')+' ago';
+  return fmtDateShort(iso);
+}
+// Every number here counts ITEMS (one calibration / one certificate each), so they all agree.
 function renderDashboard(){
   try{
   if(typeof renderNeedsAttention==='function') renderNeedsAttention();
-  const list=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal);
-  const allItems=list.flatMap(j=>j.items||[]).filter(i=>i.status!=='Deleted');
+  const staffView=isAdmin(currentUser)||getUserRole(currentUser)==='Manager';
   const today=new Date(); today.setHours(0,0,0,0);
-  const total=list.length;
-  const unassigned=allItems.filter(i=>i.status==='Unassigned').length;
-  const inprog=allItems.filter(i=>i.status==='Assigned'||i.status==='In Progress').length;
-  const pendApproval=allItems.filter(i=>i.status==='Pending Approval').length;
-  const completed=list.filter(j=>allItemsCompleted(j)).length;
-  el('dash-total').textContent=total;
-  el('dash-unassigned').textContent=unassigned;
-  el('dash-inprogress').textContent=inprog+pendApproval;
-  el('dash-completed').textContent=completed;
-  const totalItems=allItems.length||1;
-  const pct=n=>Math.round(n/totalItems*100);
-  el('ov-unassigned').textContent=unassigned; el('pb-unassigned').style.width=pct(unassigned)+'%';
-  el('ov-inprog').textContent=inprog; el('pb-inprog').style.width=pct(inprog)+'%';
-  el('ov-approval').textContent=pendApproval; el('pb-approval').style.width=pct(pendApproval)+'%';
-  el('ov-done').textContent=allItems.filter(i=>i.status==='Completed').length;
-  el('pb-done').style.width=pct(allItems.filter(i=>i.status==='Completed').length)+'%';
-  // Pending claims alert for admin
-  if(isAdmin(currentUser)){
-    const pendingClaims=(_claims||[]).filter(c=>c.status==='Pending');
-    const existingClaimsAlert=document.getElementById('dashboard-claims-alert');
-    if(existingClaimsAlert) existingClaimsAlert.remove();
-    if(pendingClaims.length>0){
-      const banner=document.createElement('div');
-      banner.id='dashboard-claims-alert';
-      banner.style.cssText='background:#fff3e0;border-radius:10px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;border:1px solid #ffb74d;';
-      banner.innerHTML=`<span style="font-size:13px;color:#c84b00;">🧾 <strong>${pendingClaims.length}</strong> staff claim${pendingClaims.length>1?'s':''} pending approval</span>
-        <button class="btn btn-outline btn-sm" onclick="showView('claims')" style="font-size:11px;">Review Claims</button>`;
-      const activityCard=document.querySelector('#view-dashboard .card');
-      if(activityCard) activityCard.insertAdjacentElement('beforebegin',banner);
+  const DAY=86400000;
+  const rows=_jobs.filter(j=>j.status!=='Deleted'&&!j.isInternalRefCal)
+    .flatMap(j=>(j.items||[]).filter(it=>it.status!=='Deleted').map(it=>({j,it,due:it.promisedDate||j.promisedDate||''})));
+  const IN_PROGRESS=['Assigned','In Progress','On-Site'];
+  const NOT_RUNNING=['Completed','KIV','Returned - Abnormal'];
+  const isOverdue=r=>r.due&&new Date(r.due+'T00:00:00')<today&&!NOT_RUNNING.includes(r.it.status);
+  const unassigned=rows.filter(r=>r.it.status==='Unassigned').length;
+  const inprog=rows.filter(r=>IN_PROGRESS.includes(r.it.status)).length;
+  const approval=rows.filter(r=>r.it.status==='Pending Approval').length;
+  const overdue=rows.filter(isOverdue).length;
+  const month=toLocalDateStr(new Date()).slice(0,7);
+  const doneMonth=rows.filter(r=>r.it.status==='Completed'&&String(r.it.approvedAt||r.it.calData?.approvedAt||'').slice(0,7)===month).length;
+  const monthName=new Date().toLocaleDateString('en-GB',{month:'long'});
+  const kpi=(label,n,sub,color,onclick)=>`<button class="dash-kpi${n?'':' zero'}" style="--k:${color};" onclick="${onclick}"><div class="dash-kpi-label">${label}</div><div class="dash-kpi-num">${n}</div><div class="dash-kpi-sub">${sub}</div></button>`;
+  const grid=el('dash-stats-grid');
+  if(grid) grid.innerHTML=
+      kpi('Waiting to assign',unassigned,'items not yet assigned','#d97706',"dashOpenStatus('Unassigned')")
+     +kpi('In progress',inprog,'items being calibrated','#2563eb',"dashOpenStatus('In Progress')")
+     +kpi('Awaiting approval',approval,'certificates to approve','#7c3aed',"dashOpenStatus('Pending Approval')")
+     +kpi('Overdue',overdue,'items past the promised date','#dc2626',"document.getElementById('dash-deadlines-card').scrollIntoView({behavior:'smooth'})")
+     +kpi(`Completed in ${monthName}`,doneMonth,'items approved this month','#16a34a',"showView('completed')");
+
+  // ── Deadlines: overdue + due within 7 days (everyone else sees only their own items) ──
+  const soon=new Date(today.getTime()+7*DAY);
+  const dlRows=rows.filter(r=>r.due&&!NOT_RUNNING.includes(r.it.status)&&new Date(r.due+'T00:00:00')<=soon&&(staffView||r.it.assignedTo===currentUser));
+  const groups={};
+  dlRows.forEach(r=>{ const k=r.j.jobNo+'|'+r.due; (groups[k]=groups[k]||{j:r.j,due:r.due,items:[]}).items.push(r.it); });
+  const glist=Object.values(groups).sort((a,b)=>a.due.localeCompare(b.due)||String(a.j.jobNo).localeCompare(String(b.j.jobNo)));
+  const dlBox=el('dash-deadlines');
+  if(el('dash-deadlines-sub')) el('dash-deadlines-sub').textContent=staffView?'Overdue and due in the next 7 days':'Your items — overdue and due in the next 7 days';
+  if(dlBox){
+    if(!glist.length) dlBox.innerHTML='<div style="padding:22px 16px;text-align:center;color:var(--text-muted);font-size:13px;">✅ Nothing overdue or due in the next 7 days.</div>';
+    else{
+      const shown=glist.slice(0,12);
+      dlBox.innerHTML=`<div class="table-wrap"><table class="dash-dl">${shown.map(g=>{
+        const d=Math.round((new Date(g.due+'T00:00:00')-today)/DAY);
+        const badge=d<0?`<span class="dash-due" style="background:#fdecec;color:#b42318;">${-d} day${d<-1?'s':''} overdue</span>`
+          :d===0?`<span class="dash-due" style="background:#fff4e0;color:#9a5b00;">due today</span>`
+          :`<span class="dash-due" style="background:#e8f1ff;color:#1d4ed8;">due in ${d} day${d>1?'s':''}</span>`;
+        const counts={}; g.items.forEach(it=>{ counts[it.eqName||'Item']=(counts[it.eqName||'Item']||0)+1; });
+        const what=Object.entries(counts).map(([n,c])=>escapeHtml(n)+(c>1?` ×${c}`:'')).join(', ');
+        const names=[...new Set(g.items.filter(it=>it.assignedTo).map(it=>USERS[it.assignedTo]?.name||it.assignedTo))];
+        const unas=g.items.filter(it=>!it.assignedTo).length;
+        const who=names.map(escapeHtml).join(', ')+(unas?` <span class="dash-due" style="background:#fff4e0;color:#9a5b00;font-weight:600;">${unas} unassigned</span>`:'');
+        return `<tr onclick="dashOpenJob('${escapeForJsAttr(g.j.jobNo)}')">
+          <td style="white-space:nowrap;"><b>${escapeHtml(g.j.jobNo)}</b><div style="color:var(--text-muted);font-size:11.5px;">${fmtDateShort(g.due)}</div></td>
+          <td><div style="font-weight:600;">${escapeHtml(g.j.custName||'')}</div><div style="color:var(--text-muted);font-size:11.5px;">${what}</div></td>
+          <td class="dash-hide-m">${who||'<span style="color:var(--text-muted);">—</span>'}</td>
+          <td style="text-align:right;">${badge}</td></tr>`;
+      }).join('')}</table></div>${glist.length>12?`<div style="padding:8px 16px;font-size:12px;"><a href="javascript:void(0)" onclick="showView('equipment')">and ${glist.length-12} more →</a></div>`:''}`;
     }
-    // Pending leave alert
-    const pendingLeave=(_leaveRecords||[]).filter(r=>r.status==='Pending');
-    const existingLeaveAlert=document.getElementById('dashboard-leave-alert');
-    if(existingLeaveAlert) existingLeaveAlert.remove();
-    if(pendingLeave.length>0){
-      const banner2=document.createElement('div');
-      banner2.id='dashboard-leave-alert';
-      banner2.style.cssText='background:#e8f5e9;border-radius:10px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;border:1px solid #a5d6a7;';
-      banner2.innerHTML=`<span style="font-size:13px;color:#2e7d32;">🌴 <strong>${pendingLeave.length}</strong> leave request${pendingLeave.length>1?'s':''} pending approval</span>
-        <button class="btn btn-outline btn-sm" onclick="showView('leave')" style="font-size:11px;">Review Leave</button>`;
-      const activityCard=document.querySelector('#view-dashboard .card');
-      if(activityCard) activityCard.insertAdjacentElement('beforebegin',banner2);
-    }
   }
-  const overdue=list.filter(j=>{
-    if(!j.promisedDate) return false;
-    const pd=new Date(j.promisedDate+'T00:00:00');
-    return pd<today&&!allItemsCompleted(j);
-  });
-  const overdueCard=el('dash-overdue-card');
-  const overdueBanner=el('dash-overdue-banner');
-  if(overdue.length>0){
-    if(overdueCard) overdueCard.style.display='block';
-    if(overdueBanner) overdueBanner.style.display='block';
-    const title=el('dash-overdue-title');
-    const text=el('dash-overdue-text');
-    if(title) title.textContent=`${overdue.length} job${overdue.length>1?'s':''} overdue!`;
-    if(text) text.textContent='Past promised ready date — customer may be waiting.';
-    const countEl=el('dash-overdue-count'); if(countEl) countEl.textContent=overdue.length;
-    const tbody=el('dash-overdue-tbody');
-    if(tbody) tbody.innerHTML=overdue.map(j=>{
-      const pd=new Date(j.promisedDate+'T00:00:00');
-      const daysOver=Math.floor((today-pd)/(1000*60*60*24));
-      const pendItems=j.items.filter(i=>i.status!=='Completed'&&i.status!=='Deleted');
-      return `<tr>
-        <td><span style="font-weight:700;font-size:12px;">${j.jobNo}</span></td>
-        <td>${escapeHtml(j.custName)}</td>
-        <td>${pendItems.map(i=>i.eqName).join(', ')}</td>
-        <td style="color:var(--red);font-weight:600;">${j.promisedDate}</td>
-        <td><span class="badge badge-red">${daysOver}d</span></td>
-        <td>${pendItems.map(i=>USERS[i.assignedTo]?.name||i.assignedTo||'Unassigned').filter((v,i,a)=>a.indexOf(v)===i).join(', ')}</td>
-        <td><span class="badge ${STATUS_BADGE[j.status]||'badge-slate'}">${j.status}</span></td>
-      </tr>`;
-    }).join('');
-  } else {
-    if(overdueCard) overdueCard.style.display='none';
-    if(overdueBanner) overdueBanner.style.display='none';
+
+  // ── Team workload (management only) ──
+  const wlCard=el('dash-workload-card'), gridWrap=el('dash-grid');
+  if(wlCard) wlCard.style.display=staffView?'':'none';
+  if(gridWrap) gridWrap.style.gridTemplateColumns=staffView?'':'1fr';
+  if(staffView&&el('dash-workload')){
+    const per={};
+    rows.filter(r=>r.it.assignedTo&&IN_PROGRESS.includes(r.it.status)).forEach(r=>{ const u=r.it.assignedTo; (per[u]=per[u]||{n:0,over:0}).n++; if(isOverdue(r)) per[u].over++; });
+    const people=Object.entries(per).sort((a,b)=>b[1].n-a[1].n);
+    const max=Math.max(1,...people.map(([,v])=>v.n));
+    el('dash-workload').innerHTML=people.length?people.map(([u,v])=>`<div class="dash-wl-row">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;"><span style="font-weight:600;">${escapeHtml(USERS[u]?.name||u)}</span>
+          <span>${v.n} item${v.n>1?'s':''}${v.over?` · <span style="color:var(--red);font-weight:700;">${v.over} overdue</span>`:''}</span></div>
+        <div class="dash-wl-bar"><span style="width:${Math.round(v.n/max*100)}%;${v.over?'background:linear-gradient(90deg,var(--blue),#dc2626);':''}"></span></div></div>`).join('')
+      :'<div style="text-align:center;color:var(--text-muted);font-size:13px;">Nobody has items in progress.</div>';
   }
-  // Banners
-  if(canApprove(currentUser)){
-    el('jay-approval-banner').style.display=pendApproval>0?'block':'none';
-    el('jay-approval-count-text').textContent=`${pendApproval} item(s) awaiting your approval.`;
-  } else { el('jay-approval-banner').style.display='none'; }
-  const myItems=list.flatMap(j=>(j.items||[]).filter(i=>i.assignedTo===currentUser&&i.status!=='Completed'&&i.status!=='Pending Approval'&&i.status!=='Returned - Abnormal')).length;
-  const adminUser=_settings.username||'admin';
-  el('my-jobs-banner').style.display=myItems>0&&currentUser!==adminUser?'block':'none';
-  el('my-jobs-count-text').textContent=`${myItems} item(s) assigned to you.`;
-  }catch(_e){
-    console.error("renderDashboard error:",_e);
+
+  // ── Recent activity (same people who can open the audit log) ──
+  const actCard=el('dash-activity-card');
+  const canAudit=!el('nav-reports')||!el('nav-reports').classList.contains('hidden-nav');
+  if(actCard) actCard.style.display=canAudit?'':'none';
+  if(canAudit&&el('dash-activity')){
+    const log=(_settings.auditLog||[]).slice(0,8);
+    el('dash-activity').innerHTML=log.length?log.map(a=>`<div class="activity-item"><div class="activity-dot blue">${a.icon||'•'}</div><div>
+        <div class="activity-text">${a.msg||''}</div>
+        <div class="activity-time">${escapeHtml(USERS[a.by]?.name||a.by||'')}${a.by?' · ':''}${dashTimeAgo(a.ts)}</div></div></div>`).join('')
+      :'<div style="color:var(--text-muted);font-size:13px;">No activity recorded yet.</div>';
   }
+  }catch(_e){ console.error("renderDashboard error:",_e); }
 }
 // ── BADGES ──
 function refreshAllBadges(){
@@ -19910,8 +19953,8 @@ async function confirmMarkCollected(){
 async function exportDeliveryOrderPdf(jobNo){
   const j=getJob(jobNo); if(!j||!j.doNumber){alert('This job has not been marked Collected yet.');return;}
   const esc=v=>escapeHtml(v==null?'':String(v));
-  const sig=j.collectionSignature||'';
-  const loaded=await pdfLoadImages([sig]);
+  const sig=(await pdfImageAsDataUrl(j.collectionSignature||'')).data;
+  const loaded=new Set([sig]);
   const topBlock=(pageNo,pageCount)=>`
     <div style="text-align:center;font-size:19px;font-weight:bold;letter-spacing:.5px;margin:0 0 8px;">DELIVERY ORDER</div>
     <div style="display:flex;justify-content:space-between;gap:14px;margin-bottom:10px;">
@@ -21528,6 +21571,7 @@ function docHighestUsed(series,yymm){
 }
 async function renderDocNumbering(){
   const card=el('doc-numbering-card'), body=el('doc-numbering-body'); if(!card||!body) return;
+  const sc=el('system-check-card'); if(sc) sc.style.display=isAdmin(currentUser)?'':'none';
   if(!isAdmin(currentUser)){ card.style.display='none'; return; }
   card.style.display='';
   const yymm=docYymm();
@@ -21567,6 +21611,38 @@ async function setDocSequence(prefix,seenCounter){
 }
 
 // ═══════════════════════════ A4 PAGING FOR LETTERHEAD DOCUMENTS ═══════════════════════════
+// Signatures and other images for generated PDFs are fetched fresh (never from an old browser copy)
+// and embedded straight into the document as data, so a PDF doesn't depend on the storage granting
+// the page cross-site image permission at draw time. Returns {data, why}: why = 'none' (nothing
+// saved) or 'blocked' (storage refused / unreachable).
+const _pdfImgCache={};
+async function pdfImageAsDataUrl(url){
+  if(!url) return {data:'',why:'none'};
+  if(String(url).startsWith('data:')) return {data:url,why:''};
+  if(_pdfImgCache[url]) return _pdfImgCache[url];
+  try{
+    const r=await fetch(url+(url.includes('?')?'&':'?')+'pdf='+Date.now(),{mode:'cors',cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const blob=await r.blob();
+    const data=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(blob); });
+    return (_pdfImgCache[url]={data,why:''});
+  }catch(e){ console.warn('PDF image could not be loaded:',url,e); return {data:'',why:'blocked'}; }
+}
+// A person's signature for a PDF. The startup staff list leaves out signatures saved as embedded
+// images (to keep loading fast), so if it's missing there, read that person's full staff record.
+async function pdfStaffSignature(username){
+  if(!username) return {data:'',why:'none'};
+  let sig=(_staff||[]).find(x=>x.username===username)?.signature||'';
+  if(!sig){ try{ const row=await apiFetch('/api/row/wl_staff/'+encodeURIComponent(username)); sig=(row&&row.signature)||''; }catch(e){} }
+  if(!sig) return {data:'',why:'none'};
+  return pdfImageAsDataUrl(sig);
+}
+function pdfSignatureWarning(missing,blocked){
+  const parts=[];
+  if(blocked.length) parts.push(`${blocked.join(' and ')}: the signature file couldn't be read from storage. In Cloudflare R2 → CORS, "AllowedOrigins" must be exactly ${location.origin} (no "/" at the end).`);
+  if(missing.length) parts.push(`${missing.join(' and ')}: no signature is saved on the staff record (Personnel → Edit → upload a signature).`);
+  if(parts.length) showToast('⚠️ Signature left blank — '+parts.join('  ·  '),'warn',15000);
+}
 async function pdfLoadImages(urls){
   const ok=new Set();
   await Promise.all([...new Set((urls||[]).filter(Boolean))].map(url=>new Promise(res=>{
@@ -22030,7 +22106,9 @@ async function exportPurchaseOrderPdf(poId){
   const money=n=>Number(n||0).toFixed(2);
   const t=poTotals(po); const outsource=po.purpose==='outsource';
   const approved=['Approved','Sent','Received'].includes(po.status);
-  const sigs=await pdfLoadImages([staffSigOf(po.createdBy),approved?staffSigOf(po.approvedBy):'']);
+  const prepSig=(await pdfStaffSignature(po.createdBy)).data;
+  const apprSig=approved?(await pdfStaffSignature(po.approvedBy)).data:'';
+  const sigs=null;
   const ref=(()=>{ const e=po.linkedPurchasingEntryId?(_purchasingTracker||[]).find(x=>x.id===po.linkedPurchasingEntryId):null; const jobs=[...new Set((po.items||[]).map(i=>i.jobNo).filter(Boolean))]; return [...jobs.map(j=>'Job '+j),e?e.name:''].filter(Boolean).join(', '); })();
   const topBlock=(pageNo,pageCount)=>`
     <div style="text-align:center;font-size:19px;font-weight:bold;letter-spacing:.5px;margin:0 0 6px;">PURCHASE ORDER</div>
@@ -22056,8 +22134,8 @@ async function exportPurchaseOrderPdf(poId){
     ${po.remarks?`<div style="margin-bottom:8px;"><b>Remarks:</b> <span style="white-space:pre-line;">${esc(po.remarks)}</span></div>`:''}
     <div style="font-size:11px;color:#555;margin-bottom:12px;">Please quote this PO number on all delivery orders, invoices and correspondence.${outsource?' Please return the item(s) with the calibration certificate.':''}</div>
     <div style="display:flex;justify-content:space-between;">
-      ${pdfSigBlock('Prepared by',staffNameOf(po.createdBy),staffSigOf(po.createdBy),fmtDateShort(po.createdAt),sigs)}
-      ${pdfSigBlock('Approved by',approved?staffNameOf(po.approvedBy):'',approved?staffSigOf(po.approvedBy):'',approved&&po.approvedAt?fmtDateShort(po.approvedAt):'',sigs)}
+      ${pdfSigBlock('Prepared by',staffNameOf(po.createdBy),prepSig,fmtDateShort(po.createdAt),sigs)}
+      ${pdfSigBlock('Approved by',approved?staffNameOf(po.approvedBy):'',apprSig,approved&&po.approvedAt?fmtDateShort(po.approvedAt):'',sigs)}
     </div>`;
   await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${po.poNumber}.pdf`,label:'Purchase Order',count:(po.items||[]).length});
 }
