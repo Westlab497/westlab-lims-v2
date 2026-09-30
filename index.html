@@ -10648,7 +10648,7 @@ async function exportQuotationV2Pdf(quotationId){
       <div style="width:33%;">
         <div style="font-weight:bold;font-size:16.5px;margin-bottom:6px;white-space:nowrap;">QUOTATION : ${esc(q.quotationNo)}</div>
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
-          ${[['Your Ref.',q.yourRef||''],['Our Ref.',q.ourRef||(_salesTracker.find(e=>e.id===q.linkedSalesTrackerId)?.enquiryNo||'')],['C. C.',''],['Sales Person',creatorName],['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:78px;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
+          ${[['Your Ref.',q.yourRef||''],['Our Ref.',q.ourRef||(_salesTracker.find(e=>e.id===q.linkedSalesTrackerId)?.enquiryNo||'')],['Sales Person',creatorName],['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:92px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
         </table>
       </div>
     </div>
