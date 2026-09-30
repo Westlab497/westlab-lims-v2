@@ -6399,6 +6399,7 @@ function handleLogoSelect(e){
       if(uploadRes.ok){
         const r2res=await uploadRes.json();
         _settings.logoUrl=r2res.url||'https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/'+path;
+        _pdfLogoData=null; // documents pick up the new logo
         showToast('✅ Logo uploaded — click Save Changes','success',3000);
       } else {
         showToast('❌ Logo upload failed — please try again (nothing was saved)','error',5000);
@@ -7177,7 +7178,7 @@ function buildReceiptHtml(jobs){
   const s=_settings;
   const labName=s.labName||'Westlab (M) Sdn. Bhd.';
   const labAddr=s.address||'';
-  const logoUrl=s.logoUrl||'';
+  const logoUrl=_pdfLogoData||s.logoUrl||WESTLAB_LETTERHEAD_LOGO;
   const regNo=s.regNo||'';
   const now=new Date();
   const fmtDt=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});};
@@ -7682,6 +7683,7 @@ let _pdfPreviewUrl=null, _pdfPreviewFilename=null;
 
 async function generateReceiptPdfBase64(jobs){
   try{
+    await pdfLogoDataUrl();
     if(typeof html2canvas==='undefined'||typeof PDFLib==='undefined'){
       console.warn('PDF libraries not loaded yet — skipping receipt attachment');
       return null;
@@ -8209,7 +8211,7 @@ async function submitCannotCalibrate(){
 function buildAbnormalReportHtml(r){
   const chk=(list,val)=>list.includes(val)?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>';
   const chkOne=(val,expected)=>val===expected?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>';
-  const logoUrl=_settings.logoUrl&&!_settings.logoUrl.startsWith('data:')?_settings.logoUrl:'';
+  const logoUrl=_pdfLogoData||(_settings.logoUrl&&!_settings.logoUrl.startsWith('data:')?_settings.logoUrl:'')||WESTLAB_LETTERHEAD_LOGO;
   return `<div style="width:794px;padding:28px 36px;font-family:'DM Sans',Arial,sans-serif;color:#111;background:#fff;font-size:9.5pt;">
     <div style="text-align:center;margin-bottom:10px;">
       ${logoUrl?`<img src="${logoUrl}" style="height:40px;"/>`:`<div style="font-weight:800;font-size:16pt;color:#0f1f3d;">${_settings.labName||'WESTLAB'}</div>`}
@@ -8294,6 +8296,7 @@ function buildAbnormalReportHtml(r){
 }
 async function generateAbnormalReportPdfBase64(r){
   try{
+    await pdfLogoDataUrl();
     if(typeof html2canvas==='undefined'||typeof PDFLib==='undefined')return null;
     const html=buildAbnormalReportHtml(r);
     const frame=el('receipt-print-frame');
@@ -10418,7 +10421,7 @@ async function exportQuotationV2Pdf(quotationId){
   const money=v=>v?Number(v).toFixed(2):'';
   const FONT="Tahoma,Verdana,'DejaVu Sans',Arial,sans-serif";
   const PAGE_W=794, PAGE_H=1123, PX=38, TOP=30, BOTTOM=40;
-  const logo=(s.logoUrl&&!s.logoUrl.startsWith('data:'))?s.logoUrl:WESTLAB_LETTERHEAD_LOGO;
+  const logo=await pdfLogoDataUrl();
   const labName=(s.labName||'Westlab (M) Sdn Bhd').replace(/\./g,'').toUpperCase();
   const regNo=[s.regNo,s.regNoSecondary].filter(Boolean).join(' ')||'202601005304 (1667402-A)';
   const addressHtml=s.address?esc(s.address):'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh,<br/>47000 Sungai Buloh, Selangor.';
@@ -20295,7 +20298,7 @@ async function exportLegacyTrackerPoPdf(entryId){
 async function exportInvoicePdf(invoiceId){
   const inv=_invoices.find(x=>x.id===invoiceId); if(!inv)return;
   const s=_settings;
-  const logoUrl=s.logoUrl&&!s.logoUrl.startsWith('data:')?s.logoUrl:'';
+  const logoUrl=await pdfLogoDataUrl();
   const html=`<div style="width:800px;padding:36px;font-family:Arial,sans-serif;background:#fff;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #0f1f3d;padding-bottom:14px;">
       <div style="display:flex;align-items:center;gap:12px;">
@@ -21770,6 +21773,18 @@ async function pdfStaffSignature(username){
   if(!sig){ try{ const row=await apiFetch('/api/row/wl_staff/'+encodeURIComponent(username)); sig=(row&&row.signature)||''; }catch(e){} }
   if(!sig) return {data:'',why:'none'};
   return pdfImageAsDataUrl(sig);
+}
+// The company logo for PDFs: the logo uploaded in Settings, fetched fresh and embedded (so R2
+// permissions / an old browser copy can't blank it); if that can't be read, the Westlab logo
+// built into the app. Remembered for the session.
+let _pdfLogoData=null, _pdfLogoFor=null;
+async function pdfLogoDataUrl(){
+  const url=(_settings&&_settings.logoUrl)||'';
+  if(_pdfLogoData&&_pdfLogoFor===url) return _pdfLogoData;
+  let data='';
+  if(url){ const r=await pdfImageAsDataUrl(url); data=r.data; if(!data) console.warn('Company logo could not be read from storage — using the built-in Westlab logo.'); }
+  _pdfLogoData=data||WESTLAB_LETTERHEAD_LOGO; _pdfLogoFor=url;
+  return _pdfLogoData;
 }
 function pdfSignatureWarning(missing,blocked){
   const parts=[];
