@@ -1277,6 +1277,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
         <div id="ph-table"></div>
       </div></div>
+      <div class="card" id="prp-tab-cal" style="display:none;"><div class="card-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <div style="font-size:12px;color:var(--text-muted);max-width:640px;">Standard calibration points per equipment type — suggested on enquiries, quotations and jobs from the item's range. Matched by the same names as your standard items (all services).</div>
+          <button class="btn btn-primary btn-sm" onclick="openCalPointEditor(null)">+ Add equipment type</button>
+        </div>
+        <div id="cp-list"></div>
+      </div></div>
       <div class="card" id="prp-tab-jobs" style="display:none;"><div class="card-body">
         <input class="form-control" id="price-ref-search" placeholder="Search equipment name or model, e.g. Pressure Gauge, Fluke 717…" oninput="renderPriceReferenceResults()" autocomplete="off"/>
         <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Prices actually charged on jobs, grouped by equipment and model — a reference range, not a fixed rate.</div>
@@ -2088,7 +2095,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div id="price-hint-box" style="display:none;background:#fff3e0;border-radius:8px;padding:8px 14px;font-size:12px;color:#c84b00;margin-bottom:4px;"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Tag No. <span style="font-size:11px;color:var(--text-muted);">(Customer's asset tag — leave blank if none)</span></label><input class="form-control" id="eq-tag-no" placeholder="e.g. EQ-0012 or leave blank if N/A"/></div>
-        <div class="form-group"><label class="form-label">Calibration Points</label><input class="form-control" id="eq-cal-points" placeholder="e.g. 0, 50, 100"/></div>
+        <div class="form-group"><label class="form-label">Calibration Points</label><input class="form-control" id="eq-cal-points" placeholder="e.g. 0, 50, 100"/><div id="eq-cal-sug"></div></div>
       </div>
       <div class="unit-target-group" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
         <label class="form-label" style="margin-bottom:4px;">Unit <span style="font-size:11px;font-weight:normal;color:var(--text-muted);">(applies to both Spec and Range below)</span></label>
@@ -7087,7 +7094,7 @@ function renderExtraEquipment(){
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Calibration Points</label>
-          <input class="form-control" value="${escapeHtml(eq.calPoints)}" placeholder="e.g. 0, 50, 100°C" oninput="updateExtraField(${i},'calPoints',this.value)"/></div>
+          <input class="form-control" id="extra-calpts-${i}" value="${escapeHtml(eq.calPoints)}" placeholder="e.g. 0, 50, 100°C" oninput="updateExtraField(${i},'calPoints',this.value)"/><div id="extra-cal-sug-${i}"></div></div>
         <div class="form-group unit-target-group"><label class="form-label">Resolution / Readability</label>
           <div style="display:flex;gap:6px;">
             <input class="form-control" data-unit-target value="${eq.resolution}" placeholder="e.g. 0.01" oninput="updateExtraField(${i},'resolution',this.value)"/>
@@ -7182,6 +7189,7 @@ function renderExtraEquipment(){
     renderSocSection(`extra-eq-soc-${i}`,eq);
   });
   populateAllUnitPickers();
+  if(typeof refreshJobCalSugs==='function') setTimeout(refreshJobCalSugs,0);
 }
 
 // ── JOB RECEIPT PRINT ──
@@ -9617,15 +9625,28 @@ function qtSocLines(it){
   const legacyUnits=Math.max(1,parseFloat(it.quantity)||1);
   return [{name:'',units:legacyUnits,price:it.socPricePerUnit,amount:legacyUnits*it.socPricePerUnit}];
 }
+// Extra calibration points: the item keeps a snapshot of how many extra points (beyond the standard)
+// and the price per point, so saved quotations never change when the standard settings do later.
+// For a partial PO the count is scaled to the ordered quantity.
+function qtExtraPoints(it,qty){
+  const n0=parseInt(it.extraPointsCount)||0, p=parseFloat(it.extraPointPrice)||0;
+  if(it.extraPointsWaived||n0<=0||p<=0) return {n:0,price:p,gross:0};
+  const q0=parseInt(it.extraPointsQty)||qty; const n=Math.round(n0*qty/q0);
+  return {n,price:p,gross:n*p};
+}
 function qtLineCalc(it){
   const qty=Math.max(1,parseFloat(it.quantity)||1);
   const price=parseFloat(it.unitPrice)||0;
   const gross=qty*price;
-  const disc=qtParseDiscount(it.discount,gross);
-  const net=gross-disc;
+  const ex=qtExtraPoints(it,qty);
+  const base=gross+ex.gross;
+  const disc=qtParseDiscount(it.discount,base);        // the line discount covers calibration + extra points
+  const baseDisc=base?disc*gross/base:0, exDisc=disc-baseDisc;
+  const net=base-disc;
   const soc=qtSocLines(it);
   const socTotal=soc.reduce((sum,l)=>sum+l.amount,0);
-  return {qty,price,gross,disc,net,soc,socTotal,total:net+socTotal,netUnitPrice:net/qty};
+  return {qty,price,gross,disc,net,soc,socTotal,total:net+socTotal,netUnitPrice:net/qty,
+    baseNet:gross-baseDisc,baseDisc,extra:{n:ex.n,price:ex.price,gross:ex.gross,disc:exDisc,net:ex.gross-exDisc}};
 }
 function qtQuotationTotal(items){ return (items||[]).filter(it=>it&&it.eqName!=='').reduce((sum,it)=>sum+qtLineCalc(it).total,0); }
 // One row of Serial / Tag / Cal Points / Resolution per unit on the line.
@@ -9667,6 +9688,7 @@ function qtExpandToJobUnits(items){
         unitPrice:Math.round(c.netUnitPrice*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
         socParameters:(ui<socN&&it.socParameters)?JSON.parse(JSON.stringify(it.socParameters)):undefined};
       delete unit.units; delete unit.discount; delete unit.srcIdx; delete unit.poAccepted; delete unit.poQty;
+      ['extraPointsCount','extraPointsQty','extraPointPrice','extraPointsStd','extraPointsWaived','extraPointsManual'].forEach(k=>delete unit[k]);
       out.push(unit);
     });
   });
@@ -9849,15 +9871,30 @@ function toggleQtv2SameCal(idx,same){
   if(!same) it.units.forEach(u=>{ if(!u.calPoints) u.calPoints=it.calPoints||''; if(!u.resolution) u.resolution=it.resolution||''; });
   renderQtv2ItemsList();
 }
+function qtCalSugHtml(it,idx){
+  const same=it.sameCal!==false;
+  return calPointSuggestionsHtml(calPointSuggestions(it.eqName,it.range),pts=>`applyQtv2CalPoints(${idx},'${escapeForJsAttr(pts)}',false)`,
+    same?null:pts=>`applyQtv2CalPoints(${idx},'${escapeForJsAttr(pts)}',true)`);
+}
+function applyQtv2CalPoints(idx,pts,allUnits){
+  const it=_qtv2DraftItems[idx]; if(!it) return;
+  if(it.sameCal!==false||!allUnits) it.calPoints=pts;
+  if(it.sameCal===false){ qtEnsureUnits(it); if(allUnits) it.units.forEach(u=>u.calPoints=pts); else if(it.units[0]) it.units[0].calPoints=pts; }
+  renderQtv2ItemsList();
+}
 function applyQtv2Price(idx,price,disc){ const it=_qtv2DraftItems[idx]; if(!it) return; it.unitPrice=price; it.discount=disc||''; renderQtv2ItemsList(); }
-function qtRefreshAllTotals(){ _qtv2DraftItems.forEach((_,i)=>updateQtv2ItemTotal(i)); updateQtv2GrandTotal(); if(typeof qtRefreshDiffs==='function') qtRefreshDiffs(); }
+function qtRefreshAllTotals(){ _qtv2DraftItems.forEach(qtApplyExtraAuto); _qtv2DraftItems.forEach((_,i)=>updateQtv2ItemTotal(i)); updateQtv2GrandTotal(); if(typeof qtRefreshDiffs==='function') qtRefreshDiffs();
+  _qtv2DraftItems.forEach((it,i)=>{ const b=el(`qtv2-cal-sug-${i}`); if(b) b.innerHTML=qtCalSugHtml(it,i); }); } // suggestions follow the name / range as you type
 function updateQtv2ItemTotal(idx){
   const it=_qtv2DraftItems[idx]; if(!it)return;
   const c=qtLineCalc(it); const total=c.total;
-  const parts=[`calibration RM ${c.net.toFixed(2)}${c.disc?` (after RM ${c.disc.toFixed(2)} discount)`:''}`];
+  const parts=[`calibration RM ${c.baseNet.toFixed(2)}`];
+  if(c.extra.gross) parts.push(`${c.extra.n} extra point${c.extra.n>1?'s':''} RM ${c.extra.net.toFixed(2)}`);
+  if(c.disc) parts[parts.length-1]+=` (after RM ${c.disc.toFixed(2)} discount)`;
   if(c.socTotal) parts.push(`SoC RM ${c.socTotal.toFixed(2)}`);
   const el2=el(`qtv2-item-total-${idx}`); if(el2) el2.textContent=`RM ${total.toFixed(2)}`;
-  const bd=el(`qtv2-item-breakdown-${idx}`); if(bd) bd.textContent=(c.disc||c.socTotal)?parts.join(' + '):'';
+  const bd=el(`qtv2-item-breakdown-${idx}`); if(bd) bd.textContent=(c.disc||c.socTotal||c.extra.gross)?parts.join(' + '):'';
+  const nb=el(`qtv2-extra-${idx}`); if(nb) nb.innerHTML=qtExtraNoticeHtml(it,'qtv2',idx);
   const hd=el(`qtv2-item-head-total-${idx}`); if(hd) hd.textContent=`RM ${total.toFixed(2)}`;
   updateQtv2GrandTotal();
 }
@@ -10004,9 +10041,10 @@ function openStandardPriceListModal(){ openPriceReferencePage('std'); }
 function openPriceReferenceModal(){ openPriceReferencePage('std'); }
 function prpSetTab(t){ _prpTab=t; renderPriceReferencePage(); }
 function renderPriceReferencePage(){
-  const tabs=[['std','Standard items'],['hist','Quotation price history'],['jobs','Job prices']];
+  const tabs=[['std','Standard items'],['hist','Quotation price history'],['cal','Calibration points'],['jobs','Job prices']];
   const tb=el('prp-tabs'); if(tb) tb.innerHTML=tabs.map(([k,l])=>`<button class="st-tab ${_prpTab===k?'active':''}" onclick="prpSetTab('${k}')">${l}</button>`).join('');
-  ['std','hist','jobs'].forEach(k=>{ const d=el('prp-tab-'+k); if(d) d.style.display=_prpTab===k?'':'none'; });
+  ['std','hist','cal','jobs'].forEach(k=>{ const d=el('prp-tab-'+k); if(d) d.style.display=_prpTab===k?'':'none'; });
+  if(_prpTab==='cal') renderCalPointList();
   if(_prpTab==='std'){ renderPriceReferenceTable(); ensurePriceRefCodes().then(renderPriceReferenceTable).catch(()=>{}); }
   if(_prpTab==='hist'){
     const f=window._prpPending; window._prpPending=null;
@@ -10017,6 +10055,72 @@ function renderPriceReferencePage(){
     renderPriceHistoryPage();
   }
   if(_prpTab==='jobs') renderPriceReferenceResults();
+}
+function renderCalPointList(){
+  const box=el('cp-list'); if(!box) return;
+  const list=(_settings.calPointTemplates||[]).slice().sort((a,b)=>String(a.eqName).localeCompare(String(b.eqName)));
+  box.innerHTML=list.length?`<div class="table-wrap"><table><thead><tr><th>Equipment type</th><th>Fixed points by range</th><th>% rule</th><th></th></tr></thead><tbody>
+    ${list.map(t=>{ const also=[...cpTemplateNames(t)].filter(n=>n!==qtNameKey(t.eqName));
+      return `<tr><td><b>${escapeHtml(t.eqName)}</b>${also.length?`<div style="font-size:11px;color:var(--text-muted);">also matches: ${escapeHtml(also.join(', '))}</div>`:''}</td>
+      <td style="font-size:12px;">${(t.rows||[]).length?cpSortRows(t.rows||[]).map(r=>`up to ${escapeHtml(String(r.upTo))} ${escapeHtml(r.unit||'')} → ${escapeHtml(r.points)}`).join('<br/>'):'<span style="color:var(--text-muted);">—</span>'}</td>
+      <td style="font-size:12px;">${t.percents?escapeHtml(t.percents)+' %':'<span style="color:var(--text-muted);">—</span>'}</td>
+      <td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="openCalPointEditor('${t.id}')">✏️ Edit</button> <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deleteCalPointTemplate('${t.id}')">✕</button></td></tr>`; }).join('')}
+  </tbody></table></div>`:'<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No standard calibration points yet — add an equipment type.</div>';
+}
+// Range rows in size order, comparing across units (e.g. 220 g before 6.2 kg)
+function cpSortRows(rows){ const base=(rows[0]||{}).unit||''; const size=r=>{ const v=cpConvert(parseFloat(r.upTo)||0,r.unit||base,base); return v==null?(parseFloat(r.upTo)||0):v; }; return rows.slice().sort((a,b)=>size(a)-size(b)); }
+function cpEditorRowHtml(r){ return `<div class="cp-row" style="display:grid;grid-template-columns:auto 100px 80px 1fr auto;gap:6px;align-items:center;margin-bottom:6px;">
+    <span style="font-size:12px;">Range up to</span><input class="form-control cp-upto" type="number" step="any" value="${escapeHtml(String(r.upTo??''))}" placeholder="220"/>
+    <input class="form-control cp-unit" value="${escapeHtml(r.unit||'')}" placeholder="g"/>
+    <input class="form-control cp-points" value="${escapeHtml(r.points||'')}" placeholder="0, 50, 100, 150, 200 g"/>
+    <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="this.parentElement.remove()">✕</button></div>`; }
+function openCalPointEditor(id){
+  const t=id?(_settings.calPointTemplates||[]).find(x=>x.id===id):null;
+  refreshStdNameSuggestions();
+  let ov=document.getElementById('cp-edit-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='cp-edit-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999995;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:720px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📏 ${t?'Edit':'Add'} standard calibration points</span>
+      <button onclick="document.getElementById('cp-edit-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;">
+      <div class="form-group"><label class="form-label">Equipment type</label><input class="form-control" id="cp-name" list="std-eq-names" value="${escapeHtml(t?.eqName||'')}" placeholder="e.g. Analytical Balance"/>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Items called by any name of a matching standard item also use these points.</div></div>
+      <div class="form-group"><label class="form-label">Other names <span style="font-weight:normal;color:var(--text-muted);">(optional, comma-separated)</span></label><input class="form-control" id="cp-aliases" value="${escapeHtml((t?.aliases||[]).join(', '))}"/></div>
+      <label class="form-label">Fixed points by range <span style="font-weight:normal;color:var(--text-muted);">— the first row whose limit covers the item's range is used</span></label>
+      <div id="cp-rows">${(t?.rows||[]).map(cpEditorRowHtml).join('')}</div>
+      <button class="btn btn-outline btn-sm" onclick="el('cp-rows').insertAdjacentHTML('beforeend',cpEditorRowHtml({}))">+ Add range row</button>
+      <div class="form-group" style="margin-top:12px;"><label class="form-label">Percentage rule <span style="font-weight:normal;color:var(--text-muted);">(optional — % of the item's range, e.g. 0, 25, 50, 75, 100)</span></label><input class="form-control" id="cp-percents" value="${escapeHtml(t?.percents||'')}" placeholder="0, 25, 50, 75, 100"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn btn-outline" onclick="document.getElementById('cp-edit-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCalPointTemplate('${t?.id||''}')">Save</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+  if(!t) el('cp-rows').insertAdjacentHTML('beforeend',cpEditorRowHtml({}));
+}
+async function saveCalPointTemplate(id){
+  const name=el('cp-name').value.trim().replace(/\s+/g,' ');
+  if(!name){ alert('Please enter the equipment type.'); return; }
+  const aliases=[...new Set(el('cp-aliases').value.split(',').map(x=>x.trim().replace(/\s+/g,' ')).filter(x=>x&&qtNameKey(x)!==qtNameKey(name)))];
+  const rows=[...document.querySelectorAll('#cp-rows .cp-row')].map(r=>({upTo:r.querySelector('.cp-upto').value.trim(),unit:r.querySelector('.cp-unit').value.trim(),points:r.querySelector('.cp-points').value.trim()}))
+    .filter(r=>r.upTo!==''||r.points);
+  const bad=rows.find(r=>r.upTo===''||!isFinite(parseFloat(r.upTo))||!r.points);
+  if(bad){ alert('Each range row needs a number in "Range up to" and its points.'); return; }
+  const percents=el('cp-percents').value.trim();
+  if(!rows.length&&!percents){ alert('Add at least one range row or a percentage rule.'); return; }
+  // one set of points per equipment type
+  const probe={eqName:name,aliases};
+  const clash=(_settings.calPointTemplates||[]).find(o=>o.id!==id&&[...cpTemplateNames(o)].some(n=>cpTemplateNames(probe).has(n)));
+  if(clash){ alert(`“${clash.eqName}” already has standard points that cover this name. Edit that one instead.`); return; }
+  const rec={id:id||('CP-'+Date.now()),eqName:name,aliases,rows,percents};
+  await patchSettings(st=>{ const l=st.calPointTemplates||(st.calPointTemplates=[]); const k=l.findIndex(x=>x.id===rec.id); if(k>=0) l[k]=rec; else l.push(rec); });
+  document.getElementById('cp-edit-overlay').style.display='none';
+  renderCalPointList(); showToast('✅ Calibration points saved','success',2500);
+}
+async function deleteCalPointTemplate(id){
+  const t=(_settings.calPointTemplates||[]).find(x=>x.id===id); if(!t||!confirm(`Remove the standard calibration points for "${t.eqName}"?`)) return;
+  await patchSettings(st=>{ st.calPointTemplates=(st.calPointTemplates||[]).filter(x=>x.id!==id); });
+  renderCalPointList();
 }
 function priceHistoryPageFilter(){ return {custId:el('ph-cust')?.value||'',q:el('ph-q')?.value||'',status:el('ph-status')?.value||'',from:el('ph-from')?.value||'',to:el('ph-to')?.value||'',code:el('ph-code')?.value||''}; }
 function renderPriceHistoryPage(){
@@ -10041,7 +10145,7 @@ function renderPriceReferenceTable(){
     <td style="white-space:nowrap;font-weight:600;">${escapeHtml(p.itemCode||'…')}</td>
     <td>${escapeHtml(p.eqName)}${(p.aliases||[]).length?`<div style="font-size:11px;color:var(--text-muted);">also: ${escapeHtml(p.aliases.join(', '))}</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px;">${escapeHtml(qtServiceTag(p).replace(/[\[\]]/g,''))}</td>
-    <td style="text-align:right;">${(p.standardPrice||0).toFixed(2)}</td>
+    <td style="text-align:right;">${(p.standardPrice||0).toFixed(2)}${p.extraPointPrice?`<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">+ ${Number(p.extraPointPrice).toFixed(2)} / extra point</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px;">${(()=>{ const rs=_prpHist.filter(r=>r.itemCode&&r.itemCode===p.itemCode); if(!rs.length) return '<span style="color:var(--text-muted);">—</span>';
       return `<a href="javascript:void(0)" onclick="openPriceReferencePage('hist',{code:'${escapeForJsAttr(p.itemCode)}'})">${rs.length}×</a><div style="font-size:11px;color:var(--text-muted);">last RM ${rs[0].netUnit.toFixed(2)}, ${fmtDateShort(rs[0].date)}</div>`; })()}</td>
     <td style="font-size:11.5px;color:var(--text-muted);white-space:pre-line;">${escapeHtml(p.description||'')}</td>
@@ -10082,7 +10186,11 @@ function openPriceRefEditor(id){
       <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="pr-edit-name" value="${v(p.eqName)}"/></div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:-4px 0 10px;cursor:pointer;"><input type="checkbox" id="pr-edit-keep-old" checked/> Keep the old name “${v(p.eqName)}” as another name (so items typed that way still match)</label>
       <div class="form-group"><label class="form-label">Also known as <span style="font-weight:normal;color:var(--text-muted);">(comma-separated)</span></label><input class="form-control" id="pr-edit-aliases" value="${v((p.aliases||[]).join(', '))}"/></div>
-      <div class="form-group"><label class="form-label">Standard price (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-price" value="${v(p.standardPrice||0)}" style="max-width:180px;"/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Standard price (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-price" value="${v(p.standardPrice||0)}"/></div>
+        <div class="form-group"><label class="form-label">Price per extra calibration point (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-extra" value="${v(p.extraPointPrice||'')}" placeholder="0.00"/>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Charged for each point beyond the standard points (Calibration points tab).</div></div>
+      </div>
       <div class="form-group"><label class="form-label">Description lines printed on quotations</label><textarea class="form-control" id="pr-edit-desc" rows="2">${v(p.description||'')}</textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('pr-edit-overlay').style.display='none'">Cancel</button>
@@ -10101,8 +10209,8 @@ async function savePriceRefEdit(id){
   // no two standard items of the same service may answer to the same name
   const clash=(_settings.priceReference||[]).find(o=>o.id!==id&&(o.accreditation||'')===(p.accreditation||'')&&(o.calType||'Lab')===(p.calType||'Lab')&&qtStdNames(o).some(k=>seen.has(k)));
   if(clash){ alert(`“${[...seen].find(k=>qtStdNames(clash).includes(k))}” is already used by ${clash.itemCode} ${clash.eqName} for the same service. Remove it from one of them first.`); return; }
-  const price=parseFloat(el('pr-edit-price').value)||0, desc=el('pr-edit-desc').value.trim();
-  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e){ e.eqName=name; e.aliases=aliases; e.standardPrice=price; e.description=desc; } });
+  const price=parseFloat(el('pr-edit-price').value)||0, desc=el('pr-edit-desc').value.trim(), extra=Math.max(0,parseFloat(el('pr-edit-extra')?.value)||0);
+  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e){ e.eqName=name; e.aliases=aliases; e.standardPrice=price; e.extraPointPrice=extra; e.description=desc; } });
   document.getElementById('pr-edit-overlay').style.display='none';
   renderPriceReferenceTable(); refreshStdNameSuggestions();
   showToast(`✅ ${p.itemCode} updated`,'success',2500);
@@ -10215,6 +10323,118 @@ function renderPriceHistoryTable(box,f,compact){
         <td style="text-align:right;">${r.unitPrice.toFixed(2)}</td><td>${escapeHtml(r.discount||'')}</td>
         <td style="text-align:right;font-weight:700;">${r.netUnit.toFixed(2)}</td><td>${priceHistoryStatusBadge(r.status)}</td></tr>`).join('')}</tbody></table></div>`
       :'<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No sent quotations match.</div>'}`;
+}
+// Job Creation: suggestions follow each item's name and range as they're typed
+function refreshJobCalSugs(){
+  const m=el('eq-cal-sug');
+  if(m) m.innerHTML=calPointSuggestionsHtml(calPointSuggestions(el('eq-name')?.value,el('eq-range')?.value),pts=>`el('eq-cal-points').value='${escapeForJsAttr(pts)}'`);
+  (typeof _extraEquipment!=='undefined'?_extraEquipment:[]).forEach((eq,i)=>{ const b=el(`extra-cal-sug-${i}`); if(!b) return;
+    b.innerHTML=calPointSuggestionsHtml(calPointSuggestions(eq.eqName,eq.range),pts=>`updateExtraField(${i},'calPoints','${escapeForJsAttr(pts)}');el('extra-calpts-${i}').value='${escapeForJsAttr(pts)}'`); });
+}
+document.addEventListener('input',e=>{ const t=e.target; if(!t||!t.closest) return; if(t.closest('#modal-add-equipment')) setTimeout(refreshJobCalSugs,0); });
+// ═══ STANDARD CALIBRATION POINTS ═══
+// Kept on Price Reference → Calibration points, per equipment type (matched by the same names / other
+// names as the standard items, for every service). Two optional ways per type: fixed point lists by
+// range ("up to 220 g → 0, 50, 100, 150, 200 g") and a percentage rule ("0, 25, 50, 75, 100 %").
+// Only ever SUGGESTED on the enquiry, quotation and job forms — never filled in by itself.
+const CP_UNITS={ // factor to a base unit, per quantity
+  mass:{mg:0.001,g:1,kg:1000,t:1e6},
+  pressure:{pa:1,kpa:1e3,mpa:1e6,bar:1e5,mbar:100,psi:6894.757,inhg:3386.389,mmhg:133.3224},
+  volume:{ul:1e-3,ml:1,l:1000},
+  length:{um:1e-3,mm:1,cm:10,m:1000},
+  force:{n:1,kn:1000},
+  torque:{'n·m':1,'n.m':1,nm:1,'kn·m':1000}
+};
+function cpUnitKey(u){ return String(u||'').trim().toLowerCase().replace(/\s+/g,'').replace('µ','u').replace(/°c|degc|deg\.?c|℃/,'°c'); }
+function cpConvert(v,from,to){
+  const f=cpUnitKey(from), t=cpUnitKey(to);
+  if(f===t||!f||!t) return v;
+  for(const g of Object.values(CP_UNITS)){ if(g[f]!=null&&g[t]!=null) return v*g[f]/g[t]; }
+  return null; // different kinds of unit (e.g. g vs °C)
+}
+// Reads a range such as "0 – 220 g", "0-14 pH", "-20 to 150 °C", "220 g" → {min,max,unit}
+function cpParseRange(str){
+  const t=String(str||'').replace(/[–—~]/g,'-').replace(/\bto\b/ig,' - ').trim(); if(!t) return null;
+  const nums=[...t.matchAll(/-?\d+(?:\.\d+)?/g)].map(m=>({v:parseFloat(m[0]),i:m.index,len:m[0].length}));
+  if(!nums.length) return null;
+  let min,max,last;
+  if(nums.length>=2){
+    const a=nums[0], b=nums[1];
+    // "0-220" : the "-" before 220 is the separator, not a minus sign
+    const bv=(b.v<0&&/\d\s*$/.test(t.slice(0,b.i)))?-b.v:b.v;
+    min=a.v; max=bv; last=b;
+  }else{ min=0; max=nums[0].v; last=nums[0]; }
+  if(max<min){ const x=min; min=max; max=x; }
+  const unit=t.slice(last.i+last.len).replace(/^[\s,]+/,'').trim();
+  return {min,max,unit};
+}
+function cpFmt(v){ const r=Math.round(v*1e6)/1e6; return String(r); }
+// Points text such as "0, 50, 100 g" → {nums:[0,50,100], unit:'g'}
+function cpParsePoints(str,defUnit){
+  const t=String(str||''); const nums=[...t.matchAll(/-?\d+(?:\.\d+)?/g)].map(m=>parseFloat(m[0]));
+  const unit=t.replace(/-?\d+(?:\.\d+)?/g,'').replace(/[,;]/g,' ').trim()||defUnit||'';
+  return {nums,unit};
+}
+function cpTemplateNames(tpl){
+  const keys=new Set([tpl.eqName,...(tpl.aliases||[])].map(qtNameKey).filter(Boolean));
+  (_settings.priceReference||[]).forEach(p=>{ const ns=qtStdNames(p); if(ns.some(n=>keys.has(n))) ns.forEach(n=>keys.add(n)); });
+  return keys;
+}
+function cpFindTemplate(eqName){ const k=qtNameKey(eqName); if(!k) return null; return (_settings.calPointTemplates||[]).find(t=>cpTemplateNames(t).has(k))||null; }
+function calPointSuggestions(eqName,rangeStr){
+  const tpl=cpFindTemplate(eqName); if(!tpl) return [];
+  const r=cpParseRange(rangeStr); const out=[];
+  if(r){
+    const rows=(tpl.rows||[]).map(row=>({row,upToInRange:cpConvert(parseFloat(row.upTo),row.unit||r.unit,r.unit)})).filter(x=>x.upToInRange!=null&&isFinite(x.upToInRange)).sort((a,b)=>a.upToInRange-b.upToInRange);
+    const hit=rows.find(x=>r.max<=x.upToInRange*(1+1e-9));
+    if(hit){ const pp=cpParsePoints(hit.row.points,hit.row.unit||r.unit);
+      const conv=pp.nums.map(n=>cpConvert(n,pp.unit,r.unit)); if(conv.every(v=>v!=null))
+        out.push({label:`Standard points (range up to ${cpFmt(parseFloat(hit.row.upTo))} ${hit.row.unit||r.unit})`,points:conv.map(cpFmt).join(', ')+(r.unit?' '+r.unit:'')}); }
+    const pc=String(tpl.percents||'').match(/-?\d+(?:\.\d+)?/g);
+    if(pc&&pc.length){ const pts=pc.map(x=>r.min+(r.max-r.min)*parseFloat(x)/100);
+      out.push({label:`${pc.join(' / ')} % of ${cpFmt(r.min)} – ${cpFmt(r.max)}${r.unit?' '+r.unit:''}`,points:pts.map(cpFmt).join(', ')+(r.unit?' '+r.unit:'')}); }
+  }
+  return out;
+}
+// Standard number of points for an item = the points of the suggestion that applies (fixed row first,
+// else the % rule). No standard set up → no extra-point charge.
+function cpStandardCount(eqName,range){ const sg=calPointSuggestions(eqName,range); if(!sg.length) return null; return {count:cpParsePoints(sg[0].points).nums.length,label:sg[0].label}; }
+// Works for quotation items (unitPrice/itemCode/units) and enquiry items (price, one list of points).
+function qtApplyExtraAuto(it){
+  if(!it||it.extraPointsManual) return;
+  const qty=Math.max(1,parseInt(it.quantity)||1);
+  const sc=cpStandardCount(it.eqName,it.range);
+  if(!sc){ it.extraPointsCount=0; it.extraPointsStd=null; return; }
+  const lists=(it.sameCal===false&&Array.isArray(it.units))?it.units.slice(0,qty).map(u=>u.calPoints):Array(qty).fill(it.calPoints);
+  const std=it.itemCode?qtStdByCode(it.itemCode):qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
+  it.extraPointsCount=lists.reduce((sum,l)=>sum+Math.max(0,cpParsePoints(l).nums.length-sc.count),0);
+  it.extraPointsQty=qty; it.extraPointsStd=sc.count; it.extraPointPrice=parseFloat(std?.extraPointPrice)||0;
+}
+function qtExtraNoticeHtml(it,kind,idx){
+  const n=parseInt(it.extraPointsCount)||0; if(n<=0) return '';
+  const p=parseFloat(it.extraPointPrice)||0, qty=Math.max(1,parseInt(it.quantity)||1);
+  const act=a=>`extraPointsAction('${kind}',${idx},'${a}')`;
+  const links=`<a href="javascript:void(0)" onclick="${act(it.extraPointsWaived?'undo':'waive')}">${it.extraPointsWaived?'undo waive':'waive'}</a> · <a href="javascript:void(0)" onclick="${act('edit')}">edit</a>${it.extraPointsManual?` · <a href="javascript:void(0)" onclick="${act('recalc')}">recalculate</a>`:''}`;
+  const what=`${n} extra calibration point${n>1?'s':''}${qty>1?' (all units)':''}${it.extraPointsStd?` — standard is ${it.extraPointsStd} per unit`:''}`;
+  if(it.extraPointsWaived) return `<div class="qt-note info" style="margin:6px 0 0;">${what} — <b>waived</b>. ${links}</div>`;
+  if(p<=0) return `<div class="qt-note warn" style="margin:6px 0 0;">${what}, but no price per extra point is set for this item (Price Reference → Standard items → Edit). ${links}</div>`;
+  return `<div class="qt-note warn" style="margin:6px 0 0;">➕ ${what}: <b>${n} × RM ${p.toFixed(2)} = RM ${(n*p).toFixed(2)}</b> added to this line (discount applies). ${links}</div>`;
+}
+function extraPointsAction(kind,idx,a){
+  const it=kind==='sales'?_salesDraftItems[idx]:_qtv2DraftItems[idx]; if(!it) return;
+  if(a==='waive') it.extraPointsWaived=true;
+  if(a==='undo') it.extraPointsWaived=false;
+  if(a==='recalc'){ it.extraPointsManual=false; qtApplyExtraAuto(it); }
+  if(a==='edit'){
+    const c=prompt('Number of extra calibration points to charge (all units together):',String(parseInt(it.extraPointsCount)||0)); if(c===null) return;
+    const pr=prompt('Price per extra point (RM):',String(parseFloat(it.extraPointPrice)||0)); if(pr===null) return;
+    it.extraPointsCount=Math.max(0,parseInt(c)||0); it.extraPointPrice=Math.max(0,parseFloat(pr)||0); it.extraPointsQty=Math.max(1,parseInt(it.quantity)||1); it.extraPointsManual=true; it.extraPointsWaived=false;
+  }
+  if(kind==='sales') updateSalesItemTotal(idx); else renderQtv2ItemsList();
+}
+function calPointSuggestionsHtml(sugs,applyJs,allUnitsJs){
+  if(!sugs.length) return '';
+  return `<div style="font-size:11.5px;margin-top:4px;line-height:1.7;">${sugs.map(x=>`<div>💡 <span style="color:var(--text-muted);">${escapeHtml(x.label)}:</span> <b>${escapeHtml(x.points)}</b> — <a href="javascript:void(0)" onclick="${applyJs(x.points)}">use</a>${allUnitsJs?` · <a href="javascript:void(0)" onclick="${allUnitsJs(x.points)}">use for all units</a>`:''}</div>`).join('')}</div>`;
 }
 function lookupPriceGuidance(eqName,custId){
   if(!eqName)return null;
@@ -10333,6 +10553,7 @@ function renderQtv2ItemsList(){
         <div style="text-align:right;">${L('Line total')}<div id="qtv2-item-total-${idx}" style="font-size:17px;font-weight:800;padding-top:6px;">RM ${c.total.toFixed(2)}</div></div>
       </div>
       <div id="qtv2-item-breakdown-${idx}" style="font-size:11.5px;color:var(--text-muted);text-align:right;margin-top:-4px;">${(c.disc||c.socTotal)?'':''}</div>
+      <div id="qtv2-extra-${idx}"></div>
       ${guidance}
       <div class="qt-sub-sec">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
@@ -10344,6 +10565,7 @@ function renderQtv2ItemsList(){
           <div>${L('Resolution')}<input class="form-control" data-unit-target placeholder="e.g. 0.1" value="${escapeHtml(it.resolution||'')}" oninput="updateQtv2ItemField(${idx},'resolution',this.value)"/></div>
           <div>${L('Unit')}<select class="form-control unit-picker-select" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div>
         </div>`:`<div style="font-size:11.5px;color:var(--text-muted);">Different cal points &amp; resolution per unit — fill them in below.</div>`}
+        <div id="qtv2-cal-sug-${idx}">${qtCalSugHtml(it,idx)}</div>
       </div>
       ${(()=>{ const a=qtAdjust(it); const rv=qtRecalOf(it);
         return `<div class="qt-sub-sec">
@@ -10403,6 +10625,8 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
         calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0,
         accreditationRequested:it.accreditationRequested||'',methodRequested:it.methodRequested||'',remark:it.remark||'',
         calPoints:it.calPoints||'', discount:it.discount||'',
+        extraPointsCount:it.extraPointsCount, extraPointsQty:it.extraPointsQty, extraPointPrice:it.extraPointPrice, extraPointsStd:it.extraPointsStd,
+        extraPointsWaived:!!it.extraPointsWaived, extraPointsManual:!!it.extraPointsManual,
         adjustReq:it.adjustReq==='Yes'?'Yes':(it.adjustReq==='No'?'No':undefined), // not stated / not sure -> ask first
         adjustPossible:it.capabilityEvaluation?.canAdjust||undefined,
         recalInterval:it.recalInterval||undefined, recalDate:it.recalDate||undefined,
@@ -10919,10 +11143,12 @@ async function exportQuotationV2Pdf(quotationId){
       units.forEach((u,ui)=>L.push(`Unit ${ui+1}${u.serial?' (S/N '+esc(u.serial)+')':''}: Resolution ${esc(u.resolution||'—')}; Cal Points ${esc(u.calPoints||'—')}`));
     }
     qtRequirementLines(it).forEach(x=>L.push(esc(x)));
-    const discTxt=c.disc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.disc.toFixed(2)):'';
+    const discTxt=c.baseDisc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.baseDisc.toFixed(2)):'';
     const rows=[`<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(it.itemCode||'')}</td>
       <td style="${TD}"><div>${esc(it.eqName)} ${qtServiceTag(it)}</div><div style="padding-left:6px;">${L.join('<br/>')}</div></td>
-      <td style="${TD}text-align:center;white-space:nowrap;">${c.qty.toFixed(2)} UNIT</td><td style="${TD}">${money(c.price)}</td><td style="${TD}">${discTxt}</td><td style="${TD}text-align:right;">${money(c.net)}</td></tr>`];
+      <td style="${TD}text-align:center;white-space:nowrap;">${c.qty.toFixed(2)} UNIT</td><td style="${TD}">${money(c.price)}</td><td style="${TD}">${discTxt}</td><td style="${TD}text-align:right;">${money(c.baseNet)}</td></tr>`];
+    if(c.extra.gross) rows.push(`<tr><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"><div style="padding-left:6px;">Additional calibration points${it.extraPointsStd?` (beyond the standard ${it.extraPointsStd} per unit)`:''}</div></td>
+      <td style="${TD}text-align:center;white-space:nowrap;">${Number(c.extra.n).toFixed(2)} POINT</td><td style="${TD}">${money(c.extra.price)}</td><td style="${TD}">${c.extra.disc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.extra.disc.toFixed(2)):''}</td><td style="${TD}text-align:right;">${money(c.extra.net)}</td></tr>`);
     c.soc.forEach(l=>rows.push(`<tr><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"><div style="padding-left:6px;">Statement of Conformity${l.name?' — '+esc(l.name):''}</div></td>
       <td style="${TD}text-align:center;white-space:nowrap;">${Number(l.units).toFixed(2)} UNIT</td><td style="${TD}">${money(l.price)}</td><td style="${TD}"></td><td style="${TD}text-align:right;">${money(l.amount)}</td></tr>`));
     return rows;
@@ -11773,7 +11999,7 @@ function stGroupOf(status){ return Object.keys(ST_GROUPS).find(g=>ST_GROUPS[g].i
 function stEntryValue(e){
   const q=e.linkedQuotationId?(_quotationsV2||[]).find(x=>x.id===e.linkedQuotationId):null;
   if(q){ const po=qtPoValue(q); return po!=null?po:qtQuotationTotal(q.items); }
-  return (e.items||[]).reduce((s,it)=>s+qtLineCalc({quantity:it.quantity,unitPrice:it.price,discount:it.discount}).net,0);
+  return (e.items||[]).reduce((s,it)=>s+qtLineCalc({...it,unitPrice:it.price}).net,0);
 }
 function qtPoValue(q){
   if(!q||q.status!=='Accepted'||!(q.items||[]).some(it=>it.poAccepted!==undefined)) return null;
@@ -12126,7 +12352,8 @@ function updateSalesItemSpec(idx,input){
 function salesItemPriceBoxHtml(it,idx){
         const std=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
         const sg=priceSuggestions({custId:el('tk-cust-id')?.value||'',eqName:it.eqName,acc:it.accreditationRequested,calType:it.calType,dealerTicked:!!el('tk-type-dealer')?.checked});
-        const c=qtLineCalc({quantity:it.quantity,unitPrice:it.price,discount:it.discount});
+        qtApplyExtraAuto(it);
+        const c=qtLineCalc({...it,unitPrice:it.price});
   return `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
           <div style="font-size:11.5px;margin-bottom:6px;">🏷️ ${std?.itemCode?`Item code <b style="color:#3730a3;">${escapeHtml(std.itemCode)}</b>${qtNameKey(std.eqName)!==qtNameKey(it.eqName)?` — standard item “${escapeHtml(std.eqName)}”`:''}`:'<span style="color:var(--text-muted);">No item code yet — it can be linked or created at the quotation</span>'}</div>
           <div class="form-row" style="margin-bottom:0;">
@@ -12134,11 +12361,16 @@ function salesItemPriceBoxHtml(it,idx){
             <div class="form-group" style="margin-bottom:0;"><label class="form-label">Discount <span style="font-weight:normal;color:var(--text-muted);">(10% or RM)</span></label><input class="form-control" placeholder="none" value="${escapeHtml(it.discount||'')}" oninput="updateSalesItemField(${idx},'discount',this.value);updateSalesItemTotal(${idx});"/></div>
           </div>
           ${priceSuggestionsHtml(sg,(pr,d)=>`applySalesPrice(${idx},${pr},'${escapeForJsAttr(d||'')}')`,{custId:el('tk-cust-id')?.value||'',code:sg.code,eqName:it.eqName})}
+          <div id="sales-item-extra-${idx}">${qtExtraNoticeHtml(it,'sales',idx)}</div>
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">Total (× <span id="sales-item-qty-display-${idx}">${c.qty}</span>${c.disc?', after discount':''}): <strong id="sales-item-total-${idx}">RM ${c.net.toFixed(2)}</strong></div>
         </div>`;
 }
+function salesCalSugHtml(it,idx){ return calPointSuggestionsHtml(calPointSuggestions(it.eqName,it.range),pts=>`applySalesCalPoints(${idx},'${escapeForJsAttr(pts)}')`); }
+function refreshSalesCalSug(idx){ const it=_salesDraftItems[idx]; const b=el(`sales-item-cal-sug-${idx}`); if(it&&b) b.innerHTML=salesCalSugHtml(it,idx); }
+function applySalesCalPoints(idx,pts){ const it=_salesDraftItems[idx]; if(!it) return; it.calPoints=pts; const f=el(`sales-item-calpts-${idx}`); if(f) f.value=pts; updateSalesItemTotal(idx); }
 function refreshSalesItemPricing(idx){ setTimeout(()=>refreshSalesItemPricingNow(idx),0); } // after the cursor has moved to the clicked field
 function refreshSalesItemPricingNow(idx){
+  refreshSalesCalSug(idx); // the equipment name also decides the standard calibration points
   const it=_salesDraftItems[idx]; const box=el(`sales-item-price-${idx}`); if(!it||!box) return;
   // if the cursor has just moved into this box (e.g. from the name into Unit Price), keep it there
   const inputs=()=>[...box.querySelectorAll('input')]; const k=inputs().indexOf(document.activeElement);
@@ -12149,7 +12381,9 @@ function applySalesPrice(idx,price,disc){ const it=_salesDraftItems[idx]; if(!it
 function updateSalesItemTotal(idx){
   const it=_salesDraftItems[idx]; if(!it)return;
   const qty=parseFloat(it.quantity)||1;
-  const total=qtLineCalc({quantity:it.quantity,unitPrice:it.price,discount:it.discount}).net;
+  qtApplyExtraAuto(it);
+  const total=qtLineCalc({...it,unitPrice:it.price}).net;
+  const nb=el(`sales-item-extra-${idx}`); if(nb) nb.innerHTML=qtExtraNoticeHtml(it,'sales',idx);
   const totalEl=el(`sales-item-total-${idx}`); if(totalEl) totalEl.textContent=`RM ${total.toFixed(2)}`;
   const qtyEl=el(`sales-item-qty-display-${idx}`); if(qtyEl) qtyEl.textContent=qty;
 }
@@ -12195,12 +12429,12 @@ function renderSalesItemsList(){
           <option value="">Unit…</option>
         </select>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Range</label><input class="form-control" data-unit-target placeholder="e.g. 0 – 200" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value)"/></div>
+          <div class="form-group"><label class="form-label">Range</label><input class="form-control" data-unit-target placeholder="e.g. 0 – 200" value="${it.range||''}" oninput="updateSalesItemField(${idx},'range',this.value);refreshSalesCalSug(${idx});updateSalesItemTotal(${idx})"/></div>
           <div class="form-group"><label class="form-label">Spec <span style="font-weight:normal;color:var(--text-muted);">(± added automatically)</span></label><input class="form-control" data-unit-target value="${it.spec||''}" oninput="updateSalesItemSpec(${idx},this)"/></div>
           <div class="form-group"><label class="form-label">Resolution / readability</label><input class="form-control" data-unit-target placeholder="e.g. 0.1" value="${escapeHtml(it.resolution||'')}" oninput="updateSalesItemField(${idx},'resolution',this.value)"/></div>
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Calibration points <span style="font-weight:normal;color:var(--text-muted);">(if the customer has said)</span></label><input class="form-control" placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateSalesItemField(${idx},'calPoints',this.value)"/></div>
+      <div class="form-group"><label class="form-label">Calibration points <span style="font-weight:normal;color:var(--text-muted);">(if the customer has said)</span></label><input class="form-control" id="sales-item-calpts-${idx}" placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateSalesItemField(${idx},'calPoints',this.value);updateSalesItemTotal(${idx})"/><div id="sales-item-cal-sug-${idx}">${salesCalSugHtml(it,idx)}</div></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Adjustment wanted?</label>
           <select class="form-control" onchange="updateSalesItemField(${idx},'adjustReq',this.value)">
