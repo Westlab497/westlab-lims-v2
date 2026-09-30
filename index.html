@@ -3466,6 +3466,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-group"><label class="form-label">Mobile Number <span style="font-weight:normal;font-size:11px;color:var(--text-muted);">(for WhatsApp notifications)</span></label>
         <input class="form-control" id="staff-mobile" placeholder="e.g. 012-345 6789"/>
       </div>
+      <div class="form-group"><label class="form-label">Designation <span style="font-weight:normal;font-size:11px;color:var(--text-muted);">(printed under the signature on quotations)</span></label>
+        <input class="form-control" id="staff-designation" placeholder="e.g. Sales Executive"/>
+      </div>
       <div class="form-group"><label class="form-label">Role <span class="req">*</span></label>
         <select class="form-control" id="staff-role">
           <option value="Engineer">Engineer / Technician</option>
@@ -3650,6 +3653,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <select class="form-control" id="pr-new-acc" style="max-width:200px;"><option value="">Accreditation…</option><option value="SAMM-Accredited">SAMM-Accredited</option><option value="Non-Accredited">Non-Accredited</option></select>
         <select class="form-control" id="pr-new-caltype" style="max-width:140px;"><option value="Lab">Lab</option><option value="Onsite">On-site</option></select>
       </div>
+      <input class="form-control" id="pr-new-aliases" placeholder="Also known as (optional, comma-separated) — e.g. calibration bath, cooling bath" style="margin-bottom:8px;"/>
       <textarea class="form-control" id="pr-new-desc" rows="2" placeholder="Description lines printed on quotations (optional), e.g.&#10;Type: Handheld/Benchtop unit with 1 electrode, carrying case" style="margin-bottom:8px;"></textarea>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
         <span style="font-size:11px;color:var(--text-muted);">An item code (WLC-001, WLC-002 …) is given automatically.</span>
@@ -4113,6 +4117,7 @@ async function loadAll(){
     await loadInvoices();
     await loadPurchaseOrders();
     await healOrphanedQuotationLinks();
+    await backfillEnquiryNumbers();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
     await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
@@ -9517,6 +9522,21 @@ function unlinkDeletedQuotationFromEntry(entry,quotationNo){
 }
 // Repairs enquiries still pointing at a quotation that no longer exists (e.g. deleted before this
 // clean-up existed). Only runs when BOTH lists are known to have loaded properly.
+// Gives every Sales Tracker enquiry without a number one, in the month it was created (oldest first),
+// e.g. WEN-2608-0003 — so older enquiries get proper references too. Runs only when the list is
+// known to have loaded properly.
+async function backfillEnquiryNumbers(){
+  if(!_salesTrackerLoaded||!canUseSalesTracker(currentUser)) return;
+  const missing=(_salesTracker||[]).filter(e=>e&&e.type!=='purchasing'&&!e.enquiryNo).sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+  if(!missing.length) return;
+  let done=0;
+  for(const e of missing){
+    const d=new Date(e.createdAt||Date.now()); const yymm=String(d.getFullYear()).slice(-2)+String(d.getMonth()+1).padStart(2,'0');
+    try{ const r=await apiFetch('/api/seq-next',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:`WEN_${yymm}`})}); e.enquiryNo=`WEN-${yymm}-${String(r.val).padStart(4,'0')}`; done++; }
+    catch(err){ console.warn('Could not number enquiry yet:',err); break; }
+  }
+  if(done){ try{ await saveSalesTracker(); addAudit('🔢',`${done} existing enquir${done===1?'y':'ies'} given an enquiry number (WEN-…)`); }catch(err){ console.warn('Could not save enquiry numbers:',err); } }
+}
 async function healOrphanedQuotationLinks(){
   if(!_quotationsV2Loaded||!_salesTrackerLoaded) return;
   const ids=new Set((_quotationsV2||[]).map(q=>q.id));
@@ -9713,10 +9733,39 @@ async function nextItemCode(){
   const d=await apiFetch('/api/seq-next',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'item_code_seq'})});
   return 'WLC-'+String(d.val).padStart(3,'0');
 }
+// Matches the equipment name to a standard item by its name OR any of its "also known as" names
+// (ignoring capitals and extra spaces), for the same accreditation and Lab / On-site service.
+function qtNameKey(v){ return String(v||'').trim().replace(/\s+/g,' ').toLowerCase(); }
+function qtStdNames(p){ return [p.eqName,...(p.aliases||[])].map(qtNameKey).filter(Boolean); }
 function qtFindStandard(eqName,acc,calType){
-  const n=String(eqName||'').trim().toLowerCase(); if(!n) return null;
-  return (_settings.priceReference||[]).find(p=>String(p.eqName||'').trim().toLowerCase()===n&&(p.accreditation||'')===(acc||'')&&(p.calType||'Lab')===(calType||'Lab'))||null;
+  const n=qtNameKey(eqName); if(!n) return null;
+  return (_settings.priceReference||[]).find(p=>qtStdNames(p).includes(n)&&(p.accreditation||'')===(acc||'')&&(p.calType||'Lab')===(calType||'Lab'))||null;
 }
+function qtStdByCode(code){ return (_settings.priceReference||[]).find(p=>p.itemCode===code)||null; }
+// Suggestions while typing an equipment name (standard names + their other names). Free typing is
+// still allowed — the customer's own wording is kept.
+function refreshStdNameSuggestions(){
+  let dl=document.getElementById('std-eq-names');
+  if(!dl){ dl=document.createElement('datalist'); dl.id='std-eq-names'; document.body.appendChild(dl); }
+  const names=[...new Set((_settings.priceReference||[]).flatMap(p=>[p.eqName,...(p.aliases||[])]).map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  dl.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
+}
+// Link a quotation item to an existing standard item. The customer's wording stays as the equipment
+// name; if it's a new wording it's remembered as another name for that standard item.
+async function qtLinkStandard(idx,prId){
+  const it=_qtv2DraftItems[idx]; const p=(_settings.priceReference||[]).find(x=>x.id===prId); if(!it||!p) return;
+  it.itemCode=p.itemCode||''; if(!it.stdDescription) it.stdDescription=p.description||'';
+  const key=qtNameKey(it.eqName);
+  if(key&&!qtStdNames(p).includes(key)){
+    const alias=String(it.eqName).trim().replace(/\s+/g,' ');
+    try{ await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===p.id); if(e){ e.aliases=[...(e.aliases||[]),alias]; } });
+      showToast(`🏷️ Linked to ${p.itemCode}. “${alias}” is now remembered as another name for ${p.eqName}.`,'success',5000); }
+    catch(e){ showToast('Linked, but the other name could not be saved: '+e.message,'warn',5000); }
+    refreshStdNameSuggestions();
+  }else showToast(`🏷️ Linked to ${p.itemCode}`,'success',2500);
+  renderQtv2ItemsList();
+}
+function qtUnlinkStandard(idx){ const it=_qtv2DraftItems[idx]; if(!it) return; it.itemCode=''; it._noAutoCode=true; renderQtv2ItemsList(); }
 let _ensuringItemCodes=false;
 async function ensurePriceRefCodes(){
   const missing=(_settings.priceReference||[]).filter(p=>!p.itemCode);
@@ -9732,7 +9781,8 @@ async function ensurePriceRefCodes(){
 }
 function applyStandardItemToQtv2(idx,prId){
   const it=_qtv2DraftItems[idx]; const p=(_settings.priceReference||[]).find(x=>x.id===prId); if(!it||!p) return;
-  it.eqName=p.eqName; it.unitPrice=p.standardPrice||0; it.itemCode=p.itemCode||''; it.stdDescription=p.description||'';
+  if(!String(it.eqName||'').trim()) it.eqName=p.eqName; // keep the customer's own wording if already typed
+  it.unitPrice=p.standardPrice||0; it.itemCode=p.itemCode||''; it.stdDescription=p.description||''; delete it._noAutoCode;
   it.accreditationRequested=p.accreditation||''; it.calType=p.calType||'Lab';
   renderQtv2ItemsList();
 }
@@ -9740,13 +9790,13 @@ async function saveQtv2LineAsStandardItem(idx){
   const it=_qtv2DraftItems[idx]; if(!it) return;
   if(!String(it.eqName||'').trim()){ alert('Enter the equipment name first.'); return; }
   const existing=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
-  if(existing&&existing.itemCode){ it.itemCode=existing.itemCode; if(!it.stdDescription) it.stdDescription=existing.description||''; renderQtv2ItemsList(); showToast(`This item is already in the Standard Price List as ${existing.itemCode}`,'info',3500); return; }
+  if(existing&&existing.itemCode){ it.itemCode=existing.itemCode; delete it._noAutoCode; if(!it.stdDescription) it.stdDescription=existing.description||''; renderQtv2ItemsList(); showToast(`This item is already in the Standard Price List as ${existing.itemCode}`,'info',3500); return; }
   try{
     const code=await nextItemCode();
     const entry={id:'PR-'+Date.now(),itemCode:code,eqName:it.eqName.trim(),standardPrice:parseFloat(it.unitPrice)||0,
       accreditation:it.accreditationRequested||'',calType:it.calType||'Lab',description:it.stdDescription||''};
     await patchSettings(st=>{ if(!st.priceReference) st.priceReference=[]; st.priceReference.push(entry); });
-    it.itemCode=code; renderQtv2ItemsList();
+    it.itemCode=code; delete it._noAutoCode; renderQtv2ItemsList(); refreshStdNameSuggestions();
     showToast(`💾 Saved to the Standard Price List as ${code}`,'success',3500);
   }catch(e){ showToast('❌ Could not save standard item: '+e.message,'error',5000); }
 }
@@ -9910,11 +9960,11 @@ function renderPriceReferenceTable(){
   const list=(_settings.priceReference||[]).slice().sort((a,b)=>(a.itemCode||'~').localeCompare(b.itemCode||'~')||a.eqName.localeCompare(b.eqName));
   body.innerHTML=list.map((p,idx)=>`<tr>
     <td style="white-space:nowrap;font-weight:600;">${escapeHtml(p.itemCode||'…')}</td>
-    <td>${escapeHtml(p.eqName)}</td>
+    <td>${escapeHtml(p.eqName)}${(p.aliases||[]).length?`<div style="font-size:11px;color:var(--text-muted);">also: ${escapeHtml(p.aliases.join(', '))}</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px;">${escapeHtml(qtServiceTag(p).replace(/[\[\]]/g,''))}</td>
     <td style="text-align:right;">${(p.standardPrice||0).toFixed(2)}</td>
     <td style="font-size:11.5px;color:var(--text-muted);white-space:pre-line;">${escapeHtml(p.description||'')}</td>
-    <td><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deletePriceReferenceEntry('${p.id}')">✕</button></td>
+    <td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" title="Other names customers use for this item" onclick="editPriceRefAliases('${p.id}')">✏️ Names</button> <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deletePriceReferenceEntry('${p.id}')">✕</button></td>
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No price references yet.</td></tr>';
 }
 async function addPriceReferenceEntry(){
@@ -9925,14 +9975,24 @@ async function addPriceReferenceEntry(){
   if(qtFindStandard(name,acc,calType)){ alert('This equipment with the same accreditation and lab/on-site service is already in the list.'); return; }
   let itemCode='';
   try{ itemCode=await nextItemCode(); }catch(e){ showToast('⚠️ Item code will be assigned later (server not reachable)','warn',4000); }
-  const priceEntry={id:'PR-'+Date.now(),itemCode,eqName:name,standardPrice:price,accreditation:acc,calType,description:el('pr-new-desc')?.value.trim()||''}; // built once so the saved copy and local copy match
+  const aliases=[...new Set((el('pr-new-aliases')?.value||'').split(',').map(x=>x.trim().replace(/\s+/g,' ')).filter(x=>x&&qtNameKey(x)!==qtNameKey(name)))];
+  const priceEntry={id:'PR-'+Date.now(),itemCode,eqName:name,aliases,standardPrice:price,accreditation:acc,calType,description:el('pr-new-desc')?.value.trim()||''}; // built once so the saved copy and local copy match
   await patchSettings(st=>{
     if(!st.priceReference) st.priceReference=[];
     st.priceReference.push(priceEntry);
   });
-  el('pr-new-name').value=''; el('pr-new-price').value=''; if(el('pr-new-desc')) el('pr-new-desc').value='';
+  el('pr-new-name').value=''; el('pr-new-price').value=''; if(el('pr-new-desc')) el('pr-new-desc').value=''; if(el('pr-new-aliases')) el('pr-new-aliases').value='';
+  refreshStdNameSuggestions();
   renderPriceReferenceTable();
   showToast('✅ Price reference added','success',2500);
+}
+async function editPriceRefAliases(id){
+  const p=(_settings.priceReference||[]).find(x=>x.id===id); if(!p) return;
+  const v=prompt(`Other names customers use for "${p.eqName}" (${p.itemCode||''}) — separate with commas:`,(p.aliases||[]).join(', '));
+  if(v===null) return;
+  const aliases=[...new Set(v.split(',').map(x=>x.trim().replace(/\s+/g,' ')).filter(x=>x&&qtNameKey(x)!==qtNameKey(p.eqName)))];
+  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e) e.aliases=aliases; });
+  renderPriceReferenceTable(); refreshStdNameSuggestions(); showToast('✅ Names updated','success',2000);
 }
 async function deletePriceReferenceEntry(id){
   if(!confirm('Remove this price reference?'))return;
@@ -9989,6 +10049,11 @@ function renderQtv2ItemsList(){
   const box=el('qtv2-items-list'); if(!box)return;
   const std=(_settings.priceReference||[]).slice().sort((a,b)=>(a.itemCode||'~').localeCompare(b.itemCode||'~')||String(a.eqName).localeCompare(String(b.eqName)));
   const L=(t,sub)=>`<label class="qt-l">${t}${sub?` <span style="font-weight:normal;text-transform:none;letter-spacing:0;">${sub}</span>`:''}</label>`;
+  // Item codes: keep a linked code only while it still fits the item's service; otherwise match automatically
+  _qtv2DraftItems.forEach(it=>{
+    if(it.itemCode){ const p=qtStdByCode(it.itemCode); if(p&&((p.accreditation||'')!==(it.accreditationRequested||'')||(p.calType||'Lab')!==(it.calType||'Lab'))) it.itemCode=''; }
+    if(!it.itemCode&&!it._noAutoCode){ const m=qtFindStandard(it.eqName,it.accreditationRequested,it.calType); if(m&&m.itemCode){ it.itemCode=m.itemCode; if(!it.stdDescription) it.stdDescription=m.description||''; } }
+  });
   box.innerHTML=_qtv2DraftItems.map((it,idx)=>{
     qtEnsureUnits(it);
     const key=qtItemKey(it);
@@ -10006,7 +10071,7 @@ function renderQtv2ItemsList(){
         <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(service)}${qty>1?` · ×${qty}`:''}</span>
         <span id="qtv2-item-flag-${idx}"></span>
         <span style="margin-left:auto;font-weight:700;" id="qtv2-item-head-total-${idx}">RM ${c.total.toFixed(2)}</span>
-        ${it.itemCode?'':`<button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})" title="Adds this equipment to the Standard Price List and gives it an item code">💾 Save as standard item</button>`}
+        ${it.itemCode?'':`<span class="qt-flag info" title="No item code yet — link or create one in the item">🏷️ no code</span>`}
         <button type="button" onclick="removeQtv2ItemRow(${idx})" title="Remove item" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;">✕</button>
       </div>`;
     if(folded) return `<div class="qt-card">${head}</div>`;
@@ -10027,12 +10092,23 @@ function renderQtv2ItemsList(){
       </div>`).join('');
     return `<div class="qt-card">${head}<div class="qt-card-body">
       <div id="qtv2-item-diff-${idx}"></div>
+      ${(()=>{ if(it.itemCode){ const p=qtStdByCode(it.itemCode);
+          return `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">🏷️ Item code <b style="color:#3730a3;">${escapeHtml(it.itemCode)}</b>${p&&qtNameKey(p.eqName)!==qtNameKey(it.eqName)?` — standard item “${escapeHtml(p.eqName)}”`:''} · <a href="javascript:void(0)" onclick="qtUnlinkStandard(${idx})">change</a></div>`; }
+        const same=(_settings.priceReference||[]).filter(p=>p.itemCode&&(p.accreditation||'')===(it.accreditationRequested||'')&&(p.calType||'Lab')===(it.calType||'Lab'))
+          .sort((a,b)=>String(a.itemCode).localeCompare(String(b.itemCode)));
+        return `<div class="qt-note info" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span>🏷️ <b>No item code yet.</b></span>
+          ${same.length?`<select class="form-control" style="width:auto;max-width:330px;padding:5px 8px;font-size:12px;" onchange="if(this.value) qtLinkStandard(${idx},this.value)">
+            <option value="">Link to an existing standard item…</option>
+            ${same.map(p=>`<option value="${p.id}">${escapeHtml(p.itemCode+' — '+p.eqName+((p.aliases||[]).length?' (also: '+p.aliases.join(', ')+')':''))}</option>`).join('')}</select><span>or</span>`:''}
+          <button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})">➕ Create new code</button>
+        </div>`; })()}
       ${std.length?`<div class="form-group">${L('Fill from Standard Price List','(optional)')}<select class="form-control" onchange="if(this.value) applyStandardItemToQtv2(${idx},this.value)">
         <option value="">⭐ Choose a standard item…</option>
         ${std.map(p=>`<option value="${p.id}">${escapeHtml((p.itemCode?p.itemCode+' — ':'')+p.eqName+' '+qtServiceTag(p))}</option>`).join('')}
       </select></div>`:''}
       <div class="qt-grid" style="grid-template-columns:2fr 1fr 1fr;">
-        <div>${L('Equipment')}<input class="form-control" value="${escapeHtml(it.eqName||'')}" oninput="updateQtv2ItemField(${idx},'eqName',this.value)"/></div>
+        <div>${L('Equipment')}<input class="form-control" list="std-eq-names" value="${escapeHtml(it.eqName||'')}" oninput="updateQtv2ItemField(${idx},'eqName',this.value)"/></div>
         <div>${L('Brand')}<input class="form-control" value="${escapeHtml(it.brand||'')}" oninput="updateQtv2ItemField(${idx},'brand',this.value)"/></div>
         <div>${L('Model')}<input class="form-control" value="${escapeHtml(it.model||'')}" oninput="updateQtv2ItemField(${idx},'model',this.value)"/></div>
       </div>
@@ -10103,6 +10179,7 @@ function renderQtv2ItemsList(){
 }
 let _qtv2EditingId=null;
 function openQuotationV2Modal(quotationId,salesTrackerEntryId){
+  refreshStdNameSuggestions();
   ensurePriceRefCodes().then(()=>{ if(document.getElementById('qtv2-overlay')?.style.display!=='none') renderQtv2ItemsList(); }).catch(()=>{});
   if(!canUseQuotationSystem(currentUser)){alert('You do not have access to create quotations.');return;}
   if(quotationId&&!_quotationsV2.some(q=>q.id===quotationId)){ alert('This quotation no longer exists — it may have been deleted.'); return; }
@@ -10144,6 +10221,10 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
         <input class="form-control" id="qtv2-cust-name" value="${escapeHtml(existing?.custName||prefillEntry?.name||'')}" autocomplete="off" oninput="suggestQtv2Customer(this.value)" onfocus="suggestQtv2Customer(this.value)"/>
         <div id="qtv2-cust-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:160px;overflow-y:auto;margin-top:2px;"></div>
         <input type="hidden" id="qtv2-cust-id" value="${existing?.custId||prefillEntry?.custId||''}"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Your Ref. <span style="font-weight:normal;color:var(--text-muted);">(customer's reference)</span></label><input class="form-control" id="qtv2-your-ref" value="${escapeHtml(existing?.yourRef??(fromEntry?.customerRef||''))}" placeholder="e.g. RFQ-2026-118"/></div>
+        <div class="form-group"><label class="form-label">Our Ref. <span style="font-weight:normal;color:var(--text-muted);">(enquiry number)</span></label><input class="form-control" id="qtv2-our-ref" value="${escapeHtml(existing?.ourRef??(fromEntry?.enquiryNo||''))}"/></div>
       </div>
       <div id="qtv2-cust-summary" style="display:none;background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;"></div>
       <div id="qtv2-cust-fields">
@@ -10289,6 +10370,9 @@ async function saveQuotationV2(quotationId){
   q.address=el('qtv2-address').value.trim();
   q.items=_qtv2DraftItems.filter(it=>it.eqName);
   q.items.forEach(qtSyncLegacyFields);
+  q.items.forEach(it=>{ delete it._noAutoCode; });
+  q.yourRef=el('qtv2-your-ref')?.value.trim()||'';
+  q.ourRef=el('qtv2-our-ref')?.value.trim()||'';
   const tsel=el('qtv2-turnaround')?.value||'';
   q.turnaroundRequested=tsel==='Other'?(el('qtv2-turnaround-other')?.value.trim()||''):tsel;
   const hasOnsite=q.items.some(it=>it.calType==='Onsite'), hasLab=q.items.some(it=>it.calType!=='Onsite');
@@ -10564,7 +10648,7 @@ async function exportQuotationV2Pdf(quotationId){
       <div style="width:33%;">
         <div style="font-weight:bold;font-size:16.5px;margin-bottom:6px;white-space:nowrap;">QUOTATION : ${esc(q.quotationNo)}</div>
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
-          ${[['Your Ref.',q.yourRef||''],['Our Ref.',''],['C. C.',''],['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:78px;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
+          ${[['Your Ref.',q.yourRef||''],['Our Ref.',q.ourRef||(_salesTracker.find(e=>e.id===q.linkedSalesTrackerId)?.enquiryNo||'')],['C. C.',''],['Sales Person',creatorName],['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:78px;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
         </table>
       </div>
     </div>
@@ -10632,7 +10716,7 @@ async function exportQuotationV2Pdf(quotationId){
         <div style="width:44%;">
           <div>Yours faithfully,</div>
           <div style="height:62px;display:flex;align-items:flex-end;">${creatorSig?`<img src="${creatorSig}" crossorigin="anonymous" style="max-height:58px;max-width:210px;object-fit:contain;"/>`:''}</div>
-          <div style="border-top:1px solid #000;width:250px;padding-top:4px;font-weight:bold;">${esc(creatorName)}</div>
+          <div style="border-top:1px solid #000;width:250px;padding-top:4px;"><b>${esc(creatorName)}</b>${creatorStaff?.designation?`<div style="font-size:11px;">${esc(creatorStaff.designation)}</div>`:''}</div>
         </div>
         <div style="width:48%;">
           <div>We confirm the order by accepting the terms<br/>&amp; conditions stated above.</div>
@@ -10658,24 +10742,49 @@ async function exportQuotationV2Pdf(quotationId){
     const trs=[...meas.querySelectorAll('tr')].map(tr=>tr.getBoundingClientRect().height);
     let k=0; groupHs=groups.map(g=>g.map(()=>trs[k++]));
   }finally{ meas.remove(); }
-  // Paginate: keep a line with its SoC rows when they fit on one page; leave room for totals on the last page
+  // Paginate. Items (each kept together with its SoC lines when it fits) fill the pages. The totals +
+  // signature block then goes on the last page:
+  //  • fits → normal;
+  //  • nearly fits (page would need to shrink to no less than 85%) → kept on the same page, which is
+  //    drawn a little taller and scaled to A4 — no extra page;
+  //  • clearly doesn't fit → the last item moves to a new page WITH the totals, so a page never
+  //    carries only the totals and signatures.
   const avail=PAGE_H-TOP-BOTTOM-headH-6;
-  const pages=[[]]; let used=0;
+  const pages=[{rows:[],gids:[],used:0}];
   groups.forEach((g,gi)=>{
     const hs=groupHs[gi]; const gh=hs.reduce((a,b)=>a+b,0);
-    if(used>0&&used+gh>avail&&gh<=avail){ pages.push([]); used=0; }
+    let cur=pages[pages.length-1];
+    if(cur.used>0&&cur.used+gh>avail&&gh<=avail){ cur={rows:[],gids:[],used:0}; pages.push(cur); }
     g.forEach((row,ri)=>{
-      if(used>0&&used+hs[ri]>avail){ pages.push([]); used=0; }
-      pages[pages.length-1].push(row); used+=hs[ri];
+      if(cur.used>0&&cur.used+hs[ri]>avail){ cur={rows:[],gids:[],used:0}; pages.push(cur); }
+      cur.rows.push(row); cur.used+=hs[ri]; if(!cur.gids.includes(gi)) cur.gids.push(gi);
     });
   });
-  if(used+footH+10>avail) pages.push([]);
+  const MIN_SCALE=0.85, need=footH+10;
+  let last=pages[pages.length-1], tallLast=false;
+  if(last.used+need>avail){
+    if(last.used+need<=avail/MIN_SCALE) tallLast=true;
+    else{
+      const gi=last.gids[last.gids.length-1], moveRows=groups[gi]||[], startIdx=last.rows.length-moveRows.length;
+      const wholeGroupHere=startIdx>=0&&moveRows.every((r,k)=>last.rows[startIdx+k]===r);
+      if(last.gids.length>1&&wholeGroupHere){
+        const mh=groupHs[gi].reduce((a,b)=>a+b,0);
+        last.rows=last.rows.slice(0,startIdx); last.used-=mh; last.gids.pop();
+        last={rows:moveRows.slice(),gids:[gi],used:mh}; pages.push(last);
+        if(last.used+need>avail) tallLast=true; // one very long item: keep it with the totals anyway
+      }else tallLast=true; // a single item filling the page: keep the totals with it rather than alone
+    }
+  }
   const pageCount=pages.length;
-  const pageHtml=pages.map((rows,pi)=>`<div class="pdf-doc" style="${pageStyle}">
+  const tallStyle=pageStyle.replace(`height:${PAGE_H}px;`,`min-height:${PAGE_H}px;`).replace('overflow:hidden;','');
+  const pageHtml=pages.map((pg,pi)=>{
+    const isLast=pi===pageCount-1, tall=isLast&&tallLast;
+    return `<div class="pdf-doc" style="${tall?tallStyle:pageStyle}">
       ${letterhead}${custBlock(pi+1,pageCount)}
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">${COLS}${tableHead}${rows.join('')}</table>
-      ${pi===pageCount-1?`<div style="position:absolute;left:${PX}px;right:${PX}px;bottom:${BOTTOM}px;">${footerBlock}</div>`:''}
-    </div>`);
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">${COLS}${tableHead}${pg.rows.join('')}</table>
+      ${isLast?(tall?`<div style="margin-top:14px;">${footerBlock}</div>`:`<div style="position:absolute;left:${PX}px;right:${PX}px;bottom:${BOTTOM}px;">${footerBlock}</div>`):''}
+    </div>`;
+  });
   const extraTerms=qtIsLegacyDefaultTerms(q.termsConditions)?'':String(q.termsConditions||'').trim();
   const termsPage=`<div class="pdf-doc" style="${pageStyle}font-size:12px;">
       ${letterhead}
@@ -10717,7 +10826,9 @@ async function exportQuotationV2Pdf(quotationId){
       ${extraTerms?`<div style="margin-top:10px;"><strong>Additional terms for this quotation:</strong><div style="white-space:pre-line;">${esc(extraTerms)}</div></div>`:''}
       <div style="text-align:center;font-weight:bold;margin-top:18px;font-size:11.5px;">This is a computer-generated quotation; no signature is required unless otherwise stated.</div>
     </div>`;
-  await exportPagedPdf([...pageHtml,termsPage],`${q.quotationNo}.pdf`,'Quotation',items.length,true);
+  // File name: quotation number + customer, e.g. "WQT-2609-0001_Envirolab Sdn Bhd.pdf"
+  const safeCust=String(q.custName||'').replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'').replace(/\s+/g,' ').trim().slice(0,80);
+  await exportPagedPdf([...pageHtml,termsPage],`${q.quotationNo}${safeCust?'_'+safeCust:''}.pdf`,'Quotation',items.length,true);
 }
 let _startingFromQuotationV2Id=null;
 async function createJobFromQuotationV2(quotationId){
@@ -10962,7 +11073,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;">
       <div><div style="font-size:18px;font-weight:bold;color:${NAVY};letter-spacing:.3px;">CONTRACT REVIEW FORM</div>
         <div style="font-size:10px;color:${MUTED};">Review of requests, tenders and contracts — ISO/IEC 17025:2017 Clause 7.1</div></div>
-      <div style="font-size:10px;color:${MUTED};text-align:right;">Item ${itemNo} of ${itemCount}</div>
+      <div style="font-size:10px;color:${MUTED};text-align:right;">${entry.enquiryNo?`Enquiry ref.: <b style="color:#111;">${esc(entry.enquiryNo)} / Item ${(entry.items||[]).indexOf(item)+1}</b><br/>`:''}Item ${itemNo} of ${itemCount}</div>
     </div>
     <div style="display:grid;grid-template-columns:1.3fr 1.3fr .9fr 1.1fr;border:1px solid ${NAVY};border-radius:4px;background:#f3f6fa;">
       ${[['Customer',esc(entry.name)],['Equipment',`${esc(item.eqName)}${item.quantity?` <span style="color:${MUTED};">× ${esc(item.quantity)}</span>`:''}`],['Enquiry received',enquiryDate||'—'],['Outcome',outcomeBadge]].map(([l,v],i)=>`<div style="padding:5px 9px;${i<3?`border-right:1px solid ${LINE};`:''}"><div style="font-size:8.5px;font-weight:bold;letter-spacing:.5px;color:${MUTED};text-transform:uppercase;">${l}</div><div style="font-size:11.5px;font-weight:bold;margin-top:2px;">${v}</div></div>`).join('')}
@@ -11514,7 +11625,7 @@ function renderSalesTrackerList(readOnly){
     if(month&&e.month!==month) return false;
     if(status&&e.status!==status) return false;
     if(person&&e.salesPersonnel!==person) return false;
-    if(q&&!(String(e.name||'').toLowerCase().includes(q)||(e.items||[]).some(it=>String(it.eqName||'').toLowerCase().includes(q)))) return false;
+    if(q&&!(String(e.name||'').toLowerCase().includes(q)||String(e.enquiryNo||'').toLowerCase().includes(q)||(e.items||[]).some(it=>String(it.eqName||'').toLowerCase().includes(q)))) return false;
     return true;
   });
   // summary strip (for the current month / person / search filters)
@@ -11554,7 +11665,7 @@ function renderSalesTrackerList(readOnly){
       return `<tr>
         <td data-l="Received" style="white-space:nowrap;font-size:12.5px;">${received}</td>
         <td data-l="Customer"><div style="font-weight:700;">${escapeHtml(e.name||'')}${e.remark?` <span title="${escapeHtml(e.remark)}" onclick="showToast(this.title,'info',6000)" style="cursor:pointer;font-size:12px;">💬</span>`:''}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">${person?escapeHtml(person):''}</div>${tags?`<div style="margin-top:3px;">${tags}</div>`:''}</td>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">${[e.enquiryNo,person].filter(Boolean).map(escapeHtml).join(' · ')}</div>${tags?`<div style="margin-top:3px;">${tags}</div>`:''}</td>
         <td data-l="Items" style="font-size:12.5px;">${items.map(it=>`<div style="margin:1px 0;">${escapeHtml(it.eqName||'')}${parseFloat(it.quantity)>1?` <span style="color:var(--text-muted);">× ${escapeHtml(it.quantity)}</span>`:''}${chip(it)}</div>`).join('')||'<span style="color:var(--text-muted);">—</span>'}</td>
         ${canSeeSalesMoney(currentUser)?`<td data-l="Value (RM)" style="text-align:right;white-space:nowrap;font-weight:600;">${val?val.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:var(--text-muted);font-weight:400;">—</span>'}</td>`:''}
         <td data-l="Status"><button class="st-pill" ${readOnly?'disabled style="cursor:default;"':`onclick="stOpenStatusMenu(event,'${e.id}')" title="Click to change status"`}>
@@ -11568,6 +11679,7 @@ function renderSalesTrackerList(readOnly){
 }
 
 function openTrackerEntryModal(type,entryId){
+  if(type==='sales') refreshStdNameSuggestions();
   if(!trackerCanUse(type)){alert('You do not have access to this tracker.');return;}
   if(type==='sales'&&!canUseSalesTracker(currentUser)){alert('Quality Manager has view-only access to Sales Tracker.');return;}
   const existing=entryId?trackerArr(type).find(e=>e.id===entryId):null;
@@ -11580,7 +11692,7 @@ function openTrackerEntryModal(type,entryId){
   if(!ov){ov=document.createElement('div');ov.id='tracker-entry-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} ${type==='sales'?'Sales':'Purchasing'} Entry</span>
+      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} ${type==='sales'?'Sales':'Purchasing'} Entry${existing?.enquiryNo?` <span style="font-weight:600;color:var(--text-muted);font-size:13px;">— ${escapeHtml(existing.enquiryNo)}</span>`:''}</span>
       <button onclick="document.getElementById('tracker-entry-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
     </div>
     <div style="padding:16px 20px;">
@@ -11619,6 +11731,9 @@ function openTrackerEntryModal(type,entryId){
       <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">2</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Enquiry</span><span style="font-size:11px;color:var(--text-muted);">printed on the Contract Review Form</span></div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Date Enquiry Received</label><input class="form-control" type="date" id="tk-enquiry-date" onchange="tkSyncMonth(this.value)" value="${existing?.enquiryDate||(existing?.createdAt?toLocalDateStr(new Date(existing.createdAt)):toLocalDateStr(new Date()))}"/></div>
+          <div class="form-group"><label class="form-label">Customer's reference <span style="font-weight:normal;color:var(--text-muted);">(their RFQ / PR no., if any)</span></label><input class="form-control" id="tk-cust-ref" value="${escapeHtml(existing?.customerRef||'')}" placeholder="e.g. RFQ-2026-118"/></div>
+        </div>
+        <div class="form-row">
           <div class="form-group"><label class="form-label">Received Via</label>
             <select class="form-control" id="tk-received-via">
               ${['','Email','Call','WhatsApp','Walk-in'].map(v=>`<option value="${v}" ${(existing?.receivedVia||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}
@@ -11779,7 +11894,7 @@ function renderSalesItemsList(){
       </div>
       <div class="form-group" style="margin-bottom:6px;">
         <label class="form-label">Equipment Name</label>
-        <input class="form-control" value="${escapeHtml(it.eqName||'')}" oninput="updateSalesItemField(${idx},'eqName',this.value)"/>
+        <input class="form-control" list="std-eq-names" value="${escapeHtml(it.eqName||'')}" oninput="updateSalesItemField(${idx},'eqName',this.value)"/>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Brand</label><input class="form-control" value="${escapeHtml(it.brand||'')}" oninput="updateSalesItemField(${idx},'brand',this.value)"/></div>
@@ -11956,7 +12071,8 @@ async function saveTrackerEntry(type,entryId){
   const arr=trackerArr(type);
   let entry=entryId?arr.find(e=>e.id===entryId):null;
   const isNew=!entry;
-  if(isNew){ entry={id:'TRK-'+Date.now(),type,createdAt:new Date().toISOString(),createdBy:currentUser,statusHistory:[]}; arr.push(entry); }
+  if(isNew){ entry={id:'TRK-'+Date.now(),type,createdAt:new Date().toISOString(),createdBy:currentUser,statusHistory:[]}; arr.push(entry);
+    if(type==='sales'){ try{ entry.enquiryNo=await getNextDocNumber('WEN'); }catch(e){ console.warn('Enquiry number could not be issued now — it will be given on next load:',e); } } }
   const oldStatus=entry.status;
   let newStatus=el('tk-status').value;
   if(type==='sales'){
@@ -11990,6 +12106,7 @@ async function saveTrackerEntry(type,entryId){
     const turnaroundSel=el('tk-turnaround')?.value||'';
     entry.turnaroundRequested=turnaroundSel==='Other'?(el('tk-turnaround-other')?.value.trim()||''):turnaroundSel;
     entry.requiredBy=el('tk-required-by')?.value||'';
+    entry.customerRef=el('tk-cust-ref')?.value.trim()||'';
     const anyOnsite=(_salesDraftItems||[]).some(it=>it.calType==='Onsite');
     ['onsiteStart:tk-onsite-start','onsiteEnd:tk-onsite-end','siteArea:tk-site-area','siteAddress:tk-site-address','siteContact:tk-site-contact','siteMobile:tk-site-mobile','siteAccess:tk-site-access']
       .forEach(pair=>{ const [k,id]=pair.split(':'); entry[k]=anyOnsite?(el(id)?.value.trim()||''):''; });
@@ -20816,6 +20933,7 @@ function openAddStaffModal(){
   el('staff-edit-username').value='';
   el('staff-name').value='';
   el('staff-cert-name').value='';
+  if(el('staff-designation')) el('staff-designation').value='';
   const staffMobileClear=el('staff-mobile'); if(staffMobileClear) staffMobileClear.value='';
   el('staff-username').value='';
   el('staff-username').readOnly=false;
@@ -20837,6 +20955,7 @@ function openEditStaffModal(username){
   el('staff-name').value=s.name||'';
   el('staff-cert-name').value=s.certName||s.name||'';
   const staffMobileEl=el('staff-mobile'); if(staffMobileEl) staffMobileEl.value=s.mobile||'';
+  if(el('staff-designation')) el('staff-designation').value=s.designation||'';
   el('staff-username').value=username;
   el('staff-username').readOnly=true;
   el('staff-role').value=s.role||'Engineer';
@@ -20857,6 +20976,7 @@ function openResetPwModal(username){
   el('staff-name').value=s.name||'';
   el('staff-cert-name').value=s.certName||s.name||'';
   const staffMobileEl2=el('staff-mobile'); if(staffMobileEl2) staffMobileEl2.value=s.mobile||'';
+  if(el('staff-designation')) el('staff-designation').value=s.designation||'';
   el('staff-username').value=username;
   el('staff-username').readOnly=true;
   el('staff-role').value=s.role||'Engineer';
@@ -20917,6 +21037,7 @@ async function saveStaff(){
     username, name,
     certName: el('staff-cert-name').value.trim()||name,
     mobile: el('staff-mobile')?.value.trim()||'',
+    designation: el('staff-designation')?.value.trim()||'',
     display:role,
     role,
     joinDate:el('staff-join-date')?.value||existing?.joinDate||'',
@@ -21862,6 +21983,7 @@ function renderQuickAccess(){
 <script>
 // ═══════════════════════════ DOCUMENT NUMBERING (Settings) ═══════════════════════════
 const DOC_SERIES=[
+  {prefix:'WEN',label:'Enquiry',used:()=>(_salesTracker||[]).map(e=>e.enquiryNo)},
   {prefix:'WQT',label:'Quotation',used:()=>(_quotationsV2||[]).map(q=>q.quotationNo)},
   {prefix:'WIV',label:'Invoice',used:()=>(_invoices||[]).map(i=>i.invoiceNo)},
   {prefix:'WPO',label:'Purchase Order',used:()=>(_purchaseOrders||[]).map(p=>p.poNumber).concat((_purchasingTracker||[]).map(e=>e.poNumber).filter(Boolean))},
@@ -22936,7 +23058,9 @@ async function draftDiscardByKey(key){
   if(typeof origSet==='function') window.setCurrentUser=function(...a){
     Object.keys(_draftActive).forEach(k=>delete _draftActive[k]); _draftsCache=null; updateDraftsBadge();
     const r=origSet.apply(this,a);
-    Promise.resolve(r).then(()=>migrateOldLocalJobDraft()).then(()=>renderMyDrafts()).catch(()=>{});
+    Promise.resolve(r).then(()=>migrateOldLocalJobDraft()).then(()=>renderMyDrafts())
+      .then(()=>{ if(typeof backfillEnquiryNumbers==='function') return backfillEnquiryNumbers(); }) // start-up runs before login; do it once signed in
+      .then(()=>{ if(document.getElementById('view-sales-tracker')?.classList.contains('active')) renderSalesTrackerPage(); }).catch(()=>{});
     return r;
   };
   const origPoll=window.pollForLiveUpdates;
