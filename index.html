@@ -104,6 +104,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
   .card-header>div[style*="display:flex"]{max-width:100%;}
   .view input.form-control,.view select.form-control,.view .filter-select{max-width:100%;}
 }
+.qt-sec{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--navy);margin:14px 0 10px;padding-bottom:5px;border-bottom:2px solid var(--navy);}
+.qt-sec-n{background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;margin-right:6px;}
+.qt-card{border:1px solid var(--border);border-radius:10px;margin-bottom:10px;background:#fff;overflow:hidden;}
+.qt-card-head{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#f8fafc;cursor:pointer;flex-wrap:wrap;}
+.qt-card-body{padding:12px;}
+.qt-chip{background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;}
+.qt-l{display:block;font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;}
+.qt-grid{display:grid;gap:10px;margin-bottom:10px;}
+.qt-price{display:grid;grid-template-columns:90px 1fr 1fr 1fr;gap:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+.qt-sub-sec{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;}
+.qt-footer{position:sticky;bottom:-30px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;background:#fff;border-top:1px solid var(--border);border-radius:0 0 16px 16px;box-shadow:0 -6px 16px rgba(15,31,61,.06);margin-top:14px;}
+@media(max-width:768px){ .qt-grid{grid-template-columns:1fr 1fr!important;} .qt-price{grid-template-columns:1fr 1fr;} }
 .dash-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px;}
 .dash-kpi{text-align:left;background:var(--bg-card,#fff);border:1px solid var(--border);border-top:3px solid var(--k);border-radius:12px;padding:14px 16px;cursor:pointer;font-family:inherit;color:inherit;transition:box-shadow .12s,transform .12s;}
 .dash-kpi:hover{box-shadow:0 6px 18px rgba(15,31,61,.08);transform:translateY(-1px);}
@@ -6908,31 +6920,34 @@ function renderSocSection(containerId,item){
             <strong style="font-size:11.5px;">Parameter ${idx+1}</strong>
             <button type="button" onclick="removeSocParameter('${containerId}',window._socItemRefs['${containerId}'],${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
           </div>
-          <input class="form-control" placeholder="Parameter Name (e.g. Temperature)" value="${p.parameterName||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'parameterName',this.value)" style="margin-bottom:6px;font-size:12px;"/>
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;">
+          <div><label style="display:block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px;">Parameter</label><input class="form-control" placeholder="e.g. Temperature" value="${escapeHtml(p.parameterName||'')}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'parameterName',this.value)" style="font-size:12px;"/></div>
+          <div><label style="display:block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px;">Specification</label><div style="display:flex;gap:6px;">
             <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'specType',this.value);renderSocSection('${containerId}',window._socItemRefs['${containerId}'])">
               ${opts(SOC_SPEC_TYPES,p.specType)}
             </select>
             ${p.specType==='Other'?`<input class="form-control" placeholder="Specify…" value="${p.specTypeOther||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'specTypeOther',this.value)" style="font-size:12px;"/>`:''}
-          </div>
-          <div class="unit-target-group" style="display:flex;gap:6px;margin-bottom:6px;">
-            <input class="form-control" data-unit-target placeholder="Limit Value(s) / Parameter(s) to check" value="${p.limitValue||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'limitValue',this.value,this)" style="font-size:12px;"/>
+          </div></div>
+          <div><label style="display:block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px;">Limit value(s) to check</label><div class="unit-target-group" style="display:flex;gap:6px;">
+            <input class="form-control" data-unit-target placeholder="e.g. ±0.5 °C" value="${p.limitValue||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'limitValue',this.value,this)" style="font-size:12px;"/>
             <select class="form-control unit-picker-select" style="max-width:80px;font-size:12px;" onchange="applyUnitFromPicker(this)">
               <option value="">Unit…</option>
             </select>
+          </div></div>
+          <div><label style="display:block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px;">SoC price per unit (RM)</label><input class="form-control" type="number" min="0" step="0.01" placeholder="0.00" value="${p.socPrice||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'socPrice',parseFloat(this.value)||0);updateSocParamTotal('${containerId}',${idx})" style="margin-bottom:2px;font-size:12px;"/>
+          <div style="font-size:10.5px;color:var(--text-muted);" id="soc-total-${containerId}-${idx}">Total for ${item.socUnitsNeeded||item.quantity||1} unit(s): RM ${((p.socPrice||0)*(item.socUnitsNeeded||parseFloat(item.quantity)||1)).toFixed(2)}</div>
           </div>
-          <input class="form-control" type="number" min="0" step="0.01" placeholder="SoC Price Per Unit (RM)" value="${p.socPrice||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'socPrice',parseFloat(this.value)||0);updateSocParamTotal('${containerId}',${idx})" style="margin-bottom:2px;font-size:12px;"/>
-          <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:6px;" id="soc-total-${containerId}-${idx}">Total for ${item.socUnitsNeeded||item.quantity||1} unit(s): RM ${((p.socPrice||0)*(item.socUnitsNeeded||parseFloat(item.quantity)||1)).toFixed(2)}</div>
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <div><label style="display:block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px;">Decision rule</label><div style="display:flex;gap:6px;">
             <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'decisionRule',this.value);renderSocSection('${containerId}',window._socItemRefs['${containerId}'])">
               ${opts(SOC_DECISION_RULES,p.decisionRule)}
             </select>
             ${p.decisionRule==='Guard-Banded — Customer-Specified Risk %'?`<input class="form-control" placeholder="Risk % / guard-band factor" value="${p.decisionRuleRisk||''}" oninput="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'decisionRuleRisk',this.value)" style="font-size:12px;width:140px;"/>`:''}
-          </div>
-          <div class="form-group">
+          </div></div>
+          <div><label style="display:block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text-muted);margin-bottom:2px;">Reporting</label>
             <select class="form-control" style="font-size:12px;" onchange="updateSocParamField(window._socItemRefs['${containerId}'],${idx},'reportingPreference',this.value)">
               ${opts(SOC_REPORTING_PREFS,p.reportingPreference)}
             </select>
+          </div>
           </div>
           ${p.status&&p.status!=='Pending'?`<div style="font-size:11px;font-weight:700;margin-top:6px;color:${p.status==='Withdrawn'?'var(--text-muted)':'var(--green)'};">${p.status==='Uploaded'?'📎 SoC uploaded':`🚫 Withdrawn${p.withdrawnReason?': '+p.withdrawnReason:''}`}</div>`:''}
         </div>`).join('')}
@@ -9648,12 +9663,17 @@ function updateQtv2ItemTotal(idx){
   const c=qtLineCalc(it); const total=c.total;
   const parts=[`calibration RM ${c.net.toFixed(2)}${c.disc?` (after RM ${c.disc.toFixed(2)} discount)`:''}`];
   if(c.socTotal) parts.push(`SoC RM ${c.socTotal.toFixed(2)}`);
-  const el2=el(`qtv2-item-total-${idx}`); if(el2) el2.textContent=`RM ${total.toFixed(2)}${(c.disc||c.socTotal)?' — '+parts.join(' + '):''}`;
+  const el2=el(`qtv2-item-total-${idx}`); if(el2) el2.textContent=`RM ${total.toFixed(2)}`;
+  const bd=el(`qtv2-item-breakdown-${idx}`); if(bd) bd.textContent=(c.disc||c.socTotal)?parts.join(' + '):'';
+  const hd=el(`qtv2-item-head-total-${idx}`); if(hd) hd.textContent=`RM ${total.toFixed(2)}`;
   updateQtv2GrandTotal();
 }
 function updateQtv2GrandTotal(){
   const grand=qtQuotationTotal(_qtv2DraftItems);
-  const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${grand.toFixed(2)}`;
+  const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${(_settings.sstEnabled?grand*1.08:grand).toFixed(2)}`;
+  const wrap=el('qtv2-grand-wrap');
+  if(wrap&&el2){ let pre=wrap.querySelector('.qt-sub'); if(!pre){ pre=document.createElement('span'); pre.className='qt-sub'; wrap.insertBefore(pre,wrap.firstChild); }
+    pre.innerHTML=_settings.sstEnabled?`<span style="color:var(--text-muted);">Subtotal</span> RM ${grand.toFixed(2)} &nbsp;·&nbsp; <span style="color:var(--text-muted);">SST 8%</span> RM ${(grand*0.08).toFixed(2)} &nbsp;·&nbsp; `:''; }
 }
 const DEFAULT_ENQUIRY_TEMPLATES=[
   {type:'Balance',text:'To prepare a quotation, please provide the following for each balance:\n- Equipment name\n- Brand\n- Model\n- Type: Single-range / Multi-range\n- Serial No.\n- Range/Capacity\n- Resolution\n- Adjustment required: Yes/No\n- Result required: As Found / As Left / Both\n- Specification/Tolerance\n- Calibration Points'},
@@ -9836,92 +9856,100 @@ function lookupPriceGuidance(eqName,custId){
   if(!standard&&!lastCustomerPrice)return null;
   return {standardPrice:standard?.standardPrice,lastCustomerPrice};
 }
+let _qtv2Folded=new Set(), _qtv2DetailsOpen=new Set(); // screen-only state, by item id
+function qtItemKey(it){ if(!it.id) it.id='QI-'+Date.now()+'-'+Math.floor(Math.random()*100000); return it.id; }
+function qtToggleFold(id){ _qtv2Folded.has(id)?_qtv2Folded.delete(id):_qtv2Folded.add(id); renderQtv2ItemsList(); }
+function qtToggleFoldAll(){ const ids=_qtv2DraftItems.map(qtItemKey); const allFolded=ids.every(id=>_qtv2Folded.has(id)); _qtv2Folded=allFolded?new Set():new Set(ids); renderQtv2ItemsList(); }
+function qtToggleDetails(id){ _qtv2DetailsOpen.has(id)?_qtv2DetailsOpen.delete(id):_qtv2DetailsOpen.add(id); renderQtv2ItemsList(); }
 function renderQtv2ItemsList(){
   const box=el('qtv2-items-list'); if(!box)return;
   const std=(_settings.priceReference||[]).slice().sort((a,b)=>(a.itemCode||'~').localeCompare(b.itemCode||'~')||String(a.eqName).localeCompare(String(b.eqName)));
+  const L=(t,sub)=>`<label class="qt-l">${t}${sub?` <span style="font-weight:normal;text-transform:none;letter-spacing:0;">${sub}</span>`:''}</label>`;
   box.innerHTML=_qtv2DraftItems.map((it,idx)=>{
     qtEnsureUnits(it);
+    const key=qtItemKey(it);
+    const folded=_qtv2Folded.has(key);
     const qty=Math.max(1,parseInt(it.quantity)||1);
     const same=it.sameCal!==false;
-    const unitCols=`${qty>1?'52px ':''}1fr 1fr${same?'':' 1fr 1fr'}`;
-    const unitRows=it.units.map((u,ui)=>`<div style="display:grid;grid-template-columns:${unitCols};gap:6px;margin-bottom:4px;align-items:center;">
-        ${qty>1?`<span style="font-size:11px;color:var(--text-muted);">Unit ${ui+1}</span>`:''}
-        <input class="form-control" placeholder="Serial No." value="${escapeHtml(u.serial||'')}" oninput="updateQtv2UnitField(${idx},${ui},'serial',this.value)"/>
-        <input class="form-control" placeholder="Tag No." value="${escapeHtml(u.tagNo||'')}" oninput="updateQtv2UnitField(${idx},${ui},'tagNo',this.value)"/>
-        ${same?'':`<input class="form-control" placeholder="Cal Points" value="${escapeHtml(u.calPoints||'')}" oninput="updateQtv2UnitField(${idx},${ui},'calPoints',this.value)"/>
-        <input class="form-control" placeholder="Resolution" value="${escapeHtml(u.resolution||'')}" oninput="updateQtv2UnitField(${idx},${ui},'resolution',this.value)"/>`}
-      </div>`).join('');
+    const c=qtLineCalc(it);
+    const service=[qtAccLabel(it.accreditationRequested),it.calType==='Onsite'?'On-site':'Lab'].filter(Boolean).join(' · ');
+    const filled=it.units.filter(u=>u.serial||u.tagNo).length+(it.stdDescription?1:0);
+    const detailsOpen=_qtv2DetailsOpen.has(key)||!same;
+    const head=`<div class="qt-card-head" onclick="if(!event.target.closest('button'))qtToggleFold('${key}')">
+        <span style="color:var(--text-muted);width:14px;">${folded?'▸':'▾'}</span>
+        <b>${idx+1}</b><span style="font-weight:600;">${escapeHtml(it.eqName||'New item')}</span>
+        ${it.itemCode?`<span class="qt-chip">${escapeHtml(it.itemCode)}</span>`:''}
+        <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(service)}${qty>1?` · ×${qty}`:''}</span>
+        <span style="margin-left:auto;font-weight:700;" id="qtv2-item-head-total-${idx}">RM ${c.total.toFixed(2)}</span>
+        ${it.itemCode?'':`<button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})" title="Adds this equipment to the Standard Price List and gives it an item code">💾 Save as standard item</button>`}
+        <button type="button" onclick="removeQtv2ItemRow(${idx})" title="Remove item" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;">✕</button>
+      </div>`;
+    if(folded) return `<div class="qt-card">${head}</div>`;
     const guidance=(()=>{
       const g=lookupPriceGuidance(it.eqName,el('qtv2-cust-id')?.value); if(!g) return '';
       let text='';
       if(g.standardPrice) text+=`Standard: RM ${g.standardPrice.toFixed(2)}`;
       if(g.lastCustomerPrice) text+=`${text?' · ':''}Last quoted to this customer: RM ${g.lastCustomerPrice.price.toFixed(2)} (${fmtDateShort(g.lastCustomerPrice.date)})`;
       const useValue=g.lastCustomerPrice?g.lastCustomerPrice.price:g.standardPrice;
-      return `<div style="font-size:11px;color:var(--blue);margin:-2px 0 6px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateQtv2ItemField(${idx},'unitPrice',${useValue});renderQtv2ItemsList()">use this</a></div>`;
+      return `<div style="font-size:11.5px;color:var(--blue);margin-top:4px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateQtv2ItemField(${idx},'unitPrice',${useValue});renderQtv2ItemsList()">use this</a></div>`;
     })();
-    return `<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
-        <strong style="font-size:12px;">Item ${idx+1}${it.itemCode?` <span style="background:#e0e7ff;color:#3730a3;border-radius:4px;padding:1px 6px;font-size:11px;margin-left:4px;">${escapeHtml(it.itemCode)}</span>`:''}</strong>
-        <span style="display:flex;gap:6px;align-items:center;">
-          ${it.itemCode?'':`<button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})" title="Adds this equipment to the Standard Price List and gives it an item code">💾 Save as standard item</button>`}
-          <button onclick="removeQtv2ItemRow(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button>
-        </span>
-      </div>
-      ${std.length?`<select class="form-control" style="margin-bottom:6px;" onchange="if(this.value) applyStandardItemToQtv2(${idx},this.value)">
-        <option value="">⭐ Pick from Standard Price List…</option>
+    const unitRows=it.units.map((u,ui)=>`<div style="display:grid;grid-template-columns:${qty>1?'56px ':''}1fr 1fr${same?'':' 1fr 1fr'};gap:8px;margin-bottom:6px;align-items:center;">
+        ${qty>1?`<span style="font-size:11.5px;color:var(--text-muted);">Unit ${ui+1}</span>`:''}
+        <input class="form-control" placeholder="Serial No." value="${escapeHtml(u.serial||'')}" oninput="updateQtv2UnitField(${idx},${ui},'serial',this.value)"/>
+        <input class="form-control" placeholder="Tag No." value="${escapeHtml(u.tagNo||'')}" oninput="updateQtv2UnitField(${idx},${ui},'tagNo',this.value)"/>
+        ${same?'':`<input class="form-control" placeholder="Cal Points" value="${escapeHtml(u.calPoints||'')}" oninput="updateQtv2UnitField(${idx},${ui},'calPoints',this.value)"/>
+        <input class="form-control" placeholder="Resolution" value="${escapeHtml(u.resolution||'')}" oninput="updateQtv2UnitField(${idx},${ui},'resolution',this.value)"/>`}
+      </div>`).join('');
+    return `<div class="qt-card">${head}<div class="qt-card-body">
+      ${std.length?`<div class="form-group">${L('Fill from Standard Price List','(optional)')}<select class="form-control" onchange="if(this.value) applyStandardItemToQtv2(${idx},this.value)">
+        <option value="">⭐ Choose a standard item…</option>
         ${std.map(p=>`<option value="${p.id}">${escapeHtml((p.itemCode?p.itemCode+' — ':'')+p.eqName+' '+qtServiceTag(p))}</option>`).join('')}
-      </select>`:''}
-      <input class="form-control" placeholder="Equipment Name" value="${escapeHtml(it.eqName||'')}" oninput="updateQtv2ItemField(${idx},'eqName',this.value)" style="margin-bottom:6px;"/>
-      <div class="form-row">
-        <div class="form-group"><input class="form-control" placeholder="Brand" value="${escapeHtml(it.brand||'')}" oninput="updateQtv2ItemField(${idx},'brand',this.value)"/></div>
-        <div class="form-group"><input class="form-control" placeholder="Model" value="${escapeHtml(it.model||'')}" oninput="updateQtv2ItemField(${idx},'model',this.value)"/></div>
+      </select></div>`:''}
+      <div class="qt-grid" style="grid-template-columns:2fr 1fr 1fr;">
+        <div>${L('Equipment')}<input class="form-control" value="${escapeHtml(it.eqName||'')}" oninput="updateQtv2ItemField(${idx},'eqName',this.value)"/></div>
+        <div>${L('Brand')}<input class="form-control" value="${escapeHtml(it.brand||'')}" oninput="updateQtv2ItemField(${idx},'brand',this.value)"/></div>
+        <div>${L('Model')}<input class="form-control" value="${escapeHtml(it.model||'')}" oninput="updateQtv2ItemField(${idx},'model',this.value)"/></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><select class="form-control" onchange="updateQtv2ItemField(${idx},'accreditationRequested',this.value)">
-          ${['','SAMM-Accredited','Non-Accredited'].map(v=>`<option value="${v}" ${(it.accreditationRequested||'')===v?'selected':''}>${v||'Accreditation…'}</option>`).join('')}
-        </select></div>
-        <div class="form-group"><select class="form-control" onchange="updateQtv2ItemField(${idx},'calType',this.value)">
-          <option value="Lab" ${it.calType!=='Onsite'?'selected':''}>Lab</option>
-          <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>On-site</option>
-        </select></div>
+      <div class="qt-grid unit-target-group" style="grid-template-columns:1fr 1fr 120px 1fr 1fr;">
+        <div>${L('Accreditation')}<select class="form-control" onchange="updateQtv2ItemField(${idx},'accreditationRequested',this.value);renderQtv2ItemsList()">
+          ${['','SAMM-Accredited','Non-Accredited'].map(v=>`<option value="${v}" ${(it.accreditationRequested||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}</select></div>
+        <div>${L('Lab / On-site')}<select class="form-control" onchange="updateQtv2ItemField(${idx},'calType',this.value);renderQtv2ItemsList()">
+          <option value="Lab" ${it.calType!=='Onsite'?'selected':''}>Lab</option><option value="Onsite" ${it.calType==='Onsite'?'selected':''}>On-site</option></select></div>
+        <div>${L('Unit')}<select class="form-control unit-picker-select" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div>
+        <div>${L('Range')}<input class="form-control" data-unit-target placeholder="e.g. 0 – 200" value="${escapeHtml(it.range||'')}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/></div>
+        <div>${L('Spec')}<input class="form-control" data-unit-target placeholder="e.g. ±0.5" value="${escapeHtml(it.spec||'')}" oninput="autoPlusMinus(this);updateQtv2ItemField(${idx},'spec',this.value)"/></div>
       </div>
-      <div class="unit-target-group" style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;">
-        <select class="form-control unit-picker-select" style="margin-bottom:6px;" onchange="applyUnitFromPicker(this)">
-          <option value="">Unit… (applies to Spec + Range)</option>
-        </select>
-        <div class="form-row">
-          <div class="form-group"><input class="form-control" data-unit-target placeholder="Spec" value="${escapeHtml(it.spec||'')}" oninput="autoPlusMinus(this);updateQtv2ItemField(${idx},'spec',this.value)"/></div>
-          <div class="form-group"><input class="form-control" data-unit-target placeholder="Range (e.g. 0 – 200)" value="${escapeHtml(it.range||'')}" oninput="updateQtv2ItemField(${idx},'range',this.value)"/></div>
-        </div>
+      <div class="qt-price">
+        <div>${L('Qty')}<input class="form-control" type="number" min="1" value="${qty}" oninput="updateQtv2ItemField(${idx},'quantity',this.value)" onchange="renderQtv2ItemsList()"/></div>
+        <div>${L('Unit price (RM)')}<input class="form-control" type="number" min="0" step="0.01" value="${it.unitPrice||''}" oninput="updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0)"/></div>
+        <div>${L('Discount','10% or RM')}<input class="form-control" placeholder="none" value="${escapeHtml(it.discount||'')}" oninput="updateQtv2ItemField(${idx},'discount',this.value)"/></div>
+        <div style="text-align:right;">${L('Line total')}<div id="qtv2-item-total-${idx}" style="font-size:17px;font-weight:800;padding-top:6px;">RM ${c.total.toFixed(2)}</div></div>
       </div>
-      <textarea class="form-control" rows="2" placeholder="Description lines printed under the item (optional), e.g.&#10;Type: Handheld/Benchtop unit with 1 electrode, carrying case" oninput="updateQtv2ItemField(${idx},'stdDescription',this.value)" style="margin-bottom:6px;font-size:12px;">${escapeHtml(it.stdDescription||'')}</textarea>
-      <div style="display:grid;grid-template-columns:90px 1fr 120px;gap:6px;margin-bottom:6px;">
-        <input class="form-control" type="number" min="1" placeholder="Qty" title="Quantity" value="${qty}" oninput="updateQtv2ItemField(${idx},'quantity',this.value)" onchange="renderQtv2ItemsList()"/>
-        <input class="form-control" type="number" min="0" step="0.01" placeholder="Unit Price (RM)" value="${it.unitPrice||''}" oninput="updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0)"/>
-        <input class="form-control" placeholder="Disc (10% or 50)" title="Optional discount on this line — type 10% or an RM amount such as 50" value="${escapeHtml(it.discount||'')}" oninput="updateQtv2ItemField(${idx},'discount',this.value)"/>
-      </div>
+      <div id="qtv2-item-breakdown-${idx}" style="font-size:11.5px;color:var(--text-muted);text-align:right;margin-top:-4px;">${(c.disc||c.socTotal)?'':''}</div>
       ${guidance}
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;">
+      <div class="qt-sub-sec">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-          <span style="font-size:11.5px;font-weight:600;">${qty>1?`Unit details (${qty} units)`:'Unit details'}</span>
-          ${qty>1?`<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:normal;cursor:pointer;"><input type="checkbox" ${same?'checked':''} onchange="toggleQtv2SameCal(${idx},this.checked)"/> Same cal points &amp; resolution for all units</label>`:''}
+          <span class="qt-l" style="margin:0;">Calibration details</span>
+          ${qty>1?`<label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:normal;cursor:pointer;"><input type="checkbox" ${same?'checked':''} onchange="toggleQtv2SameCal(${idx},this.checked)"/> Same cal points &amp; resolution for all ${qty} units</label>`:''}
         </div>
-        ${same?`<div class="form-row" style="margin-bottom:4px;">
-          <div class="form-group"><input class="form-control" placeholder="Calibration Points" value="${escapeHtml(it.calPoints||'')}" oninput="updateQtv2ItemField(${idx},'calPoints',this.value)"/></div>
-          <div class="form-group unit-target-group"><div style="display:flex;gap:6px;"><input class="form-control" data-unit-target placeholder="Resolution" value="${escapeHtml(it.resolution||'')}" oninput="updateQtv2ItemField(${idx},'resolution',this.value)"/><select class="form-control unit-picker-select" style="max-width:70px;" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div></div>
-        </div>`:''}
-        ${unitRows}
+        ${same?`<div class="qt-grid unit-target-group" style="grid-template-columns:2fr 1fr 110px;margin-bottom:0;">
+          <div>${L('Calibration points')}<input class="form-control" placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateQtv2ItemField(${idx},'calPoints',this.value)"/></div>
+          <div>${L('Resolution')}<input class="form-control" data-unit-target placeholder="e.g. 0.1" value="${escapeHtml(it.resolution||'')}" oninput="updateQtv2ItemField(${idx},'resolution',this.value)"/></div>
+          <div>${L('Unit')}<select class="form-control unit-picker-select" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div>
+        </div>`:`<div style="font-size:11.5px;color:var(--text-muted);">Different cal points &amp; resolution per unit — fill them in below.</div>`}
       </div>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:11.5px;margin-bottom:4px;">
-        <input type="checkbox" ${it.socRequested?'checked':''} onchange="updateQtv2ItemField(${idx},'socRequested',this.checked);renderQtv2ItemsList()"/>
-        📋 Statement of Conformity requested for this item <span style="color:var(--text-muted);">(priced per parameter, per unit — enter prices below)</span>
-      </label>
-      <div class="form-group" id="qtv2-item-soc-${idx}"></div>
-      <div style="font-size:11px;color:var(--text-muted);">Line total: <strong id="qtv2-item-total-${idx}"></strong></div>
-    </div>`;
+      <div class="qt-sub-sec" id="qtv2-item-soc-${idx}"></div>
+      <div class="qt-sub-sec" style="padding:0;">
+        <div onclick="${same?`qtToggleDetails('${key}')`:''}" style="padding:9px 12px;cursor:${same?'pointer':'default'};font-size:12.5px;font-weight:600;">
+          ${detailsOpen?'▾':'▸'} Serial / tag numbers &amp; description <span style="font-weight:normal;color:var(--text-muted);">${detailsOpen?'':(filled?`(${filled} filled in)`:'(optional — often not known yet)')}</span></div>
+        ${detailsOpen?`<div style="padding:0 12px 10px;">${unitRows}
+          ${L('Description lines printed under the item','(optional)')}
+          <textarea class="form-control" rows="2" placeholder="e.g. Type: Handheld/Benchtop unit with 1 electrode, carrying case" oninput="updateQtv2ItemField(${idx},'stdDescription',this.value)" style="font-size:12px;">${escapeHtml(it.stdDescription||'')}</textarea></div>`:''}
+      </div>
+    </div></div>`;
   }).join('');
-  _qtv2DraftItems.forEach((it,idx)=>renderSocSection(`qtv2-item-soc-${idx}`,it));
-  // Any change anywhere in the items (price, discount, quantity, SoC prices) refreshes totals
+  _qtv2DraftItems.forEach((it,idx)=>{ if(!_qtv2Folded.has(qtItemKey(it))) renderSocSection(`qtv2-item-soc-${idx}`,it); });
+  const fa=el('qtv2-foldall'); if(fa){ const all=_qtv2DraftItems.length&&_qtv2DraftItems.every(it=>_qtv2Folded.has(qtItemKey(it))); fa.textContent=_qtv2DraftItems.length>1?(all?'Expand all':'Fold all'):''; }
   box.oninput=()=>setTimeout(qtRefreshAllTotals,0);
   box.onchange=()=>setTimeout(qtRefreshAllTotals,0);
   qtRefreshAllTotals();
@@ -9952,18 +9980,22 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
     }):[];
   let ov=document.getElementById('qtv2-overlay');
   if(!ov){ov=document.createElement('div');ov.id='qtv2-overlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';document.body.appendChild(ov);}
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:620px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+  const fromEntry=prefillEntry||(existing?.linkedSalesTrackerId?_salesTracker.find(e=>e.id===existing.linkedSalesTrackerId):null);
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:920px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} Quotation ${existing?.quotationNo?'— '+existing.quotationNo:''}</span>
+      <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} Quotation ${existing?.quotationNo?'— '+existing.quotationNo:''}${fromEntry?`<span style="display:block;font-weight:500;font-size:12px;color:var(--text-muted);margin-top:2px;">From enquiry: ${escapeHtml(fromEntry.name||'')} · ${(fromEntry.items||[]).length} item${(fromEntry.items||[]).length===1?'':'s'}</span>`:''}</span>
       <button onclick="document.getElementById('qtv2-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
     </div>
-    <div style="padding:16px 20px;">
+    <div style="padding:16px 20px 0;">
+      <div class="qt-sec"><span class="qt-sec-n">1</span>Customer</div>
       <div class="form-group" style="position:relative;">
         <label class="form-label">Customer <span class="req">*</span></label>
         <input class="form-control" id="qtv2-cust-name" value="${escapeHtml(existing?.custName||prefillEntry?.name||'')}" autocomplete="off" oninput="suggestQtv2Customer(this.value)" onfocus="suggestQtv2Customer(this.value)"/>
         <div id="qtv2-cust-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-lg);z-index:500;max-height:160px;overflow-y:auto;margin-top:2px;"></div>
         <input type="hidden" id="qtv2-cust-id" value="${existing?.custId||prefillEntry?.custId||''}"/>
       </div>
+      <div id="qtv2-cust-summary" style="display:none;background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;"></div>
+      <div id="qtv2-cust-fields">
       <div class="form-row">
         <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="qtv2-attention" value="${escapeHtml(existing?.attention||prefillCustomer?.attention||prefillEntry?.prospectAttention||'')}"/></div>
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="qtv2-email" value="${existing?.email||prefillCustomer?.email||prefillEntry?.prospectEmail||''}"/></div>
@@ -9974,7 +10006,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
         <div class="form-group"><label class="form-label">Fax</label><input class="form-control" id="qtv2-fax" value="${existing?.fax||prefillCustomer?.fax||''}"/></div>
       </div>
       <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="qtv2-address" rows="2">${escapeHtml(existing?.address||prefillCustomer?.address||prefillEntry?.prospectAddress||'')}</textarea></div>
-      <div style="border-top:1px solid var(--border);margin:10px 0;"></div>
+      </div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;margin-bottom:8px;">
         <input type="checkbox" id="qtv2-has-end-user" ${existing?.endUserName?'checked':''} onchange="el('qtv2-end-user-group').style.display=this.checked?'block':'none'"/>
         🏭 This is a dealer — certificate should go to their client instead
@@ -9985,12 +10017,10 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
           <div class="form-group"><label class="form-label">End User Address</label><textarea class="form-control" id="qtv2-end-user-address" rows="2">${escapeHtml(existing?.endUserAddress||'')}</textarea></div>
         </div>
       </div>
-      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
-      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px;">Items Quoted</div>
+      <div class="qt-sec" style="justify-content:space-between;"><span><span class="qt-sec-n">2</span>Items</span><a href="javascript:void(0)" id="qtv2-foldall" onclick="qtToggleFoldAll()" style="font-size:12px;font-weight:500;"></a></div>
       <div id="qtv2-items-list"></div>
       <button class="btn btn-outline btn-sm" onclick="addQtv2ItemRow()">+ Add Item</button>
-      <div style="text-align:right;font-size:14px;font-weight:700;margin-top:10px;">Grand Total: <span id="qtv2-grand-total" style="color:var(--green);">RM 0.00</span></div>
-      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
+      <div class="qt-sec"><span class="qt-sec-n">3</span>Terms</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Validity (days)</label><input class="form-control" type="number" id="qtv2-validity" value="${existing?.validityDays||30}"/></div>
       </div>
@@ -10006,14 +10036,19 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       </div>
       <div class="form-group"><label class="form-label">Additional Terms <span style="font-weight:normal;color:var(--text-muted);">(optional — only for this quotation; your standard 16-point Terms &amp; Conditions are always printed)</span></label><textarea class="form-control" id="qtv2-terms" rows="2" placeholder="e.g. Price valid for this batch of items only">${escapeHtml(qtIsLegacyDefaultTerms(existing?.termsConditions)?'':(existing?.termsConditions||''))}</textarea></div>
       <input type="hidden" id="qtv2-linked-sales-entry" value="${existing?.linkedSalesTrackerId||salesTrackerEntryId||''}"/>
-      <div style="display:flex;justify-content:flex-end;gap:8px;">
+    </div>
+    <div class="qt-footer">
+      <div id="qtv2-grand-wrap" style="font-size:13px;"><span style="color:var(--text-muted);">Total</span> <b id="qtv2-grand-total" style="font-size:18px;color:var(--green);">RM 0.00</b></div>
+      <div style="display:flex;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('qtv2-overlay').style.display='none'">Cancel</button>
-        <button class="btn btn-primary" onclick="saveQuotationV2('${quotationId||''}')">${existing?'Save Changes':'Save as Draft'}</button>
+        <button class="btn btn-primary" onclick="saveQuotationV2('${quotationId||''}')">${existing?'Save Changes':'Save Quotation'}</button>
       </div>
     </div>
   </div>`;
   ov.style.display='flex';
+  _qtv2Folded=new Set(); _qtv2DetailsOpen=new Set();
   renderQtv2ItemsList();
+  qtv2RefreshCustomerView();
 }
 function suggestQtv2Customer(query){
   const box=el('qtv2-cust-suggestions'); if(!box)return;
@@ -10034,6 +10069,20 @@ function selectQtv2Customer(custId){
   if(el('qtv2-mobile')) el('qtv2-mobile').value=c.mobile||'';
   if(el('qtv2-fax')) el('qtv2-fax').value=c.fax||'';
   el('qtv2-cust-suggestions').style.display='none';
+  qtv2RefreshCustomerView();
+}
+// An existing customer's details are already filled in — show them as a one-line summary with
+// "Edit details" instead of six open boxes. (All the boxes stay in the form, so saving is unchanged.)
+function qtv2RefreshCustomerView(forceOpen){
+  const box=el('qtv2-cust-fields'), sum=el('qtv2-cust-summary'); if(!box||!sum) return;
+  const v=id=>(el(id)?.value||'').trim();
+  const known=!!v('qtv2-cust-id')||(!!v('qtv2-cust-name')&&!!(v('qtv2-attention')||v('qtv2-email')||v('qtv2-mobile')||v('qtv2-tel')||v('qtv2-address')));
+  if(!known||forceOpen){ box.style.display=''; sum.style.display=known?'':'none'; if(known) sum.innerHTML=`Contact details shown below <a href="javascript:void(0)" style="float:right;" onclick="qtv2RefreshCustomerView()">Hide</a>`; return; }
+  const bits=[v('qtv2-attention'),v('qtv2-tel')||v('qtv2-mobile'),v('qtv2-email')].filter(Boolean).map(escapeHtml);
+  const addr=v('qtv2-address').split('\n')[0];
+  sum.innerHTML=`<b>${escapeHtml(v('qtv2-cust-name'))}</b>${bits.length?' — '+bits.join(' · '):''}${addr?`<div style="color:var(--text-muted);font-size:11.5px;margin-top:2px;">${escapeHtml(addr)}</div>`:''}
+    <a href="javascript:void(0)" style="float:right;margin-top:-16px;" onclick="qtv2RefreshCustomerView(true)">Edit details</a>`;
+  sum.style.display=''; box.style.display='none';
 }
 async function saveQuotationV2(quotationId){
   const custName=el('qtv2-cust-name').value.trim();
