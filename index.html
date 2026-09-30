@@ -599,7 +599,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="nav-section-label">Customers &amp; Equipment</div>
     <button class="nav-item" id="nav-customers" onclick="showView('customers')" data-label="Customer Database"><span class="nav-icon"><i class="ti ti-building"></i></span><span class="nav-label">Customer Database</span></button>
     <button class="nav-item" id="nav-ref-eq" onclick="showView('ref-eq')" data-label="Masterlist of Equipment"><span class="nav-icon"><i class="ti ti-building-bank"></i></span><span class="nav-label">Masterlist of Equipment</span></button>
-    <button class="nav-item hidden-nav" id="nav-price-ref" onclick="openPriceReferenceModal()" data-label="Price Reference"><span class="nav-icon"><i class="ti ti-tag"></i></span><span class="nav-label">Price Reference</span></button>
+    <button class="nav-item hidden-nav" id="nav-price-ref" onclick="showView('price-reference')" data-label="Price Reference"><span class="nav-icon"><i class="ti ti-tag"></i></span><span class="nav-label">Price Reference</span></button>
     <button class="nav-item hidden-nav" id="nav-quotations" onclick="showView('quotations')" data-label="Quotations"><span class="nav-icon"><i class="ti ti-file-invoice"></i></span><span class="nav-label">Quotations</span></button>
     <button class="nav-item hidden-nav" id="nav-sales-tracker" onclick="showView('sales-tracker')" data-label="Sales Tracker"><span class="nav-icon"><i class="ti ti-timeline"></i></span><span class="nav-label">Sales Tracker</span></button>
     <button class="nav-item hidden-nav" id="nav-quotations-v2" onclick="showView('quotations-v2')" data-label="Quotations"><span class="nav-icon"><i class="ti ti-file-text"></i></span><span class="nav-label">Quotations</span></button>
@@ -1238,6 +1238,50 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </select>
       </div>
       <div id="po-list"></div>
+    </div>
+
+    <!-- ════ PRICE REFERENCE — standard items, quotation price history, job prices ════ -->
+    <div class="view" id="view-price-reference">
+      <div class="page-header"><div><div class="page-title">💰 Price Reference</div><div class="page-sub">Standard items with their codes, and every price quoted to customers</div></div></div>
+      <div class="st-tabs" id="prp-tabs" style="margin-bottom:12px;"></div>
+      <div class="card" id="prp-tab-std"><div class="card-body">
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:12px;">Standard prices per equipment type — shown as a suggestion when quoting, so pricing stays consistent even though individual customers can still be quoted differently.</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input class="form-control" id="pr-new-name" placeholder="Equipment type (e.g. pH Meter)"/>
+        <input class="form-control" type="number" min="0" step="0.01" id="pr-new-price" placeholder="Standard Price (RM)" style="max-width:180px;"/>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <select class="form-control" id="pr-new-acc" style="max-width:200px;"><option value="">Accreditation…</option><option value="SAMM-Accredited">SAMM-Accredited</option><option value="Non-Accredited">Non-Accredited</option></select>
+        <select class="form-control" id="pr-new-caltype" style="max-width:140px;"><option value="Lab">Lab</option><option value="Onsite">On-site</option></select>
+      </div>
+      <input class="form-control" id="pr-new-aliases" placeholder="Also known as (optional, comma-separated) — e.g. calibration bath, cooling bath" style="margin-bottom:8px;"/>
+      <textarea class="form-control" id="pr-new-desc" rows="2" placeholder="Description lines printed on quotations (optional), e.g.&#10;Type: Handheld/Benchtop unit with 1 electrode, carrying case" style="margin-bottom:8px;"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-muted);">An item code (WLC-001, WLC-002 …) is given automatically.</span>
+        <button class="btn btn-primary" onclick="addPriceReferenceEntry()">+ Add</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Code</th><th>Equipment Type</th><th>Service</th><th>Standard Price (RM)</th><th>Quoted</th><th>Description</th><th></th></tr></thead>
+        <tbody id="price-reference-tbody"></tbody>
+      </table></div>
+    </div></div>
+      <div class="card" id="prp-tab-hist" style="display:none;"><div class="card-body">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <select class="filter-select" id="ph-cust" onchange="renderPriceHistoryPage()"></select>
+          <input class="filter-select" id="ph-q" placeholder="Search code, equipment, customer, quotation…" oninput="renderPriceHistoryPage()" style="min-width:240px;"/>
+          <select class="filter-select" id="ph-status" onchange="renderPriceHistoryPage()"><option value="">All statuses</option><option>Sent</option><option>Accepted</option><option>Not in PO</option><option>Lost</option><option>Expired</option></select>
+          <input class="filter-select" type="date" id="ph-from" onchange="renderPriceHistoryPage()" title="From"/><input class="filter-select" type="date" id="ph-to" onchange="renderPriceHistoryPage()" title="To"/>
+          <input type="hidden" id="ph-code"/>
+          <span id="ph-code-chip"></span>
+          <button class="btn btn-outline btn-sm" onclick="exportPriceHistoryExcel()">📊 Export to Excel</button>
+        </div>
+        <div id="ph-table"></div>
+      </div></div>
+      <div class="card" id="prp-tab-jobs" style="display:none;"><div class="card-body">
+        <input class="form-control" id="price-ref-search" placeholder="Search equipment name or model, e.g. Pressure Gauge, Fluke 717…" oninput="renderPriceReferenceResults()" autocomplete="off"/>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Prices actually charged on jobs, grouped by equipment and model — a reference range, not a fixed rate.</div>
+        <div id="price-ref-results" style="margin-top:14px;"></div>
+      </div></div>
     </div>
 
     <!-- ════ MODULE LAUNCHER (opened from a sidebar category) ════ -->
@@ -2927,6 +2971,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <div class="modal-body">
       <div id="aq-summary" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;"></div>
+      <div class="form-group"><label class="form-label">Items in the customer's PO</label>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">Untick anything the customer didn't order, or lower the quantity. Items left out are recorded as lost (not in the PO); the job will only include what's ordered.</div>
+        <div id="aq-items"></div>
+        <div id="aq-po-value" style="font-size:12.5px;font-weight:700;text-align:right;margin-top:6px;"></div>
+      </div>
       <div class="form-group"><label class="form-label">PO Number <span class="req">*</span></label><input class="form-control" id="aq-po-number" placeholder="Customer's PO number"/></div>
       <div class="form-group">
         <label class="form-label">PO Document <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
@@ -3396,7 +3445,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <label class="form-label">Customer Type <span class="req">*</span></label>
         <div style="display:flex;gap:20px;padding:10px 0;flex-wrap:wrap;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
-            <input type="checkbox" id="cust-type-dealer" onchange="checkCustTypeConflict()" style="width:16px;height:16px;"/> Dealer
+            <input type="checkbox" id="cust-type-dealer" onchange="checkCustTypeConflict();custToggleDealerRow()" style="width:16px;height:16px;"/> Dealer
           </label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;">
             <input type="checkbox" id="cust-type-direct" onchange="checkCustTypeConflict()" style="width:16px;height:16px;"/> Direct Customer
@@ -3406,6 +3455,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
           </label>
         </div>
         <div style="font-size:11px;color:var(--text-muted);">A company can be both Dealer and Direct — e.g. a dealer who also buys directly for their own equipment. "End User Only" is for a company that never deals with us directly, only through their dealer. Check at least one.</div>
+      <div id="cust-dealer-disc-row" class="form-group" style="display:none;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 12px;">
+        <label class="form-label">Dealer discount (%) <span style="font-weight:normal;color:var(--text-muted);">— suggested on this dealer's enquiries and quotations; normally 20%</span></label>
+        <input class="form-control" type="number" min="0" max="100" step="1" id="cust-dealer-discount" value="20" style="max-width:120px;"/>
+      </div>
         <div id="cust-type-conflict-warning" style="display:none;background:#fef3c7;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:11px;color:#92400e;">⚠️ "End User Only" usually shouldn't be combined with "Direct Customer", since End User Only means they never deal with us directly. Please double-check this is intentional.</div>
       </div>
 
@@ -3637,39 +3690,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
 </div>
 
 <!-- STANDARD PRICE LIST MODAL -->
-<div class="modal-overlay" id="modal-price-reference" style="display:none;">
-  <div class="modal modal-lg">
-    <div class="modal-header">
-      <span class="modal-title">💰 Standard Price List</span>
-      <button class="modal-close" onclick="closeModal('modal-price-reference')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:12px;">Standard prices per equipment type — shown as a suggestion when quoting, so pricing stays consistent even though individual customers can still be quoted differently.</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <input class="form-control" id="pr-new-name" placeholder="Equipment type (e.g. pH Meter)"/>
-        <input class="form-control" type="number" min="0" step="0.01" id="pr-new-price" placeholder="Standard Price (RM)" style="max-width:180px;"/>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <select class="form-control" id="pr-new-acc" style="max-width:200px;"><option value="">Accreditation…</option><option value="SAMM-Accredited">SAMM-Accredited</option><option value="Non-Accredited">Non-Accredited</option></select>
-        <select class="form-control" id="pr-new-caltype" style="max-width:140px;"><option value="Lab">Lab</option><option value="Onsite">On-site</option></select>
-      </div>
-      <input class="form-control" id="pr-new-aliases" placeholder="Also known as (optional, comma-separated) — e.g. calibration bath, cooling bath" style="margin-bottom:8px;"/>
-      <textarea class="form-control" id="pr-new-desc" rows="2" placeholder="Description lines printed on quotations (optional), e.g.&#10;Type: Handheld/Benchtop unit with 1 electrode, carrying case" style="margin-bottom:8px;"></textarea>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:11px;color:var(--text-muted);">An item code (WLC-001, WLC-002 …) is given automatically.</span>
-        <button class="btn btn-primary" onclick="addPriceReferenceEntry()">+ Add</button>
-      </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Code</th><th>Equipment Type</th><th>Service</th><th>Standard Price (RM)</th><th>Description</th><th></th></tr></thead>
-        <tbody id="price-reference-tbody"></tbody>
-      </table></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('modal-price-reference')">Close</button>
-    </div>
-  </div>
-</div>
-
 <!-- PDF PREVIEW MODAL -->
 <div class="modal-overlay" id="modal-pdf-preview" style="display:none;">
   <div class="modal modal-lg" style="height:90vh;display:flex;flex-direction:column;">
@@ -4700,7 +4720,7 @@ const TITLES={dashboard:'Dashboard',equipment:'Equipment & Calibration',complete
   customers:'Customer Database',deleted:'Deleted Jobs',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
   documents:'Document Control',capa:'Nonconformance & CAPA','ref-eq':'Masterlist of Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
-  personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings',launcher:'Modules',
+  personnel:'Personnel',reports:'Reports & Audit Logs',settings:'Settings',launcher:'Modules','price-reference':'Price Reference',
   'my-drafts':'My Drafts','purchase-orders':'Purchase Orders','external-partners':'Supplier Database'};
 
 function showView(name){
@@ -9636,14 +9656,17 @@ function qtSyncLegacyFields(it){
 // price after discount, and SoC on however many units needed it.
 function qtExpandToJobUnits(items){
   const out=[];
-  (items||[]).filter(it=>it&&it.eqName).forEach(it=>{
+  // Partial PO: items left out of the customer's PO are skipped, and only the ordered quantity is used
+  // (the first units of the line). The net price per unit stays as quoted.
+  (items||[]).filter(it=>it&&it.eqName&&it.poAccepted!==false).forEach(it=>{
     const c=qtLineCalc(it);
-    const socN=it.socRequested?qtSocUnits(it):0;
-    qtUnitDetails(it).forEach((u,ui)=>{
+    const ordered=it.poAccepted===true?Math.max(1,Math.min(parseInt(it.poQty)||c.qty,c.qty)):c.qty;
+    const socN=it.socRequested?Math.min(qtSocUnits(it),ordered):0;
+    qtUnitDetails(it).slice(0,ordered).forEach((u,ui)=>{
       const unit={...it,serial:u.serial,tagNo:u.tagNo,calPoints:u.calPoints,resolution:u.resolution,quantity:1,
         unitPrice:Math.round(c.netUnitPrice*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
         socParameters:(ui<socN&&it.socParameters)?JSON.parse(JSON.stringify(it.socParameters)):undefined};
-      delete unit.units; delete unit.discount; delete unit.srcIdx;
+      delete unit.units; delete unit.discount; delete unit.srcIdx; delete unit.poAccepted; delete unit.poQty;
       out.push(unit);
     });
   });
@@ -9680,6 +9703,9 @@ function qtCompareToEnquiry(qi,ei){
     // cal points / resolution: filling in what the enquiry left blank is normal; changing a stated value needs a check
     const cap=capRule==='ifSet'?!!String(ei[f]||'').trim():capRule;
     changes.push({label,from:disp(f,ei[f]),to:disp(f,qi[f]),cap}); if(cap) needsReview=true; } });
+  const ep=parseFloat(ei.price)||0, qp=parseFloat(qi.unitPrice)||0;
+  if(Math.abs(ep-qp)>0.004) changes.push({label:'Price',from:'RM '+ep.toFixed(2),to:'RM '+qp.toFixed(2),cap:false});
+  if(String(ei.discount||'').trim()!==String(qi.discount||'').trim()) changes.push({label:'Discount',from:String(ei.discount||'').trim()||'none',to:String(qi.discount||'').trim()||'none',cap:false});
   if(qtSocSig(ei)!==qtSocSig(qi)){ changes.push({label:'Statement of Conformity',from:qtSocText(ei),to:qtSocText(qi),cap:true}); needsReview=true; }
   if(!['Can Do','Can Do (External)'].includes(ei.capabilityVerdict)) needsReview=true;
   return {added:false,changes,needsReview};
@@ -9823,6 +9849,7 @@ function toggleQtv2SameCal(idx,same){
   if(!same) it.units.forEach(u=>{ if(!u.calPoints) u.calPoints=it.calPoints||''; if(!u.resolution) u.resolution=it.resolution||''; });
   renderQtv2ItemsList();
 }
+function applyQtv2Price(idx,price,disc){ const it=_qtv2DraftItems[idx]; if(!it) return; it.unitPrice=price; it.discount=disc||''; renderQtv2ItemsList(); }
 function qtRefreshAllTotals(){ _qtv2DraftItems.forEach((_,i)=>updateQtv2ItemTotal(i)); updateQtv2GrandTotal(); if(typeof qtRefreshDiffs==='function') qtRefreshDiffs(); }
 function updateQtv2ItemTotal(idx){
   const it=_qtv2DraftItems[idx]; if(!it)return;
@@ -9966,22 +9993,60 @@ document.addEventListener('keyup',e=>{
   const len=f.value.length;
   if(len&&((f.selectionStart===0&&f.selectionEnd===len)||f.selectionStart===len)) placeCaretBeforeUnit(f,false); // tabbing in selects everything — typing would wipe the unit
 });
-function openStandardPriceListModal(){
-  renderPriceReferenceTable();
-  openModal('modal-price-reference');
-  ensurePriceRefCodes().then(renderPriceReferenceTable).catch(()=>{});
+// The Price Reference page (Sales & Customers). Both the menu tile and the Quotations page button open it.
+let _prpTab='std';
+function openPriceReferencePage(tab,filters){
+  if(!canViewPriceReference(currentUser)){ alert('You do not have access to the Price Reference.'); return; }
+  _prpTab=tab||'std'; window._prpPending=filters||null;
+  showView('price-reference');
 }
+function openStandardPriceListModal(){ openPriceReferencePage('std'); }
+function openPriceReferenceModal(){ openPriceReferencePage('std'); }
+function prpSetTab(t){ _prpTab=t; renderPriceReferencePage(); }
+function renderPriceReferencePage(){
+  const tabs=[['std','Standard items'],['hist','Quotation price history'],['jobs','Job prices']];
+  const tb=el('prp-tabs'); if(tb) tb.innerHTML=tabs.map(([k,l])=>`<button class="st-tab ${_prpTab===k?'active':''}" onclick="prpSetTab('${k}')">${l}</button>`).join('');
+  ['std','hist','jobs'].forEach(k=>{ const d=el('prp-tab-'+k); if(d) d.style.display=_prpTab===k?'':'none'; });
+  if(_prpTab==='std'){ renderPriceReferenceTable(); ensurePriceRefCodes().then(renderPriceReferenceTable).catch(()=>{}); }
+  if(_prpTab==='hist'){
+    const f=window._prpPending; window._prpPending=null;
+    const custs=[...new Map(priceHistoryRecords().filter(r=>r.custId||r.custName).map(r=>[r.custId||r.custName,r.custName])).entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
+    const cs=el('ph-cust'); const cur=f?(f.custId||''):(cs?.value||'');
+    if(cs) cs.innerHTML='<option value="">All customers</option>'+custs.map(([id,n])=>`<option value="${escapeHtml(id)}" ${id===cur?'selected':''}>${escapeHtml(n)}</option>`).join('');
+    if(f){ el('ph-q').value=f.q||''; el('ph-status').value=f.status||''; el('ph-from').value=''; el('ph-to').value=''; el('ph-code').value=f.code||''; }
+    renderPriceHistoryPage();
+  }
+  if(_prpTab==='jobs') renderPriceReferenceResults();
+}
+function priceHistoryPageFilter(){ return {custId:el('ph-cust')?.value||'',q:el('ph-q')?.value||'',status:el('ph-status')?.value||'',from:el('ph-from')?.value||'',to:el('ph-to')?.value||'',code:el('ph-code')?.value||''}; }
+function renderPriceHistoryPage(){
+  const f=priceHistoryPageFilter();
+  const chip=el('ph-code-chip'); const std=f.code?qtStdByCode(f.code):null;
+  if(chip) chip.innerHTML=f.code?`<span class="qt-chip" style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px;">${escapeHtml(f.code)}${std?' '+escapeHtml(std.eqName):''} <a href="javascript:void(0)" onclick="el('ph-code').value='';renderPriceHistoryPage()" style="text-decoration:none;">✕</a></span>`:'';
+  renderPriceHistoryTable(el('ph-table'),f,false);
+}
+function exportPriceHistoryExcel(){
+  if(typeof XLSX==='undefined'){ alert('Excel export library failed to load — please check your connection and refresh.'); return; }
+  const rows=priceHistoryFilter(priceHistoryRecords(),priceHistoryPageFilter()).map(r=>({Date:String(r.date).slice(0,10),Quotation:r.quotationNo,Customer:r.custName,'Item Code':r.itemCode,Equipment:r.eqName,
+    Service:qtServiceTag({accreditation:r.acc,calType:r.calType}).replace(/[\[\]]/g,''),Qty:r.qty,'Qty in PO':r.poQty??'','Unit Price (RM)':r.unitPrice,Discount:r.discount,'Net / Unit (RM)':Number(r.netUnit.toFixed(2)),Status:r.status}));
+  const ws=XLSX.utils.json_to_sheet(rows); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Price History');
+  XLSX.writeFile(wb,`Westlab_Price_History_${toLocalDateStr(new Date())}.xlsx`);
+}
+let _prpHist=[];
 function renderPriceReferenceTable(){
   const body=el('price-reference-tbody'); if(!body)return;
+  _prpHist=priceHistoryRecords();
   const list=(_settings.priceReference||[]).slice().sort((a,b)=>(a.itemCode||'~').localeCompare(b.itemCode||'~')||a.eqName.localeCompare(b.eqName));
   body.innerHTML=list.map((p,idx)=>`<tr>
     <td style="white-space:nowrap;font-weight:600;">${escapeHtml(p.itemCode||'…')}</td>
     <td>${escapeHtml(p.eqName)}${(p.aliases||[]).length?`<div style="font-size:11px;color:var(--text-muted);">also: ${escapeHtml(p.aliases.join(', '))}</div>`:''}</td>
     <td style="white-space:nowrap;font-size:12px;">${escapeHtml(qtServiceTag(p).replace(/[\[\]]/g,''))}</td>
     <td style="text-align:right;">${(p.standardPrice||0).toFixed(2)}</td>
+    <td style="white-space:nowrap;font-size:12px;">${(()=>{ const rs=_prpHist.filter(r=>r.itemCode&&r.itemCode===p.itemCode); if(!rs.length) return '<span style="color:var(--text-muted);">—</span>';
+      return `<a href="javascript:void(0)" onclick="openPriceReferencePage('hist',{code:'${escapeForJsAttr(p.itemCode)}'})">${rs.length}×</a><div style="font-size:11px;color:var(--text-muted);">last RM ${rs[0].netUnit.toFixed(2)}, ${fmtDateShort(rs[0].date)}</div>`; })()}</td>
     <td style="font-size:11.5px;color:var(--text-muted);white-space:pre-line;">${escapeHtml(p.description||'')}</td>
     <td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" title="Rename, other names, price, description" onclick="openPriceRefEditor('${p.id}')">✏️ Edit</button> <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="deletePriceReferenceEntry('${p.id}')">✕</button></td>
-  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No price references yet.</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No price references yet.</td></tr>';
 }
 async function addPriceReferenceEntry(){
   const name=el('pr-new-name').value.trim();
@@ -10059,6 +10124,98 @@ async function deletePriceReferenceEntry(id){
 }
 // Finds the closest matching standard price and the customer's own price history for a
 // given equipment name, used while quoting so pricing stays informed and consistent.
+// ═══ PRICE HISTORY — every item of every quotation that was SENT (drafts never sent don't count).
+// Built from the quotations themselves, so it's always complete and consistent. Matching is by item
+// code, so "Cooling Bath" and "Liquid Bath" (same code) share one history.
+function qtHistoryStatus(q,it){
+  if(q.status==='Accepted') return it.poAccepted===false?'Not in PO':'Accepted';
+  if(['Lost','Rejected','Cancelled'].includes(q.status)) return 'Lost';
+  if(q.status==='Expired') return 'Expired';
+  return 'Sent';
+}
+function priceHistoryRecords(){
+  const out=[];
+  (_quotationsV2||[]).forEach(q=>{
+    if(!q.sentAt&&(q.status||'Draft')==='Draft') return;
+    (q.items||[]).filter(it=>it&&it.eqName).forEach(it=>{
+      const c=qtLineCalc(it);
+      out.push({date:q.sentAt||q.createdAt||'',quotationNo:q.quotationNo,quotationId:q.id,custId:q.custId||'',custName:q.custName||'',
+        itemCode:it.itemCode||'',eqName:it.eqName,acc:it.accreditationRequested||'',calType:it.calType||'Lab',
+        qty:c.qty,poQty:(q.status==='Accepted'&&it.poAccepted!==false)?(parseInt(it.poQty)||c.qty):null,
+        unitPrice:c.price,discount:String(it.discount||'').trim(),netUnit:c.netUnitPrice,status:qtHistoryStatus(q,it)});
+    });
+  });
+  return out.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+}
+function priceRecordMatches(r,itemCode,eqName,acc,calType){
+  if(itemCode&&r.itemCode) return r.itemCode===itemCode;
+  return qtNameKey(r.eqName)===qtNameKey(eqName)&&(r.acc||'')===(acc||'')&&(r.calType||'Lab')===(calType||'Lab');
+}
+// Dealer discount: set per dealer on the customer record (20% unless changed). A new prospect ticked as
+// Dealer on the enquiry gets the standard 20%.
+function customerDealerPct(custId,dealerTicked){
+  const c=custId?(_customers||[]).find(x=>x.id===custId):null;
+  if(c) return (c.custTypes||[]).includes('Dealer')?(c.dealerDiscount!=null&&c.dealerDiscount!==''?parseFloat(c.dealerDiscount):20):null;
+  return dealerTicked?20:null;
+}
+function priceSuggestions(o){
+  const std=o.itemCode?qtStdByCode(o.itemCode):qtFindStandard(o.eqName,o.acc,o.calType);
+  const code=o.itemCode||std?.itemCode||'';
+  const recs=priceHistoryRecords().filter(r=>r.quotationId!==o.excludeQuotationId&&priceRecordMatches(r,code,o.eqName,o.acc,o.calType));
+  const mine=o.custId?recs.filter(r=>r.custId===o.custId):[];
+  const out=[];
+  const a=mine.find(r=>r.status==='Accepted'); if(a) out.push({kind:'Last accepted',price:a.unitPrice,discount:a.discount,ref:a});
+  const l=mine[0]; if(l&&l!==a) out.push({kind:'Last quoted',price:l.unitPrice,discount:l.discount,ref:l});
+  const pct=customerDealerPct(o.custId,o.dealerTicked);
+  if(std&&std.standardPrice&&pct) out.push({kind:'Dealer price',price:std.standardPrice,discount:pct+'%'});
+  if(std&&std.standardPrice) out.push({kind:'Standard price',price:std.standardPrice,discount:''});
+  return {suggestions:out,std,code,count:recs.length};
+}
+// The small suggestion list under a price. applyJs(price,discount) returns the onclick code.
+function priceSuggestionsHtml(sg,applyJs,histFilter){
+  if(!sg.suggestions.length&&!sg.count) return '';
+  const fmt=x=>{ const net=qtLineCalc({quantity:1,unitPrice:x.price,discount:x.discount}).net;
+    return `RM ${Number(x.price).toFixed(2)}${x.discount?` − ${escapeHtml(x.discount)} = <b>RM ${net.toFixed(2)}</b>`:''}`; };
+  return `<div style="font-size:11.5px;margin-top:6px;line-height:1.7;">
+    ${sg.suggestions.map(x=>`<div>💡 <span style="color:var(--text-muted);">${x.kind}:</span> ${fmt(x)}${x.ref?` <span style="color:var(--text-muted);">· ${escapeHtml(x.ref.quotationNo)}, ${fmtDateShort(x.ref.date)}</span>`:''} — <a href="javascript:void(0)" onclick="${applyJs(x.price,x.discount)}">use</a></div>`).join('')}
+    ${sg.count?`<div><a href="javascript:void(0)" onclick='openPriceHistoryPopup(${JSON.stringify(histFilter).replace(/'/g,"&#39;")})'>📜 Price history (${sg.count})</a></div>`:''}
+  </div>`;
+}
+function openPriceHistoryPopup(f){
+  let ov=document.getElementById('price-hist-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='price-hist-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999996;display:flex;align-items:flex-start;justify-content:center;padding:36px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:980px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">📜 Price history</span>
+      <button onclick="document.getElementById('price-hist-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:12px 18px;" id="price-hist-popup-body"></div></div>`;
+  ov.style.display='flex';
+  renderPriceHistoryTable(el('price-hist-popup-body'),f||{},true);
+}
+function priceHistoryFilter(recs,f){
+  const q=qtNameKey(f.q||'');
+  return recs.filter(r=>(!f.custId||r.custId===f.custId)&&(!f.code||r.itemCode===f.code||(!r.itemCode&&f.eqName&&qtNameKey(r.eqName)===qtNameKey(f.eqName)))
+    &&(!f.status||r.status===f.status)&&(!f.from||String(r.date).slice(0,10)>=f.from)&&(!f.to||String(r.date).slice(0,10)<=f.to)
+    &&(!q||[r.itemCode,r.eqName,r.custName,r.quotationNo].some(v=>qtNameKey(v).includes(q))));
+}
+function priceHistoryStatusBadge(st){ const c={Accepted:'badge-green',Sent:'badge-blue',Lost:'badge-red','Not in PO':'badge-amber',Expired:'badge-slate'}[st]||'badge-slate'; return `<span class="badge ${c}">${escapeHtml(st)}</span>`; }
+function renderPriceHistoryTable(box,f,compact){
+  if(!box) return;
+  const recs=priceHistoryFilter(priceHistoryRecords(),f);
+  const std=f.code?qtStdByCode(f.code):null, cust=f.custId?(_customers||[]).find(c=>c.id===f.custId):null;
+  const title=[std?`${std.itemCode} ${std.eqName}`:(f.eqName||''),cust?cust.company:''].filter(Boolean).join(' — ');
+  box.innerHTML=`${compact&&title?`<div style="font-size:12.5px;margin-bottom:8px;color:var(--text-muted);">${escapeHtml(title)}</div>`:''}
+    ${recs.length?`<div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Quotation</th><th>Customer</th><th>Code</th><th>Equipment</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Unit price</th><th>Disc</th><th style="text-align:right;">Net / unit</th><th>Status</th></tr></thead>
+      <tbody>${recs.map(r=>`<tr>
+        <td style="white-space:nowrap;">${fmtDateShort(r.date)}</td><td style="white-space:nowrap;">${escapeHtml(r.quotationNo)}</td><td>${escapeHtml(r.custName)}</td>
+        <td style="white-space:nowrap;font-weight:600;color:#3730a3;">${escapeHtml(r.itemCode||'—')}</td>
+        <td>${escapeHtml(r.eqName)}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(qtServiceTag({accreditation:r.acc,calType:r.calType}).replace(/[\[\]]/g,''))}</div></td>
+        <td style="text-align:center;">${r.poQty!=null&&r.poQty!==r.qty?`${r.poQty} of ${r.qty}`:r.qty}</td>
+        <td style="text-align:right;">${r.unitPrice.toFixed(2)}</td><td>${escapeHtml(r.discount||'')}</td>
+        <td style="text-align:right;font-weight:700;">${r.netUnit.toFixed(2)}</td><td>${priceHistoryStatusBadge(r.status)}</td></tr>`).join('')}</tbody></table></div>`
+      :'<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No sent quotations match.</div>'}`;
+}
 function lookupPriceGuidance(eqName,custId){
   if(!eqName)return null;
   const nameLower=eqName.toLowerCase();
@@ -10133,14 +10290,8 @@ function renderQtv2ItemsList(){
         <button type="button" onclick="removeQtv2ItemRow(${idx})" title="Remove item" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;">✕</button>
       </div>`;
     if(folded) return `<div class="qt-card">${head}</div>`;
-    const guidance=(()=>{
-      const g=lookupPriceGuidance(it.eqName,el('qtv2-cust-id')?.value); if(!g) return '';
-      let text='';
-      if(g.standardPrice) text+=`Standard: RM ${g.standardPrice.toFixed(2)}`;
-      if(g.lastCustomerPrice) text+=`${text?' · ':''}Last quoted to this customer: RM ${g.lastCustomerPrice.price.toFixed(2)} (${fmtDateShort(g.lastCustomerPrice.date)})`;
-      const useValue=g.lastCustomerPrice?g.lastCustomerPrice.price:g.standardPrice;
-      return `<div style="font-size:11.5px;color:var(--blue);margin-top:4px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateQtv2ItemField(${idx},'unitPrice',${useValue});renderQtv2ItemsList()">use this</a></div>`;
-    })();
+    const guidance=priceSuggestionsHtml(priceSuggestions({custId:el('qtv2-cust-id')?.value||'',itemCode:it.itemCode,eqName:it.eqName,acc:it.accreditationRequested,calType:it.calType,excludeQuotationId:_qtv2EditingId}),
+      (pr,d)=>`applyQtv2Price(${idx},${pr},'${escapeForJsAttr(d||'')}')`,{custId:el('qtv2-cust-id')?.value||'',code:it.itemCode||'',eqName:it.eqName});
     const unitRows=it.units.map((u,ui)=>`<div style="display:grid;grid-template-columns:${qty>1?'56px ':''}1fr 1fr${same?'':' 1fr 1fr'};gap:8px;margin-bottom:6px;align-items:center;">
         ${qty>1?`<span style="font-size:11.5px;color:var(--text-muted);">Unit ${ui+1}</span>`:''}
         <input class="form-control" placeholder="Serial No." value="${escapeHtml(u.serial||'')}" oninput="updateQtv2UnitField(${idx},${ui},'serial',this.value)"/>
@@ -10161,10 +10312,6 @@ function renderQtv2ItemsList(){
             ${same.map(p=>`<option value="${p.id}">${escapeHtml(p.itemCode+' — '+p.eqName+((p.aliases||[]).length?' (also: '+p.aliases.join(', ')+')':''))}</option>`).join('')}</select><span>or</span>`:''}
           <button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})">➕ Create new code</button>
         </div>`; })()}
-      ${std.length?`<div class="form-group">${L('Fill from Standard Price List','(optional)')}<select class="form-control" onchange="if(this.value) applyStandardItemToQtv2(${idx},this.value)">
-        <option value="">⭐ Choose a standard item…</option>
-        ${std.map(p=>`<option value="${p.id}">${escapeHtml((p.itemCode?p.itemCode+' — ':'')+p.eqName+' '+qtServiceTag(p))}</option>`).join('')}
-      </select></div>`:''}
       <div class="qt-grid" style="grid-template-columns:2fr 1fr 1fr;">
         <div>${L('Equipment')}<input class="form-control" list="std-eq-names" value="${escapeHtml(it.eqName||'')}" oninput="updateQtv2ItemField(${idx},'eqName',this.value)"/></div>
         <div>${L('Brand')}<input class="form-control" value="${escapeHtml(it.brand||'')}" oninput="updateQtv2ItemField(${idx},'brand',this.value)"/></div>
@@ -10255,7 +10402,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       return {id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),srcIdx,eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,resolution:it.resolution||'',
         calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0,
         accreditationRequested:it.accreditationRequested||'',methodRequested:it.methodRequested||'',remark:it.remark||'',
-        calPoints:it.calPoints||'',
+        calPoints:it.calPoints||'', discount:it.discount||'',
         adjustReq:it.adjustReq==='Yes'?'Yes':(it.adjustReq==='No'?'No':undefined), // not stated / not sure -> ask first
         adjustPossible:it.capabilityEvaluation?.canAdjust||undefined,
         recalInterval:it.recalInterval||undefined, recalDate:it.recalDate||undefined,
@@ -10485,7 +10632,7 @@ function renderQuotationsV2Page(){
         <td style="font-weight:700;">${q.quotationNo}</td>
         <td>${escapeHtml(q.custName)}</td>
         <td style="text-align:center;">${(q.items||[]).length}</td>
-        <td style="text-align:right;">${total.toFixed(2)}</td>
+        <td style="text-align:right;">${total.toFixed(2)}${(()=>{ const po=qtPoValue(q); return po!=null&&Math.abs(po-total)>0.004?`<div style="font-size:11px;color:#9a5b00;">PO RM ${po.toFixed(2)} (partial)</div>`:''; })()}</td>
         <td>${statusBadge(q.status)}</td>
         <td style="font-size:11.5px;color:var(--text-muted);">${fmtDateShort(q.createdAt)}<br/>by ${USERS[q.createdBy]?.name||q.createdBy||''}</td>
         <td style="font-size:11px;">${q.poNumber?`📎 ${q.poNumber}${q.poDocUrl?` — <a href="javascript:void(0)" onclick="openSignedUrl('${q.poDocUrl}')">view</a>`:''}`:'—'}</td>
@@ -10557,15 +10704,35 @@ function openAcceptQuotationModal(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   _acceptQuotationId=quotationId;
   el('aq-summary').innerHTML=`<strong>${q.quotationNo}</strong> — ${escapeHtml(q.custName)}`;
+  el('aq-items').innerHTML=(q.items||[]).map((it,i)=>{ if(!it.eqName) return ''; const qty=Math.max(1,parseInt(it.quantity)||1);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:5px;font-size:12.5px;">
+      <input type="checkbox" class="aq-item" data-i="${i}" checked onchange="aqUpdatePoValue()" style="width:16px;height:16px;"/>
+      <span style="flex:1;">${it.itemCode?`<b style="color:#3730a3;">${escapeHtml(it.itemCode)}</b> `:''}${escapeHtml(it.eqName)}${it.socRequested?' <span style="color:var(--text-muted);">+ SoC</span>':''}</span>
+      <span style="color:var(--text-muted);">quoted ${qty}</span>
+      ${qty>1?`<span>in PO</span><input type="number" class="form-control aq-qty" data-i="${i}" min="1" max="${qty}" value="${qty}" oninput="aqUpdatePoValue()" style="width:70px;padding:4px 6px;"/>`:`<input type="hidden" class="aq-qty" data-i="${i}" value="1"/>`}
+    </div>`; }).join('');
+  aqUpdatePoValue();
   el('aq-po-number').value='';
   el('aq-po-file').value='';
   openModal('modal-accept-quotation');
+}
+function aqSelections(){
+  return [...document.querySelectorAll('#aq-items .aq-item')].map(cb=>{ const i=+cb.dataset.i; const qEl=document.querySelector(`#aq-items .aq-qty[data-i="${i}"]`);
+    return {i,on:cb.checked,qty:Math.max(1,parseInt(qEl?.value)||1)}; });
+}
+function aqUpdatePoValue(){
+  const q=_quotationsV2.find(x=>x.id===_acceptQuotationId); const box=el('aq-po-value'); if(!q||!box) return;
+  const sel=aqSelections(); const full=qtQuotationTotal(q.items);
+  const val=sel.filter(x=>x.on).reduce((s,x)=>{ const it=q.items[x.i]; const n=Math.min(x.qty,parseInt(it.quantity)||1); return s+qtLineCalc({...it,quantity:n,socUnitsNeeded:Math.min(qtSocUnits(it),n)}).total; },0);
+  box.innerHTML=`PO value: RM ${val.toFixed(2)}${Math.abs(val-full)>0.004?` <span style="font-weight:normal;color:var(--text-muted);">(quotation RM ${full.toFixed(2)} — partial)</span>`:''}`;
 }
 let _acceptQuotationId=null;
 async function confirmAcceptQuotation(){
   const poNumber=el('aq-po-number').value.trim();
   if(!poNumber){alert("Please enter the customer's PO number.");return;}
   const q=_quotationsV2.find(x=>x.id===_acceptQuotationId); if(!q)return;
+  const sel=aqSelections();
+  if(sel.length&&!sel.some(x=>x.on)){ alert("Tick at least one item that's in the customer's PO."); return; }
   const btn=document.querySelector('#modal-accept-quotation .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='⏳ Saving…';}
   let poDocUrl='';
@@ -10578,6 +10745,7 @@ async function confirmAcceptQuotation(){
       if(uploadRes.ok){ const r2=await uploadRes.json(); poDocUrl=r2.url||''; }
     }catch(e){ console.error('PO document upload failed:',e); showToast('⚠️ PO document could not be uploaded, but acceptance was still recorded.','warn',4000); }
   }
+  sel.forEach(x=>{ const it=q.items[x.i]; if(!it) return; it.poAccepted=x.on; it.poQty=x.on?Math.min(x.qty,parseInt(it.quantity)||1):0; });
   q.status='Accepted';
   q.respondedAt=new Date().toISOString();
   q.poNumber=poNumber;
@@ -10589,12 +10757,26 @@ async function confirmAcceptQuotation(){
   if(q.linkedSalesTrackerId){
     const linkedEntryForAccept=_salesTracker.find(en=>en.id===q.linkedSalesTrackerId);
     if(linkedEntryForAccept){
-      (linkedEntryForAccept.items||[]).forEach(it=>{
-        if(['Can Do','Can Do (External)'].includes(it.capabilityVerdict)) it.clientAccepted=true;
+      // Only the enquiry items that are in the PO are accepted; the rest are recorded as lost below.
+      const m=qtMatchEnquiryItems(q.items,linkedEntryForAccept);
+      const inPo=new Set(), outPo=new Set();
+      q.items.forEach((qi,k)=>{ const ei=m[k]?.idx; if(ei==null||ei<0) return; (qi.poAccepted===false?outPo:inPo).add(ei); });
+      (linkedEntryForAccept.items||[]).forEach((it,ei)=>{
+        if(!['Can Do','Can Do (External)'].includes(it.capabilityVerdict)) return;
+        it.clientAccepted=!outPo.has(ei)||inPo.has(ei);
       });
+      window._aqNotInPo={entryId:linkedEntryForAccept.id,idx:[...outPo].filter(ei=>!inPo.has(ei))};
     }
   }
   await advanceLinkedTrackerStage(q.id,'PO Received',`Quotation ${q.quotationNo} accepted — PO ${poNumber}`);
+  const nip=window._aqNotInPo; window._aqNotInPo=null;
+  const enA=q.linkedSalesTrackerId?_salesTracker.find(x=>x.id===q.linkedSalesTrackerId):null;
+  if(enA){
+    (nip&&nip.entryId===enA.id?nip.idx:[]).forEach(ei=>{ const it=enA.items[ei]; if(it){ it.clientAccepted=false; it.outcome='Lost'; it.lostReason="Not in customer's PO"; } });
+    // items now Won shouldn't keep the automatic "awaiting response" reason from when the quotation was sent
+    (enA.items||[]).forEach(it=>{ if(it.outcome==='Won'&&it.lostReason==='Quotation Sent — Awaiting Response') delete it.lostReason; });
+    await saveSalesTracker();
+  }
   closeModal('modal-accept-quotation');
   renderQuotationsV2Page();
   showToast(`✅ ${q.quotationNo} marked Accepted — PO ${poNumber}`,'success',3500);
@@ -11586,7 +11768,17 @@ const ST_GROUPS={
 };
 let _stTab='all';
 function stGroupOf(status){ return Object.keys(ST_GROUPS).find(g=>ST_GROUPS[g].includes(status))||'open'; }
-function stEntryValue(e){ return (e.items||[]).reduce((s,it)=>s+(parseFloat(it.price)||0)*(parseFloat(it.quantity)||1),0); }
+// Value of an enquiry: the PO value once a PO is received, else its quotation's value, else the
+// enquiry's own prices (after discount).
+function stEntryValue(e){
+  const q=e.linkedQuotationId?(_quotationsV2||[]).find(x=>x.id===e.linkedQuotationId):null;
+  if(q){ const po=qtPoValue(q); return po!=null?po:qtQuotationTotal(q.items); }
+  return (e.items||[]).reduce((s,it)=>s+qtLineCalc({quantity:it.quantity,unitPrice:it.price,discount:it.discount}).net,0);
+}
+function qtPoValue(q){
+  if(!q||q.status!=='Accepted'||!(q.items||[]).some(it=>it.poAccepted!==undefined)) return null;
+  return (q.items||[]).filter(it=>it.eqName&&it.poAccepted!==false).reduce((s,it)=>s+qtLineCalc({...it,quantity:parseInt(it.poQty)||parseInt(it.quantity)||1,socUnitsNeeded:Math.min(qtSocUnits(it),parseInt(it.poQty)||parseInt(it.quantity)||1)}).total,0);
+}
 function stIsLost(e){ const it=e.items||[]; return e.status==='Closed'&&it.length&&it.every(x=>x.outcome==='Lost'); }
 function stStatusStyle(e){
   if(stIsLost(e)) return ['#fdecec','#b42318'];
@@ -11929,10 +12121,35 @@ function updateSalesItemSpec(idx,input){
 }
 // Updates just this one item's Total display in place — never re-renders the whole list,
 // so the input never loses focus or gets interrupted mid-keystroke.
+// The pricing box of one enquiry item (item code, price, discount, suggestions). It's refreshed on its
+// own when the name / accreditation / Lab-On-site changes, so fields being typed in are never redrawn.
+function salesItemPriceBoxHtml(it,idx){
+        const std=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
+        const sg=priceSuggestions({custId:el('tk-cust-id')?.value||'',eqName:it.eqName,acc:it.accreditationRequested,calType:it.calType,dealerTicked:!!el('tk-type-dealer')?.checked});
+        const c=qtLineCalc({quantity:it.quantity,unitPrice:it.price,discount:it.discount});
+  return `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+          <div style="font-size:11.5px;margin-bottom:6px;">🏷️ ${std?.itemCode?`Item code <b style="color:#3730a3;">${escapeHtml(std.itemCode)}</b>${qtNameKey(std.eqName)!==qtNameKey(it.eqName)?` — standard item “${escapeHtml(std.eqName)}”`:''}`:'<span style="color:var(--text-muted);">No item code yet — it can be linked or created at the quotation</span>'}</div>
+          <div class="form-row" style="margin-bottom:0;">
+            <div class="form-group" style="margin-bottom:0;"><label class="form-label">Unit Price (RM)</label><input class="form-control" type="number" min="0" step="0.01" placeholder="0.00" value="${it.price||''}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});"/></div>
+            <div class="form-group" style="margin-bottom:0;"><label class="form-label">Discount <span style="font-weight:normal;color:var(--text-muted);">(10% or RM)</span></label><input class="form-control" placeholder="none" value="${escapeHtml(it.discount||'')}" oninput="updateSalesItemField(${idx},'discount',this.value);updateSalesItemTotal(${idx});"/></div>
+          </div>
+          ${priceSuggestionsHtml(sg,(pr,d)=>`applySalesPrice(${idx},${pr},'${escapeForJsAttr(d||'')}')`,{custId:el('tk-cust-id')?.value||'',code:sg.code,eqName:it.eqName})}
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">Total (× <span id="sales-item-qty-display-${idx}">${c.qty}</span>${c.disc?', after discount':''}): <strong id="sales-item-total-${idx}">RM ${c.net.toFixed(2)}</strong></div>
+        </div>`;
+}
+function refreshSalesItemPricing(idx){ setTimeout(()=>refreshSalesItemPricingNow(idx),0); } // after the cursor has moved to the clicked field
+function refreshSalesItemPricingNow(idx){
+  const it=_salesDraftItems[idx]; const box=el(`sales-item-price-${idx}`); if(!it||!box) return;
+  // if the cursor has just moved into this box (e.g. from the name into Unit Price), keep it there
+  const inputs=()=>[...box.querySelectorAll('input')]; const k=inputs().indexOf(document.activeElement);
+  box.innerHTML=salesItemPriceBoxHtml(it,idx);
+  if(k>=0){ const f=inputs()[k]; if(f){ const v=document.activeElement; f.focus(); try{ f.setSelectionRange?.(f.value.length,f.value.length); }catch(e){} } }
+}
+function applySalesPrice(idx,price,disc){ const it=_salesDraftItems[idx]; if(!it) return; it.price=price; it.discount=disc||''; renderSalesItemsList(); }
 function updateSalesItemTotal(idx){
   const it=_salesDraftItems[idx]; if(!it)return;
   const qty=parseFloat(it.quantity)||1;
-  const total=(it.price||0)*qty;
+  const total=qtLineCalc({quantity:it.quantity,unitPrice:it.price,discount:it.discount}).net;
   const totalEl=el(`sales-item-total-${idx}`); if(totalEl) totalEl.textContent=`RM ${total.toFixed(2)}`;
   const qtyEl=el(`sales-item-qty-display-${idx}`); if(qtyEl) qtyEl.textContent=qty;
 }
@@ -11952,7 +12169,7 @@ function renderSalesItemsList(){
       </div>
       <div class="form-group" style="margin-bottom:6px;">
         <label class="form-label">Equipment Name</label>
-        <input class="form-control" list="std-eq-names" value="${escapeHtml(it.eqName||'')}" oninput="updateSalesItemField(${idx},'eqName',this.value)"/>
+        <input class="form-control" list="std-eq-names" value="${escapeHtml(it.eqName||'')}" oninput="updateSalesItemField(${idx},'eqName',this.value)" onchange="refreshSalesItemPricing(${idx})"/>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Brand</label><input class="form-control" value="${escapeHtml(it.brand||'')}" oninput="updateSalesItemField(${idx},'brand',this.value)"/></div>
@@ -11961,13 +12178,13 @@ function renderSalesItemsList(){
       <div style="display:grid;grid-template-columns:90px 1fr 1.3fr;gap:10px;">
         <div class="form-group"><label class="form-label">Quantity</label><input class="form-control" type="number" min="1" value="${it.quantity||''}" oninput="updateSalesItemField(${idx},'quantity',this.value);updateSalesItemTotal(${idx});renderSocSection('sales-item-soc-${idx}',_salesDraftItems[${idx}]);"/></div>
         <div class="form-group"><label class="form-label">Lab / On-site</label>
-          <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value);tkRefreshOnsiteBlock()">
+          <select class="form-control" onchange="updateSalesItemField(${idx},'calType',this.value);tkRefreshOnsiteBlock();refreshSalesItemPricing(${idx})">
             <option value="Lab" ${it.calType!=='Onsite'?'selected':''}>Lab</option>
             <option value="Onsite" ${it.calType==='Onsite'?'selected':''}>On-site</option>
           </select>
         </div>
         <div class="form-group"><label class="form-label">Accreditation Requested</label>
-          <select class="form-control" onchange="updateSalesItemField(${idx},'accreditationRequested',this.value)">
+          <select class="form-control" onchange="updateSalesItemField(${idx},'accreditationRequested',this.value);refreshSalesItemPricing(${idx})">
             ${['','SAMM-Accredited','Non-Accredited'].map(v=>`<option value="${v}" ${(it.accreditationRequested||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}
           </select>
         </div>
@@ -11998,21 +12215,7 @@ function renderSalesItemsList(){
       <div class="form-group"><label class="form-label">Method / Standard Requested <span style="font-weight:normal;color:var(--text-muted);">(if any)</span></label><input class="form-control" placeholder="e.g. OIML R76, EURAMET cg-18" value="${escapeHtml(it.methodRequested||'')}" oninput="updateSalesItemField(${idx},'methodRequested',this.value)"/></div>
       <div class="form-group" id="sales-item-soc-${idx}"></div>
       <div class="form-group"><label class="form-label">Remark <span style="font-weight:normal;color:var(--text-muted);">(customer's stated requirement for this item)</span></label><textarea class="form-control" rows="2" oninput="updateSalesItemField(${idx},'remark',this.value)">${escapeHtml(it.remark||'')}</textarea></div>
-      <div class="form-group">
-        <label class="form-label">Unit Price (RM)</label>
-        <input class="form-control" type="number" min="0" step="0.01" value="${it.price||0}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});"/>
-        ${(()=>{
-          const custId=el('tk-cust-id')?.value;
-          const guidance=lookupPriceGuidance(it.eqName,custId);
-          if(!guidance)return '';
-          let text='';
-          if(guidance.standardPrice) text+=`Standard: RM ${guidance.standardPrice.toFixed(2)}`;
-          if(guidance.lastCustomerPrice) text+=`${text?' · ':''}Last quoted to this customer: RM ${guidance.lastCustomerPrice.price.toFixed(2)} (${fmtDateShort(guidance.lastCustomerPrice.date)})`;
-          const useValue=guidance.lastCustomerPrice?guidance.lastCustomerPrice.price:guidance.standardPrice;
-          return `<div style="font-size:11px;color:var(--blue);margin-top:4px;">💡 ${text} — <a href="javascript:void(0)" onclick="updateSalesItemField(${idx},'price',${useValue});renderSalesItemsList()">use this</a></div>`;
-        })()}
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Total (Unit Price × Qty <span id="sales-item-qty-display-${idx}">${qty}</span>): <strong id="sales-item-total-${idx}">RM ${total.toFixed(2)}</strong></div>
-      </div>
+      <div id="sales-item-price-${idx}">${salesItemPriceBoxHtml(it,idx)}</div>
       ${it.capabilityVerdict?`<div style="font-size:11px;font-weight:700;color:${VERDICT_COLOR[it.capabilityVerdict]||'#64748b'};margin-top:4px;">✓ Capability: ${capabilityVerdictLabel(it.capabilityVerdict)}</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">⏳ Awaiting capability review</div>`}
       ${cleared?`<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin-top:6px;">
         <input type="checkbox" ${it.clientAccepted?'checked':''} onchange="updateSalesItemField(${idx},'clientAccepted',this.checked)"/>
@@ -12057,6 +12260,7 @@ function suggestTrackerName(type,query){
 // Sales entry: the on-site block only shows when an item is on-site (its fields always stay in the
 // form, so nothing typed is lost when switching an item between Lab and On-site).
 function tkRefreshOnsiteBlock(){ const b=el('tk-onsite-block'); if(b) b.style.display=(_salesDraftItems||[]).some(it=>it.calType==='Onsite')?'':'none'; }
+function custToggleDealerRow(){ const r=el('cust-dealer-disc-row'); if(r) r.style.display=el('cust-type-dealer')?.checked?'':'none'; }
 function selectTrackerSupplier(supId,name){
   el('tk-name').value=name; if(el('tk-supplier-id')) el('tk-supplier-id').value=supId; el('tk-name-suggestions').style.display='none';
 }
@@ -12087,6 +12291,7 @@ function selectTrackerCustomer(custId,name){
   if(el('tk-type-dealer')) el('tk-type-dealer').checked=(c.custTypes||[]).includes('Dealer');
   if(el('tk-type-direct')) el('tk-type-direct').checked=(c.custTypes||[]).includes('Direct');
   if(el('tk-type-enduser-only')) el('tk-type-enduser-only').checked=(c.custTypes||[]).includes('EndUserOnly');
+  if(typeof refreshSalesItemPricing==='function') (_salesDraftItems||[]).forEach((_,k)=>refreshSalesItemPricing(k)); // price suggestions for this customer
   if(el('tk-prospect-designation')&&!el('tk-prospect-designation').value) el('tk-prospect-designation').value=c.designation||'';
   tkRefreshContactView();
 }
@@ -17676,6 +17881,7 @@ function openAddCustomerModal(){
   el('cust-type-dealer').checked=false;
   el('cust-type-direct').checked=true;
   el('cust-type-enduser-only').checked=false;
+  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=20; custToggleDealerRow();
   el('cust-type-conflict-warning').style.display='none';
   el('cust-payment-terms').value='credit';
   const adGroup=el('cust-always-direct-group');
@@ -17702,6 +17908,7 @@ function openEditCustomerModal(custId){
   el('cust-type-dealer').checked=types.includes('Dealer');
   el('cust-type-direct').checked=types.includes('Direct');
   el('cust-type-enduser-only').checked=types.includes('EndUserOnly');
+  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=(c.dealerDiscount!=null&&c.dealerDiscount!=='')?c.dealerDiscount:20; custToggleDealerRow();
   checkCustTypeConflict();
   const adGroup=el('cust-always-direct-group');
   if(adGroup) adGroup.style.display=isAdmin(currentUser)?'block':'none';
@@ -17742,6 +17949,7 @@ async function saveCustomer(){
     }
     const record={
       id:custId, custTypes, company,
+      dealerDiscount:custTypes.includes('Dealer')?(()=>{ const v=parseFloat(el('cust-dealer-discount')?.value); return isFinite(v)&&v>=0&&v<=100?v:20; })():null,
       type:custTypes.includes('Dealer')?'Dealer':'Direct', // legacy field for old code paths
       approvedDealers,
       alwaysDirect: isAdmin(currentUser)?!!el('cust-always-direct')?.checked:!!existingRec?.alwaysDirect,
@@ -19301,30 +19509,7 @@ function renderMyRequests(){
   }catch(e){console.error('renderMyRequests error:',e);}
 }
 
-function openPriceReferenceModal(){
-  if(!canViewPriceReference(currentUser)){alert('You do not have access to the Price Reference List.');return;}
-  let ov=document.getElementById('price-ref-overlay');
-  if(!ov){
-    ov=document.createElement('div');
-    ov.id='price-ref-overlay';
-    ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';
-    document.body.appendChild(ov);
-  }
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:700;font-size:15px;">💰 Price Reference — All Customers</span>
-      <button onclick="document.getElementById('price-ref-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
-    </div>
-    <div style="padding:16px 20px;">
-      <input class="form-control" id="price-ref-search" placeholder="Search equipment name or model, e.g. Pressure Gauge, Fluke 717…" oninput="renderPriceReferenceResults()" autocomplete="off"/>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Based on your own historical pricing across all customers — a reference range to help quote quickly, not a fixed rate. Actual quotes may vary by complexity.</div>
-      <div id="price-ref-results" style="margin-top:14px;max-height:400px;overflow-y:auto;"></div>
-    </div>
-  </div>`;
-  ov.style.display='flex';
-  el('price-ref-search').focus();
-  renderPriceReferenceResults();
-}
+function _oldPriceReferencePopupRemoved(){}
 function renderPriceReferenceResults(){
   const box=el('price-ref-results'); if(!box)return;
   const q=(el('price-ref-search')?.value||'').trim().toLowerCase();
@@ -22024,6 +22209,7 @@ function renderQuickAccess(){
       t.innerHTML=`<a href="javascript:void(0)" onclick="openNavCategory('${cat.id}')" style="color:var(--text-muted);text-decoration:none;font-weight:500;">${escapeHtml(cat.label)}</a> <span style="color:var(--text-muted);font-weight:400;">›</span> ${escapeHtml(title)}`;
     }
     if(name==='dashboard') renderQuickAccess();
+    if(name==='price-reference'){ if(!canViewPriceReference(currentUser)){ alert('You do not have access to the Price Reference.'); return orig.call(this,'dashboard'); } renderPriceReferencePage(); }
     renderCategoryNav();
     return r;
   };
