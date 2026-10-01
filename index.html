@@ -715,7 +715,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <button class="btn btn-primary" id="btn-new-job" onclick="openNewJobModal()">+ New Job / Equipment</button>
       </div>
       <div class="kpi-row">
-        <div class="kpi-mini"><div class="kpi-val" id="kpi-total">0</div><div class="kpi-lbl">Total</div></div>
+        <div class="kpi-mini"><div class="kpi-val" id="kpi-total">0</div><div class="kpi-lbl">Total items</div></div>
         <div class="kpi-mini"><div class="kpi-val" style="color:var(--amber)" id="kpi-unassigned">0</div><div class="kpi-lbl">Unassigned</div></div>
         <div class="kpi-mini"><div class="kpi-val" style="color:var(--blue)" id="kpi-assigned">0</div><div class="kpi-lbl">Assigned</div></div>
         <div class="kpi-mini"><div class="kpi-val" style="color:var(--purple)" id="kpi-pending-approval">0</div><div class="kpi-lbl">Pending Approval</div></div>
@@ -727,6 +727,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <input id="eq-search" class="filter-select" placeholder="Search…" style="width:180px;" oninput="renderEquipmentTable()"/>
             <select class="filter-select" id="eq-filter-status" onchange="renderEquipmentTable()">
+              <option value="__active" selected>Active (not completed)</option>
               <option value="">All Status</option>
               <option>Unassigned</option><option>Assigned</option><option>In Progress</option>
               <option>Pending Approval</option><option>Completed</option>
@@ -741,7 +742,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
               <th style="cursor:pointer;user-select:none;" onclick="sortEquipmentTable('priority')">Priority <span id="eq-sort-priority"></span></th>
               <th style="cursor:pointer;user-select:none;" onclick="sortEquipmentTable('receiveDate')">Received <span id="eq-sort-receiveDate"></span></th>
               <th style="cursor:pointer;user-select:none;" onclick="sortEquipmentTable('promisedDate')">Ready By <span id="eq-sort-promisedDate"></span></th>
-              <th>Actions</th>
+              <th>Technician</th><th>Status</th>
+              <th></th>
             </tr></thead>
             <tbody id="equipment-tbody">
               <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>No jobs yet. Click "+ New Job" to add.</p></div></td></tr>
@@ -854,18 +856,17 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <!-- ════ CAPA ════ -->
     <div class="view" id="view-capa">
       <div class="page-header">
-        <div><div class="page-title">Nonconformance &amp; CAPA</div><div class="page-sub">9 open items</div></div>
-        <button class="btn btn-primary" onclick="openModal('modal-add-nc')">+ Raise NC</button>
+        <div><div class="page-title">⚠️ Nonconformance, Complaints &amp; CAPA</div><div class="page-sub" id="ncr-sub">ISO/IEC 17025 7.9 complaints · 7.10 nonconforming work · 8.7 corrective action</div></div>
+        <div style="display:flex;gap:8px;"><button class="btn btn-outline" onclick="exportNcrExcel()">📊 Excel</button><button class="btn btn-primary" onclick="openRaiseNcr()">+ Raise NC / complaint</button></div>
       </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">NC Register</span></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>NC ID</th><th>Description</th><th>Raised By</th><th>Date</th><th>Severity</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            <tr><td><span style="font-family:'DM Mono';font-size:12px;">NC-2026-009</span></td><td>Test result outside criteria</td><td>Jay</td><td>28 Mar</td><td><span class="badge badge-red">Major</span></td><td><span class="badge badge-amber">Under Investigation</span></td><td><button class="btn btn-outline btn-sm">Details</button></td></tr>
-          </tbody>
-        </table></div>
-      </div>
+      <div class="kpi-row" id="ncr-kpis"></div>
+      <div class="card"><div class="card-header" style="flex-wrap:wrap;gap:8px;">
+        <div class="st-tabs" id="ncr-tabs"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select class="filter-select" id="ncr-filter-kind" onchange="renderNcrPage()"><option value="">All types</option><option>Customer complaint</option><option>Nonconforming work</option><option>Audit finding</option><option>Other</option></select>
+          <input class="filter-select" id="ncr-search" placeholder="Search…" oninput="renderNcrPage()" style="width:180px;"/>
+        </div></div>
+        <div id="ncr-list"></div></div>
     </div>
 
     <!-- ════ COMPLETED JOBS ════ -->
@@ -901,8 +902,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Job No.</th><th>Cert No.</th><th>Customer</th><th>Equipment</th>
-              <th>Cal Date</th><th>Approved By</th><th>Billing Status</th><th>Actions</th>
+              <th>Job / Item</th><th>Cert No.</th><th>Equipment</th><th>Serial No.</th>
+              <th>Cal Date</th><th>Approved By</th><th>Status</th><th></th>
             </tr></thead>
             <tbody id="completed-tbody"></tbody>
           </table>
@@ -1943,6 +1944,24 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
 
+      <div class="card" id="charge-defaults-card" style="margin-bottom:16px;display:none;">
+        <div class="card-header"><span class="card-title">💵 Standard charges (Terms &amp; Conditions)</span></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Default amounts suggested when these charges are added to a job. Adjustment prices can also be set per item code in Price Reference.</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Adjustment (T&amp;C 7)</label><input class="form-control" type="number" min="0" step="0.01" id="cd-adjustment"/></div>
+            <div class="form-group"><label class="form-label">Calibration attempt fee (T&amp;C 8)</label><input class="form-control" type="number" min="0" step="0.01" id="cd-attempt"/></div>
+            <div class="form-group"><label class="form-label">Transport (T&amp;C 9)</label><input class="form-control" type="number" min="0" step="0.01" id="cd-transport"/></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">On-site postponed, &lt; 24 h notice (T&amp;C 11)</label><input class="form-control" type="number" min="0" step="0.01" id="cd-postponement" placeholder="350"/></div>
+            <div class="form-group"><label class="form-label">On-site, equipment not ready (T&amp;C 11)</label><input class="form-control" type="number" min="0" step="0.01" id="cd-notReady" placeholder="350"/></div>
+            <div class="form-group"><label class="form-label">Certificate reissue (T&amp;C 12)</label><input class="form-control" type="number" min="0" step="0.01" id="cd-reissue" placeholder="10"/></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveChargeDefaults()">Save</button>
+        </div>
+      </div>
+
       <div class="card" id="system-check-card" style="margin-bottom:16px;display:none;">
         <div class="card-header"><span class="card-title">🔧 System check</span></div>
         <div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -2480,7 +2499,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Before Calibration</label><input class="form-control" id="cal-cond-before" placeholder="e.g. Good Physical Condition."/></div>
         <div class="form-group"><label class="form-label">After Calibration</label><input class="form-control" id="cal-cond-after" placeholder="e.g. Calibrated as Requested."/></div>
       </div>
-      <div class="form-group"><label class="form-label">Condition Remark</label><input class="form-control" id="cal-cond-remark" placeholder="e.g. Without Adjustment."/></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Adjustment performed?</label>
+          <select class="form-control" id="cal-adjusted" onchange="const r=el('cal-cond-remark'); if(r&&(!r.value.trim()||/^with(out)? adjustment\.?$/i.test(r.value.trim()))) r.value=this.value==='Yes'?'With Adjustment.':(this.value==='No'?'Without Adjustment.':r.value);">
+            <option value="">— Select —</option><option>No</option><option>Yes</option></select></div>
+        <div class="form-group"><label class="form-label">Condition Remark</label><input class="form-control" id="cal-cond-remark" placeholder="e.g. Without Adjustment."/></div>
+      </div>
 
       <!-- SECTION 6: Location & Procedure -->
       <div class="form-section-title" style="margin-top:4px;">📍 Location &amp; Procedure</div>
@@ -3491,6 +3515,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="cust-email" type="email" placeholder="info@company.com"/></div>
       </div>
       <div class="form-group">
+        <label class="form-label">Other contacts <span style="font-weight:normal;color:var(--text-muted);">— purchasing, QA, accounts… (the main contact is the Attention above)</span></label>
+        <div id="cust-contacts"></div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="custAddContactRow({})">+ Add contact</button>
+      </div>
+      <div class="form-group">
         <label class="form-label">Payment Terms</label>
         <select class="form-control" id="cust-payment-terms">
           <option value="credit">Credit Terms (no payment reminder)</option>
@@ -3586,9 +3615,6 @@ textarea.form-control{resize:vertical;min-height:70px;}
 <!-- Simple modals -->
 <div class="modal-overlay" id="modal-add-test" style="display:none;"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">New Test Request</span><button class="modal-close" onclick="closeModal('modal-add-test')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Client</label><input class="form-control"/></div><div class="form-group"><label class="form-label">Test Method</label><input class="form-control" placeholder="e.g. ASTM D1293"/></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-test')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-test')">Submit</button></div></div></div>
 <div class="modal-overlay" id="modal-add-doc" style="display:none;"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">New Document</span><button class="modal-close" onclick="closeModal('modal-add-doc')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Document ID</label><input class="form-control" placeholder="e.g. SOP-LAB-016"/></div><div class="form-group"><label class="form-label">Title</label><input class="form-control"/></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-doc')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-doc')">Create</button></div></div></div>
-<div class="modal-overlay" id="modal-add-nc" style="display:none;"><div class="modal modal-sm"><div class="modal-header"><span class="modal-title">Raise NC</span><button class="modal-close" onclick="closeModal('modal-add-nc')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Description</label><textarea class="form-control" placeholder="Describe the nonconformance…"></textarea></div><div class="form-row"><div class="form-group"><label class="form-label">Severity</label><select class="form-control"><option>Minor</option><option>Major</option><option>Critical</option></select></div></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-add-nc')">Cancel</button><button class="btn btn-primary" onclick="closeModal('modal-add-nc')">Submit</button></div></div></div>
-
-<!-- CERTIFICATE PAGE 1 PREVIEW -->
 <div class="modal-overlay" id="modal-cert-preview" style="display:none;">
   <div class="modal" style="width:min(820px,96vw);max-height:92vh;display:flex;flex-direction:column;">
     <div class="modal-header">
@@ -4143,6 +4169,7 @@ async function loadAll(){
     await loadQuotationsV2();
     await loadInvoices();
     await loadPurchaseOrders();
+    await loadNcrs();
     await healOrphanedQuotationLinks();
     await backfillEnquiryNumbers();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
@@ -4534,72 +4561,92 @@ function renderStaffEvaluationPage(){
   if(_staffEvalTab==='sales') return renderStaffEvalSalesTab(box);
   return renderStaffEvalTechnicalTab(box);
 }
-function renderStaffEvalTechnicalTab(box){
-  const inPeriod=getStaffEvalPeriodFilter();
-  const stats={};
-  const ensure=u=>{ if(!stats[u]) stats[u]={valueCleared:0,itemsCompleted:0,visits:[],abnormalPreExisting:0,abnormalHandling:0,abnormalUnclassified:0,rejectionCount:0}; return stats[u]; };
-  let excludedCount=0;
-  _jobs.forEach(j=>{
-    if(j.status==='Deleted')return;
-    (j.items||[]).forEach(it=>{
-      const doneBy=it.calData?.calibratedByUsername;
-      if(!doneBy&&it.status==='Completed'&&inPeriod(it.calData?.date||j.receiveDate)) excludedCount++;
-      if(doneBy&&it.status==='Completed'&&inPeriod(it.calData?.date||j.receiveDate)){
-        const s=ensure(doneBy);
-        s.valueCleared+=(it.price||0);
-        s.itemsCompleted+=1;
+// Period windows: this period and the one before it (for "vs last month / quarter / year")
+function staffEvalRange(offset){
+  const period=el('staffeval-period')?.value||'month'; const n=new Date();
+  if(period==='all') return offset?null:[new Date(2000,0,1),new Date(2999,0,1)];
+  if(period==='month') return [new Date(n.getFullYear(),n.getMonth()-offset,1),new Date(n.getFullYear(),n.getMonth()-offset+1,1)];
+  if(period==='quarter'){ const q=Math.floor(n.getMonth()/3)-offset; return [new Date(n.getFullYear(),q*3,1),new Date(n.getFullYear(),q*3+3,1)]; }
+  return [new Date(n.getFullYear()-offset,0,1),new Date(n.getFullYear()-offset+1,0,1)];
+}
+function staffEvalCollect(range){
+  const inR=d=>{ if(!range||!d) return false; const x=new Date(String(d).length===10?d+'T12:00:00':d); return !isNaN(x)&&x>=range[0]&&x<range[1]; };
+  const st={};
+  const S=u=>st[u]||(st[u]={value:0,done:0,onTime:0,withDue:0,firstTime:0,rejections:0,amendments:0,handling:0,preExisting:0,visits:[],assumed:0,items:[]});
+  (_jobs||[]).forEach(j=>{ if(j.status==='Deleted') return;
+    (j.items||[]).forEach((it,idx)=>{
+      const cd=it.calData||{};
+      // who did it: recorded "calibrated by", else the assigned technician (flagged)
+      let who=cd.calibratedByUsername, assumed=false;
+      if(!who&&it.status==='Completed'&&it.assignedTo){ who=it.assignedTo; assumed=true; }
+      const finished=cd.submittedAt||it.approvedAt||cd.date; // when the technician handed it in
+      if(who&&it.status==='Completed'&&inR(it.approvedAt||cd.date||finished)){
+        const s=S(who); s.done++; s.value+=parseFloat(it.price)||0; if(assumed) s.assumed++;
+        const due=it.promisedDate||j.promisedDate; let ot=null;
+        if(due&&finished){ s.withDue++; ot=String(finished).slice(0,10)<=due; if(ot) s.onTime++; }
+        const rj=it.rejectionCount||0; if(!rj) s.firstTime++; s.rejections+=rj;
+        const am=(it.amendments||[]).length; s.amendments+=am;
+        s.items.push({jobNo:j.jobNo,cust:j.custName,eq:it.eqName,cert:it.certNo,due,finished,ot,rj,am,assumed});
       }
-      if(doneBy&&(it.rejectionCount||0)>0&&inPeriod(it.calData?.date||j.receiveDate)){
-        ensure(doneBy).rejectionCount+=it.rejectionCount;
-      }
-      if(it.assignedTo&&it.status==='Returned - Abnormal'&&inPeriod(it.customerNotReadyDate||j.receiveDate)){
-        const s=ensure(it.assignedTo);
-        if(it.abnormalCause==='Occurred During Handling') s.abnormalHandling+=1;
-        else if(it.abnormalCause==='Pre-existing') s.abnormalPreExisting+=1;
-        else s.abnormalUnclassified+=1;
-      }
+      if(it.assignedTo&&it.status==='Returned - Abnormal'&&inR(it.customerNotReadyDate||j.receiveDate)){
+        const s=S(it.assignedTo); if(it.abnormalCause==='Occurred During Handling') s.handling++; else if(it.abnormalCause==='Pre-existing') s.preExisting++; }
       if(it.assignedTo&&it.calType==='Onsite'){
-        const allVisits=[...(it.visitHistory||[])];
-        if(it.checkinTime) allVisits.push({checkinTime:it.checkinTime,checkoutTime:it.checkoutTime});
-        allVisits.forEach(v=>{
-          if(v.checkinTime&&v.checkoutTime&&inPeriod(v.checkinTime)){
-            ensure(it.assignedTo).visits.push(Math.round((new Date(v.checkoutTime)-new Date(v.checkinTime))/60000));
-          }
-        });
-      }
-    });
-  });
-  const rows=Object.entries(stats).map(([username,s])=>({
-    username,name:USERS[username]?.name||username,
-    valueCleared:s.valueCleared,itemsCompleted:s.itemsCompleted,
-    visitCount:s.visits.length,
-    avgDurationMin:s.visits.length?Math.round(s.visits.reduce((a,b)=>a+b,0)/s.visits.length):0,
-    abnormalPreExisting:s.abnormalPreExisting,abnormalHandling:s.abnormalHandling,abnormalUnclassified:s.abnormalUnclassified,
-    rejectionCount:s.rejectionCount
-  })).sort((a,b)=>b.valueCleared-a.valueCleared);
-
-  const fmtDuration=mins=>{ const h=Math.floor(mins/60); return `${h>0?h+'h ':''}${mins%60}min`; };
+        [...(it.visitHistory||[]),...(it.checkinTime?[{checkinTime:it.checkinTime,checkoutTime:it.checkoutTime}]:[])].forEach(v=>{
+          if(v.checkinTime&&v.checkoutTime&&inR(v.checkinTime)) S(it.assignedTo).visits.push(Math.round((new Date(v.checkoutTime)-new Date(v.checkinTime))/60000)); }); }
+    }); });
+  return st;
+}
+let _staffEvalSort='value', _staffEvalOpen=null;
+function renderStaffEvalTechnicalTab(box){
+  const cur=staffEvalCollect(staffEvalRange(0)), prevRange=staffEvalRange(1), prev=prevRange?staffEvalCollect(prevRange):null;
+  const period=el('staffeval-period')?.value||'month';
+  const prevLabel={month:'last month',quarter:'last quarter',year:'last year'}[period]||'';
+  // current workload + NC corrective actions are "now", not per period
+  const work={}, ncOwn={};
+  (_jobs||[]).forEach(j=>{ if(j.status==='Deleted') return; (j.items||[]).forEach(it=>{ if(it.assignedTo&&['Assigned','In Progress','On-Site'].includes(it.status)) work[it.assignedTo]=(work[it.assignedTo]||0)+1; }); });
+  (typeof _ncrs!=='undefined'?_ncrs:[]).forEach(n=>{ if(n.status!=='Closed'&&n.actionOwner){ const o=ncOwn[n.actionOwner]||(ncOwn[n.actionOwner]={open:0,over:0}); o.open++; if(ncrOverdue(n)) o.over++; } });
+  const techs=new Set([...Object.keys(cur),...Object.keys(work),...Object.keys(ncOwn)]);
+  (_staff||[]).forEach(s=>{ if(s.active!==false&&['Technician','Engineer','Technical Manager','Senior Technician'].includes(s.role)) techs.add(s.username); });
+  const pct=(a,b)=>b?Math.round(a/b*100):null;
+  const rows=[...techs].map(u=>{ const c=cur[u]||{done:0,value:0,onTime:0,withDue:0,firstTime:0,rejections:0,amendments:0,handling:0,preExisting:0,visits:[],assumed:0,items:[]}; const pv=prev?.[u];
+    return {u,name:USERS[u]?.name||u,c,pv,onTime:pct(c.onTime,c.withDue),firstTime:pct(c.firstTime,c.done),pvOnTime:pv?pct(pv.onTime,pv.withDue):null,
+      work:work[u]||0,nc:ncOwn[u]||{open:0,over:0},avgVisit:c.visits.length?Math.round(c.visits.reduce((a,b)=>a+b,0)/c.visits.length):0}; });
+  const key={value:r=>r.c.value,done:r=>r.c.done,onTime:r=>r.onTime??-1,firstTime:r=>r.firstTime??-1}[_staffEvalSort]||(r=>r.c.value);
+  rows.sort((a,b)=>key(b)-key(a)||a.name.localeCompare(b.name));
+  const assumedTotal=rows.reduce((s2,r)=>s2+r.c.assumed,0);
+  const delta=(now,before,unit='')=>{ if(before==null||now==null) return ''; const d=now-before; if(!d) return `<div style="font-size:10.5px;color:var(--text-muted);">= ${prevLabel}</div>`;
+    return `<div style="font-size:10.5px;color:${d>0?'var(--green)':'var(--red)'};">${d>0?'▲':'▼'} ${Math.abs(d)}${unit} vs ${prevLabel}</div>`; };
+  const pc=v=>v==null?'<span style="color:var(--text-muted);">—</span>':`<b style="color:${v>=90?'var(--green)':v>=70?'#c84b00':'var(--red)'};">${v}%</b>`;
+  const fmtDur=m=>{ const h=Math.floor(m/60); return `${h?h+'h ':''}${m%60}min`; };
   box.innerHTML=`
-  ${excludedCount>0?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#9a3412;">⚠️ ${excludedCount} completed item(s) in this period have no recorded "calibrated by" and are excluded from the table below — likely older records from before this tracking existed. These aren't wrong, just not attributable to anyone.</div>`:''}
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+    <div style="font-size:12px;color:var(--text-muted);">Work is counted when its certificate is approved; "on time" compares when the technician submitted it with the promised date.</div>
+    <label style="font-size:12px;">Sort by <select class="filter-select" onchange="_staffEvalSort=this.value;renderStaffEvaluationPage()">
+      ${[['value','Value cleared'],['done','Items completed'],['onTime','On-time rate'],['firstTime','First-time approval']].map(([v,l])=>`<option value="${v}" ${_staffEvalSort===v?'selected':''}>${l}</option>`).join('')}</select></label>
+  </div>
+  ${assumedTotal?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#9a3412;">ℹ️ ${assumedTotal} completed item${assumedTotal>1?'s have':' has'} no recorded "calibrated by" (older records) and ${assumedTotal>1?'are':'is'} counted for the technician it was assigned to.</div>`:''}
   <div class="card"><div class="table-wrap"><table>
-    <thead><tr>
-      <th>Rank</th><th>Staff</th><th>💰 Value Cleared (RM)</th><th>Items Completed</th>
-      <th>Onsite Visits</th><th>Avg Visit Duration</th>
-      <th>🔍 Pre-existing Damage</th><th>⚠️ Occurred During Handling</th><th>✗ Cert. Rejections</th>
-    </tr></thead>
-    <tbody>${rows.map((r,i)=>`<tr>
-      <td style="text-align:center;font-weight:700;">${i+1}${i===0&&r.valueCleared>0?' 🏆':''}</td>
-      <td><strong>${r.name}</strong></td>
-      <td style="text-align:center;font-weight:700;color:var(--green);">${r.valueCleared.toFixed(2)}</td>
-      <td style="text-align:center;">${r.itemsCompleted}</td>
-      <td style="text-align:center;">${r.visitCount}</td>
-      <td style="text-align:center;">${r.visitCount?fmtDuration(r.avgDurationMin):'—'}</td>
-      <td style="text-align:center;color:var(--text-muted);">${r.abnormalPreExisting||'—'}</td>
-      <td style="text-align:center;${r.abnormalHandling?'color:var(--red);font-weight:700;':''}">${r.abnormalHandling||'—'}${r.abnormalUnclassified?` <span style="font-size:9px;color:var(--text-muted);">(+${r.abnormalUnclassified} unclassified)</span>`:''}</td>
-      <td style="text-align:center;${r.rejectionCount?'color:var(--red);font-weight:700;':''}">${r.rejectionCount||'—'}</td>
-    </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:16px;color:var(--text-muted);">No completed work recorded for this period.</td></tr>'}</tbody>
+    <thead><tr><th>#</th><th>Technician</th><th style="text-align:right;">💰 Value cleared</th><th style="text-align:center;">Items completed</th><th style="text-align:center;">On time</th><th style="text-align:center;">First-time approval</th>
+      <th style="text-align:center;">Rejections · amendments</th><th style="text-align:center;">Handling issues</th><th style="text-align:center;">In progress now</th><th style="text-align:center;">NC actions</th><th style="text-align:center;">On-site visits</th></tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr style="cursor:pointer;" onclick="_staffEvalOpen=_staffEvalOpen==='${escapeForJsAttr(r.u)}'?null:'${escapeForJsAttr(r.u)}';renderStaffEvaluationPage()">
+      <td style="text-align:center;font-weight:700;">${i+1}</td>
+      <td><strong>${escapeHtml(r.name)}</strong> <span style="font-size:11px;color:var(--text-muted);">${_staffEvalOpen===r.u?'▾':'▸'}</span></td>
+      <td style="text-align:right;font-weight:700;color:var(--green);white-space:nowrap;">RM ${r.c.value.toFixed(2)}${delta(Math.round(r.c.value),r.pv?Math.round(r.pv.value):(prev?0:null),'')}</td>
+      <td style="text-align:center;font-weight:700;">${r.c.done}${delta(r.c.done,r.pv?r.pv.done:(prev?0:null))}</td>
+      <td style="text-align:center;">${pc(r.onTime)}${r.c.withDue?`<div style="font-size:10.5px;color:var(--text-muted);">${r.c.onTime} of ${r.c.withDue}</div>`:''}${delta(r.onTime,r.pvOnTime,' pts')}</td>
+      <td style="text-align:center;">${pc(r.firstTime)}</td>
+      <td style="text-align:center;${r.c.rejections?'color:var(--red);font-weight:700;':''}">${r.c.rejections||0} · ${r.c.amendments||0}</td>
+      <td style="text-align:center;">${r.c.handling?`<b style="color:var(--red);">${r.c.handling}</b>`:'0'}${r.c.preExisting?`<div style="font-size:10.5px;color:var(--text-muted);">+${r.c.preExisting} pre-existing</div>`:''}</td>
+      <td style="text-align:center;">${r.work}</td>
+      <td style="text-align:center;">${r.nc.open?`${r.nc.open}${r.nc.over?` <b style="color:var(--red);">(${r.nc.over} overdue)</b>`:''}`:'0'}</td>
+      <td style="text-align:center;">${r.c.visits.length}${r.c.visits.length?`<div style="font-size:10.5px;color:var(--text-muted);">avg ${fmtDur(r.avgVisit)}</div>`:''}</td></tr>
+      ${_staffEvalOpen===r.u?`<tr><td></td><td colspan="10" style="background:var(--bg);padding:8px 12px;">${r.c.items.length?`<table style="width:100%;font-size:12px;"><thead><tr><th>Job</th><th>Item</th><th>Cert</th><th>Promised</th><th>Submitted</th><th>On time</th><th>Rejections</th><th>Amendments</th></tr></thead><tbody>
+        ${r.c.items.map(x=>`<tr><td>${escapeHtml(x.jobNo)}</td><td>${escapeHtml(x.eq||'')}${x.assumed?' <span style="color:var(--text-muted);font-size:10.5px;">(assigned)</span>':''}</td><td>${escapeHtml(x.cert||'—')}</td><td>${x.due?fmtDateShort(x.due):'—'}</td><td>${x.finished?fmtDateShort(x.finished):'—'}</td>
+          <td>${x.ot===null?'—':(x.ot?'<span class="badge badge-green">on time</span>':'<span class="badge badge-red">late</span>')}</td><td>${x.rj||0}</td><td>${x.am||0}</td></tr>`).join('')}</tbody></table>`:'<span style="font-size:12px;color:var(--text-muted);">No completed items in this period.</span>'}</td></tr>`:''}`).join('')
+      ||'<tr><td colspan="11" style="text-align:center;padding:16px;color:var(--text-muted);">No technical staff or completed work for this period.</td></tr>'}</tbody>
   </table></div>
-  <div style="padding:12px 16px;font-size:11px;color:var(--text-muted);">Ranked by Value Cleared — the primary bonus/KPI metric. "Pre-existing Damage" is shown neutrally (not the technician's fault); "Occurred During Handling" is a genuine quality signal, classified independently by a verifier — never by the technician who submitted the report.</div>
+  <div style="padding:12px 16px;font-size:11px;color:var(--text-muted);line-height:1.6;">
+    <b>How to read this:</b> value cleared is the bonus measure; the others show how the work was done. "Handling issues" are abnormal reports classified as <i>occurred during handling</i> by a verifier (pre-existing damage is shown separately and isn't the technician's fault). Rejections and amendments are certificate corrections. "In progress now" and "NC actions" are current, not for the period. Click a technician to see the items behind their figures.</div>
   </div>`;
 }
 function renderStaffEvalSalesTab(box){
@@ -5883,7 +5930,7 @@ async function openNewJobModal(){
         // Each quotation line becomes one job item PER UNIT (a line of 2 balances = 2 job items,
         // 2 certificates), each carrying its own serial/tag/cal points/resolution and the price
         // after any discount.
-        const _qtUnits=qtExpandToJobUnits(quo.items);
+        const _qtUnits=qtExpandToJobUnits(quo.items,quo);
         const first=_qtUnits[0];
         const nameEl=el('eq-name'); if(nameEl) nameEl.value=first.eqName||'';
         const brandEl=el('eq-brand'); if(brandEl) brandEl.value=first.brand||'';
@@ -6285,6 +6332,12 @@ async function saveEquipment(printReceipt=false){
     if(quoV2){
       quoV2.createdJobNo=jobNo;
       await saveQuotationsV2();
+      // …and on the enquiry it came from, so the Sales Tracker shows the job and its job-based rules work
+      const enq=quoV2.linkedSalesTrackerId?_salesTracker.find(e=>e.id===quoV2.linkedSalesTrackerId):null;
+      if(enq&&enq.jobNo!==jobNo){ enq.jobNo=jobNo; (enq.statusHistory=enq.statusHistory||[]).push({status:enq.status,date:new Date().toISOString(),by:currentUser,note:`Job ${jobNo} created from ${quoV2.quotationNo}`}); await saveSalesTracker(); }
+      // transport + on-site minimum from the quotation go on the job, so they reach the invoice
+      for(const ch of qtQuoteCharges(quoV2,qtOrderedItems(quoV2,null).filter(Boolean)).filter(c=>c.key!=='surcharge'))
+        await addJobCharge(jobNo,{type:ch.key==='onsiteMin'?'onsiteMin':'transport',desc:ch.label,amount:ch.amount,note:'From '+quoV2.quotationNo});
       await advanceLinkedTrackerStage(quoV2.id,'Job In Progress',`Job ${jobNo} created`);
     }
     // Lab items were pre-filled from the quotation before the item was ever physically seen —
@@ -7505,28 +7558,34 @@ function getReceivingLogRows(){
         const hay=`${escapeHtml(j.custName||'')} ${escapeHtml(it.eqName||'')} ${escapeHtml(it.serial||'')}`.toLowerCase();
         if(!hay.includes(search))return;
       }
-      rows.push({company:j.custName,receiveDate:j.receiveDate,jobNo:j.jobNo,eqName:it.eqName,brand:it.brand,model:it.model,serial:it.serial,certNo:it.certNo});
+      rows.push({company:j.custName,receiveDate:j.receiveDate,jobNo:j.jobNo,eqName:it.eqName,brand:it.brand,model:it.model,serial:it.serial,certNo:it.certNo,
+        condition:[it.condition||j.condition||'',it.accessories?'Accessories: '+it.accessories:''].filter(Boolean).join(' · '),
+        receivedBy:USERS[j.createdBy]?.name||j.createdBy||''});
     });
   });
-  return rows.sort((a,b)=>(a.receiveDate||'').localeCompare(b.receiveDate||''));
+  // chronological, with each item's permanent running number (the official log order)
+  rows.sort((a,b)=>(a.receiveDate||'').localeCompare(b.receiveDate||'')||String(a.jobNo).localeCompare(String(b.jobNo)));
+  rows.forEach((r,i)=>r.no=i+1);
+  return rows;
 }
 function renderReceivingLogPage(){
   const rows=getReceivingLogRows();
   const box=el('receiving-log-list'); if(!box)return;
   if(!rows.length){ box.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><p>No items match the current filters.</p></div>`; return; }
   box.innerHTML=`<div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>No.</th><th>Company Name</th><th>Receiving Date</th><th>Job Number</th><th>Equipment Name</th><th>Brand</th><th>Model</th><th>Serial No.</th><th>Cert/Report No.</th></tr></thead>
-    <tbody>${rows.map((r,i)=>`<tr>
-      <td>${i+1}</td><td>${escapeHtml(r.company||'—')}</td><td>${fmtDateShort(r.receiveDate)}</td><td>${r.jobNo}</td>
-      <td>${escapeHtml(r.eqName||'—')}</td><td>${escapeHtml(r.brand||'—')}</td><td>${escapeHtml(r.model||'—')}</td><td>${escapeHtml(r.serial||'—')}</td><td>${r.certNo||'—'}</td>
+    <thead><tr><th>No.</th><th>Company Name</th><th>Receiving Date</th><th>Job Number</th><th>Equipment Name</th><th>Brand</th><th>Model</th><th>Serial No.</th><th>Cert/Report No.</th><th>Condition on receipt</th><th>Received by</th></tr></thead>
+    <tbody>${rows.slice().reverse().map(r=>`<tr>
+      <td>${r.no}</td><td>${escapeHtml(r.company||'—')}</td><td style="white-space:nowrap;">${fmtDateShort(r.receiveDate)}</td><td style="white-space:nowrap;">${r.jobNo}</td>
+      <td>${escapeHtml(r.eqName||'—')}</td><td>${escapeHtml(r.brand||'—')}</td><td>${escapeHtml(r.model||'—')}</td><td>${escapeHtml(r.serial||'—')}</td><td style="white-space:nowrap;">${r.certNo||'—'}</td>
+      <td style="font-size:12px;">${escapeHtml(r.condition||'—')}</td><td style="white-space:nowrap;">${escapeHtml(r.receivedBy||'—')}</td>
     </tr>`).join('')}</tbody>
   </table></div></div>`;
 }
 function exportReceivingLogExcel(){
   if(typeof XLSX==='undefined'){alert('Excel export library failed to load.');return;}
   const rows=getReceivingLogRows().map((r,i)=>({
-    'No.':i+1,'Company Name':r.company||'',' Receiving Date':fmtDateShort(r.receiveDate),'Job Number':r.jobNo,
-    'Equipment Name':r.eqName||'','Brand':r.brand||'','Model':r.model||'','Serial No.':r.serial||'','Cert/Report No.':r.certNo||''
+    'No.':r.no||i+1,'Company Name':r.company||'',' Receiving Date':fmtDateShort(r.receiveDate),'Job Number':r.jobNo,
+    'Equipment Name':r.eqName||'','Brand':r.brand||'','Model':r.model||'','Serial No.':r.serial||'','Cert/Report No.':r.certNo||'','Condition on receipt':r.condition||'','Received by':r.receivedBy||''
   }));
   const ws=XLSX.utils.json_to_sheet(rows);
   ws['!cols']=[{wch:6},{wch:24},{wch:16},{wch:16},{wch:22},{wch:16},{wch:16},{wch:16},{wch:18}];
@@ -7545,10 +7604,10 @@ async function exportReceivingLogPdf(){
       <thead><tr>
         <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Company</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Receiving Date</th>
         <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Job No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Equipment</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Brand</th>
-        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Model</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Serial No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Cert/Report No.</th>
+        <th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Model</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Serial No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Cert/Report No.</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Condition on receipt</th><th style="padding:6px 8px;background:#0f1f3d;color:#fff;">Received by</th>
       </tr></thead>
       <tbody>${rows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
-        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${i+1}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.no||i+1}</td>
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${escapeHtml(r.company||'')}</td>
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${fmtDateShort(r.receiveDate)}</td>
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.jobNo}</td>
@@ -7556,7 +7615,7 @@ async function exportReceivingLogPdf(){
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${escapeHtml(r.brand||'')}</td>
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${escapeHtml(r.model||'')}</td>
         <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${escapeHtml(r.serial||'')}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.certNo||''}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${r.certNo||''}</td><td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;">${escapeHtml(r.condition||'—')}</td><td style="padding:5px 8px;border-bottom:1px solid #e2e8f0;">${escapeHtml(r.receivedBy||'—')}</td>
       </tr>`).join('')}</tbody>
     </table>
   </div>`;
@@ -8256,6 +8315,8 @@ async function submitCannotCalibrate(){
   }finally{
     if(btn){btn.disabled=false;btn.textContent='Submit Abnormal Report';}
   }
+  // T&C 8: the attempt fee (if any) is decided by billing — put it on their review list
+  try{ await updateJob(calJobNo,job=>addChargeReviewTo(job,{type:'attempt',itemIdx:calItemIdx})); }catch(e){ console.warn('Attempt-fee review not recorded:',e); }
 }
 
 function buildAbnormalReportHtml(r){
@@ -8734,6 +8795,7 @@ async function submitCalibration(){
       cond_before:el('cal-cond-before').value.trim(),
       cond_after:el('cal-cond-after').value.trim(),
       cond_remark:el('cal-cond-remark').value.trim(),
+      adjusted:el('cal-adjusted')?.value==='Yes',
       location:el('cal-location').value.trim(),
       procedure:el('cal-procedure').value,
       sticker_no:stickerNeeded?stickerFmt(stickerType,stickerNum):'N/A',
@@ -8760,6 +8822,7 @@ async function submitCalibration(){
       it.calData=calData;
       it.excelFile=uploadedFile;
       it.status='Pending Approval';
+      if(calData.adjusted&&!(job.chargeReviews||[]).some(r=>r.type==='adjustment'&&r.itemIdx===calItemIdx)) addChargeReviewTo(job,{type:'adjustment',itemIdx:calItemIdx});
       it.calInterval=calData.calInterval||0;
       it.nextDue=calData.next_due||'';
       // Sync the engineer's actual observed condition back into the item's real record —
@@ -9037,6 +9100,8 @@ async function approveAmendment(jobNo,itemIdx,amendmentId){
   renderApprovalQueue();
   showToast('✅ Amendment approved','success',3000);
   addAudit('📝',`Amendment No. ${amendment.amendmentNo} approved for Certificate ${item.certNo}`);
+  // T&C 12: billing decides whether the reissue is charged (not if it was Westlab's error)
+  await updateJob(jobNo,job=>addChargeReviewTo(job,{type:'reissue',itemIdx,note:`${item.certNo}, Amendment ${amendment.amendmentNo}`}));
 }
 async function exportAmendmentPdf(jobNo,itemIdx,amendmentId){
   const job=getJob(jobNo); const item=job?.items?.[itemIdx]; const amendment=item?.amendments?.find(a=>a.id===amendmentId);
@@ -9188,6 +9253,18 @@ const STATUS_BADGE={
   'Customer Not Ready':'badge-red','Reschedule Required':'badge-red'
 };
 
+// ⋯ menu on a job row (Equipment & Calibration): the less-used actions, with Delete kept at the bottom
+function eqJobMenu(ev,jobNo){
+  ev.stopPropagation(); const j=getJob(jobNo); if(!j) return;
+  const role=getUserRole(currentUser); let h=stMenuItem('👁️ View job',`viewJobDetail('${escapeForJsAttr(jobNo)}')`);
+  if(canCreateJobs(currentUser)){
+    h+=stMenuItem('🧾 Reissue receipt',`reissueJobReceipt('${escapeForJsAttr(jobNo)}')`)+stMenuItem('🖨️ Print work order',`printWorkOrder('${escapeForJsAttr(jobNo)}')`);
+    if((j.items||[]).some(it=>it.calType!=='Onsite')) h+=stMenuItem('🏷️ Reprint receiving labels',`reprintReceivingLabels('${escapeForJsAttr(jobNo)}')`);
+  }
+  if(role==='Admin'||role==='Managing Director')
+    h+='<hr/>'+(j.status!=='Completed'?stMenuItem('🗑 Delete job',`deleteJob('${escapeForJsAttr(jobNo)}')`,{danger:true}):stMenuItem('🗑️ Permanent deletion…',`openRequestPermanentDeletionModal('${escapeForJsAttr(jobNo)}')`,{danger:true}));
+  stShowMenu(ev.currentTarget,h);
+}
 function renderEquipmentTable(){
   try{
   const list=_jobs.filter(j=>j.status!=='Deleted');
@@ -9202,7 +9279,7 @@ function renderEquipmentTable(){
     const ms=!q||j.jobNo.toLowerCase().includes(q)||(j.custName||'').toLowerCase().includes(q)||
       items.some(i=>(i.eqName||'').toLowerCase().includes(q)||(i.serial||'').toLowerCase().includes(q)||
       (i.certNo||'').toLowerCase().includes(q)||(i.tagNo||'').toLowerCase().includes(q));
-    const matchStatus=!sf||j.status===sf||items.some(i=>i.status===sf);
+    const matchStatus=!sf||(sf==='__active'?(j.status!=='Completed'&&items.some(i=>i.status!=='Completed')):(j.status===sf||items.some(i=>i.status===sf)));
     return ms&&matchStatus;
   });
 
@@ -9223,7 +9300,7 @@ function renderEquipmentTable(){
   });
 
   if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📋</div><p>${list.length?'No matching records.':'No jobs yet. Click + New Job to get started.'}</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📋</div><p>${list.length?'No matching records.':'No jobs yet. Click + New Job to get started.'}</p></div></td></tr>`;
   } else {
     const rows=[];
     filtered.forEach(j=>{
@@ -9240,46 +9317,42 @@ function renderEquipmentTable(){
       const overdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&j.status!=='Completed';
       const depositBadge=(j.depositRequired&&!j.depositCollected&&canViewPrice(currentUser))?`<span style="background:#fca5a5;color:#7f1d1d;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;" title="Deposit of RM${(j.depositAmount||0).toFixed(2)} not yet collected">💰 DEPOSIT DUE</span>`:'';
       const emailFailBadge=j.receiptEmailStatus==='failed'?`<span style="background:#fca5a5;color:#7f1d1d;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;cursor:pointer;" title="Receipt email to ${j.receiptEmailTo||'customer'} failed — click Reissue Receipt to try again" onclick="reissueJobReceipt('${j.jobNo}')">📧⚠️ EMAIL FAILED</span>`:'';
-      // ── JOB GROUP HEADER ROW ──
-      rows.push(`<tr style="background:var(--navy);color:#fff;">
-        <td colspan="2" style="padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-          ${j.jobNo}
-          <span style="font-size:11px;font-weight:400;opacity:.8;margin-left:8px;">${itemCount} item${itemCount>1?'s':''}</span>
+      // ── JOB GROUP HEADER ROW ── (light, fills its own columns; actions live in a ⋯ menu)
+      const jobStatus=j.status==='Completed'?'Completed':(items.every(i=>i.status==='Unassigned')?'Unassigned':(items.some(i=>i.status==='Pending Approval')&&items.every(i=>['Pending Approval','Completed'].includes(i.status))?'Pending Approval':'In Progress'));
+      rows.push(`<tr style="background:#eef2f7;border-top:2px solid #cbd5e1;">
+        <td colspan="2" style="padding:7px 10px;font-size:12.5px;font-weight:800;color:var(--navy);white-space:nowrap;border-left:4px solid var(--navy);">
+          <a href="javascript:void(0)" onclick="viewJobDetail('${escapeForJsAttr(j.jobNo)}')" style="color:var(--navy);text-decoration:none;">${j.jobNo}</a>
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">${itemCount} item${itemCount>1?'s':''}</span>
           ${typeBadge}${depositBadge}${emailFailBadge}
         </td>
-        <td colspan="2" style="padding:6px 10px;font-size:12px;color:#fff;">
-          <strong>${escapeHtml(j.custName)}</strong>${j.attention?`<span style="opacity:.7;font-size:11px;"> · ${escapeHtml(j.attention)}</span>`:''}
-        </td>
-        <td style="padding:6px 10px;font-size:12px;"><span class="badge ${PB[j.priority]||'badge-slate'}">${j.priority}</span></td>
-        <td style="padding:6px 10px;font-size:12px;color:#fff;">${j.receiveDate||'—'}</td>
-        <td style="padding:6px 10px;font-size:12px;">${j.promisedDate?`<span style="color:${overdue?'#fca5a5':'#86efac'};font-size:11px;">${j.promisedDate}</span>`:'<span style="opacity:.5;font-size:11px;">—</span>'}</td>
-        <td style="padding:6px 10px;white-space:nowrap;text-align:right;">
-          ${canCreateJobs(currentUser)?`<button onclick="reissueJobReceipt('${j.jobNo}')" title="Reissue Receipt" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🧾</button>`:''}
-          ${canCreateJobs(currentUser)?`<button onclick="printWorkOrder('${j.jobNo}')" title="Print Work Order" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🖨️</button>`:''}
-          ${canCreateJobs(currentUser)&&(j.items||[]).some(it=>it.calType!=='Onsite')?`<button onclick="reprintReceivingLabels('${j.jobNo}')" title="Reprint Receiving Labels" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🏷️</button>`:''}
-          ${(role==='Admin'||role==='Managing Director')&&j.status!=='Completed'?`<button onclick="deleteJob('${j.jobNo}')" title="Delete Job" style="background:rgba(220,38,38,.85);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑</button>`:''}
-          ${(role==='Admin'||role==='Managing Director')&&j.status==='Completed'?`<button onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (Admin override — irreversible)" style="background:rgba(153,27,27,.9);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:5px 8px;font-size:12px;cursor:pointer;margin-left:4px;">🗑️⚠️</button>`:''}
-        </td>
+        <td colspan="2" style="padding:7px 10px;font-size:12.5px;"><strong>${escapeHtml(j.custName)}</strong>${j.attention?`<span style="color:var(--text-muted);font-size:11px;"> · ${escapeHtml(j.attention)}</span>`:''}</td>
+        <td style="padding:7px 10px;font-size:12px;">${j.priority?`<span class="badge ${PB[j.priority]||'badge-slate'}">${j.priority}</span>`:'<span style="color:var(--text-muted);">—</span>'}</td>
+        <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${j.receiveDate?fmtDateShort(j.receiveDate):'—'}</td>
+        <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${j.promisedDate?`<span style="color:${overdue?'var(--red)':'inherit'};font-weight:${overdue?700:400};">${fmtDateShort(j.promisedDate)}${overdue?' · overdue':''}</span>`:'<span style="color:var(--text-muted);">—</span>'}</td>
+        <td></td>
+        <td style="padding:7px 10px;"><span class="badge ${STATUS_BADGE[jobStatus]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">Job: ${jobStatus}</span></td>
+        <td style="padding:7px 10px;text-align:right;"><button class="btn btn-outline btn-sm" title="More actions" onclick="eqJobMenu(event,'${escapeForJsAttr(j.jobNo)}')">⋯</button></td>
       </tr>`);
       // ── ITEM ROWS ──
       items.forEach((item,idx)=>{
         const assignedName=item.assignedTo?USERS[item.assignedTo]?.name||item.assignedTo:'—';
         let actions='';
         if(item.status==='Completed'&&item.calData)
-          actions+=`<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})" style="font-size:11px;">📄</button> `;
+          actions+=`<button class="btn btn-outline btn-sm" onclick="showCertForItem('${j.jobNo}',${idx})" style="font-size:11px;" title="View certificate">📄 Cert</button> `;
         if(canCreateJobs(currentUser))
-          actions+=`<button class="btn btn-outline btn-sm" onclick="openEditJobModal('${j.jobNo}',${idx})" style="font-size:11px;">✏️</button> `;
+          actions+=`<button class="btn btn-outline btn-sm" onclick="openEditJobModal('${j.jobNo}',${idx})" style="font-size:11px;" title="Edit item">✏️ Edit</button> `;
         if(item.status==='Customer Not Ready'&&canCreateJobs(currentUser))
           actions+=`<button class="btn btn-outline btn-sm" style="font-size:11px;color:#c0001a;border-color:#fca5a5;" onclick="openResolveCustomerNotReadyModal('${j.jobNo}',${idx})" title="${item.customerNotReadyReason||''}">✅ Resolve</button> `;
         rows.push(`<tr style="border-left:3px solid var(--border);">
           <td style="padding:5px 10px 5px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
           <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${item.certNo||'—'}</td>
           <td style="padding:5px 8px;font-size:12px;">${escapeHtml(item.eqName)}<br/><span style="font-size:11px;color:var(--text-muted);">${[item.brand,item.model].filter(Boolean).join(' / ')||''}</span></td>
-          <td style="padding:5px 8px;font-size:11px;color:var(--text-muted);">S/N: ${escapeHtml(item.serial||'—')}</td>
-          <td></td>
-          <td style="padding:5px 8px;font-size:11px;">${assignedName}</td>
-          <td style="padding:5px 8px;"><span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}" style="font-size:10px;">${item.status}</span></td>
-          <td style="padding:5px 8px;white-space:nowrap;">${actions}</td>
+          <td style="padding:5px 8px;font-size:11px;color:var(--text-muted);">${escapeHtml(item.serial||'—')}</td>
+          <td></td><td></td>
+          <td style="padding:5px 8px;font-size:11px;white-space:nowrap;">${item.promisedDate&&item.promisedDate!==j.promisedDate?fmtDateShort(item.promisedDate):''}</td>
+          <td style="padding:5px 8px;font-size:11.5px;">${assignedName}</td>
+          <td style="padding:5px 8px;"><span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">${item.status}</span></td>
+          <td style="padding:5px 8px;white-space:nowrap;text-align:right;">${actions}</td>
         </tr>`);
       });
     });
@@ -9289,7 +9362,7 @@ function renderEquipmentTable(){
   // KPIs — count by items
   const allItems=list.flatMap(j=>j.items||[]);
   const t=list.length;
-  el('kpi-total').textContent=t;
+  el('kpi-total').textContent=allItems.length; // every card counts items
   el('kpi-unassigned').textContent=allItems.filter(i=>i.status==='Unassigned').length;
   el('kpi-assigned').textContent=allItems.filter(i=>i.status==='Assigned'||i.status==='In Progress').length;
   el('kpi-pending-approval').textContent=allItems.filter(i=>i.status==='Pending Approval').length;
@@ -9310,7 +9383,7 @@ function openAssignItemModal(jobNo, itemIdx){
   el('assign-job-no-label').textContent=`${jobNo} — Item ${item.itemNo}`;
   el('assign-job-eq-label').textContent=`${item.eqName}${item.brand?' — '+item.brand:''}${item.model?' '+item.model:''}`;
   const custLabel=el('assign-job-cust-label');
-  if(custLabel) custLabel.textContent=`Customer: ${j.custName} · Priority: ${j.priority}${j.promisedDate?' · Ready by: '+j.promisedDate:''}`;
+  if(custLabel) custLabel.textContent=`Customer: ${j.custName}${j.priority?' · Priority: '+j.priority:''}${j.promisedDate?' · Ready by: '+fmtDateShort(j.promisedDate):''}`;
   populateUserDropdown('assign-to-select',false,true);
   el('assign-to-select').value=item.assignedTo||'';
   el('assign-note').value='';
@@ -9648,6 +9721,42 @@ function qtLineCalc(it){
   return {qty,price,gross,disc,net,soc,socTotal,total:net+socTotal,netUnitPrice:net/qty,
     baseNet:gross-baseDisc,baseDisc,extra:{n:ex.n,price:ex.price,gross:ex.gross,disc:exDisc,net:ex.gross-exDisc}};
 }
+// T&C 5: items subcontracted to a third party are marked (*). Known from the capability review of
+// the enquiry item ("Can Do (External)"); remembered on the quotation item when it's created.
+function qtOutsourcedFlags(q,items){
+  const its=items||q?.items||[];
+  const entry=q?._entry||(q?.linkedSalesTrackerId?(_salesTracker||[]).find(e=>e.id===q.linkedSalesTrackerId):null);
+  const m=entry?qtMatchEnquiryItems(its,entry):[];
+  return its.map((it,i)=>!!(it&&(it.outsourced||m[i]?.ei?.capabilityVerdict==='Can Do (External)')));
+}
+// T&C 6: Urgent +50%, Express +75–100% (chosen each time) on in-house calibration only — outsourced (*)
+// items can't be Urgent/Express and SoC isn't surcharged.
+function qtTurnaroundKind(t){ t=String(t||''); return /^urgent/i.test(t)?'Urgent':(/^express/i.test(t)?'Express':''); }
+function qtSurcharge(q,items){
+  const its=items||q?.items||[]; const kind=qtTurnaroundKind(q?.turnaroundRequested);
+  const pct=kind==='Urgent'?(parseFloat(q.turnaroundSurchargePct)||50):(kind==='Express'?(parseFloat(q.turnaroundSurchargePct)||0):0);
+  if(!kind||pct<=0) return {kind,pct:0,base:0,amount:0,excluded:0};
+  const flags=qtOutsourcedFlags(q,its); let base=0, excluded=0;
+  its.forEach((it,i)=>{ if(!it||!it.eqName) return; if(flags[i]) excluded++; else base+=qtLineCalc(it).net; });
+  return {kind,pct,base,amount:Math.round(base*pct)/100,excluded};
+}
+// T&C 9 / 11: transport (Westlab pickup & delivery) and the on-site minimum charge. The minimum is a
+// top-up: if the on-site items come to less than the minimum set for this job, the difference is added.
+function qtOnsiteTopup(q,items){
+  const its=items||q?.items||[]; const min=parseFloat(q?.onsiteMinFee)||0;
+  const onsiteTotal=its.filter(it=>it&&it.eqName&&it.calType==='Onsite').reduce((sum,it)=>sum+qtLineCalc(it).total,0);
+  if(!min||!its.some(it=>it&&it.calType==='Onsite')) return {min,onsiteTotal,amount:0};
+  return {min,onsiteTotal,amount:Math.max(0,Math.round((min-onsiteTotal)*100)/100)};
+}
+function qtQuoteCharges(q,items){ // extra quotation lines after the items
+  const its=items||q?.items||[]; const out=[];
+  const sur=qtSurcharge(q,its); if(sur.amount) out.push({key:'surcharge',label:`${sur.kind} Service surcharge (+${sur.pct}% on in-house calibration${sur.excluded?'; outsourced (*) items excluded':''})`,amount:sur.amount});
+  const tp=parseFloat(q?.transportCharge)||0; if(tp>0&&q?.logistics==='Westlab pickup & delivery') out.push({key:'transport',label:'Transport — Westlab pickup & delivery',amount:tp});
+  const otp=parseFloat(q?.onsiteTransport)||0; if(otp>0&&its.some(it=>it&&it.calType==='Onsite')) out.push({key:'onsiteTransport',label:`Transport — on-site visit${q.siteArea?' ('+q.siteArea+')':''}`,amount:otp});
+  const ot=qtOnsiteTopup(q,its); if(ot.amount) out.push({key:'onsiteMin',label:`On-site minimum charge${q.onsiteArea?' ('+q.onsiteArea+')':''} — top-up to RM ${ot.min.toFixed(2)}`,amount:ot.amount});
+  return out;
+}
+function qtGrandTotal(q,items){ const its=items||q?.items||[]; return qtQuotationTotal(its)+qtQuoteCharges(q,its).reduce((s2,c)=>s2+c.amount,0); }
 function qtQuotationTotal(items){ return (items||[]).filter(it=>it&&it.eqName!=='').reduce((sum,it)=>sum+qtLineCalc(it).total,0); }
 // One row of Serial / Tag / Cal Points / Resolution per unit on the line.
 function qtEnsureUnits(it){
@@ -9675,8 +9784,9 @@ function qtSyncLegacyFields(it){
 }
 // Splits every quotation line into one job item per unit, each with its own details, the
 // price after discount, and SoC on however many units needed it.
-function qtExpandToJobUnits(items){
+function qtExpandToJobUnits(items,q){
   const out=[];
+  const sur=q?qtSurcharge(q,items):{pct:0}; const outFl=q?qtOutsourcedFlags(q,items):[];
   // Partial PO: items left out of the customer's PO are skipped, and only the ordered quantity is used
   // (the first units of the line). The net price per unit stays as quoted.
   (items||[]).filter(it=>it&&it.eqName&&it.poAccepted!==false).forEach(it=>{
@@ -9685,10 +9795,10 @@ function qtExpandToJobUnits(items){
     const socN=it.socRequested?Math.min(qtSocUnits(it),ordered):0;
     qtUnitDetails(it).slice(0,ordered).forEach((u,ui)=>{
       const unit={...it,serial:u.serial,tagNo:u.tagNo,calPoints:u.calPoints,resolution:u.resolution,quantity:1,
-        unitPrice:Math.round(c.netUnitPrice*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
+        unitPrice:Math.round(c.netUnitPrice*(1+(sur.pct&&!outFl[(items||[]).indexOf(it)]?sur.pct/100:0))*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
         socParameters:(ui<socN&&it.socParameters)?JSON.parse(JSON.stringify(it.socParameters)):undefined};
       delete unit.units; delete unit.discount; delete unit.srcIdx; delete unit.poAccepted; delete unit.poQty;
-      ['extraPointsCount','extraPointsQty','extraPointPrice','extraPointsStd','extraPointsWaived','extraPointsManual'].forEach(k=>delete unit[k]);
+      ['extraPointsCount','extraPointsQty','extraPointPrice','extraPointsStd','extraPointsWaived','extraPointsManual','outsourced'].forEach(k=>delete unit[k]);
       out.push(unit);
     });
   });
@@ -9882,6 +9992,18 @@ function applyQtv2CalPoints(idx,pts,allUnits){
   if(it.sameCal===false){ qtEnsureUnits(it); if(allUnits) it.units.forEach(u=>u.calPoints=pts); else if(it.units[0]) it.units[0].calPoints=pts; }
   renderQtv2ItemsList();
 }
+function qtv2DraftQ(){ const t=el('qtv2-turnaround')?.value||''; return {logistics:el('qtv2-logistics')?.value||'',transportCharge:parseFloat(el('qtv2-transport')?.value)||0,
+  onsiteArea:el('qtv2-onsite-area')?.value||'',onsiteMinFee:parseFloat(el('qtv2-onsite-min')?.value)||0,onsiteTransport:parseFloat(el('qtv2-onsite-transport')?.value)||0,turnaroundRequested:t==='Other'?(el('qtv2-turnaround-other')?.value||''):t,
+  turnaroundSurchargePct:qtTurnaroundKind(t)==='Urgent'?50:(parseFloat(el('qtv2-surcharge-pct')?.value)||0),linkedSalesTrackerId:el('qtv2-linked-sales-entry')?.value||'',_entry:_qtv2SourceEntry}; }
+function qtv2SurchargeUi(){
+  const row=el('qtv2-surcharge-row'); if(!row) return; const q=qtv2DraftQ(); const kind=qtTurnaroundKind(q.turnaroundRequested);
+  row.style.display=kind?'':'none'; if(!kind) return;
+  el('qtv2-surcharge-label').innerHTML=kind==='Urgent'?'⚡ <b>Urgent service</b> — surcharge on in-house calibration: <b>+50%</b>':'⚡ <b>Express service</b> — surcharge on in-house calibration (choose 75–100):';
+  el('qtv2-surcharge-pct').style.display=kind==='Express'?'':'none'; el('qtv2-surcharge-pct-sign').style.display=kind==='Express'?'':'none';
+  const s=qtSurcharge(q,_qtv2DraftItems);
+  el('qtv2-surcharge-amt').textContent=s.amount?`+ RM ${s.amount.toFixed(2)}`:'';
+  el('qtv2-surcharge-note').textContent=s.excluded?`${s.excluded} outsourced (*) item${s.excluded>1?'s':''} can't be ${kind} — ${s.excluded>1?'they stay':'it stays'} at standard turnaround and ${s.excluded>1?'are':'is'} not surcharged.`:'';
+}
 function applyQtv2Price(idx,price,disc){ const it=_qtv2DraftItems[idx]; if(!it) return; it.unitPrice=price; it.discount=disc||''; renderQtv2ItemsList(); }
 function qtRefreshAllTotals(){ _qtv2DraftItems.forEach(qtApplyExtraAuto); _qtv2DraftItems.forEach((_,i)=>updateQtv2ItemTotal(i)); updateQtv2GrandTotal(); if(typeof qtRefreshDiffs==='function') qtRefreshDiffs();
   _qtv2DraftItems.forEach((it,i)=>{ const b=el(`qtv2-cal-sug-${i}`); if(b) b.innerHTML=qtCalSugHtml(it,i); }); } // suggestions follow the name / range as you type
@@ -9899,7 +10021,12 @@ function updateQtv2ItemTotal(idx){
   updateQtv2GrandTotal();
 }
 function updateQtv2GrandTotal(){
-  const grand=qtQuotationTotal(_qtv2DraftItems);
+  const dq=qtv2DraftQ();
+  const grand=qtGrandTotal(dq,_qtv2DraftItems);
+  const mn=el('qtv2-onsite-min-note'); if(mn){ const ot=qtOnsiteTopup(dq,_qtv2DraftItems); const v=dq.onsiteMinFee;
+    const bad=dq.onsiteArea==='Klang Valley'&&v&&(v<350||v>550);
+    mn.innerHTML=`T&amp;C 11: minimum per on-site job within the Klang Valley is <b>RM350–RM550</b>, depending on the area; outstation jobs are quoted based on location.${bad?' <b style="color:#b42318;">⚠ This is outside RM350–550.</b>':''}${ot.amount?` <b>Top-up added: RM ${ot.amount.toFixed(2)}</b> (on-site items RM ${ot.onsiteTotal.toFixed(2)}).`:(v&&ot.onsiteTotal>=v?' On-site items already exceed the minimum — no top-up.':'')}`; }
+  if(typeof qtv2SurchargeUi==='function') qtv2SurchargeUi();
   const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${(_settings.sstEnabled?grand*1.08:grand).toFixed(2)}`;
   const wrap=el('qtv2-grand-wrap');
   if(wrap&&el2){ let pre=wrap.querySelector('.qt-sub'); if(!pre){ pre=document.createElement('span'); pre.className='qt-sub'; wrap.insertBefore(pre,wrap.firstChild); }
@@ -9990,6 +10117,7 @@ async function applyUnitFromPicker(selectEl){
   const prevUnit=selectEl.dataset.currentUnit||'';
   group.querySelectorAll('[data-unit-target]').forEach(fieldEl=>{
     let current=fieldEl.value;
+    if(fieldEl.hasAttribute('data-unit-skip-empty')&&!current.trim()) return; // don't turn an empty box into just "g"
     // The list being redrawn forgets which unit was picked, so fall back to recognising the unit
     // already sitting on the field — otherwise changing g -> mg would give "0.5gmg".
     const prev=prevUnit||getFieldUnit(fieldEl);
@@ -10171,6 +10299,10 @@ async function addPriceReferenceEntry(){
   renderPriceReferenceTable();
   showToast('✅ Price reference added','success',2500);
 }
+async function saveChargeDefaults(){
+  const d={}; ['adjustment','attempt','transport','postponement','notReady','reissue'].forEach(k=>{ const v=el('cd-'+k)?.value; if(v!==''&&v!=null) d[k]=Math.max(0,parseFloat(v)||0); });
+  await patchSettings(st=>{ st.chargeDefaults=d; }); showToast('✅ Standard charges saved','success',2500);
+}
 function openPriceRefEditor(id){
   const p=(_settings.priceReference||[]).find(x=>x.id===id); if(!p) return;
   const v=x=>escapeHtml(x==null?'':String(x));
@@ -10188,6 +10320,8 @@ function openPriceRefEditor(id){
       <div class="form-group"><label class="form-label">Also known as <span style="font-weight:normal;color:var(--text-muted);">(comma-separated)</span></label><input class="form-control" id="pr-edit-aliases" value="${v((p.aliases||[]).join(', '))}"/></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Standard price (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-price" value="${v(p.standardPrice||0)}"/></div>
+        <div class="form-group"><label class="form-label">Adjustment price (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-adjust" value="${v(p.adjustmentPrice||'')}" placeholder="0.00"/>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Suggested when an adjustment is charged on a job (T&amp;C 7).</div></div>
         <div class="form-group"><label class="form-label">Price per extra calibration point (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-extra" value="${v(p.extraPointPrice||'')}" placeholder="0.00"/>
           <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Charged for each point beyond the standard points (Calibration points tab).</div></div>
       </div>
@@ -10210,7 +10344,7 @@ async function savePriceRefEdit(id){
   const clash=(_settings.priceReference||[]).find(o=>o.id!==id&&(o.accreditation||'')===(p.accreditation||'')&&(o.calType||'Lab')===(p.calType||'Lab')&&qtStdNames(o).some(k=>seen.has(k)));
   if(clash){ alert(`“${[...seen].find(k=>qtStdNames(clash).includes(k))}” is already used by ${clash.itemCode} ${clash.eqName} for the same service. Remove it from one of them first.`); return; }
   const price=parseFloat(el('pr-edit-price').value)||0, desc=el('pr-edit-desc').value.trim(), extra=Math.max(0,parseFloat(el('pr-edit-extra')?.value)||0);
-  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e){ e.eqName=name; e.aliases=aliases; e.standardPrice=price; e.extraPointPrice=extra; e.description=desc; } });
+  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e){ e.eqName=name; e.aliases=aliases; e.standardPrice=price; e.extraPointPrice=extra; e.adjustmentPrice=Math.max(0,parseFloat(el('pr-edit-adjust')?.value)||0); e.description=desc; } });
   document.getElementById('pr-edit-overlay').style.display='none';
   renderPriceReferenceTable(); refreshStdNameSuggestions();
   showToast(`✅ ${p.itemCode} updated`,'success',2500);
@@ -10332,6 +10466,120 @@ function refreshJobCalSugs(){
     b.innerHTML=calPointSuggestionsHtml(calPointSuggestions(eq.eqName,eq.range),pts=>`updateExtraField(${i},'calPoints','${escapeForJsAttr(pts)}');el('extra-calpts-${i}').value='${escapeForJsAttr(pts)}'`); });
 }
 document.addEventListener('input',e=>{ const t=e.target; if(!t||!t.closest) return; if(t.closest('#modal-add-equipment')) setTimeout(refreshJobCalSugs,0); });
+// ═══ JOB CHARGES (T&C 7, 8, 9, 11, 12) ═══
+// Charges on a job beyond the items' prices. They go onto the job's invoice; anything added after the
+// invoice was made can be put on a follow-up invoice from the job window.
+const JOB_CHARGE_TYPES=[
+  ['adjustment','Adjustment (T&C 7)'],['attempt','Calibration attempt fee (T&C 8)'],['transport','Transport / courier (T&C 9)'],
+  ['onsiteMin','On-site minimum charge (T&C 11)'],['postponement','On-site postponed with < 24 working hours notice (T&C 11)'],
+  ['notReady','On-site: equipment not ready (T&C 11)'],['reissue','Certificate reissue (T&C 12)'],['other','Other']];
+function jobChargeLabel(t){ return (JOB_CHARGE_TYPES.find(x=>x[0]===t)||[])[1]||t; }
+function jobChargeDefault(type,j,itemIdx){
+  const d=_settings.chargeDefaults||{};
+  if(type==='adjustment'){ const it=j?.items?.[itemIdx]; const p=it?(qtFindStandard(it.eqName,it.accreditationRequested||'',it.calType||'Lab')||(_settings.priceReference||[]).find(x=>qtStdNames(x).includes(qtNameKey(it.eqName)))):null; return parseFloat(p?.adjustmentPrice)||parseFloat(d.adjustment)||0; }
+  return parseFloat({attempt:d.attempt,transport:d.transport,postponement:d.postponement??350,notReady:d.notReady??350,reissue:d.reissue??10,onsiteMin:350}[type])||0;
+}
+async function addJobCharge(jobNo,c){
+  const rec={id:'CH-'+Date.now()+'-'+Math.floor(Math.random()*1000),type:c.type,desc:c.desc||jobChargeLabel(c.type),amount:Math.round((parseFloat(c.amount)||0)*100)/100,itemIdx:c.itemIdx??null,note:c.note||'',at:new Date().toISOString(),by:currentUser,waived:false,invoiceNo:null};
+  if(!(rec.amount>0)) return null;
+  await updateJob(jobNo,j=>{ (j.extraCharges=j.extraCharges||[]).push(rec); j.history.push({action:`💵 Charge added: ${rec.desc} — RM ${rec.amount.toFixed(2)}`,by:currentUser,time:rec.at}); });
+  addAudit('💵',`Job ${jobNo}: charge added — ${escapeHtml(rec.desc)}, RM ${rec.amount.toFixed(2)}`);
+  return rec;
+}
+// Charges to review: technical staff record what happened (adjustment done, customer not ready on site,
+// item couldn't be calibrated, certificate reissued); billing (Admin/MD/Coordinator) decides whether to charge.
+const CHARGE_REVIEW_LABEL={adjustment:'Adjustment performed',notReady:'On-site: customer not ready',attempt:'Could not be calibrated',reissue:'Certificate reissued'};
+function addChargeReviewTo(job,r){ (job.chargeReviews=job.chargeReviews||[]).push({id:'CR-'+Date.now()+'-'+Math.floor(Math.random()*1000),status:'pending',at:new Date().toISOString(),by:currentUser,...r}); }
+function pendingChargeReviews(){ const out=[]; (_jobs||[]).forEach(j=>{ if(j.status==='Deleted') return; (j.chargeReviews||[]).forEach(r=>{ if(r.status==='pending') out.push({j,r}); }); }); return out; }
+async function decideChargeReview(jobNo,id,charge){
+  if(charge){ const j=getJob(jobNo); const r=(j?.chargeReviews||[]).find(x=>x.id===id); if(!r) return; openAddJobChargeModal(jobNo,r.type==='notReady'?'notReady':r.type,r.itemIdx??0,id); return; }
+  await updateJob(jobNo,j=>{ const r=(j.chargeReviews||[]).find(x=>x.id===id); if(r){ r.status='notCharged'; r.decidedBy=currentUser; r.decidedAt=new Date().toISOString();
+    j.history.push({action:`💵 No charge: ${CHARGE_REVIEW_LABEL[r.type]||r.type}${r.itemIdx!=null&&j.items[r.itemIdx]?' — '+j.items[r.itemIdx].eqName:''}`,by:currentUser,time:r.decidedAt}); } });
+  viewJobDetail(jobNo); if(typeof renderDashboard==='function') renderDashboard();
+}
+function openAddJobChargeModal(jobNo,preType,preItem,reviewId){
+  window._jcReviewId=reviewId||null;
+  const j=getJob(jobNo); if(!j) return;
+  let ov=document.getElementById('job-charge-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='job-charge-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999996;display:flex;align-items:flex-start;justify-content:center;padding:50px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:520px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">💵 Add a charge — ${escapeHtml(jobNo)}</span>
+      <button onclick="document.getElementById('job-charge-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;">
+      <div class="form-group"><label class="form-label">Charge</label><select class="form-control" id="jc-type" onchange="jcRefresh('${escapeForJsAttr(jobNo)}')">${JOB_CHARGE_TYPES.map(([v,l])=>`<option value="${v}" ${v===preType?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="form-group" id="jc-item-row"><label class="form-label">Item</label><select class="form-control" id="jc-item" onchange="jcRefresh('${escapeForJsAttr(jobNo)}')">${(j.items||[]).map((it,i)=>`<option value="${i}" ${i===preItem?'selected':''}>${i+1}. ${escapeHtml(it.eqName||'')}${it.certNo?' — '+escapeHtml(it.certNo):''}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Description (shown on the invoice)</label><input class="form-control" id="jc-desc"/></div>
+      <div class="form-group"><label class="form-label">Amount (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="jc-amount" style="max-width:180px;"/><div id="jc-hint" style="font-size:11.5px;color:var(--text-muted);margin-top:4px;"></div></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('job-charge-overlay').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="jcSave('${escapeForJsAttr(jobNo)}')">Add charge</button></div>
+    </div></div>`;
+  ov.style.display='flex'; jcRefresh(jobNo);
+}
+function jcRefresh(jobNo){
+  const j=getJob(jobNo); const t=el('jc-type').value; const needItem=['adjustment','attempt','reissue'].includes(t);
+  el('jc-item-row').style.display=needItem?'':'none';
+  const i=parseInt(el('jc-item').value)||0; const it=j.items[i];
+  el('jc-desc').value=jobChargeLabel(t).replace(/ \(T&C \d+\)$/,'')+(needItem&&it?` — ${it.eqName}${it.certNo?' ('+it.certNo+')':''}`:'');
+  el('jc-amount').value=jobChargeDefault(t,j,i)||'';
+  el('jc-hint').textContent={postponement:'T&C 11: minimum RM350 once the technician has arrived on site.',notReady:'T&C 11: minimum RM350 plus the transportation fee.',reissue:'T&C 12: RM10 per reissued certificate — don\'t charge if the error was Westlab\'s.',onsiteMin:'T&C 11: RM350–550 within the Klang Valley by area; outstation by location.',adjustment:'Set a standard adjustment price per item code in Price Reference → Standard items → Edit.'}[t]||'';
+}
+async function jcSave(jobNo){
+  const amt=parseFloat(el('jc-amount').value); if(!(amt>0)){ alert('Please enter the amount.'); return; }
+  const t=el('jc-type').value; const needItem=['adjustment','attempt','reissue'].includes(t);
+  const rec=await addJobCharge(jobNo,{type:t,desc:el('jc-desc').value.trim()||jobChargeLabel(t),amount:amt,itemIdx:needItem?parseInt(el('jc-item').value):null});
+  const rid=window._jcReviewId; window._jcReviewId=null;
+  if(rid&&rec) await updateJob(jobNo,j=>{ const r=(j.chargeReviews||[]).find(x=>x.id===rid); if(r){ r.status='charged'; r.chargeId=rec.id; r.decidedBy=currentUser; r.decidedAt=new Date().toISOString(); } });
+  document.getElementById('job-charge-overlay').style.display='none';
+  if(typeof renderDashboard==='function') renderDashboard();
+  showToast('💵 Charge added','success',2500); viewJobDetail(jobNo);
+}
+async function setJobChargeWaived(jobNo,id,waived){
+  await updateJob(jobNo,j=>{ const c=(j.extraCharges||[]).find(x=>x.id===id); if(c&&!c.invoiceNo){ c.waived=waived; j.history.push({action:`💵 Charge ${waived?'waived':'restored'}: ${c.desc}`,by:currentUser,time:new Date().toISOString()}); } });
+  viewJobDetail(jobNo);
+}
+// Follow-up invoice for charges added after the job's invoice was made (e.g. a certificate reissue)
+async function invoicePendingJobCharges(jobNo){
+  const j=getJob(jobNo); if(!j) return;
+  const pend=(j.extraCharges||[]).filter(c=>!c.waived&&!c.invoiceNo); if(!pend.length) return;
+  if(!confirm(`Create an invoice for ${pend.length} charge${pend.length>1?'s':''} (RM ${pend.reduce((s2,c)=>s2+c.amount,0).toFixed(2)}) on job ${jobNo}?`)) return;
+  const invoiceNo=await getNextDocNumber('WIV'); const invoiceDate=new Date().toISOString(); const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+30);
+  const subtotal=pend.reduce((s2,c)=>s2+c.amount,0); const sstAmount=_settings.sstEnabled?subtotal*0.08:0;
+  const inv={id:'INV-'+Date.now(),invoiceNo,jobNo,custName:j.custName,custId:j.custId||null,attention:j.attention||'',address:j.address||'',email:j.email||'',
+    items:pend.map(c=>({eqName:c.desc,brand:'',model:'',certNo:'',price:c.amount,isCharge:true})),supplementary:true,
+    invoiceDate,dueDate:toLocalDateStr(dueDate),subtotal,sstAmount,totalAmount:subtotal+sstAmount,paymentStatus:'Unpaid',amountPaid:0,createdBy:currentUser,createdAt:invoiceDate};
+  _invoices.push(inv); await saveInvoices();
+  await updateJob(jobNo,jj=>{ (jj.extraCharges||[]).forEach(c=>{ if(pend.some(p=>p.id===c.id)) c.invoiceNo=invoiceNo; }); jj.history.push({action:`🧾 Invoice ${invoiceNo} created for extra charges`,by:currentUser,time:invoiceDate}); });
+  addAudit('🧾',`Invoice ${invoiceNo} created for extra charges on job ${jobNo} — RM ${inv.totalAmount.toFixed(2)}`);
+  showToast(`🧾 ${invoiceNo} created`,'success',3500); viewJobDetail(jobNo);
+}
+// T&C 10 / 13 time limits, shown on the job for reference
+function tncAddWorkingDays(d,n){ const x=new Date(d); let k=0; while(k<n){ x.setDate(x.getDate()+1); if(x.getDay()!==0&&x.getDay()!==6) k++; } return x; } // (addWorkingDays already exists for promised dates — different inputs)
+function jobTncDeadlinesHtml(j){
+  const now=new Date(); const lines=[];
+  if(j.collectedAt){ const dl=tncAddWorkingDays(new Date(j.collectedAt),5); lines.push(`T&amp;C 10 — shortfall / discrepancy to be reported by <b>${fmtDateShort(dl.toISOString())}</b> (5 working days after the items were returned ${fmtDateShort(j.collectedAt)}) ${now<=dl?'<span class="badge badge-green">open</span>':'<span class="badge badge-slate">closed</span>'}`); }
+  const certDates=(j.items||[]).map(it=>it.approvedAt).filter(Boolean).sort(); const last=certDates[certDates.length-1];
+  if(last){ const dl=new Date(last); dl.setDate(dl.getDate()+14); lines.push(`T&amp;C 13 — complaints about results by <b>${fmtDateShort(dl.toISOString())}</b> (2 weeks after the certificate, ${fmtDateShort(last)}) ${now<=dl?'<span class="badge badge-green">open</span>':'<span class="badge badge-slate">closed</span>'}`); }
+  return lines.length?`<div style="margin-top:14px;font-size:12px;line-height:1.8;"><div style="font-weight:700;font-size:12.5px;margin-bottom:2px;">⏱️ Customer time limits</div>${lines.map(l=>`<div>${l}</div>`).join('')}</div>`:'';
+}
+function jobChargesHtml(j){
+  const can=canUseInvoiceSystem(currentUser); const list=j.extraCharges||[]; if(!can) return ''; // money is for billing roles only
+  const pend=list.filter(c=>!c.waived&&!c.invoiceNo); const hasInv=(_invoices||[]).some(v=>v.jobNo===j.jobNo);
+  const reviews=(j.chargeReviews||[]).filter(r=>r.status==='pending');
+  const reviewHtml=can&&reviews.length?`<div style="background:#fff7e6;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;margin:6px 0;">
+      <div style="font-weight:700;font-size:12px;margin-bottom:4px;">To review — charge or not?</div>
+      ${reviews.map(r=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;">
+        <span style="flex:1;">${escapeHtml(CHARGE_REVIEW_LABEL[r.type]||r.type)}${r.itemIdx!=null&&j.items[r.itemIdx]?' — '+escapeHtml(j.items[r.itemIdx].eqName):''}${r.note?` <span style="color:var(--text-muted);">(${escapeHtml(r.note)})</span>`:''}<span style="color:var(--text-muted);"> · ${escapeHtml(USERS[r.by]?.name||r.by||'')}, ${fmtDateShort(r.at)}</span></span>
+        <button class="btn btn-primary btn-sm" onclick="decideChargeReview('${escapeForJsAttr(j.jobNo)}','${r.id}',true)">💵 Charge…</button>
+        <button class="btn btn-outline btn-sm" onclick="decideChargeReview('${escapeForJsAttr(j.jobNo)}','${r.id}',false)">No charge</button></div>`).join('')}
+    </div>`:'';
+  return `<div style="margin-top:14px;"><div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:700;font-size:12.5px;">💵 Extra charges</span>${can?`<button class="btn btn-outline btn-sm" onclick="openAddJobChargeModal('${escapeForJsAttr(j.jobNo)}')">+ Add charge</button>`:''}</div>
+    ${reviewHtml}
+    ${list.length?`<table style="width:100%;font-size:12px;margin-top:6px;border-collapse:collapse;">${list.map(c=>`<tr style="border-bottom:1px solid var(--border);${c.waived?'color:var(--text-muted);text-decoration:line-through;':''}">
+      <td style="padding:4px 2px;">${escapeHtml(c.desc)}</td><td style="text-align:right;white-space:nowrap;">RM ${c.amount.toFixed(2)}</td>
+      <td style="text-align:right;white-space:nowrap;padding-left:8px;">${c.invoiceNo?`<span class="badge badge-green">${escapeHtml(c.invoiceNo)}</span>`:(c.waived?`waived${can?` · <a href="javascript:void(0)" onclick="setJobChargeWaived('${escapeForJsAttr(j.jobNo)}','${c.id}',false)">undo</a>`:''}`:`<span class="badge badge-amber">to invoice</span>${can?` · <a href="javascript:void(0)" onclick="setJobChargeWaived('${escapeForJsAttr(j.jobNo)}','${c.id}',true)">waive</a>`:''}`)}</td></tr>`).join('')}</table>`:'<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">None.</div>'}
+    ${pend.length&&hasInv&&can?`<div style="margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="invoicePendingJobCharges('${escapeForJsAttr(j.jobNo)}')">🧾 Invoice ${pend.length} pending charge${pend.length>1?'s':''}</button> <span style="font-size:11.5px;color:var(--text-muted);">— the job's invoice was already made</span></div>`:''}
+  </div>`;
+}
 // ═══ STANDARD CALIBRATION POINTS ═══
 // Kept on Price Reference → Calibration points, per equipment type (matched by the same names / other
 // names as the standard items, for every service). Two optional ways per type: fixed point lists by
@@ -10502,7 +10750,7 @@ function renderQtv2ItemsList(){
     const head=`<div class="qt-card-head" onclick="if(!event.target.closest('button'))qtToggleFold('${key}')">
         <span style="color:var(--text-muted);width:14px;">${folded?'▸':'▾'}</span>
         <b>${idx+1}</b><span style="font-weight:600;">${escapeHtml(it.eqName||'New item')}</span>
-        ${it.itemCode?`<span class="qt-chip">${escapeHtml(it.itemCode)}</span>`:''}
+        ${it.itemCode?`<span class="qt-chip">${escapeHtml(it.itemCode)}</span>`:''}${qtOutsourcedFlags({_entry:_qtv2SourceEntry},_qtv2DraftItems)[idx]?'<span class="qt-flag warn" title="Subcontracted to a third party (T&amp;C 5)">(*) Outsourced</span>':''}
         <span style="color:var(--text-muted);font-size:12px;">${escapeHtml(service)}${qty>1?` · ×${qty}`:''}</span>
         <span id="qtv2-item-flag-${idx}"></span>
         <span style="margin-left:auto;font-weight:700;" id="qtv2-item-head-total-${idx}">RM ${c.total.toFixed(2)}</span>
@@ -10561,7 +10809,7 @@ function renderQtv2ItemsList(){
           ${qty>1?`<label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:normal;cursor:pointer;"><input type="checkbox" ${same?'checked':''} onchange="toggleQtv2SameCal(${idx},this.checked)"/> Same cal points &amp; resolution for all ${qty} units</label>`:''}
         </div>
         ${same?`<div class="qt-grid unit-target-group" style="grid-template-columns:2fr 1fr 110px;margin-bottom:0;">
-          <div>${L('Calibration points')}<input class="form-control" placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateQtv2ItemField(${idx},'calPoints',this.value)"/></div>
+          <div>${L('Calibration points')}<input class="form-control" data-unit-target data-unit-skip-empty placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateQtv2ItemField(${idx},'calPoints',this.value)"/></div>
           <div>${L('Resolution')}<input class="form-control" data-unit-target placeholder="e.g. 0.1" value="${escapeHtml(it.resolution||'')}" oninput="updateQtv2ItemField(${idx},'resolution',this.value)"/></div>
           <div>${L('Unit')}<select class="form-control unit-picker-select" onchange="applyUnitFromPicker(this)"><option value="">Unit…</option></select></div>
         </div>`:`<div style="font-size:11.5px;color:var(--text-muted);">Different cal points &amp; resolution per unit — fill them in below.</div>`}
@@ -10624,7 +10872,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       return {id:'QI-'+Date.now()+'-'+Math.floor(Math.random()*1000),srcIdx,eqName:it.eqName,brand:it.brand,model:it.model,spec:it.spec,range:it.range,resolution:it.resolution||'',
         calType:it.calType,quantity:parseFloat(it.quantity)||1,unitPrice:it.price||0,
         accreditationRequested:it.accreditationRequested||'',methodRequested:it.methodRequested||'',remark:it.remark||'',
-        calPoints:it.calPoints||'', discount:it.discount||'',
+        calPoints:it.calPoints||'', discount:it.discount||'', outsourced:it.capabilityVerdict==='Can Do (External)',
         extraPointsCount:it.extraPointsCount, extraPointsQty:it.extraPointsQty, extraPointPrice:it.extraPointPrice, extraPointsStd:it.extraPointsStd,
         extraPointsWaived:!!it.extraPointsWaived, extraPointsManual:!!it.extraPointsManual,
         adjustReq:it.adjustReq==='Yes'?'Yes':(it.adjustReq==='No'?'No':undefined), // not stated / not sure -> ask first
@@ -10658,7 +10906,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       <div id="qtv2-cust-summary" style="display:none;background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;"></div>
       <div id="qtv2-cust-fields">
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="qtv2-attention" value="${escapeHtml(existing?.attention||prefillCustomer?.attention||prefillEntry?.prospectAttention||'')}"/></div>
+        <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="qtv2-attention" list="qtv2-contact-list" onchange="applyContactPick(el('qtv2-cust-id')?.value,this.value,{email:'qtv2-email',mobile:'qtv2-mobile'})" value="${escapeHtml(existing?.attention||prefillCustomer?.attention||prefillEntry?.prospectAttention||'')}"/></div>
         <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="qtv2-email" value="${existing?.email||prefillCustomer?.email||prefillEntry?.prospectEmail||''}"/></div>
       </div>
       <div class="form-row">
@@ -10684,7 +10932,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       <div class="qt-sec"><span class="qt-sec-n">3</span>Schedule &amp; site</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Turnaround requested</label>
-          <select class="form-control" id="qtv2-turnaround" onchange="el('qtv2-turnaround-other').style.display=this.value==='Other'?'':'none'">
+          <select class="form-control" id="qtv2-turnaround" onchange="el('qtv2-turnaround-other').style.display=this.value==='Other'?'':'none';qtv2SurchargeUi();updateQtv2GrandTotal()">
             ${(()=>{ const cur=existing?.turnaroundRequested??(prefillEntry?.turnaroundRequested||''); const other=cur&&!QT_TURNAROUNDS.includes(cur);
               return ['',...QT_TURNAROUNDS,'Other'].map(v=>`<option value="${v}" ${(v===cur||(v==='Other'&&other))?'selected':''}>${v||'— Select —'}</option>`).join(''); })()}
           </select></div>
@@ -10692,11 +10940,22 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
           ${(()=>{ const cur=existing?.turnaroundRequested??(prefillEntry?.turnaroundRequested||''); const other=cur&&!QT_TURNAROUNDS.includes(cur);
             return `<input class="form-control" id="qtv2-turnaround-other" placeholder="e.g. before 15 Oct" value="${other?escapeHtml(cur):''}" style="${other?'':'display:none;'}"/>`; })()}</div>
       </div>
+      <div id="qtv2-surcharge-row" style="display:none;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12.5px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span id="qtv2-surcharge-label"></span>
+          <input class="form-control" type="number" min="75" max="100" step="5" id="qtv2-surcharge-pct" value="${escapeHtml(String(existing?.turnaroundSurchargePct||''))}" placeholder="75–100" style="width:90px;padding:4px 8px;" oninput="updateQtv2GrandTotal()"/>
+          <span id="qtv2-surcharge-pct-sign">%</span>
+          <b id="qtv2-surcharge-amt" style="margin-left:auto;"></b>
+        </div>
+        <div id="qtv2-surcharge-note" style="font-size:11.5px;color:#9a3412;margin-top:4px;"></div>
+      </div>
       <div id="qtv2-req-lab" class="form-row">
         <div class="form-group"><label class="form-label">Required by <span style="font-weight:normal;color:var(--text-muted);">(lab items — date the customer needs them back)</span></label><input class="form-control" type="date" id="qtv2-req-date" value="${escapeHtml(existing?.reqDate||prefillEntry?.requiredBy||'')}"/></div>
         <div class="form-group"><label class="form-label">Items delivered &amp; returned by</label>
-          <select class="form-control" id="qtv2-logistics">${['','Customer drops off & collects','Courier (arranged by customer)','Westlab pickup & delivery'].map(v=>`<option value="${v}" ${(existing?.logistics||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}</select></div>
+          <select class="form-control" id="qtv2-logistics" onchange="el('qtv2-transport-row').style.display=this.value==='Westlab pickup & delivery'?'':'none';updateQtv2GrandTotal()">${['','Customer drops off & collects','Courier (arranged by customer)','Westlab pickup & delivery'].map(v=>`<option value="${v}" ${(existing?.logistics||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}</select></div>
       </div>
+      <div id="qtv2-transport-row" class="form-group" style="${(existing?.logistics||'')==='Westlab pickup & delivery'?'':'display:none;'}"><label class="form-label">Transport charge (RM) <span style="font-weight:normal;color:var(--text-muted);">— Westlab pickup &amp; delivery (T&amp;C 9)</span></label>
+        <input class="form-control" type="number" min="0" step="0.01" id="qtv2-transport" value="${escapeHtml(String(existing?.transportCharge||''))}" placeholder="0.00" style="max-width:180px;" oninput="updateQtv2GrandTotal()"/></div>
       <div id="qtv2-req-onsite" style="background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:10px 12px;margin-bottom:12px;">
         <div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">📍 On-site visit</div>
         <div class="form-row">
@@ -10709,6 +10968,14 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
         <div class="form-row">
           <div class="form-group"><label class="form-label">Site contact person</label><input class="form-control" id="qtv2-site-contact" value="${escapeHtml(existing?.siteContact||prefillEntry?.siteContact||'')}"/></div>
           <div class="form-group"><label class="form-label">Site contact mobile</label><input class="form-control" id="qtv2-site-mobile" value="${escapeHtml(existing?.siteMobile||prefillEntry?.siteMobile||'')}"/></div>
+        </div>
+        <div class="form-row" style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 10px;margin-bottom:10px;">
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Transport charge (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="qtv2-onsite-transport" value="${escapeHtml(String(existing?.onsiteTransport??(prefillEntry?.onsiteTransport||'')))}" placeholder="0.00" oninput="updateQtv2GrandTotal()"/></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Area (for the minimum charge)</label>
+            <select class="form-control" id="qtv2-onsite-area" onchange="updateQtv2GrandTotal()">${['','Klang Valley','Outstation'].map(v=>`<option value="${v}" ${(existing?.onsiteArea??(prefillEntry?.onsiteArea||''))===v?'selected':''}>${v||'— Select —'}</option>`).join('')}</select></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Minimum charge for this on-site job (RM)</label>
+            <input class="form-control" type="number" min="0" step="10" id="qtv2-onsite-min" value="${escapeHtml(String(existing?.onsiteMinFee??(prefillEntry?.onsiteMinFee||'')))}" placeholder="e.g. 350" oninput="updateQtv2GrandTotal()"/></div>
+          <div style="grid-column:1 / -1;font-size:11.5px;color:#9a3412;" id="qtv2-onsite-min-note">T&amp;C 11: minimum per on-site job within the Klang Valley is <b>RM350–RM550</b>, depending on the area; outstation jobs are quoted based on location.</div>
         </div>
         <div class="form-group" style="margin-bottom:0;"><label class="form-label">Site access notes</label><textarea class="form-control" id="qtv2-site-access" rows="2" placeholder="e.g. safety induction, PPE, work permit, working hours, parking">${escapeHtml(existing?.siteAccess||prefillEntry?.siteAccess||'')}</textarea></div>
       </div>
@@ -10741,6 +11008,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   _qtv2Folded=new Set(); _qtv2DetailsOpen=new Set();
   renderQtv2ItemsList();
   qtv2RefreshCustomerView();
+  refreshContactSuggestions('qtv2-contact-list',el('qtv2-cust-id')?.value);
 }
 function suggestQtv2Customer(query){
   const box=el('qtv2-cust-suggestions'); if(!box)return;
@@ -10762,6 +11030,7 @@ function selectQtv2Customer(custId){
   if(el('qtv2-fax')) el('qtv2-fax').value=c.fax||'';
   el('qtv2-cust-suggestions').style.display='none';
   qtv2RefreshCustomerView();
+  refreshContactSuggestions('qtv2-contact-list',el('qtv2-cust-id')?.value);
 }
 // An existing customer's details are already filled in — show them as a one-line summary with
 // "Edit details" instead of six open boxes. (All the boxes stay in the form, so saving is unchanged.)
@@ -10802,6 +11071,13 @@ async function saveQuotationV2(quotationId){
   q.items.forEach(it=>{ delete it._noAutoCode; });
   q.yourRef=el('qtv2-your-ref')?.value.trim()||'';
   q.ourRef=el('qtv2-our-ref')?.value.trim()||'';
+  const tselK=qtTurnaroundKind(el('qtv2-turnaround')?.value||'');
+  if(tselK==='Express'){ const pv=parseFloat(el('qtv2-surcharge-pct')?.value); if(!(pv>=75&&pv<=100)){ alert('Express service: please choose the surcharge (75–100%).'); return; } }
+  q.turnaroundSurchargePct=tselK==='Urgent'?50:(tselK==='Express'?parseFloat(el('qtv2-surcharge-pct').value):null);
+  q.transportCharge=(el('qtv2-logistics')?.value==='Westlab pickup & delivery')?(parseFloat(el('qtv2-transport')?.value)||0):0;
+  const qHasOnsite=(_qtv2DraftItems||[]).some(it=>it.calType==='Onsite');
+  q.onsiteArea=qHasOnsite?(el('qtv2-onsite-area')?.value||''):''; q.onsiteMinFee=qHasOnsite?(parseFloat(el('qtv2-onsite-min')?.value)||0):0;
+  q.onsiteTransport=qHasOnsite?(parseFloat(el('qtv2-onsite-transport')?.value)||0):0;
   const tsel=el('qtv2-turnaround')?.value||'';
   q.turnaroundRequested=tsel==='Other'?(el('qtv2-turnaround-other')?.value.trim()||''):tsel;
   const hasOnsite=q.items.some(it=>it.calType==='Onsite'), hasLab=q.items.some(it=>it.calType!=='Onsite');
@@ -10851,7 +11127,7 @@ function renderQuotationsV2Page(){
   box.innerHTML=`<div class="table-wrap"><table>
     <thead><tr><th>Quotation No.</th><th>Customer</th><th>Items</th><th>Total (RM)</th><th>Status</th><th>Created</th><th>PO</th><th>Actions</th></tr></thead>
     <tbody>${list.map(q=>{
-      const total=qtQuotationTotal(q.items);
+      const total=qtGrandTotal(q);
       return `<tr>
         <td style="font-weight:700;">${q.quotationNo}</td>
         <td>${escapeHtml(q.custName)}</td>
@@ -10946,8 +11222,8 @@ function aqSelections(){
 }
 function aqUpdatePoValue(){
   const q=_quotationsV2.find(x=>x.id===_acceptQuotationId); const box=el('aq-po-value'); if(!q||!box) return;
-  const sel=aqSelections(); const full=qtQuotationTotal(q.items);
-  const val=sel.filter(x=>x.on).reduce((s,x)=>{ const it=q.items[x.i]; const n=Math.min(x.qty,parseInt(it.quantity)||1); return s+qtLineCalc({...it,quantity:n,socUnitsNeeded:Math.min(qtSocUnits(it),n)}).total; },0);
+  const sel=aqSelections(); const full=qtGrandTotal(q);
+  const val=qtValueOf(q,qtOrderedItems(q,sel));
   box.innerHTML=`PO value: RM ${val.toFixed(2)}${Math.abs(val-full)>0.004?` <span style="font-weight:normal;color:var(--text-muted);">(quotation RM ${full.toFixed(2)} — partial)</span>`:''}`;
 }
 let _acceptQuotationId=null;
@@ -11069,7 +11345,7 @@ async function exportQuotationV2Pdf(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   const s=_settings;
   const items=(q.items||[]).filter(it=>it&&it.eqName);
-  const subtotal=qtQuotationTotal(items);
+  const subtotal=qtGrandTotal(q,items);
   const sstAmount=s.sstEnabled?subtotal*0.08:0;
   const total=subtotal+sstAmount;
   const creatorStaff=(_staff||[]).find(x=>x.username===q.createdBy);
@@ -11123,6 +11399,7 @@ async function exportQuotationV2Pdf(quotationId){
   const tableHead=`<tr style="border-top:1px solid #000;border-bottom:1px solid #000;"><th style="${TH}">Item</th><th style="${TH}">Item Code</th><th style="${TH}">Description</th><th style="${TH}text-align:center;">Qty</th><th style="${TH}">Unit Price</th><th style="${TH}">Disc</th><th style="${TH}text-align:right;">Amount</th></tr>`;
   const TD='padding:3px 3px 5px;vertical-align:top;';
   // Build every row (each quotation line, then its SoC lines)
+  const outFlags=qtOutsourcedFlags(q,items);
   const groups=items.map((it,i)=>{
     const c=qtLineCalc(it);
     const units=qtUnitDetails(it);
@@ -11145,7 +11422,7 @@ async function exportQuotationV2Pdf(quotationId){
     qtRequirementLines(it).forEach(x=>L.push(esc(x)));
     const discTxt=c.baseDisc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.baseDisc.toFixed(2)):'';
     const rows=[`<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(it.itemCode||'')}</td>
-      <td style="${TD}"><div>${esc(it.eqName)} ${qtServiceTag(it)}</div><div style="padding-left:6px;">${L.join('<br/>')}</div></td>
+      <td style="${TD}"><div>${outFlags[i]?'* ':''}${esc(it.eqName)} ${qtServiceTag(it)}</div><div style="padding-left:6px;">${L.join('<br/>')}</div></td>
       <td style="${TD}text-align:center;white-space:nowrap;">${c.qty.toFixed(2)} UNIT</td><td style="${TD}">${money(c.price)}</td><td style="${TD}">${discTxt}</td><td style="${TD}text-align:right;">${money(c.baseNet)}</td></tr>`];
     if(c.extra.gross) rows.push(`<tr><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"><div style="padding-left:6px;">Additional calibration points${it.extraPointsStd?` (beyond the standard ${it.extraPointsStd} per unit)`:''}</div></td>
       <td style="${TD}text-align:center;white-space:nowrap;">${Number(c.extra.n).toFixed(2)} POINT</td><td style="${TD}">${money(c.extra.price)}</td><td style="${TD}">${c.extra.disc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.extra.disc.toFixed(2)):''}</td><td style="${TD}text-align:right;">${money(c.extra.net)}</td></tr>`);
@@ -11153,6 +11430,8 @@ async function exportQuotationV2Pdf(quotationId){
       <td style="${TD}text-align:center;white-space:nowrap;">${Number(l.units).toFixed(2)} UNIT</td><td style="${TD}">${money(l.price)}</td><td style="${TD}"></td><td style="${TD}text-align:right;">${money(l.amount)}</td></tr>`));
     return rows;
   });
+  qtQuoteCharges(q,items).forEach(ch=>groups.push([`<tr><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"><div>${esc(ch.label)}</div></td>
+      <td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}text-align:right;">${money(ch.amount)}</td></tr>`]));
   const totalsRows=(s.sstEnabled?`<tr><td style="padding:2px 8px;font-weight:bold;">Subtotal (MYR)</td><td style="padding:2px 6px;text-align:right;">${subtotal.toFixed(2)}</td></tr>
       <tr><td style="padding:2px 8px;font-weight:bold;">SST (8%)</td><td style="padding:2px 6px;text-align:right;">${sstAmount.toFixed(2)}</td></tr>`:'')+
     `<tr><td style="padding:2px 8px;font-weight:bold;">Total (MYR)</td><td style="padding:2px 6px;text-align:right;font-weight:bold;border:1px solid #000;min-width:130px;">${total.toFixed(2)}</td></tr>`;
@@ -11300,6 +11579,11 @@ let _startingFromQuotationV2Id=null;
 async function createJobFromQuotationV2(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   if(q.createdJobNo){alert(`A job has already been created from this quotation: ${q.createdJobNo}`);return;}
+  if(q.status!=='Accepted'){
+    if(!isAdmin(currentUser)){ alert(`${q.quotationNo} hasn't been accepted yet. Work starts only after the customer acknowledges the quotation or sends a PO (T&C 4) — use "Mark Accepted" first.`); return; }
+    if(!confirm(`${q.quotationNo} hasn't been accepted (no PO / acknowledgement recorded — T&C 4).\n\nCreate the job anyway as an Admin override? This will be recorded in the audit log.`)) return;
+    addAudit('⚠️',`Job created from ${q.quotationNo} before acceptance — Admin override by ${USERS[currentUser]?.name||currentUser}`);
+  }
   if(!confirm(`Create a new job from ${q.quotationNo}? This will open Job Creation pre-filled with this quotation's items.`))return;
   _startingFromQuotationV2Id=quotationId;
   showView('equipment');
@@ -11942,7 +12226,7 @@ function renderTrackerPage(type){
       const items=e.items||[];
       const anyCleared=items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict));
       const linkedHtml=type==='sales'
-        ?(e.jobNo?`<a href="#" onclick="event.preventDefault();showView('equipment');el('equipment-search').value='${e.jobNo}';renderEquipmentTable();">🔧 ${e.jobNo}</a>`:e.custId?'👤 Linked customer':'—')
+        ?(e.jobNo?`<a href="#" onclick="event.preventDefault();dashOpenJob('${escapeForJsAttr(e.jobNo)}');">🔧 ${escapeHtml(e.jobNo)}</a>`:e.custId?'👤 Linked customer':'—')
         :(e.refEqId?`<a href="#" onclick="event.preventDefault();showView('ref-eq');">🔩 Ref Equipment</a>`:'—');
       const totalPrice=items.reduce((s,it)=>s+(it.price||0),0);
       const externalCheckButtons=type==='sales'?items.map((it,idx)=>{
@@ -11998,12 +12282,21 @@ function stGroupOf(status){ return Object.keys(ST_GROUPS).find(g=>ST_GROUPS[g].i
 // enquiry's own prices (after discount).
 function stEntryValue(e){
   const q=e.linkedQuotationId?(_quotationsV2||[]).find(x=>x.id===e.linkedQuotationId):null;
-  if(q){ const po=qtPoValue(q); return po!=null?po:qtQuotationTotal(q.items); }
+  if(q){ const po=qtPoValue(q); return po!=null?po:qtGrandTotal(q); }
   return (e.items||[]).reduce((s,it)=>s+qtLineCalc({...it,unitPrice:it.price}).net,0);
 }
+function qtOrderedItems(q,sel){ // the quotation's items as ordered (sel: [{i,on,qty}] from the accept window, or the saved PO flags)
+  return (q.items||[]).map((it,i)=>{ if(!it||!it.eqName) return null;
+    const on=sel?sel.find(x=>x.i===i)?.on:(it.poAccepted!==false); if(!on) return null;
+    const n=Math.max(1,Math.min(sel?(sel.find(x=>x.i===i)?.qty||1):(parseInt(it.poQty)||parseInt(it.quantity)||1),parseInt(it.quantity)||1));
+    return {...it,quantity:n,socUnitsNeeded:Math.min(qtSocUnits(it),n)}; });
+}
+function qtValueOf(q,list){ const its=list.filter(Boolean); const flagsAll=qtOutsourcedFlags(q,q.items);
+  const withFlags=list.map((it,i)=>it?{...it,outsourced:it.outsourced||flagsAll[i]}:null).filter(Boolean);
+  return qtQuotationTotal(its)+qtQuoteCharges(q,withFlags).reduce((s2,c)=>s2+c.amount,0); }
 function qtPoValue(q){
   if(!q||q.status!=='Accepted'||!(q.items||[]).some(it=>it.poAccepted!==undefined)) return null;
-  return (q.items||[]).filter(it=>it.eqName&&it.poAccepted!==false).reduce((s,it)=>s+qtLineCalc({...it,quantity:parseInt(it.poQty)||parseInt(it.quantity)||1,socUnitsNeeded:Math.min(qtSocUnits(it),parseInt(it.poQty)||parseInt(it.quantity)||1)}).total,0);
+  return qtValueOf(q,qtOrderedItems(q,null));
 }
 function stIsLost(e){ const it=e.items||[]; return e.status==='Closed'&&it.length&&it.every(x=>x.outcome==='Lost'); }
 function stStatusStyle(e){
@@ -12053,7 +12346,7 @@ function stOpenRowMenu(ev,entryId){
   if(items.some(it=>it.capabilityVerdict)) html+=stMenuItem('📄 Contract Review Form (PDF)',`exportEntryCapabilityReviewPdf('${e.id}')`);
   if(e.linkedQuotationId&&_quotationsV2.some(q=>q.id===e.linkedQuotationId)) html+=stMenuItem('📄 Open quotation',`showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')`);
   else if(items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict))&&!['open','quoted'].includes(stGroupOf(e.status))) html+=stMenuItem('📄 Create quotation',`openQuotationV2Modal(null,'${e.id}')`);
-  if(e.jobNo) html+=stMenuItem('🔧 Open job '+escapeHtml(e.jobNo),`showView('equipment');el('equipment-search').value='${escapeForJsAttr(e.jobNo)}';renderEquipmentTable();`);
+  if(e.jobNo) html+=stMenuItem('🔧 Open job '+escapeHtml(e.jobNo),`viewJobDetail('${escapeForJsAttr(e.jobNo)}')`);
   items.forEach((it,idx)=>{ if(it.capabilityVerdict==='Cannot Do') html+=stMenuItem('🔄 Resubmit for review: '+escapeHtml(it.eqName),`resubmitCapabilityForReview('${e.id}',${idx})`); });
   html+=(html?'<hr/>':'')+stMenuItem('✏️ Edit entry',`openTrackerEntryModal('sales','${e.id}')`)+stMenuItem('🗑 Delete entry',`deleteTrackerEntry('sales','${e.id}')`,{danger:true});
   stShowMenu(ev.currentTarget,html);
@@ -12135,7 +12428,9 @@ function renderSalesTrackerList(readOnly){
       const step=SALES_STAGES.indexOf(e.status)+1;
       const received=fmtDateShort(e.enquiryDate||e.createdAt).replace(/ \d{4}$/,'');
       const qn=e.linkedQuotationId?((_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||''):'';
-      const tags=[qn?`📄 ${escapeHtml(qn)}`:'',e.jobNo?`🔧 ${escapeHtml(e.jobNo)}`:''].filter(Boolean).map(t=>`<span style="font-size:10.5px;color:var(--text-muted);background:var(--bg);border-radius:6px;padding:1px 6px;margin-right:4px;">${t}</span>`).join('');
+      const tagStyle='font-size:10.5px;color:var(--text-muted);background:var(--bg);border-radius:6px;padding:1px 6px;margin-right:4px;text-decoration:none;';
+      const tags=(qn?`<a href="javascript:void(0)" style="${tagStyle}" title="Open quotation" onclick="openQuotationV2Modal('${escapeForJsAttr(e.linkedQuotationId||'')}')">📄 ${escapeHtml(qn)}</a>`:'')
+        +(e.jobNo?`<a href="javascript:void(0)" style="${tagStyle}" title="Open job" onclick="viewJobDetail('${escapeForJsAttr(e.jobNo)}')">🔧 ${escapeHtml(e.jobNo)}</a>`:'');
       const person=USERS[e.salesPersonnel]?.name||e.salesPersonnel||'';
       const val=stEntryValue(e);
       return `<tr>
@@ -12196,7 +12491,7 @@ function openTrackerEntryModal(type,entryId){
         <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">Contact details — for a new prospect; filled in automatically when you pick an existing customer</div>
         <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="tk-prospect-address" rows="2">${escapeHtml(existing?.prospectAddress||'')}</textarea></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="tk-prospect-attention" value="${escapeHtml(existing?.prospectAttention||'')}"/></div>
+          <div class="form-group"><label class="form-label">Attention</label><input class="form-control" id="tk-prospect-attention" list="tk-contact-list" onchange="applyContactPick(el('tk-cust-id')?.value,this.value,{role:'tk-prospect-designation',email:'tk-prospect-email',mobile:'tk-prospect-phone'})" value="${escapeHtml(existing?.prospectAttention||'')}"/></div>
           <div class="form-group"><label class="form-label">Designation</label><input class="form-control" id="tk-prospect-designation" placeholder="e.g. QA Manager" value="${escapeHtml(existing?.prospectDesignation||'')}"/></div>
         </div>
         <div class="form-row">
@@ -12242,6 +12537,12 @@ function openTrackerEntryModal(type,entryId){
           <div class="form-group"><label class="form-label">Site contact person</label><input class="form-control" id="tk-site-contact" value="${escapeHtml(existing?.siteContact||'')}"/></div>
           <div class="form-group"><label class="form-label">Site contact mobile</label><input class="form-control" id="tk-site-mobile" value="${escapeHtml(existing?.siteMobile||'')}"/></div>
         </div>
+        <div class="form-row" style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 10px;margin-bottom:10px;">
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Transport charge (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="tk-onsite-transport" value="${escapeHtml(String(existing?.onsiteTransport||''))}" placeholder="0.00"/></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Area (for the minimum)</label><select class="form-control" id="tk-onsite-area">${['','Klang Valley','Outstation'].map(v=>`<option value="${v}" ${(existing?.onsiteArea||'')===v?'selected':''}>${v||'— Select —'}</option>`).join('')}</select></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Minimum charge (RM)</label><input class="form-control" type="number" min="0" step="10" id="tk-onsite-min" value="${escapeHtml(String(existing?.onsiteMinFee||''))}" placeholder="e.g. 350"/></div>
+          <div style="grid-column:1 / -1;font-size:11.5px;color:#9a3412;">T&amp;C 11: minimum per on-site job within the Klang Valley is <b>RM350–RM550</b>, depending on the area; outstation jobs are quoted based on location.</div>
+        </div>
         <div class="form-group" style="margin-bottom:0;"><label class="form-label">Site access notes</label><textarea class="form-control" id="tk-site-access" rows="2" placeholder="e.g. safety induction, PPE, work permit, working hours, parking">${escapeHtml(existing?.siteAccess||'')}</textarea></div>
       </div>
       <div style="display:flex;align-items:baseline;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--navy);"><span style="background:var(--navy);color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">4</span><span style="font-size:13px;font-weight:700;color:var(--navy);">Internal</span></div>
@@ -12259,7 +12560,13 @@ function openTrackerEntryModal(type,entryId){
         </select>
       </div>
       </div>
-      <div class="form-group"><label class="form-label">Linked Job No. (optional)</label><input class="form-control" id="tk-jobno" value="${existing?.jobNo||''}" placeholder="e.g. WL26-00123"/></div>
+      ${existing?.jobNo?`<div class="form-group"><label class="form-label">Linked job</label>
+        <div style="display:flex;align-items:center;gap:8px;"><a href="javascript:void(0)" onclick="viewJobDetail('${escapeForJsAttr(existing.jobNo)}')" style="font-weight:700;">🔧 ${escapeHtml(existing.jobNo)}</a>
+        <span style="font-size:11.5px;color:var(--text-muted);">— set automatically when the job was created from the quotation</span>
+        <a href="javascript:void(0)" style="margin-left:auto;font-size:12px;" onclick="const f=el('tk-jobno');f.type='text';f.focus();this.remove();">change</a></div>
+        <input class="form-control" type="hidden" id="tk-jobno" value="${escapeHtml(existing.jobNo)}" placeholder="e.g. WL26-00123" style="margin-top:6px;"/></div>`
+      :(existing?`<div class="form-group"><label class="form-label">Linked job <span style="font-weight:normal;color:var(--text-muted);">(filled in automatically when a job is created from the quotation — only type one to link an older job)</span></label><input class="form-control" id="tk-jobno" placeholder="e.g. WL26-00123"/></div>`
+      :`<input type="hidden" id="tk-jobno" value=""/>`)}
       ${existing?`      <div class="form-row">
         <div class="form-group"><label class="form-label">Month <span class="req">*</span></label><input class="form-control" type="month" id="tk-month" value="${existing?.month||toLocalDateStr(new Date()).slice(0,7)}"/></div>
         <div class="form-group"><label class="form-label">Status</label>
@@ -12424,7 +12731,7 @@ function renderSalesItemsList(){
         </div>
       </div>
       <div class="unit-target-group" style="background:#fff;border-radius:6px;padding:8px;margin-bottom:6px;">
-        <label class="form-label" style="margin-bottom:4px;">Unit <span style="font-weight:normal;color:var(--text-muted);">(applies to Range, Spec and Resolution below)</span></label>
+        <label class="form-label" style="margin-bottom:4px;">Unit <span style="font-weight:normal;color:var(--text-muted);">(applies to Range, Spec, Resolution and Calibration points below)</span></label>
         <select class="form-control unit-picker-select" style="margin-bottom:6px;" onchange="applyUnitFromPicker(this)">
           <option value="">Unit…</option>
         </select>
@@ -12433,8 +12740,8 @@ function renderSalesItemsList(){
           <div class="form-group"><label class="form-label">Spec <span style="font-weight:normal;color:var(--text-muted);">(± added automatically)</span></label><input class="form-control" data-unit-target value="${it.spec||''}" oninput="updateSalesItemSpec(${idx},this)"/></div>
           <div class="form-group"><label class="form-label">Resolution / readability</label><input class="form-control" data-unit-target placeholder="e.g. 0.1" value="${escapeHtml(it.resolution||'')}" oninput="updateSalesItemField(${idx},'resolution',this.value)"/></div>
         </div>
+      <div class="form-group" style="margin:6px 0 0;"><label class="form-label">Calibration points <span style="font-weight:normal;color:var(--text-muted);">(if the customer has said)</span></label><input class="form-control" data-unit-target data-unit-skip-empty id="sales-item-calpts-${idx}" placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateSalesItemField(${idx},'calPoints',this.value);updateSalesItemTotal(${idx})"/><div id="sales-item-cal-sug-${idx}">${salesCalSugHtml(it,idx)}</div></div>
       </div>
-      <div class="form-group"><label class="form-label">Calibration points <span style="font-weight:normal;color:var(--text-muted);">(if the customer has said)</span></label><input class="form-control" id="sales-item-calpts-${idx}" placeholder="e.g. 0, 50, 100, 200 g" value="${escapeHtml(it.calPoints||'')}" oninput="updateSalesItemField(${idx},'calPoints',this.value);updateSalesItemTotal(${idx})"/><div id="sales-item-cal-sug-${idx}">${salesCalSugHtml(it,idx)}</div></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Adjustment wanted?</label>
           <select class="form-control" onchange="updateSalesItemField(${idx},'adjustReq',this.value)">
@@ -12494,6 +12801,25 @@ function suggestTrackerName(type,query){
 // Sales entry: the on-site block only shows when an item is on-site (its fields always stay in the
 // form, so nothing typed is lost when switching an item between Lab and On-site).
 function tkRefreshOnsiteBlock(){ const b=el('tk-onsite-block'); if(b) b.style.display=(_salesDraftItems||[]).some(it=>it.calType==='Onsite')?'':'none'; }
+// ── Other contacts per customer (name, role, email, mobile) ──
+function custContactRowHtml(c){ const v=x=>escapeHtml(x||'');
+  return `<div class="cust-contact-row" style="display:grid;grid-template-columns:1.2fr 1fr 1.4fr 1fr auto;gap:6px;margin-bottom:6px;">
+    <input class="form-control cc-name" placeholder="Name" value="${v(c.name)}"/><input class="form-control cc-role" placeholder="Role (e.g. Purchasing)" value="${v(c.role)}"/>
+    <input class="form-control cc-email" type="email" placeholder="Email" value="${v(c.email)}"/><input class="form-control cc-mobile" placeholder="Mobile" value="${v(c.mobile)}"/>
+    <button type="button" class="btn btn-outline btn-sm" style="color:var(--red);" onclick="this.parentElement.remove()">✕</button></div>`; }
+function custAddContactRow(c){ el('cust-contacts')?.insertAdjacentHTML('beforeend',custContactRowHtml(c||{})); }
+function custSetContacts(list){ const b=el('cust-contacts'); if(!b) return; b.innerHTML=''; (list||[]).forEach(custAddContactRow); }
+function custReadContacts(){ return [...document.querySelectorAll('#cust-contacts .cust-contact-row')].map(r=>({name:r.querySelector('.cc-name').value.trim(),role:r.querySelector('.cc-role').value.trim(),email:r.querySelector('.cc-email').value.trim(),mobile:r.querySelector('.cc-mobile').value.trim()})).filter(c=>c.name||c.email); }
+// Everyone at a customer: the main contact first, then the others
+function customerContacts(custId){ const c=(_customers||[]).find(x=>x.id===custId); if(!c) return [];
+  return [...(c.attention?[{name:c.attention,role:c.designation||'Main contact',email:c.email||'',mobile:c.mobile||''}]:[]),...(c.contacts||[])]; }
+// Attention box on enquiries / quotations: suggest this customer's contacts, and fill their details when picked
+function refreshContactSuggestions(listId,custId){
+  let dl=document.getElementById(listId); if(!dl){ dl=document.createElement('datalist'); dl.id=listId; document.body.appendChild(dl); }
+  dl.innerHTML=customerContacts(custId).map(c=>`<option value="${escapeHtml(c.name)}">${escapeHtml([c.role,c.email].filter(Boolean).join(' · '))}</option>`).join('');
+}
+function applyContactPick(custId,name,map){ const c=customerContacts(custId).find(x=>x.name===name); if(!c) return;
+  Object.entries(map).forEach(([k,id])=>{ const f=el(id); if(f&&c[k]) f.value=c[k]; }); }
 function custToggleDealerRow(){ const r=el('cust-dealer-disc-row'); if(r) r.style.display=el('cust-type-dealer')?.checked?'':'none'; }
 function selectTrackerSupplier(supId,name){
   el('tk-name').value=name; if(el('tk-supplier-id')) el('tk-supplier-id').value=supId; el('tk-name-suggestions').style.display='none';
@@ -12526,6 +12852,7 @@ function selectTrackerCustomer(custId,name){
   if(el('tk-type-direct')) el('tk-type-direct').checked=(c.custTypes||[]).includes('Direct');
   if(el('tk-type-enduser-only')) el('tk-type-enduser-only').checked=(c.custTypes||[]).includes('EndUserOnly');
   if(typeof refreshSalesItemPricing==='function') (_salesDraftItems||[]).forEach((_,k)=>refreshSalesItemPricing(k)); // price suggestions for this customer
+  refreshContactSuggestions('tk-contact-list',custId);
   if(el('tk-prospect-designation')&&!el('tk-prospect-designation').value) el('tk-prospect-designation').value=c.designation||'';
   tkRefreshContactView();
 }
@@ -12559,6 +12886,11 @@ async function autoCreateCustomerFromProspect(entry){
   addAudit('🏢',`Customer <strong>${entry.name}</strong> auto-created from Sales Tracker enquiry`);
 }
 async function saveTrackerEntry(type,entryId){
+  // T&C 11 reminder — asked before anything is changed, so Cancel leaves nothing half-saved
+  if(type==='sales'&&(_salesDraftItems||[]).some(it=>it.calType==='Onsite')){
+    const ar=el('tk-onsite-area')?.value||'', mn=parseFloat(el('tk-onsite-min')?.value)||0;
+    if(ar==='Klang Valley'&&mn&&(mn<350||mn>550)&&!confirm(`The on-site minimum of RM ${mn.toFixed(2)} is outside the Klang Valley range (RM350–550, T&C 11). Save anyway?`)) return;
+  }
   if(type==='sales'&&!canUseSalesTracker(currentUser)){alert('Quality Manager has view-only access to Sales Tracker.');return;}
   const name=el('tk-name').value.trim();
   if(!name){alert(`Please enter the ${type==='sales'?'customer/prospect':'vendor'} name.`);return;}
@@ -12607,6 +12939,9 @@ async function saveTrackerEntry(type,entryId){
     const anyOnsite=(_salesDraftItems||[]).some(it=>it.calType==='Onsite');
     ['onsiteStart:tk-onsite-start','onsiteEnd:tk-onsite-end','siteArea:tk-site-area','siteAddress:tk-site-address','siteContact:tk-site-contact','siteMobile:tk-site-mobile','siteAccess:tk-site-access']
       .forEach(pair=>{ const [k,id]=pair.split(':'); entry[k]=anyOnsite?(el(id)?.value.trim()||''):''; });
+    entry.onsiteTransport=anyOnsite?(parseFloat(el('tk-onsite-transport')?.value)||0):0;
+    entry.onsiteArea=anyOnsite?(el('tk-onsite-area')?.value||''):'';
+    entry.onsiteMinFee=anyOnsite?(parseFloat(el('tk-onsite-min')?.value)||0):0;
     entry.prospectPhone=el('tk-prospect-phone')?.value.trim()||'';
     entry.prospectEmail=el('tk-prospect-email')?.value.trim()||'';
     entry.prospectTypes=[
@@ -15276,6 +15611,7 @@ async function confirmCustomerNotReady(){
     it.customerNotReadyDate=today;
     it.customerNotReadyCause=cause;
     it.customerNotReadySignature=sigUrl;
+    if(cause!=='Internal'&&it.calType==='Onsite') addChargeReviewTo(job,{type:'notReady',itemIdx:_cnrItemIdx,note:reason});
     job.history.push({
       action:`Item ${it.itemNo} — Customer Not Ready: "${reason}"${notes?' ('+notes+')':''}. Cause: ${cause==='Internal'?'Our side':'Customer side'}. Flagged for office to reschedule.`,
       by:currentUser,time:new Date().toISOString()
@@ -15561,14 +15897,20 @@ function renderMyJobs(){
     }
   }
 
-  container.innerHTML=myItems.map(({job:j,item,idx})=>{
+  // Items waiting for approval can't be worked on — keep them together at the bottom
+  const waiting=myItems.filter(x=>x.item.status==='Pending Approval');
+  const active=myItems.filter(x=>x.item.status!=='Pending Approval');
+  myItems.length=0; myItems.push(...active,...waiting);
+  const firstWaiting=active.length;
+  container.innerHTML=myItems.map(({job:j,item,idx},pos)=>{
+    const sectionHead=pos===firstWaiting&&waiting.length?`<div style="margin:18px 0 8px;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);">📬 Waiting for approval (${waiting.length})</div>`:'';
     const cd=getCheckinData(j.jobNo,idx);
     // If this job is mixed (has both Lab and Onsite items), flag any sibling item with a
     // different calType — since My Jobs is a flat, FIFO-sorted list, these two items could
     // end up far apart on screen with nothing else showing they're actually the same visit.
     const siblingItems=(j.items||[]).filter((it,i)=>i!==idx&&it.calType!==item.calType);
     const mixedJobNote=siblingItems.length?`<div style="font-size:11px;color:#7c2d12;background:#fff7ed;border-radius:6px;padding:4px 8px;margin-bottom:6px;">🔗 Part of the same job as: ${siblingItems.map(it=>`${escapeHtml(it.eqName)} (${it.calType})`).join(', ')} — Job ${j.jobNo}</div>`:'';
-    const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&item.status!=='Completed'&&item.status!=='KIV';
+    const isOverdue=j.promisedDate&&new Date(j.promisedDate+'T00:00:00')<today&&!['Completed','KIV','Pending Approval','Returned - Abnormal'].includes(item.status); // only work the technician can act on
     let slaHtml='';
     if(item.status==='KIV'&&item.kivStartDate){
       // Show KIV countdown — max 7 working days
@@ -15582,15 +15924,15 @@ function renderMyJobs(){
       if(diff<0) slaHtml=`<span class="badge badge-red" style="margin-left:6px;">🚨 ${Math.abs(diff)}d overdue</span>`;
       else if(diff===0) slaHtml=`<span class="badge badge-amber" style="margin-left:6px;">⚠️ Due today</span>`;
       else if(diff<=2) slaHtml=`<span class="badge badge-amber" style="margin-left:6px;">⏰ ${diff}d left</span>`;
-      else slaHtml=`<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">Ready by ${j.promisedDate}</span>`;
+      else slaHtml=`<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">Ready by ${fmtDateShort(j.promisedDate)}</span>`;
     }
     const histId=`hist-${j.jobNo.replace(/[^a-z0-9]/gi,'_')}_${idx}`;
     const histRows=(j.history||[]).filter(h=>h.action&&h.action.includes(`Item ${item.itemNo}`)).slice(-5).reverse()
       .map(h=>`<div style="font-size:11px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid var(--border);"><span style="color:var(--navy);font-weight:600;">${h.action}</span> — ${h.by||''} <span style="float:right;">${h.time?h.time.split('T')[0]:''}</span></div>`).join('');
-    return `
+    return `${sectionHead}
     <div class="approval-card ${isOverdue?'urgent':''}" style="${isOverdue?'border:1px solid var(--red);':''}">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">
-        <strong style="color:var(--navy);">${j.jobNo}</strong> · ${escapeHtml(j.custName)} · Priority: ${j.priority}
+        <strong style="color:var(--navy);">${j.jobNo}</strong> · ${escapeHtml(j.custName)}${j.priority?' · Priority: '+j.priority:''}
         ${item.calType==='Onsite'?`<span class="badge badge-teal" style="margin-left:6px;font-size:10px;">📍 Onsite</span>`:''}
       </div>
       ${mixedJobNote}
@@ -15932,8 +16274,10 @@ async function viewJobDetail(jobNo){
   if(isAdmin(currentUser))
     footerBtns+=`<button class="btn btn-amber" onclick="closeModal('modal-view-job');openEditJobModal('${j.jobNo}')">✏️ Edit Job</button>`;
   if(j.status==='Completed'&&items.some(it=>it.calData))
-    footerBtns+=`<button class="btn btn-outline" onclick="closeModal('modal-view-job');showView('equipment');el('equipment-search').value='${j.jobNo}';renderEquipmentTable();">📄 View in Equipment Records</button>`;
+    footerBtns+=`<button class="btn btn-outline" onclick="closeModal('modal-view-job');showView('equipment');if(el('eq-filter-status'))el('eq-filter-status').value='';el('eq-search').value='${j.jobNo}';renderEquipmentTable();">📄 View in Equipment Records</button>`;
   el('view-job-footer').innerHTML=`<button class="btn btn-outline" onclick="closeModal('modal-view-job')">Close</button>${footerBtns}`;
+  const vb=el('view-job-body'); if(vb){ vb.querySelectorAll('.job-tnc-extra').forEach(x=>x.remove()); vb.insertAdjacentHTML('beforeend',`<div class="job-tnc-extra">${jobChargesHtml(j)}${jobTncDeadlinesHtml(j)}${jobNcrHtml(j)}
+      <div style="margin-top:10px;"><button class="btn btn-outline btn-sm" onclick="closeModal('modal-view-job');openRaiseNcr({jobNo:'${escapeForJsAttr(j.jobNo)}',custName:${JSON.stringify(j.custName||'').replace(/"/g,'&quot;')}})">⚠️ Raise NC / complaint on this job</button></div></div>`); }
   openModal('modal-view-job');
   }catch(_err){
     console.error("viewJobDetail error:",_err);
@@ -16342,6 +16686,16 @@ function renderNeedsAttention(){
     if(pc) items.push({icon:'🧾',text:`${pc} staff claim${pc>1?'s':''} waiting for approval`,view:'claims'});
     const pl=(_leaveRecords||[]).filter(r=>r.status==='Pending').length;
     if(pl) items.push({icon:'🌴',text:`${pl} leave request${pl>1?'s':''} waiting for approval`,view:'leave'});
+  }
+  if(typeof canUseInvoiceSystem==='function'&&canUseInvoiceSystem(currentUser)){
+    const pr=pendingChargeReviews();
+    if(pr.length) items.push({icon:'💵',text:`${pr.length} possible charge${pr.length>1?'s':''} to review (${[...new Set(pr.map(x=>CHARGE_REVIEW_LABEL[x.r.type]))].join(', ').toLowerCase()})`,onclick:`viewJobDetail('${escapeForJsAttr(pr[0].j.jobNo)}')`});
+  }
+  if(typeof _ncrs!=='undefined'){
+    const mine=_ncrs.filter(n=>n.status!=='Closed'&&n.actionOwner===currentUser);
+    if(mine.length) items.push({icon:'🛠️',text:`${mine.length} corrective action${mine.length>1?'s':''} assigned to you${mine.some(ncrOverdue)?' (some overdue)':''}`,view:'capa',level:mine.some(ncrOverdue)?'high':''});
+    if(canManageNcr(currentUser)){ const op=_ncrs.filter(n=>n.status!=='Closed'); const ov=op.filter(ncrOverdue);
+      if(op.length) items.push({icon:'⚠️',text:`${op.length} open nonconformance${op.length>1?'s':''} / complaint${op.length>1?'s':''}${ov.length?` — ${ov.length} with overdue actions`:''}`,view:'capa',level:ov.length?'high':''}); }
   }
   items.forEach(i=>{ if(i.icon==='🚨') i.level='high'; });
   const rank=i=>i.icon==='🚨'?0:(i.level==='high'?1:2); // overdue first, then approvals, then everything else
@@ -18115,7 +18469,7 @@ function openAddCustomerModal(){
   el('cust-type-dealer').checked=false;
   el('cust-type-direct').checked=true;
   el('cust-type-enduser-only').checked=false;
-  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=20; custToggleDealerRow();
+  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=20; custToggleDealerRow(); custSetContacts([]);
   el('cust-type-conflict-warning').style.display='none';
   el('cust-payment-terms').value='credit';
   const adGroup=el('cust-always-direct-group');
@@ -18142,7 +18496,7 @@ function openEditCustomerModal(custId){
   el('cust-type-dealer').checked=types.includes('Dealer');
   el('cust-type-direct').checked=types.includes('Direct');
   el('cust-type-enduser-only').checked=types.includes('EndUserOnly');
-  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=(c.dealerDiscount!=null&&c.dealerDiscount!=='')?c.dealerDiscount:20; custToggleDealerRow();
+  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=(c.dealerDiscount!=null&&c.dealerDiscount!=='')?c.dealerDiscount:20; custToggleDealerRow(); custSetContacts(c.contacts||[]);
   checkCustTypeConflict();
   const adGroup=el('cust-always-direct-group');
   if(adGroup) adGroup.style.display=isAdmin(currentUser)?'block':'none';
@@ -18193,6 +18547,7 @@ async function saveCustomer(){
       mobile:el('cust-mobile').value.trim(),
       fax:el('cust-fax').value.trim(),
       email:el('cust-email').value.trim(),
+      contacts:custReadContacts(),
       paymentTerms:el('cust-payment-terms').value,
       notes:el('cust-notes').value.trim(),
       createdAt:editId?(existingRec?.createdAt||new Date().toISOString()):new Date().toISOString()
@@ -20440,6 +20795,19 @@ function buildCompletedJobPhotosHtml(j){
   });
   return html;
 }
+function compJobMenu(ev,jobNo,histId){
+  ev.stopPropagation(); const j=getJob(jobNo); if(!j) return; const q=`'${escapeForJsAttr(jobNo)}'`;
+  let h=stMenuItem('👁️ View job',`viewJobDetail(${q})`)+stMenuItem('📋 History',`toggleJobHistory('${histId}')`);
+  if(!j.isInternal){
+    if(isAdmin(currentUser)&&!j.billed) h+=stMenuItem('💰 Mark Billed',`markBilled(${q})`);
+    if(canCreateJobs(currentUser)&&!j.collectedAt) h+=stMenuItem('📦 Mark Collected',`openMarkCollectedModal(${q})`);
+    if(j.collectedAt) h+=stMenuItem('📄 View delivery order',`exportDeliveryOrderPdf(${q})`);
+    if(j.collectedAt&&!j.feedbackConfirmed) h+=stMenuItem('📝 Feedback confirmed',`markFeedbackConfirmed(${q})`);
+    if(isAdmin(currentUser)) h+=stMenuItem('💬 WhatsApp collection message',`sendWhatsAppCollection(${q})`);
+  }
+  if(isAdmin(currentUser)) h+='<hr/>'+stMenuItem('🗑️ Permanent deletion…',`openRequestPermanentDeletionModal(${q})`,{danger:true});
+  stShowMenu(ev.currentTarget,h);
+}
 function renderCompletedJobs(){
   try{
   // A job is completed when all its items are completed
@@ -20496,26 +20864,25 @@ function renderCompletedJobs(){
   const rows=[];
   filtered.forEach(j=>{
     const lastApproved=j.items.reduce((latest,i)=>i.approvedAt&&i.approvedAt>latest?i.approvedAt:latest,'');
-    rows.push(`<tr style="background:var(--bg);">
-      <td colspan="5" style="padding:6px 10px;font-size:12px;font-weight:700;color:var(--navy);">
-        ${j.jobNo} &nbsp;<span style="font-weight:400;color:var(--text-muted);">— ${escapeHtml(j.custName)}${escapeHtml(j.attention?' · '+j.attention:'')}</span>
+    const histId=`comp-hist-${j.jobNo.replace(/[^a-z0-9]/gi,'_')}`;
+    // one "next step" button; everything else is in the ⋯ menu
+    let next='';
+    if(!j.isInternal){
+      if(isAdmin(currentUser)&&!j.billed) next=`<button class="btn btn-primary btn-sm" onclick="markBilled('${escapeForJsAttr(j.jobNo)}')">💰 Mark Billed</button>`;
+      else if(canCreateJobs(currentUser)&&!j.collectedAt) next=`<button class="btn btn-primary btn-sm" onclick="openMarkCollectedModal('${escapeForJsAttr(j.jobNo)}')">📦 Mark Collected</button>`;
+      else if(j.collectedAt&&!j.feedbackConfirmed) next=`<button class="btn btn-outline btn-sm" onclick="markFeedbackConfirmed('${escapeForJsAttr(j.jobNo)}')">📝 Feedback confirmed</button>`;
+    }
+    const chips=j.isInternal?`<span class="badge badge-blue">🔧 Internal — no billing</span>`:
+      `${j.billed?`<span class="badge badge-green" title="${j.billedAt?'Billed '+fmtDateShort(j.billedAt):''}">✅ Billed</span>`:`<span class="badge badge-amber">⏳ Not billed</span>`}
+       ${j.collectedAt?`<span class="badge badge-green" title="${[j.collectedBy?'Collected by '+j.collectedBy:'',j.doNumber||''].filter(Boolean).join(' · ')}">📦 Collected${j.doNumber?' · '+escapeHtml(j.doNumber):''}</span>`:`<span class="badge badge-amber">📦 Not collected</span>`}
+       ${j.feedbackConfirmed?`<span class="badge badge-green">✅ Feedback</span>`:''}`;
+    rows.push(`<tr style="background:#eef2f7;border-top:2px solid #cbd5e1;">
+      <td colspan="4" style="padding:7px 10px;font-size:12.5px;font-weight:800;color:var(--navy);border-left:4px solid var(--navy);">
+        <a href="javascript:void(0)" onclick="viewJobDetail('${escapeForJsAttr(j.jobNo)}')" style="color:var(--navy);text-decoration:none;">${j.jobNo}</a>
+        <span style="font-weight:600;color:#111;margin-left:6px;">${escapeHtml(j.custName)}</span>${j.attention?`<span style="font-weight:400;color:var(--text-muted);font-size:11px;"> · ${escapeHtml(j.attention)}</span>`:''}
       </td>
-      <td colspan="3" style="padding:6px 10px;font-size:11px;color:var(--text-muted);text-align:right;">
-        ${j.isInternal?`<span class="badge badge-blue">🔧 Internal Calibration — no billing/collection applicable</span>`:`
-        ${j.billed?`<span class="badge badge-green">✅ Billed ${j.billedAt?.split('T')[0]||''}</span>`:`<span class="badge badge-amber">⏳ Pending Billing</span>`}
-        &nbsp;
-        ${j.collectedAt?`<span class="badge badge-green">📦 Collected by ${j.collectedBy||''} — ${j.doNumber||''}</span>`:`<span class="badge badge-amber">📦 Not Yet Collected</span>`}
-        &nbsp;
-        ${j.collectedAt?(j.feedbackConfirmed?`<span class="badge badge-green">✅ Feedback Confirmed</span>`:`<button class="btn btn-outline btn-sm" onclick="markFeedbackConfirmed('${j.jobNo}')">📝 Mark Feedback Confirmed</button>`):''}
-        &nbsp;
-        ${isAdmin(currentUser)&&!j.billed?`<button class="btn btn-primary btn-sm" onclick="markBilled('${j.jobNo}')">💰 Mark Billed</button>`:''}
-        ${canCreateJobs(currentUser)&&!j.collectedAt?`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="openMarkCollectedModal('${j.jobNo}')">📦 Mark Collected</button>`:''}
-        ${j.collectedAt?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportDeliveryOrderPdf('${j.jobNo}')">📄 View DO</button>`:''}
-        ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#25D366;color:#fff;border-color:#25D366;" onclick="sendWhatsAppCollection('${j.jobNo}')">💬 WhatsApp</button>`:''}
-        `}
-        ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#991b1b;color:#fff;border-color:#991b1b;" onclick="openRequestPermanentDeletionModal('${j.jobNo}')" title="Permanent Deletion (irreversible)">🗑️⚠️ Delete</button>`:''}
-        <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="toggleJobHistory('comp-hist-${j.jobNo.replace(/[^a-z0-9]/gi,'_')}')">📋 History</button>
-      </td>
+      <td colspan="3" style="padding:7px 10px;">${chips}</td>
+      <td style="padding:7px 10px;white-space:nowrap;text-align:right;">${next} <button class="btn btn-outline btn-sm" title="More actions" onclick="compJobMenu(event,'${escapeForJsAttr(j.jobNo)}','${histId}')">⋯</button></td>
     </tr>
     <tr id="comp-hist-${j.jobNo.replace(/[^a-z0-9]/gi,'_')}" style="display:none;">
       <td colspan="8" style="padding:8px 16px;background:var(--bg);">
@@ -20530,8 +20897,8 @@ function renderCompletedJobs(){
         <td style="padding:5px 10px 5px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
         <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${item.certNo||'—'}</td>
         <td style="padding:5px 8px;font-size:12px;">${escapeHtml(item.eqName)}<br/><span style="font-size:11px;color:var(--text-muted);">${[item.brand,item.model].filter(Boolean).join(' / ')||''}</span></td>
-        <td style="padding:5px 8px;font-size:11px;">S/N: ${escapeHtml(item.serial||'—')}</td>
-        <td style="padding:5px 8px;font-size:11px;">${item.calData?.date||item.approvedAt?.split('T')[0]||'—'}</td>
+        <td style="padding:5px 8px;font-size:11px;color:var(--text-muted);">${escapeHtml(item.serial||'—')}</td>
+        <td style="padding:5px 8px;font-size:11px;white-space:nowrap;">${(item.calData?.date||item.approvedAt)?fmtDateShort(item.calData?.date||item.approvedAt):'—'}</td>
         <td style="padding:5px 8px;font-size:11px;">${approvedName}</td>
         <td></td>
         <td style="padding:5px 8px;white-space:nowrap;">
@@ -20704,8 +21071,7 @@ We confirm the following for your job:
 
 Job No.: ${jobNo}
 Received: ${fmtDateShort(j.receiveDate)}
-Priority: ${j.priority}
-
+${j.priority?'Priority: '+j.priority:''}
 Items received at our lab:
 ${labLines}
 
@@ -20726,8 +21092,7 @@ We confirm receipt of your equipment:
 
 Job No.: ${jobNo}
 Received: ${fmtDateShort(j.receiveDate)}
-Priority: ${j.priority}
-
+${j.priority?'Priority: '+j.priority:''}
 Items:
 ${itemLines}
 
@@ -20889,19 +21254,22 @@ async function generateInvoiceFromJob(jobNo){
   const invoiceNo=await getNextDocNumber('WIV');
   const invoiceDate=new Date().toISOString();
   const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+30);
-  const subtotal=(j.items||[]).reduce((sum,it)=>sum+(it.price||0),0);
+  const charges=(j.extraCharges||[]).filter(c=>!c.waived&&!c.invoiceNo);
+  const subtotal=(j.items||[]).reduce((sum,it)=>sum+(it.price||0),0)+charges.reduce((sum,c)=>sum+c.amount,0);
   const sstAmount=_settings.sstEnabled?subtotal*0.08:0;
   const totalAmount=subtotal+sstAmount;
   const inv={
     id:'INV-'+Date.now(),invoiceNo,jobNo,
     custName:j.custName,custId:j.custId||null,attention:j.attention||'',address:j.address||'',email:j.email||'',
-    items:(j.items||[]).map(it=>({eqName:it.eqName,brand:it.brand,model:it.model,certNo:it.certNo,price:it.price||0})),
+    items:[...(j.items||[]).map(it=>({eqName:it.eqName,brand:it.brand,model:it.model,certNo:it.certNo,price:it.price||0})),
+      ...charges.map(c=>({eqName:c.desc,brand:'',model:'',certNo:'',price:c.amount,isCharge:true}))],
     invoiceDate,dueDate:toLocalDateStr(dueDate),subtotal,sstAmount,totalAmount,
     paymentStatus:'Unpaid',amountPaid:0,
     createdBy:currentUser,createdAt:invoiceDate
   };
   _invoices.push(inv);
   await saveInvoices();
+  if(charges.length) await updateJob(jobNo,jj=>{ (jj.extraCharges||[]).forEach(c=>{ if(charges.some(x=>x.id===c.id)) c.invoiceNo=invoiceNo; }); });
   addAudit('🧾',`Invoice ${invoiceNo} generated for job ${jobNo} — RM ${totalAmount.toFixed(2)}`);
   await advanceLinkedTrackerStageByJobNo(jobNo,'Invoice Generated',`Invoice ${invoiceNo} generated`);
   return inv;
@@ -20934,6 +21302,14 @@ async function deleteInvoice(invoiceId){
   docDeleteToast(inv.invoiceNo,wasHighest,rollbackResult);
   addAudit('🗑️',`Invoice ${inv.invoiceNo} permanently deleted by ${USERS[currentUser]?.name||currentUser}`);
 }
+// T&C 2: 2% per month on the amount still due, counted by days overdue (shown for reference only)
+function invOverdueInfo(inv){
+  if(!inv||inv.paymentStatus==='Paid'||!inv.dueDate) return null;
+  const due=new Date(inv.dueDate+'T00:00:00'), now=new Date(); now.setHours(0,0,0,0);
+  const days=Math.round((now-due)/86400000); if(days<=0) return null;
+  const outstanding=Math.max(0,(inv.totalAmount||0)-(inv.amountPaid||0));
+  return {days,outstanding,interest:Math.round(outstanding*0.02*(days/30)*100)/100};
+}
 function renderInvoicesPage(){
   const box=el('invoices-list'); if(!box)return;
   if(!canUseInvoiceSystem(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
@@ -20947,7 +21323,8 @@ function renderInvoicesPage(){
   const statusBadge=inv=>{
     const colors={Unpaid:'badge-red','Partially Paid':'badge-amber',Paid:'badge-green'};
     const overdue=inv.paymentStatus!=='Paid'&&inv.dueDate<today;
-    return `<span class="badge ${colors[inv.paymentStatus]||'badge-red'}">${inv.paymentStatus}${overdue?' — OVERDUE':''}</span>`;
+    const o=invOverdueInfo(inv);
+    return `<span class="badge ${colors[inv.paymentStatus]||'badge-red'}">${inv.paymentStatus}${overdue?' — OVERDUE':''}</span>${o?`<div style="font-size:11px;color:#b42318;margin-top:4px;text-align:right;">${o.days} day${o.days>1?'s':''} overdue · interest RM ${o.interest.toFixed(2)}<br/><span style="color:var(--text-muted);">(2% per month, for reference — not billed)</span></div>`:''}`;
   };
   box.innerHTML=list.map(inv=>`<div class="card" style="padding:14px 16px;margin-bottom:10px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -21093,7 +21470,7 @@ async function exportInvoicePdf(invoiceId){
       <tbody>${(inv.items||[]).map((it,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
         <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${i+1}</td>
         <td style="padding:5px 6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(it.eqName||'')} ${escapeHtml(it.brand||'')} ${escapeHtml(it.model||'')}</td>
-        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.certNo||'—'}</td>
+        <td style="padding:5px 6px;text-align:center;border-bottom:1px solid #e2e8f0;">${it.isCharge?'':(it.certNo||'—')}</td>
         <td style="padding:5px 6px;text-align:right;border-bottom:1px solid #e2e8f0;">${(it.price||0).toFixed(2)}</td>
       </tr>`).join('')}</tbody>
       <tfoot>
@@ -22443,6 +22820,7 @@ function renderQuickAccess(){
       t.innerHTML=`<a href="javascript:void(0)" onclick="openNavCategory('${cat.id}')" style="color:var(--text-muted);text-decoration:none;font-weight:500;">${escapeHtml(cat.label)}</a> <span style="color:var(--text-muted);font-weight:400;">›</span> ${escapeHtml(title)}`;
     }
     if(name==='dashboard') renderQuickAccess();
+    if(name==='capa') renderNcrPage();
     if(name==='price-reference'){ if(!canViewPriceReference(currentUser)){ alert('You do not have access to the Price Reference.'); return orig.call(this,'dashboard'); } renderPriceReferencePage(); }
     renderCategoryNav();
     return r;
@@ -22459,10 +22837,222 @@ function renderQuickAccess(){
 </script>
 
 <script>
+// ═══════════════════ NONCONFORMANCE, COMPLAINTS & CAPA (ISO/IEC 17025 7.9, 7.10, 8.7) ═══════════════════
+const NCR_KEY='wl_ncr';
+let _ncrs=[], _ncrTab='open';
+async function loadNcrs(){ try{ const r=await SB.get('wl_settings',NCR_KEY); _ncrs=Array.isArray(r)?r:[]; }catch(e){ _ncrs=[]; } }
+let _ncrPatchQueue=Promise.resolve();
+function patchNcrs(mutator){ // re-read, change, write back — two people can't overwrite each other
+  const run=async()=>{
+    let fresh; try{ fresh=await apiFetch('/api/row/wl_settings/'+NCR_KEY); }catch(e){ throw new Error('Could not reach the server — nothing was saved.'); }
+    const arr=Array.isArray(fresh)?fresh:[]; const result=mutator(arr);
+    await SB.upsert('wl_settings',NCR_KEY,arr); _ncrs=arr; return result;
+  };
+  const p=_ncrPatchQueue.then(run,run); _ncrPatchQueue=p.catch(()=>{}); return p;
+}
+function canManageNcr(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Quality Manager','Technical Manager'].includes(r); }
+const NCR_KINDS=['Customer complaint','Nonconforming work','Audit finding','Other'];
+const NCR_SOURCES=['Customer','Internal (staff)','Internal audit','External audit / SAMM','Proficiency testing','Management review'];
+const NCR_STATUSES=['Open','Investigating','Action in progress','Verification','Closed'];
+const NCR_COMPLAINT_CATS=[['results','Results / certificate (T&C 13 — within 2 weeks of the certificate)'],['shortfall','Shortfall, damage or discrepancy on return (T&C 10 — within 5 working days)'],['service','Service / other']];
+function ncrStatusBadge(st){ const c={Open:'badge-red',Investigating:'badge-amber','Action in progress':'badge-blue',Verification:'badge-purple',Closed:'badge-green'}[st]||'badge-slate'; return `<span class="badge ${c}" style="white-space:nowrap;">${escapeHtml(st)}</span>`; }
+function ncrSevBadge(s){ const c={Minor:'badge-slate',Major:'badge-amber',Critical:'badge-red'}[s]||'badge-slate'; return `<span class="badge ${c}">${escapeHtml(s||'')}</span>`; }
+function ncrOverdue(n){ return n.status!=='Closed'&&n.actionDue&&n.actionDue<toLocalDateStr(new Date()); }
+// T&C 10 / 13: was the complaint made within the customer's time limit? (a fact for the decision, not a refusal)
+function ncrTncCheck(n){
+  if(n.kind!=='Customer complaint'||!n.jobNo||!['results','shortfall'].includes(n.complaintCat)) return null;
+  const j=getJob(n.jobNo); if(!j) return null; const raised=new Date((n.receivedOn||n.raisedAt||'').slice(0,10)+'T23:59:59');
+  if(n.complaintCat==='shortfall'){ if(!j.collectedAt) return {text:'T&C 10: the items have not been returned yet — no time limit applies yet.',ok:true};
+    const dl=tncAddWorkingDays(new Date(j.collectedAt),5); return {ok:raised<=dl,text:`T&C 10: shortfall/discrepancy to be reported by ${fmtDateShort(dl.toISOString())} (5 working days after return on ${fmtDateShort(j.collectedAt)}) — complaint received ${fmtDateShort(raised.toISOString())}: ${raised<=dl?'WITHIN':'OUTSIDE'} the time limit.`}; }
+  const items=n.itemIdx!=null&&j.items[n.itemIdx]?[j.items[n.itemIdx]]:(j.items||[]);
+  const cert=items.map(i=>i.approvedAt).filter(Boolean).sort().pop(); if(!cert) return {text:'T&C 13: no certificate issued yet — no time limit applies yet.',ok:true};
+  const dl=new Date(cert); dl.setDate(dl.getDate()+14);
+  return {ok:raised<=dl,text:`T&C 13: complaints about results by ${fmtDateShort(dl.toISOString())} (2 weeks after the certificate, ${fmtDateShort(cert)}) — complaint received ${fmtDateShort(raised.toISOString())}: ${raised<=dl?'WITHIN':'OUTSIDE'} the time limit.`};
+}
+function renderNcrPage(){
+  const list=_ncrs.slice().sort((a,b)=>String(b.raisedAt).localeCompare(String(a.raisedAt)));
+  const yr=String(new Date().getFullYear());
+  const open=list.filter(n=>n.status!=='Closed'), over=open.filter(ncrOverdue);
+  const kp=(v,l,c)=>`<div class="kpi-mini"><div class="kpi-val" style="color:${c}">${v}</div><div class="kpi-lbl">${l}</div></div>`;
+  el('ncr-kpis').innerHTML=kp(open.length,'Open','var(--red)')+kp(over.length,'Actions overdue','var(--amber)')+kp(list.filter(n=>n.kind==='Customer complaint'&&String(n.raisedAt).startsWith(yr)).length,`Complaints ${yr}`,'var(--blue)')+kp(list.filter(n=>n.status==='Closed'&&String(n.closedAt).startsWith(yr)).length,`Closed ${yr}`,'var(--green)');
+  el('ncr-sub').textContent=`${open.length} open · ${over.length} with overdue actions`;
+  el('ncr-tabs').innerHTML=[['open','Open'],['mine','My actions'],['closed','Closed'],['all','All']].map(([k,l])=>`<button class="st-tab ${_ncrTab===k?'active':''}" onclick="_ncrTab='${k}';renderNcrPage()">${l}</button>`).join('');
+  const kind=el('ncr-filter-kind')?.value||'', q=(el('ncr-search')?.value||'').toLowerCase();
+  const rows=list.filter(n=>(_ncrTab==='all'||(_ncrTab==='open'&&n.status!=='Closed')||(_ncrTab==='closed'&&n.status==='Closed')||(_ncrTab==='mine'&&n.actionOwner===currentUser&&n.status!=='Closed'))
+    &&(!kind||n.kind===kind)&&(!q||[n.ncNo,n.description,n.custName,n.jobNo,n.certNo].some(v=>String(v||'').toLowerCase().includes(q))));
+  el('ncr-list').innerHTML=rows.length?`<div class="table-wrap"><table><thead><tr><th>No.</th><th>Type</th><th>Raised</th><th>Customer / Job</th><th>Description</th><th>Severity</th><th>Action owner · due</th><th>Status</th></tr></thead><tbody>
+    ${rows.map(n=>`<tr style="cursor:pointer;" onclick="openNcrDetail('${n.id}')">
+      <td style="white-space:nowrap;font-weight:700;color:var(--navy);">${escapeHtml(n.ncNo)}</td>
+      <td style="font-size:12px;">${escapeHtml(n.kind)}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(n.source||'')}</div></td>
+      <td style="white-space:nowrap;font-size:12px;">${fmtDateShort(n.raisedAt)}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(USERS[n.raisedBy]?.name||n.raisedBy||'')}</div></td>
+      <td style="font-size:12px;">${escapeHtml(n.custName||'—')}${n.jobNo?`<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(n.jobNo)}${n.certNo?' · '+escapeHtml(n.certNo):''}</div>`:''}</td>
+      <td style="font-size:12px;max-width:320px;">${escapeHtml(String(n.description||'').slice(0,140))}${String(n.description||'').length>140?'…':''}</td>
+      <td>${ncrSevBadge(n.severity)}</td>
+      <td style="font-size:12px;white-space:nowrap;">${n.actionOwner?escapeHtml(USERS[n.actionOwner]?.name||n.actionOwner):'—'}${n.actionDue?`<div style="font-size:11px;color:${ncrOverdue(n)?'var(--red)':'var(--text-muted)'};font-weight:${ncrOverdue(n)?700:400};">due ${fmtDateShort(n.actionDue)}${ncrOverdue(n)?' · overdue':''}</div>`:''}</td>
+      <td>${ncrStatusBadge(n.status)}</td></tr>`).join('')}</tbody></table></div>`
+    :'<div class="empty-state"><div class="empty-icon">✅</div><p>Nothing here.</p></div>';
+}
+function ncrOverlay(html){
+  let ov=document.getElementById('ncr-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='ncr-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999995;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=html; ov.style.display='flex';
+}
+function ncrClose(){ const ov=document.getElementById('ncr-overlay'); if(ov) ov.style.display='none'; }
+const ncrOpt=(arr,cur)=>arr.map(x=>{ const [v,l]=Array.isArray(x)?x:[x,x]; return `<option value="${escapeHtml(v)}" ${v===cur?'selected':''}>${escapeHtml(l)}</option>`; }).join('');
+function openRaiseNcr(pre){
+  pre=pre||{};
+  ncrOverlay(`<div style="background:#fff;border-radius:14px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">⚠️ Raise a nonconformance / complaint</span><button onclick="ncrClose()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Type</label><select class="form-control" id="ncr-kind" onchange="ncrRaiseToggle()">${ncrOpt(NCR_KINDS,pre.kind||'Customer complaint')}</select></div>
+        <div class="form-group"><label class="form-label">Source</label><select class="form-control" id="ncr-source">${ncrOpt(NCR_SOURCES,pre.source||'Customer')}</select></div>
+        <div class="form-group"><label class="form-label">Severity</label><select class="form-control" id="ncr-sev">${ncrOpt(['Minor','Major','Critical'],'Minor')}</select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Job no. <span style="font-weight:normal;color:var(--text-muted);">(if related)</span></label><input class="form-control" id="ncr-job" value="${escapeHtml(pre.jobNo||'')}" placeholder="e.g. WL26-00123" oninput="ncrRaiseJob()"/></div>
+        <div class="form-group"><label class="form-label">Item</label><select class="form-control" id="ncr-item"><option value="">Whole job</option></select></div>
+        <div class="form-group"><label class="form-label">Customer</label><input class="form-control" id="ncr-cust" value="${escapeHtml(pre.custName||'')}"/></div>
+      </div>
+      <div id="ncr-complaint-box" style="background:#eff6ff;border-radius:8px;padding:8px 10px;margin-bottom:10px;">
+        <div class="form-row" style="margin-bottom:0;">
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Complaint about</label><select class="form-control" id="ncr-cat">${ncrOpt(NCR_COMPLAINT_CATS,'results')}</select></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Received on</label><input class="form-control" type="date" id="ncr-received" value="${toLocalDateStr(new Date())}"/></div>
+          <div class="form-group" style="margin-bottom:0;"><label class="form-label">Received via</label><select class="form-control" id="ncr-via">${ncrOpt(['Email','Call','WhatsApp','Walk-in','Letter'],'Email')}</select></div>
+        </div></div>
+      <div class="form-group"><label class="form-label">What happened?</label><textarea class="form-control" id="ncr-desc" rows="3" placeholder="Describe the nonconformance or the customer's complaint…"></textarea></div>
+      <div class="form-group"><label class="form-label">Immediate correction <span style="font-weight:normal;color:var(--text-muted);">(optional — what was done straight away)</span></label><textarea class="form-control" id="ncr-correction" rows="2"></textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="ncrClose()">Cancel</button><button class="btn btn-primary" onclick="saveRaisedNcr()">Raise</button></div>
+    </div></div>`);
+  ncrRaiseToggle(); ncrRaiseJob(pre.itemIdx);
+}
+function ncrRaiseToggle(){ const b=el('ncr-complaint-box'); if(b) b.style.display=el('ncr-kind').value==='Customer complaint'?'':'none'; if(el('ncr-kind').value==='Customer complaint') el('ncr-source').value='Customer'; }
+function ncrRaiseJob(preIdx){
+  const j=getJob((el('ncr-job')?.value||'').trim()); const sel=el('ncr-item'); if(!sel) return;
+  sel.innerHTML='<option value="">Whole job</option>'+(j?(j.items||[]).map((it,i)=>`<option value="${i}" ${i===preIdx?'selected':''}>${i+1}. ${escapeHtml(it.eqName||'')}${it.certNo?' — '+escapeHtml(it.certNo):''}</option>`).join(''):'');
+  if(j&&!el('ncr-cust').value) el('ncr-cust').value=j.custName||'';
+}
+async function saveRaisedNcr(){
+  const desc=el('ncr-desc').value.trim(); if(!desc){ alert('Please describe what happened.'); return; }
+  const jobNo=(el('ncr-job').value||'').trim(); const j=jobNo?getJob(jobNo):null;
+  if(jobNo&&!j){ alert(`Job ${jobNo} was not found. Leave it empty if this isn't about a specific job.`); return; }
+  const idx=el('ncr-item').value===''?null:parseInt(el('ncr-item').value);
+  const kind=el('ncr-kind').value; const now=new Date().toISOString();
+  const ncNo=await getNextDocNumber('WNC');
+  const rec={id:'NCR-'+Date.now(),ncNo,kind,source:el('ncr-source').value,severity:el('ncr-sev').value,description:desc,correction:el('ncr-correction').value.trim(),
+    jobNo:j?j.jobNo:'',itemIdx:idx,certNo:(j&&idx!=null&&j.items[idx])?j.items[idx].certNo||'':'',custName:el('ncr-cust').value.trim(),
+    complaintCat:kind==='Customer complaint'?el('ncr-cat').value:'',receivedOn:kind==='Customer complaint'?el('ncr-received').value:'',receivedVia:kind==='Customer complaint'?el('ncr-via').value:'',
+    status:'Open',raisedAt:now,raisedBy:currentUser,history:[{at:now,by:currentUser,action:`Raised (${kind})`}]};
+  const chk=ncrTncCheck(rec); if(chk) rec.tncCheck=chk.text;
+  await patchNcrs(arr=>{ arr.push(rec); });
+  addAudit('⚠️',`${escapeHtml(ncNo)} raised — ${escapeHtml(kind)}${rec.jobNo?' on '+escapeHtml(rec.jobNo):''}`);
+  ncrClose(); showToast(`⚠️ ${ncNo} raised`,'success',3000);
+  if(document.getElementById('view-capa')?.classList.contains('active')) renderNcrPage();
+  openNcrDetail(rec.id);
+}
+function openNcrDetail(id){
+  const n=_ncrs.find(x=>x.id===id); if(!n) return; const can=canManageNcr(currentUser); const ro=!can||n.status==='Closed';
+  const v=x=>escapeHtml(x==null?'':String(x)); const dis=ro?'disabled':'';
+  const staffOpts=(_staff||[]).filter(s=>s.active!==false).map(s=>[s.username,s.name||s.username]);
+  const chk=ncrTncCheck(n);
+  const yn=(id2,cur,opts=['','Yes','No','N/A'])=>`<select class="form-control" id="${id2}" ${dis}>${opts.map(o=>`<option value="${o}" ${o===(cur||'')?'selected':''}>${o||'— Select —'}</option>`).join('')}</select>`;
+  ncrOverlay(`<div style="background:#fff;border-radius:14px;width:820px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">${v(n.ncNo)} · ${v(n.kind)} ${ncrStatusBadge(n.status)} ${ncrSevBadge(n.severity)}</span>
+      <button onclick="ncrClose()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;font-size:13px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-bottom:10px;">
+        <div><span style="color:var(--text-muted);">Raised:</span> ${fmtDateShort(n.raisedAt)} by ${v(USERS[n.raisedBy]?.name||n.raisedBy)}</div>
+        <div><span style="color:var(--text-muted);">Source:</span> ${v(n.source)}</div>
+        <div><span style="color:var(--text-muted);">Customer:</span> ${v(n.custName||'—')}</div>
+        <div><span style="color:var(--text-muted);">Job:</span> ${n.jobNo?`<a href="javascript:void(0)" onclick="ncrClose();viewJobDetail('${escapeForJsAttr(n.jobNo)}')">${v(n.jobNo)}</a>${n.itemIdx!=null?' · item '+(n.itemIdx+1):''}${n.certNo?' · '+v(n.certNo):''}`:'—'}</div>
+        ${n.kind==='Customer complaint'?`<div><span style="color:var(--text-muted);">Complaint about:</span> ${v((NCR_COMPLAINT_CATS.find(c=>c[0]===n.complaintCat)||[])[1]||'—')}</div><div><span style="color:var(--text-muted);">Received:</span> ${n.receivedOn?fmtDateShort(n.receivedOn):'—'} via ${v(n.receivedVia||'—')}</div>`:''}
+      </div>
+      <div style="background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:10px;white-space:pre-wrap;">${v(n.description)}</div>
+      ${chk?`<div class="qt-note ${chk.ok?'info':'warn'}" style="margin-bottom:10px;">⏱️ ${v(chk.text)}</div>`:''}
+      ${n.kind==='Customer complaint'?`<div class="form-row">
+        <div class="form-group"><label class="form-label">Acknowledged to the customer on</label><input class="form-control" type="date" id="ncd-ack" value="${v(n.acknowledgedOn||'')}" ${dis}/></div>
+        <div class="form-group"><label class="form-label">Outcome communicated on</label><input class="form-control" type="date" id="ncd-outcome" value="${v(n.outcomeOn||'')}" ${dis}/></div></div>`:''}
+      <div class="form-section-title">1 · Correction &amp; impact (7.10)</div>
+      <div class="form-group"><label class="form-label">Immediate correction</label><textarea class="form-control" id="ncd-correction" rows="2" ${dis}>${v(n.correction)}</textarea></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+        <div class="form-group"><label class="form-label">Affects results already issued?</label>${yn('ncd-affects',n.affectsResults,['','Yes','No','Unknown'])}</div>
+        <div class="form-group"><label class="form-label">Customer notified?</label>${yn('ncd-notified',n.customerNotified)}</div>
+        <div class="form-group"><label class="form-label">Certificates recalled?</label>${yn('ncd-recall',n.certsRecalled)}</div>
+        <div class="form-group"><label class="form-label">Work stopped / held?</label>${yn('ncd-stopped',n.workStopped)}</div>
+      </div>
+      <div class="form-group"><label class="form-label">Impact notes</label><textarea class="form-control" id="ncd-impact" rows="2" ${dis}>${v(n.impactNotes)}</textarea></div>
+      <div class="form-section-title">2 · Root cause &amp; corrective action (8.7)</div>
+      <div class="form-group"><label class="form-label">Root cause</label><textarea class="form-control" id="ncd-cause" rows="2" ${dis}>${v(n.rootCause)}</textarea></div>
+      <div class="form-group"><label class="form-label">Corrective action</label><textarea class="form-control" id="ncd-action" rows="2" ${dis}>${v(n.correctiveAction)}</textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Action owner</label><select class="form-control" id="ncd-owner" ${dis}><option value="">— Select —</option>${ncrOpt(staffOpts,n.actionOwner||'')}</select></div>
+        <div class="form-group"><label class="form-label">Due date</label><input class="form-control" type="date" id="ncd-due" value="${v(n.actionDue||'')}" ${dis}/></div></div>
+      <div class="form-section-title">3 · Verification of effectiveness</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Action effective?</label>${yn('ncd-effective',n.effective,['','Yes','No'])}</div>
+        <div class="form-group" style="flex:2;"><label class="form-label">Verification notes</label><input class="form-control" id="ncd-verify" value="${v(n.verifyNotes||'')}" ${dis}/></div></div>
+      ${n.verifiedBy?`<div style="font-size:12px;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">Verified by ${v(USERS[n.verifiedBy]?.name||n.verifiedBy)} on ${fmtDateShort(n.verifiedAt)}</div>`:''}
+      ${n.status==='Closed'?`<div class="qt-note info">✅ Closed by ${v(USERS[n.closedBy]?.name||n.closedBy)} on ${fmtDateShort(n.closedAt)}.</div>`:''}
+      <details style="margin:8px 0;"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;">History (${(n.history||[]).length})</summary>
+        ${(n.history||[]).slice().reverse().map(h=>`<div style="font-size:11.5px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid var(--border);"><b style="color:var(--navy);">${v(h.action)}</b> — ${v(USERS[h.by]?.name||h.by)} <span style="float:right;">${fmtDateShort(h.at)}</span></div>`).join('')}</details>
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;align-items:center;">
+        ${can&&n.status!=='Closed'?`<span style="font-size:12px;color:var(--text-muted);margin-right:auto;">Status:</span>
+          <select class="form-control" id="ncd-status" style="width:auto;">${ncrOpt(NCR_STATUSES.filter(s=>s!=='Closed'),n.status)}</select>
+          <button class="btn btn-outline" onclick="saveNcrDetail('${n.id}',false)">Save</button>
+          <button class="btn btn-primary" onclick="saveNcrDetail('${n.id}',true)">✅ Close</button>`
+          :(can&&n.status==='Closed'?`<button class="btn btn-outline" onclick="reopenNcr('${n.id}')">Reopen</button>`:`<span style="font-size:12px;color:var(--text-muted);">Only the Quality / Technical Manager, Admin or MD can update this.</span>`)}
+        <button class="btn btn-outline" onclick="ncrClose()">Close window</button>
+      </div>
+    </div></div>`);
+}
+async function saveNcrDetail(id,close){
+  const g=k=>el(k)?.value??''; const n0=_ncrs.find(x=>x.id===id); if(!n0) return;
+  const upd={correction:g('ncd-correction').trim(),affectsResults:g('ncd-affects'),customerNotified:g('ncd-notified'),certsRecalled:g('ncd-recall'),workStopped:g('ncd-stopped'),
+    impactNotes:g('ncd-impact').trim(),rootCause:g('ncd-cause').trim(),correctiveAction:g('ncd-action').trim(),actionOwner:g('ncd-owner'),actionDue:g('ncd-due'),
+    effective:g('ncd-effective'),verifyNotes:g('ncd-verify').trim()};
+  if(n0.kind==='Customer complaint'){ upd.acknowledgedOn=g('ncd-ack'); upd.outcomeOn=g('ncd-outcome'); }
+  if(close){
+    const miss=[]; if(!upd.rootCause) miss.push('root cause'); if(!upd.correctiveAction) miss.push('corrective action'); if(upd.effective!=='Yes') miss.push('verification that the action was effective (Yes)');
+    if(n0.kind==='Customer complaint'&&!upd.outcomeOn) miss.push('date the outcome was communicated to the customer');
+    if(miss.length){ alert('Before closing, please fill in: '+miss.join(', ')+'.'); return; }
+    // 7.9.6: the outcome should be reviewed by someone not involved in the work complained about
+    if(n0.kind==='Customer complaint'&&n0.jobNo){ const j=getJob(n0.jobNo); const its=j?(n0.itemIdx!=null?[j.items[n0.itemIdx]]:j.items):[];
+      const involved=its.some(it=>it&&(it.assignedTo===currentUser||it.calData?.calibratedByUsername===currentUser||it.calData?.approvedByUsername===currentUser));
+      if(involved&&!confirm('ISO/IEC 17025 7.9.6: the outcome of a complaint should be reviewed and approved by someone NOT involved in the original work — and you worked on this item.\n\nClose it anyway?')) return; }
+  }
+  const now=new Date().toISOString(); const st=close?'Closed':(g('ncd-status')||n0.status);
+  await patchNcrs(arr=>{ const n=arr.find(x=>x.id===id); if(!n) return; const prev=n.status; Object.assign(n,upd);
+    if(upd.effective&&upd.effective!==n0.effective){ n.verifiedBy=currentUser; n.verifiedAt=now; }
+    n.status=st; if(close){ n.closedBy=currentUser; n.closedAt=now; }
+    (n.history=n.history||[]).push({at:now,by:currentUser,action:close?'Closed':(prev!==st?`Status: ${prev} → ${st}`:'Updated')}); });
+  if(close) addAudit('✅',`${escapeHtml(n0.ncNo)} closed`);
+  showToast(close?`✅ ${n0.ncNo} closed`:'Saved','success',2500);
+  if(document.getElementById('view-capa')?.classList.contains('active')) renderNcrPage();
+  openNcrDetail(id); if(typeof renderDashboard==='function') renderDashboard();
+}
+async function reopenNcr(id){
+  if(!confirm('Reopen this record?')) return; const now=new Date().toISOString();
+  await patchNcrs(arr=>{ const n=arr.find(x=>x.id===id); if(n){ n.status='Investigating'; n.closedBy=null; n.closedAt=null; (n.history=n.history||[]).push({at:now,by:currentUser,action:'Reopened'}); } });
+  renderNcrPage(); openNcrDetail(id);
+}
+function exportNcrExcel(){
+  if(typeof XLSX==='undefined'){ alert('Excel export library failed to load — please refresh.'); return; }
+  const rows=_ncrs.map(n=>({'No.':n.ncNo,Type:n.kind,Source:n.source,Severity:n.severity,Raised:String(n.raisedAt).slice(0,10),'Raised by':USERS[n.raisedBy]?.name||n.raisedBy,Customer:n.custName,Job:n.jobNo,'Cert No.':n.certNo,
+    Description:n.description,'Time limit check':n.tncCheck||'',Correction:n.correction,'Affects results':n.affectsResults,'Customer notified':n.customerNotified,'Certs recalled':n.certsRecalled,
+    'Root cause':n.rootCause,'Corrective action':n.correctiveAction,'Action owner':USERS[n.actionOwner]?.name||n.actionOwner||'','Due':n.actionDue,Effective:n.effective,Status:n.status,Closed:String(n.closedAt||'').slice(0,10)}));
+  const ws=XLSX.utils.json_to_sheet(rows); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'NC & Complaints'); XLSX.writeFile(wb,`Westlab_NC_Register_${toLocalDateStr(new Date())}.xlsx`);
+}
+function jobNcrHtml(j){ const l=(_ncrs||[]).filter(n=>n.jobNo===j.jobNo); if(!l.length) return '';
+  return `<div style="margin-top:14px;"><div style="font-weight:700;font-size:12.5px;">⚠️ Nonconformances / complaints</div>${l.map(n=>`<div style="font-size:12px;padding:3px 0;"><a href="javascript:void(0)" onclick="openNcrDetail('${n.id}')">${escapeHtml(n.ncNo)}</a> · ${escapeHtml(n.kind)} · ${ncrStatusBadge(n.status)}</div>`).join('')}</div>`; }
+
+</script>
+<script>
 // ═══════════════════════════ DOCUMENT NUMBERING (Settings) ═══════════════════════════
 const DOC_SERIES=[
   {prefix:'WEN',label:'Enquiry',used:()=>(_salesTracker||[]).map(e=>e.enquiryNo)},
   {prefix:'WQT',label:'Quotation',used:()=>(_quotationsV2||[]).map(q=>q.quotationNo)},
+  {prefix:'WNC',label:'NC / Complaint',used:()=>(_ncrs||[]).map(n=>n.ncNo)},
   {prefix:'WIV',label:'Invoice',used:()=>(_invoices||[]).map(i=>i.invoiceNo)},
   {prefix:'WPO',label:'Purchase Order',used:()=>(_purchaseOrders||[]).map(p=>p.poNumber).concat((_purchasingTracker||[]).map(e=>e.poNumber).filter(Boolean))},
   {prefix:'WDO',label:'Delivery Order',used:()=>docAllDoNumbers()},
@@ -22481,6 +23071,7 @@ function docHighestUsed(series,yymm){
 async function renderDocNumbering(){
   const card=el('doc-numbering-card'), body=el('doc-numbering-body'); if(!card||!body) return;
   const sc=el('system-check-card'); if(sc) sc.style.display=isAdmin(currentUser)?'':'none';
+  const cdc=el('charge-defaults-card'); if(cdc){ cdc.style.display=isAdmin(currentUser)?'':'none'; const d=_settings.chargeDefaults||{}; ['adjustment','attempt','transport','postponement','notReady','reissue'].forEach(k=>{ const f=el('cd-'+k); if(f) f.value=d[k]??''; }); }
   if(!isAdmin(currentUser)){ card.style.display='none'; return; }
   card.style.display='';
   const yymm=docYymm();
