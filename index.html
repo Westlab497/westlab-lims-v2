@@ -9792,12 +9792,12 @@ function qtExpandToJobUnits(items,q){
   (items||[]).filter(it=>it&&it.eqName&&it.poAccepted!==false).forEach(it=>{
     const c=qtLineCalc(it);
     const ordered=it.poAccepted===true?Math.max(1,Math.min(parseInt(it.poQty)||c.qty,c.qty)):c.qty;
-    const socN=it.socRequested?Math.min(qtSocUnits(it),ordered):0;
+    const socN=it.socRequested?Math.min(it.poSocUnits!=null?it.poSocUnits:qtSocUnits(it),ordered):0; // SoC only for the units ordered with it
     qtUnitDetails(it).slice(0,ordered).forEach((u,ui)=>{
       const unit={...it,serial:u.serial,tagNo:u.tagNo,calPoints:u.calPoints,resolution:u.resolution,quantity:1,
         unitPrice:Math.round(c.netUnitPrice*(1+(sur.pct&&!outFl[(items||[]).indexOf(it)]?sur.pct/100:0))*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
         socParameters:(ui<socN&&it.socParameters)?JSON.parse(JSON.stringify(it.socParameters)):undefined};
-      delete unit.units; delete unit.discount; delete unit.srcIdx; delete unit.poAccepted; delete unit.poQty;
+      delete unit.units; delete unit.discount; delete unit.srcIdx; delete unit.poAccepted; delete unit.poQty; delete unit.poSocUnits;
       ['extraPointsCount','extraPointsQty','extraPointPrice','extraPointsStd','extraPointsWaived','extraPointsManual','outsourced'].forEach(k=>delete unit[k]);
       out.push(unit);
     });
@@ -11211,7 +11211,8 @@ function openAcceptQuotationModal(quotationId){
       <span style="flex:1;">${it.itemCode?`<b style="color:#3730a3;">${escapeHtml(it.itemCode)}</b> `:''}${escapeHtml(it.eqName)}${it.socRequested?' <span style="color:var(--text-muted);">+ SoC</span>':''}</span>
       <span style="color:var(--text-muted);">quoted ${qty}</span>
       ${qty>1?`<span>in PO</span><input type="number" class="form-control aq-qty" data-i="${i}" min="1" max="${qty}" value="${qty}" oninput="aqUpdatePoValue()" style="width:70px;padding:4px 6px;"/>`:`<input type="hidden" class="aq-qty" data-i="${i}" value="1"/>`}
-    </div>`; }).join('');
+      ${it.socRequested?`<span title="Units the customer wants the Statement of Conformity for — 0 means no SoC" style="white-space:nowrap;">SoC units</span><input type="number" class="form-control aq-soc" data-i="${i}" min="0" max="${Math.min(qtSocUnits(it),qty)}" value="${Math.min(qtSocUnits(it),qty)}" oninput="aqUpdatePoValue()" style="width:60px;padding:4px 6px;"/>`:''}
+    </div>`; }).join('')+((q.items||[]).some(it=>it.socRequested)?'<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">SoC units: set to 0 if the customer doesn\'t want the Statement of Conformity.</div>':'');
   aqUpdatePoValue();
   el('aq-po-number').value='';
   el('aq-po-file').value='';
@@ -11219,7 +11220,8 @@ function openAcceptQuotationModal(quotationId){
 }
 function aqSelections(){
   return [...document.querySelectorAll('#aq-items .aq-item')].map(cb=>{ const i=+cb.dataset.i; const qEl=document.querySelector(`#aq-items .aq-qty[data-i="${i}"]`);
-    return {i,on:cb.checked,qty:Math.max(1,parseInt(qEl?.value)||1)}; });
+    const sEl=document.querySelector(`#aq-items .aq-soc[data-i="${i}"]`);
+    return {i,on:cb.checked,qty:Math.max(1,parseInt(qEl?.value)||1),soc:sEl?Math.max(0,parseInt(sEl.value)||0):null}; });
 }
 function aqUpdatePoValue(){
   const q=_quotationsV2.find(x=>x.id===_acceptQuotationId); const box=el('aq-po-value'); if(!q||!box) return;
@@ -11246,7 +11248,8 @@ async function confirmAcceptQuotation(){
       if(uploadRes.ok){ const r2=await uploadRes.json(); poDocUrl=r2.url||''; }
     }catch(e){ console.error('PO document upload failed:',e); showToast('⚠️ PO document could not be uploaded, but acceptance was still recorded.','warn',4000); }
   }
-  sel.forEach(x=>{ const it=q.items[x.i]; if(!it) return; it.poAccepted=x.on; it.poQty=x.on?Math.min(x.qty,parseInt(it.quantity)||1):0; });
+  sel.forEach(x=>{ const it=q.items[x.i]; if(!it) return; it.poAccepted=x.on; it.poQty=x.on?Math.min(x.qty,parseInt(it.quantity)||1):0;
+    if(it.socRequested) it.poSocUnits=x.on?Math.min(x.soc==null?qtSocUnits(it):x.soc,it.poQty):0; });
   q.status='Accepted';
   q.respondedAt=new Date().toISOString();
   q.poNumber=poNumber;
@@ -11284,10 +11287,11 @@ async function confirmAcceptQuotation(){
   addAudit('📄',`Quotation ${q.quotationNo} marked Accepted — PO ${poNumber}`);
   if(btn){btn.disabled=false;btn.textContent='✅ Confirm Accepted';}
 }
-async function deleteQuotationV2(quotationId){
+async function deleteQuotationV2(quotationId,opts){
+  if(!isAdmin(currentUser)){ alert('Only Admin or the Managing Director can delete quotations.'); return; }
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   const linkedEntries=(_salesTracker||[]).filter(e=>e.linkedQuotationId===q.id||(q.linkedSalesTrackerId&&e.id===q.linkedSalesTrackerId));
-  if(!confirm(`Permanently delete ${q.quotationNo}? This cannot be undone — it will be completely removed, not just hidden.${linkedEntries.length?`\n\nIt was made from the Sales Tracker enquiry for ${linkedEntries.map(e=>e.name).join(', ')}. That enquiry will be unlinked and moved back so a new quotation can be made.`:''}`))return;
+  if(!(opts&&opts.skipConfirm)&&!confirm(`Permanently delete ${q.quotationNo}? This cannot be undone — it will be completely removed, not just hidden${q.poDocUrl?', including the customer PO document':''}.${linkedEntries.length?`\n\nIt was made from the Sales Tracker enquiry for ${linkedEntries.map(e=>e.name).join(', ')}. That enquiry will be unlinked and moved back so a new quotation can be made.`:''}`))return;
   const idx=_quotationsV2.findIndex(x=>x.id===quotationId);
   if(idx===-1)return;
   // If this was the most recently issued number this month (nothing higher exists), it's
@@ -11313,12 +11317,13 @@ async function deleteQuotationV2(quotationId){
   }
   _quotationsV2.splice(idx,1);
   await saveQuotationsV2();
+  if(q.poDocUrl&&!(await deleteStoredFile(q.poDocUrl))) showToast('⚠️ The quotation was deleted, but its PO document file could not be removed (the upload worker may need updating).','warn',7000);
   let entriesFixed=0;
   linkedEntries.forEach(e=>{ if(e.linkedQuotationId===q.id||!e.linkedQuotationId){ if(unlinkDeletedQuotationFromEntry(e,q.quotationNo)) entriesFixed++; } });
   if(entriesFixed){ try{ await saveSalesTracker(); }catch(e){ showToast('⚠️ The quotation was deleted, but its Sales Tracker enquiry could not be updated — it will be repaired next time the LIMS loads.','warn',8000); } }
-  renderQuotationsV2Page();
+  if(!(opts&&opts.quiet)){ renderQuotationsV2Page();
   if(document.getElementById('view-sales-tracker')?.classList.contains('active')) renderSalesTrackerPage();
-  docDeleteToast(q.quotationNo,wasHighest,rollbackResult);
+  docDeleteToast(q.quotationNo,wasHighest,rollbackResult); }
   addAudit('🗑️',`Quotation ${q.quotationNo} permanently deleted by ${USERS[currentUser]?.name||currentUser}`);
 }
 async function respondQuotationV2(quotationId,accepted){
@@ -11722,6 +11727,14 @@ function addressLines(addr){
   const a=String(addr||'').trim(); if(!a) return [];
   if(/\n/.test(a)) return a.split(/\n+/).map(x=>x.trim()).filter(Boolean);
   const m=a.match(/^(.*?,)\s*(\d{5}\b.*)$/); return m?[m[1],m[2]]:[a];
+}
+// Deletes a file the LIMS stored (e.g. a customer PO document). Needs the updated upload worker
+// (DELETE support, protected by the app secret). Returns true if removed (or nothing to remove).
+async function deleteStoredFile(url){
+  const pre='https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/';
+  if(!url||!String(url).startsWith(pre)) return true;
+  try{ const r=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'X-File-Path':decodeURIComponent(String(url).slice(pre.length)),'X-App-Secret':APP_SECRET}}); return r.ok; }
+  catch(e){ console.warn('File delete failed:',e); return false; }
 }
 function westlabLetterheadHeader(){
   return `<div style="position:absolute;left:0;right:0;top:34px;">
@@ -12263,7 +12276,7 @@ function renderTrackerPage(type){
           ${type==='sales'&&items.some(it=>it.capabilityVerdict)?`<button class="btn btn-outline btn-sm" onclick="exportEntryCapabilityReviewPdf('${e.id}')" title="Export capability review for this entry">📄</button>`:''}
           ${type==='purchasing'&&e.poNumber?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" title="PO issued with the older, no-approval method" onclick="exportLegacyTrackerPoPdf('${e.id}')">📄 ${e.poNumber}</button>`:''}
           ${(!readOnly&&type==='purchasing')?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" title="Raise a Purchase Order for this" onclick="openPurchaseOrderModal(null,{entryId:'${e.id}'})">🧾 PO${(_purchaseOrders||[]).some(po=>po.linkedPurchasingEntryId===e.id&&po.status!=='Cancelled')?' ✓':''}</button>`:''}${readOnly?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
-          <button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>`}
+          ${type==='sales'&&!isAdmin(currentUser)?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>`}`}
         </td>
       </tr>`;
     }).join('')}
@@ -12294,7 +12307,10 @@ function qtOrderedItems(q,sel){ // the quotation's items as ordered (sel: [{i,on
   return (q.items||[]).map((it,i)=>{ if(!it||!it.eqName) return null;
     const on=sel?sel.find(x=>x.i===i)?.on:(it.poAccepted!==false); if(!on) return null;
     const n=Math.max(1,Math.min(sel?(sel.find(x=>x.i===i)?.qty||1):(parseInt(it.poQty)||parseInt(it.quantity)||1),parseInt(it.quantity)||1));
-    return {...it,quantity:n,socUnitsNeeded:Math.min(qtSocUnits(it),n)}; });
+    // SoC as ordered: the accept window's "SoC units", else what was recorded at acceptance, else as quoted
+    const selSoc=sel?sel.find(x=>x.i===i)?.soc:null;
+    const socN=Math.min(selSoc!=null?selSoc:(it.poSocUnits!=null?it.poSocUnits:qtSocUnits(it)),n);
+    return {...it,quantity:n,socUnitsNeeded:socN,socRequested:!!it.socRequested&&socN>0}; });
 }
 function qtValueOf(q,list){ const its=list.filter(Boolean); const flagsAll=qtOutsourcedFlags(q,q.items);
   const withFlags=list.map((it,i)=>it?{...it,outsourced:it.outsourced||flagsAll[i]}:null).filter(Boolean);
@@ -12353,7 +12369,7 @@ function stOpenRowMenu(ev,entryId){
   else if(items.some(it=>['Can Do','Can Do (External)'].includes(it.capabilityVerdict))&&!['open','quoted'].includes(stGroupOf(e.status))) html+=stMenuItem('📄 Create quotation',`openQuotationV2Modal(null,'${e.id}')`);
   if(e.jobNo) html+=stMenuItem('🔧 Open job '+escapeHtml(e.jobNo),`viewJobDetail('${escapeForJsAttr(e.jobNo)}')`);
   items.forEach((it,idx)=>{ if(it.capabilityVerdict==='Cannot Do') html+=stMenuItem('🔄 Resubmit for review: '+escapeHtml(it.eqName),`resubmitCapabilityForReview('${e.id}',${idx})`); });
-  html+=(html?'<hr/>':'')+stMenuItem('✏️ Edit entry',`openTrackerEntryModal('sales','${e.id}')`)+stMenuItem('🗑 Delete entry',`deleteTrackerEntry('sales','${e.id}')`,{danger:true});
+  html+=(html?'<hr/>':'')+stMenuItem('✏️ Edit entry',`openTrackerEntryModal('sales','${e.id}')`)+(isAdmin(currentUser)?stMenuItem('🗑 Delete entry',`deleteTrackerEntry('sales','${e.id}')`,{danger:true}):'');
   stShowMenu(ev.currentTarget,html);
 }
 // The single most useful next action for an entry (the rest live in the ⋯ menu)
@@ -13013,15 +13029,18 @@ async function updateTrackerStatus(type,entryId,newStatus){
 }
 
 async function deleteTrackerEntry(type,entryId){
-  if(type==='sales'&&!canUseSalesTracker(currentUser)){alert('Quality Manager has view-only access to Sales Tracker.');return;}
-  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  if(type==='sales'&&!isAdmin(currentUser)){alert('Only Admin or the Managing Director can delete enquiries.');return;}
   const arr=trackerArr(type);
   const entry=arr.find(e=>e.id===entryId);
+  const quos=type==='sales'&&entry?(_quotationsV2||[]).filter(q=>q.linkedSalesTrackerId===entryId||q.id===entry.linkedQuotationId):[];
+  if(!confirm(`Delete this ${type==='sales'?'enquiry'+(entry?.enquiryNo?' '+entry.enquiryNo:''):'entry'}? This cannot be undone.${quos.length?`\n\nIts quotation${quos.length>1?'s':''} will be deleted too: ${quos.map(q=>q.quotationNo).join(', ')}${quos.some(q=>q.poDocUrl)?' (including the customer PO document)':''}.${quos.some(q=>q.createdJobNo)?`\nJobs already created (${quos.filter(q=>q.createdJobNo).map(q=>q.createdJobNo).join(', ')}) are NOT deleted — jobs have their own deletion.`:''}`:''}`))return;
+  for(const q of quos) await deleteQuotationV2(q.id,{skipConfirm:true,quiet:true});
   if(type==='sales') _salesTracker=arr.filter(e=>e.id!==entryId);
   else _purchasingTracker=arr.filter(e=>e.id!==entryId);
   await trackerSave(type);
   renderTrackerPage(type);
-  showToast('🗑️ Entry deleted','success',2000);
+  showToast(`🗑️ ${type==='sales'?'Enquiry':'Entry'} deleted${quos.length?` with ${quos.length} quotation${quos.length>1?'s':''}`:''}`,'success',3000);
+  if(quos.length&&document.getElementById('view-quotations-v2')?.classList.contains('active')) renderQuotationsV2Page();
   addAudit(type==='sales'?'📈':'🛒',`${type==='sales'?'Sales':'Purchasing'} Tracker — deleted entry for ${entry?.name||'—'}`);
 }
 
