@@ -1007,18 +1007,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th onclick="sortRefEqTable('id')" style="cursor:pointer;">ID <span id="sort-arrow-id"></span></th>
-              <th onclick="sortRefEqTable('name')" style="cursor:pointer;">Equipment Name <span id="sort-arrow-name"></span></th>
-              <th onclick="sortRefEqTable('brand')" style="cursor:pointer;">Brand / Model <span id="sort-arrow-brand"></span></th>
-              <th>Serial No.</th>
-              <th onclick="sortRefEqTable('location')" style="cursor:pointer;">Location <span id="sort-arrow-location"></span></th>
+              <th onclick="sortRefEqTable('id')" style="cursor:pointer;white-space:nowrap;">ID <span id="sort-arrow-id"></span></th>
+              <th onclick="sortRefEqTable('name')" style="cursor:pointer;">Equipment <span id="sort-arrow-name"></span><span id="sort-arrow-brand" style="display:none;"></span><span id="sort-arrow-location" style="display:none;"></span></th>
               <th>Traceability</th>
               <th onclick="sortRefEqTable('lastCal')" style="cursor:pointer;">Last Cal. <span id="sort-arrow-lastCal"></span></th>
               <th onclick="sortRefEqTable('dueDate')" style="cursor:pointer;">Due Date <span id="sort-arrow-dueDate"></span></th>
               <th onclick="sortRefEqTable('calStatus')" style="cursor:pointer;">Cal Status <span id="sort-arrow-calStatus"></span></th>
               <th onclick="sortRefEqTable('lifecycleStatus')" style="cursor:pointer;">Lifecycle <span id="sort-arrow-lifecycleStatus"></span></th>
               <th onclick="sortRefEqTable('availability')" style="cursor:pointer;">Availability <span id="sort-arrow-availability"></span></th>
-              <th>Actions</th>
+              <th></th>
             </tr></thead>
             <tbody id="ref-eq-tbody">
               <tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🏛️</div><p>No reference equipment added yet.</p></div></td></tr>
@@ -1423,11 +1420,15 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="page-header">
         <div>
           <div class="page-title">📋 My Requests</div>
-          <div class="page-sub">Status of your reference equipment checkouts and job extension requests</div>
+          <div class="page-sub">Everything you've asked for — claims, leave, overtime, reference equipment and job extensions</div>
         </div>
       </div>
       <div id="my-requests-summary-strip" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;"></div>
-      <div class="form-section-title" style="margin-top:0;">📤 Reference Equipment Checkout Requests</div>
+      <div class="form-section-title" style="margin-top:0;">🧾 My Claims</div>
+      <div id="my-requests-claims" class="card"></div>
+      <div class="form-section-title">🌴 My Leave &amp; Overtime</div>
+      <div id="my-requests-leave" class="card"></div>
+      <div class="form-section-title">📤 Reference Equipment Checkout Requests</div>
       <div id="my-requests-checkout-list" class="card"><div style="padding:16px;"></div></div>
       <div class="form-section-title">🔄 Extension Requests</div>
       <div id="my-requests-extension-list" class="card"><div style="padding:16px;"></div></div>
@@ -1445,7 +1446,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
 
       <!-- Leave Balance Cards (own balance) -->
       <div id="leave-balance-section" style="margin-bottom:16px;">
-        <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;">MY LEAVE BALANCE</div>
+        <div id="leave-balance-title" style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;text-transform:uppercase;">My leave balance</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;" id="leave-balance-cards"></div>
       </div>
 
@@ -1505,10 +1506,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
           <option value="Rejected">Rejected</option>
+          <option value="Paid">Paid</option>
         </select>
         <select class="form-control" id="claims-filter-month" onchange="renderClaims()" style="width:160px;">
           <option value="">All Months</option>
         </select>
+        <button class="btn btn-outline btn-sm" onclick="markFilteredClaimsPaid()">💵 Mark approved as paid…</button>
+        <button class="btn btn-outline btn-sm" onclick="exportClaimsSummary()">📊 Monthly summary</button>
       </div>
 
       <!-- Claims summary (admin only) -->
@@ -1518,8 +1522,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="stat-value" id="claims-pending-count">0</div>
         </div>
         <div class="stat-card" style="flex:1;min-width:140px;padding:14px;border-color:var(--green);">
-          <div class="stat-label">Approved This Month</div>
+          <div class="stat-label">Approved — to pay</div>
           <div class="stat-value" id="claims-approved-amount">RM 0</div>
+        </div>
+        <div class="stat-card" style="flex:1;min-width:140px;padding:14px;">
+          <div class="stat-label">Paid this month</div>
+          <div class="stat-value" id="claims-paid-amount">RM 0</div>
         </div>
         <div class="stat-card" style="flex:1;min-width:140px;padding:14px;">
           <div class="stat-label">My Pending</div>
@@ -1941,6 +1949,29 @@ textarea.form-control{resize:vertical;min-height:70px;}
               <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="cert-counter-preview">Current next: loading…</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="card" id="leave-settings-card" style="margin-bottom:16px;display:none;">
+        <div class="card-header"><span class="card-title">🌴 Leave &amp; public holidays</span></div>
+        <div class="card-body">
+          <div class="form-group"><label class="form-label">Annual leave carried forward to next year (max days)</label><input class="form-control" type="number" min="0" step="0.5" id="ls-carry" placeholder="0 = no carry-forward" style="max-width:200px;"/></div>
+          <div class="form-group"><label class="form-label">Public holidays <span style="font-weight:normal;color:var(--text-muted);">— one per line: YYYY-MM-DD and a name (not counted as leave days)</span></label>
+            <textarea class="form-control" id="ls-holidays" rows="8" style="font-family:'DM Mono',monospace;font-size:12px;" placeholder="2027-01-01 New Year's Day"></textarea></div>
+          <button class="btn btn-primary btn-sm" onclick="saveLeaveSettings()">Save</button>
+        </div>
+      </div>
+
+      <div class="card" id="claims-settings-card" style="margin-bottom:16px;display:none;">
+        <div class="card-header"><span class="card-title">🧾 Claims</span></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Mileage rate (RM per km)</label><input class="form-control" type="number" min="0" step="0.01" id="cs-mileage" placeholder="0.60" style="max-width:160px;"/>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Filled in automatically on transportation claims (staff can't change it).</div></div>
+            <div class="form-group"><label class="form-label">Receipt required for</label>
+              <div id="cs-receipt-types" style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;"><label style="display:flex;gap:5px;align-items:center;font-weight:normal;"><input type="checkbox" value="Transportation"/> Transportation</label><label style="display:flex;gap:5px;align-items:center;font-weight:normal;"><input type="checkbox" value="Toll"/> Toll</label><label style="display:flex;gap:5px;align-items:center;font-weight:normal;"><input type="checkbox" value="Parking"/> Parking</label><label style="display:flex;gap:5px;align-items:center;font-weight:normal;"><input type="checkbox" value="Accommodation"/> Accommodation</label><label style="display:flex;gap:5px;align-items:center;font-weight:normal;"><input type="checkbox" value="Meal Allowance"/> Meal Allowance</label><label style="display:flex;gap:5px;align-items:center;font-weight:normal;"><input type="checkbox" value="Other"/> Other</label></div></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveClaimsSettings()">Save</button>
         </div>
       </div>
 
@@ -3299,7 +3330,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="form-row" id="claim-distance-row">
         <div class="form-group">
           <label class="form-label">Distance (km) <span style="font-size:11px;color:var(--text-muted);">for transportation</span></label>
-          <input class="form-control" id="claim-distance" type="number" min="0" placeholder="e.g. 80"/>
+          <input class="form-control" id="claim-distance" type="number" min="0" placeholder="e.g. 80" oninput="calcClaimAmount()"/>
         </div>
         <div class="form-group">
           <label class="form-label">Rate (RM/km)</label>
@@ -10299,6 +10330,19 @@ async function addPriceReferenceEntry(){
   renderPriceReferenceTable();
   showToast('✅ Price reference added','success',2500);
 }
+async function saveLeaveSettings(){
+  const lines=el('ls-holidays').value.split('\n').map(l=>l.trim()).filter(Boolean); const out=[], bad=[];
+  lines.forEach(l=>{ const m=l.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/); if(m&&!isNaN(new Date(m[1]+'T00:00:00'))) out.push({date:m[1],name:m[2].trim()}); else bad.push(l); });
+  if(bad.length){ alert('These lines are not in the form "YYYY-MM-DD Name":\n\n'+bad.slice(0,8).join('\n')); return; }
+  const carry=el('ls-carry').value;
+  await patchSettings(st=>{ st.publicHolidays=[...new Map(out.map(h=>[h.date,h])).values()].sort((a,b)=>a.date.localeCompare(b.date)); st.leaveSettings={...(st.leaveSettings||{}),carryForwardMax:carry===''?0:Math.max(0,parseFloat(carry)||0)}; });
+  showToast(`✅ Leave settings saved — ${out.length} public holidays`,'success',3000);
+}
+async function saveClaimsSettings(){
+  const v=el('cs-mileage').value; const types=[...document.querySelectorAll('#cs-receipt-types input:checked')].map(cb=>cb.value);
+  await patchSettings(st=>{ st.claimsSettings={mileageRate:v===''?null:Math.max(0,parseFloat(v)||0),receiptRequired:types}; });
+  showToast('✅ Claims settings saved','success',2500);
+}
 async function saveChargeDefaults(){
   const d={}; ['adjustment','attempt','transport','postponement','notReady','reissue'].forEach(k=>{ const v=el('cd-'+k)?.value; if(v!==''&&v!=null) d[k]=Math.max(0,parseFloat(v)||0); });
   await patchSettings(st=>{ st.chargeDefaults=d; }); showToast('✅ Standard charges saved','success',2500);
@@ -13836,6 +13880,38 @@ async function confirmClockOut(){
   addAudit('🏁',`<strong>${USERS[currentUser]?.name||currentUser}</strong> clocked out at ${timeStr} (${workingHrs}h)`);
 }
 
+function attMins(t){ const [h,m]=String(t||'0:0').split(':').map(Number); return (h||0)*60+(m||0); }
+function attLateMins(clockIn){ return Math.max(0,attMins(clockIn)-attMins(OFFICE_HOURS_START)); }
+function attWorkingHours(inT,outT){ return Math.max(0,((attMins(outT)-attMins(inT))-60)/60).toFixed(1); } // minus 1 hr lunch, as at clock-out
+function attAskTime(msg){
+  const t=prompt(msg,'17:30'); if(t===null) return null;
+  if(!/^([01]?\d|2[0-3]):[0-5]\d$/.test(t.trim())){ alert('Please enter the time as HH:MM, e.g. 18:05'); return null; }
+  return t.trim().padStart(5,'0');
+}
+// Forgot to clock out: the staff member asks, a manager approves (or a manager fixes it directly)
+async function requestClockOutCorrection(id){
+  const a=_attendance.find(x=>x.id===id); if(!a) return;
+  const t=attAskTime(`You didn't clock out on ${fmtDateShort(a.date)} (clocked in ${a.clockIn}).\n\nWhat time did you leave? (HH:MM)`); if(!t) return;
+  if(attMins(t)<=attMins(a.clockIn)){ alert('The time must be after your clock-in ('+a.clockIn+').'); return; }
+  const why=prompt('Reason (e.g. forgot to clock out after on-site job):','')??''; 
+  a.correctionRequest={clockOut:t,reason:why.trim(),at:new Date().toISOString()};
+  await saveAttendance(); renderAttendance(); showToast('Correction sent to your manager','success',3000);
+}
+async function decideClockOutCorrection(id,ok){
+  const a=_attendance.find(x=>x.id===id); if(!a||!a.correctionRequest) return;
+  if(ok){ a.clockOut=a.correctionRequest.clockOut; a.workingHours=parseFloat(attWorkingHours(a.clockIn,a.clockOut)); a.correctedBy=USERS[currentUser]?.name||currentUser; a.correctionNote='Staff request: '+(a.correctionRequest.reason||''); }
+  addAudit(ok?'✅':'❌',`Clock-out correction ${ok?'approved':'rejected'} for ${escapeHtml(USERS[a.username]?.name||a.username)} on ${a.date}${ok?' — '+a.clockOut:''}`);
+  delete a.correctionRequest; await saveAttendance(); renderAttendance();
+}
+async function fixClockOut(id){
+  const a=_attendance.find(x=>x.id===id); if(!a) return;
+  const t=attAskTime(`Set the clock-out time for ${USERS[a.username]?.name||a.username} on ${fmtDateShort(a.date)} (clocked in ${a.clockIn}). HH:MM`); if(!t) return;
+  if(attMins(t)<=attMins(a.clockIn)){ alert('The time must be after the clock-in ('+a.clockIn+').'); return; }
+  const why=prompt('Reason for the correction:','')??'';
+  a.clockOut=t; a.workingHours=parseFloat(attWorkingHours(a.clockIn,t)); a.correctedBy=USERS[currentUser]?.name||currentUser; a.correctionNote=why.trim();
+  await saveAttendance(); renderAttendance();
+  addAudit('🛠️',`Clock-out set to ${t} for ${escapeHtml(USERS[a.username]?.name||a.username)} on ${a.date}${why?' — '+escapeHtml(why):''}`);
+}
 function updateAttendanceTodayCard(){
   const today=toLocalDateStr(new Date());
   const record=getTodayRecord(currentUser);
@@ -13939,13 +14015,7 @@ async function approveOT(otId){
   ot.status='Approved';
   ot.approvedBy=USERS[currentUser]?.name||currentUser;
   ot.approvedAt=new Date().toISOString();
-  // Credit RL if compensation is Replacement Leave
-  if(ot.compensation==='Replacement Leave'){
-    initLeaveBalance(ot.username);
-    const cur=_leaveBalances[ot.username]?.['Replacement Leave']||0;
-    _leaveBalances[ot.username]['Replacement Leave']=parseFloat((cur+ot.rlDays).toFixed(2));
-    await saveLeaveBalances();
-  }
+  // Replacement leave is counted from approved overtime automatically (see leaveBreakdown)
   await saveOvertime();
   renderAttendance();
   showToast(`✅ OT approved — ${ot.hours}h credited${ot.compensation==='Replacement Leave'?' (+'+ot.rlDays+' RL days)':''}` ,'success',4000);
@@ -13975,7 +14045,8 @@ function renderAttendance(){
   // Show/hide admin controls
   const adminFilter=el('att-admin-filter');
   const summaryRow=el('att-summary-row');
-  if(adminFilter) adminFilter.style.display=admin?'flex':'none';
+  if(adminFilter) adminFilter.style.display='flex'; // everyone can pick a month; only Admin/MD see the staff picker + export
+  { const fs=el('att-filter-staff'); if(fs) fs.style.display=admin?'':'none'; const ex=adminFilter?.querySelector('button[onclick^="exportAttendanceReport"]'); if(ex) ex.style.display=admin?'':'none'; }
   if(summaryRow) summaryRow.style.display=admin?'flex':'none';
 
   // Populate filters
@@ -14012,6 +14083,20 @@ function renderAttendance(){
     if(!a.date?.startsWith(selectedMonth)) return false;
     return true;
   });
+  const todayStr=toLocalDateStr(new Date());
+  const scopeUser=admin?filterStaff:currentUser; // leave / holiday rows are shown for one person at a time
+  const extraRows=[];
+  if(scopeUser&&selectedMonth){
+    const [yy,mm]=selectedMonth.split('-').map(Number); const days=new Date(yy,mm,0).getDate(); const hol=getPublicHolidays();
+    for(let d=1;d<=days;d++){ const ds=`${selectedMonth}-${String(d).padStart(2,'0')}`; const dow=new Date(ds+'T00:00:00').getDay();
+      if(dow===0||dow===6||attFiltered.some(a=>a.username===scopeUser&&a.date===ds)) continue;
+      const lv=(_leaveRecords||[]).find(r=>r.submittedBy===scopeUser&&r.status==='Approved'&&r.start<=ds&&r.end>=ds);
+      const h=hol.find(x=>x.date===ds);
+      if(lv) extraRows.push({date:ds,username:scopeUser,label:`🌴 On leave — ${lv.type}${lv.halfDayPeriod?' ('+lv.halfDayPeriod+')':''}`,cls:'badge-blue'});
+      else if(h) extraRows.push({date:ds,username:scopeUser,label:`🎉 Public holiday${h.name?' — '+h.name:''}`,cls:'badge-purple'});
+    }
+  }
+  const myMissed=_attendance.filter(a=>a.username===currentUser&&a.clockIn&&!a.clockOut&&a.date<todayStr&&!a.correctionRequest);
   const otFiltered=_overtime.filter(o=>{
     if(!admin&&o.username!==currentUser) return false;
     if(admin&&filterStaff&&o.username!==filterStaff) return false;
@@ -14051,13 +14136,17 @@ function renderAttendance(){
       ${attFiltered.sort((a,b)=>b.date.localeCompare(a.date)).map(a=>{
         const staffName=USERS[a.username]?.name||a.username;
         const badges=[];
-        if(a.isLate) badges.push('<span class="badge badge-amber" style="font-size:10px;">Late</span>');
+        if(a.isLate) badges.push(`<span class="badge badge-amber" style="font-size:10px;">Late${a.clockIn?' '+attLateMins(a.clockIn)+' min':''}</span>`);
+        const noOut=a.clockIn&&!a.clockOut&&a.date<todayStr;
+        if(noOut&&!a.correctionRequest) badges.push('<span class="badge badge-red" style="font-size:10px;">No clock-out</span>');
+        if(a.correctionRequest&&!a.clockOut) badges.push(`<span class="badge badge-amber" style="font-size:10px;" title="${escapeHtml(a.correctionRequest.reason||'')}">Correction asked: ${escapeHtml(a.correctionRequest.clockOut)}</span>`);
+        if(a.correctedBy) badges.push(`<span class="badge badge-slate" style="font-size:10px;" title="${escapeHtml(a.correctionNote||'')}">Corrected by ${escapeHtml(a.correctedBy)}</span>`);
         if(a.flagged) badges.push('<span class="badge badge-red" style="font-size:10px;">Remote</span>');
-        if(!a.isLate&&!a.flagged) badges.push('<span class="badge badge-green" style="font-size:10px;">On Time</span>');
+        if(!a.isLate&&!a.flagged&&!noOut&&!a.correctionRequest) badges.push('<span class="badge badge-green" style="font-size:10px;">On Time</span>');
         const otForDay=otFiltered.filter(o=>o.username===a.username&&o.date===a.date);
         return `<tr style="border-bottom:1px solid var(--border);">
           ${admin?`<td style="padding:10px;font-size:13px;">${staffName}</td>`:''}
-          <td style="padding:10px;font-size:13px;font-weight:600;">${a.date}</td>
+          <td style="padding:10px;font-size:13px;font-weight:600;white-space:nowrap;">${fmtDateShort(a.date)}</td>
           <td style="padding:10px;text-align:center;font-size:13px;">${a.clockIn||'—'}</td>
           <td style="padding:10px;text-align:center;font-size:13px;">${a.clockOut||'<span style="color:var(--text-muted);">—</span>'}</td>
           <td style="padding:10px;text-align:center;font-size:13px;font-weight:700;">${a.workingHours!=null?a.workingHours+'h':'—'}</td>
@@ -14066,11 +14155,20 @@ function renderAttendance(){
             ${a.selfieUrl?`<a href="${a.selfieUrl}" target="_blank" class="btn btn-outline btn-sm">🤳</a> `:''}
             ${a.overrideReason?`<span style="color:var(--text-muted);" title="${a.overrideReason}">📝</span> `:''}
             ${otForDay.map(o=>`<span class="badge ${o.status==='Approved'?'badge-green':o.status==='Rejected'?'badge-red':'badge-amber'}" style="font-size:10px;" title="${escapeHtml(o.reason)}">OT ${o.hours}h</span>`).join(' ')}
+            ${noOut&&!a.correctionRequest&&a.username===currentUser?`<button class="btn btn-outline btn-sm" onclick="requestClockOutCorrection('${a.id}')">Request correction</button>`:''}
+            ${admin&&a.correctionRequest&&!a.clockOut?`<button class="btn btn-primary btn-sm" onclick="decideClockOutCorrection('${a.id}',true)">Approve ${escapeHtml(a.correctionRequest.clockOut)}</button> <button class="btn btn-outline btn-sm" onclick="decideClockOutCorrection('${a.id}',false)">Reject</button>`:''}
+            ${admin&&noOut&&!a.correctionRequest?`<button class="btn btn-outline btn-sm" onclick="fixClockOut('${a.id}')">Fix time</button>`:''}
           </td>
         </tr>`;
       }).join('')}
+      ${extraRows.sort((a,b)=>b.date.localeCompare(a.date)).map(x=>`<tr style="border-bottom:1px solid var(--border);background:#fafbfd;">
+          ${admin?`<td style="padding:10px;font-size:13px;color:var(--text-muted);">${escapeHtml(USERS[x.username]?.name||x.username)}</td>`:''}
+          <td style="padding:10px;font-size:13px;font-weight:600;white-space:nowrap;color:var(--text-muted);">${fmtDateShort(x.date)}</td>
+          <td colspan="3" style="padding:10px;text-align:center;font-size:12px;color:var(--text-muted);">—</td>
+          <td style="padding:10px;text-align:center;"><span class="badge ${x.cls}" style="font-size:10px;white-space:nowrap;">${escapeHtml(x.label)}</span></td><td></td></tr>`).join('')}
       </tbody>
     </table>`;
+    if(myMissed.length) html=`<div class="qt-note warn" style="margin:12px 16px;">⚠️ You didn't clock out on ${myMissed.map(a=>fmtDateShort(a.date)).join(', ')}. Use <b>Request correction</b> on ${myMissed.length>1?'those rows':'that row'} to tell your manager the time you left.</div>`+html;
 
     // OT pending approvals (admin)
     const pendingOT=otFiltered.filter(o=>o.status==='Pending');
@@ -14153,6 +14251,28 @@ const SELANGOR_HOLIDAYS=[
   '2027-12-01','2027-12-25'
 ];
 
+// Public holidays: the list in Settings (editable each year), or the built-in Selangor list
+function getPublicHolidays(){ const l=_settings.publicHolidays; return (Array.isArray(l)&&l.length)?l:SELANGOR_HOLIDAYS.map(d=>({date:d,name:''})); }
+function getPublicHolidayDates(){ return getPublicHolidays().map(h=>h.date); }
+// ═══ LEAVE BALANCE — worked out per calendar year from the records, so it resets every January,
+// cancelled leave is given back, and it can never drift from what was actually approved.
+//   entitlement (years of service) + carried-forward annual leave + replacement leave earned from
+//   approved overtime − approved leave taken that year
+function leaveYearOf(d){ return parseInt(String(d||'').slice(0,4))||new Date().getFullYear(); }
+function leaveBreakdown(username,type,year,_depth=0){
+  year=year||new Date().getFullYear();
+  const ent=getDefaultEntitlement(username,type);
+  let carry=0;
+  if(type==='Annual Leave'&&_depth<5){
+    const cap=parseFloat((_settings.leaveSettings||{}).carryForwardMax)||0;
+    const st=(_staff||[]).find(x=>x.username===username); const joinY=st?.joinDate?leaveYearOf(st.joinDate):year;
+    if(cap>0&&year-1>=joinY) carry=Math.min(cap,Math.max(0,leaveBreakdown(username,type,year-1,_depth+1).balance));
+  }
+  const earned=type==='Replacement Leave'?(_overtime||[]).filter(o=>o.username===username&&o.status==='Approved'&&o.compensation==='Replacement Leave'&&leaveYearOf(o.date||o.approvedAt)===year).reduce((a,o)=>a+(parseFloat(o.rlDays)||0),0):0;
+  const used=(_leaveRecords||[]).filter(r=>r.submittedBy===username&&r.type===type&&r.status==='Approved'&&leaveYearOf(r.start)===year).reduce((a,r)=>a+(parseFloat(r.days)||0),0);
+  const total=ent+carry+earned;
+  return {ent,carry,earned,used,total,balance:Math.round((total-used)*100)/100};
+}
 async function loadLeaveRecords(){
   try{
     const data=await SB.get('wl_settings',LEAVE_KEY);
@@ -14172,10 +14292,7 @@ async function saveLeaveBalances(){
   await SB.upsert('wl_settings',LEAVE_BALANCE_KEY,_leaveBalances);
 }
 
-function getLeaveBalance(username,type){
-  if(!_leaveBalances[username]) initLeaveBalance(username);
-  return _leaveBalances[username]?.[type]??getDefaultEntitlement(username,type);
-}
+function getLeaveBalance(username,type){ return leaveBreakdown(username,type).balance; }
 
 function getDefaultEntitlement(username,type){
   const staff=_staff.find(s=>s.username===username);
@@ -14207,14 +14324,14 @@ function countWorkingDaysLeave(startStr, endStr){
   while(d<=end){
     const dow=d.getDay();
     const ds=toLocalDateStr(d);
-    if(dow!==0&&dow!==6&&!SELANGOR_HOLIDAYS.includes(ds)) count++;
+    if(dow!==0&&dow!==6&&!getPublicHolidayDates().includes(ds)) count++;
     d.setDate(d.getDate()+1);
   }
   return count;
 }
 
 function isPublicHoliday(dateStr){
-  return SELANGOR_HOLIDAYS.includes(dateStr);
+  return getPublicHolidayDates().includes(dateStr);
 }
 
 function toggleLeaveTypeFields(){
@@ -14379,16 +14496,7 @@ async function processLeaveDecision(decision){
   r.approvedBy=USERS[currentUser]?.name||currentUser;
   r.approvedAt=new Date().toISOString();
   r.approvalNotes=notes;
-  // Deduct balance on approval
-  if(decision==='Approved'){
-    const deductTypes=['Annual Leave','Medical Leave','Emergency Leave','Replacement Leave'];
-    if(deductTypes.includes(r.type)){
-      initLeaveBalance(r.submittedBy);
-      const cur=_leaveBalances[r.submittedBy][r.type]??getDefaultEntitlement(r.submittedBy,r.type);
-      _leaveBalances[r.submittedBy][r.type]=Math.max(0,cur-r.days);
-      await saveLeaveBalances();
-    }
-  }
+  // (balances are worked out from the records — nothing to deduct here)
   await saveLeaveRecords();
   closeModal('modal-review-leave');
   renderLeave();
@@ -14447,7 +14555,7 @@ function renderLeave(){
     return;
   }
 
-  const statusBadge={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red'};
+  const statusBadge={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate'};
   const typeColor={'Annual Leave':'badge-blue','Medical Leave':'badge-red','Emergency Leave':'badge-amber','Replacement Leave':'badge-purple','Unpaid Leave':'badge-slate','Maternity Leave':'badge-purple','Paternity Leave':'badge-blue','Half Day':'badge-teal'};
   container.innerHTML=`<table style="width:100%;border-collapse:collapse;">
     <thead><tr style="background:var(--bg);">
@@ -14462,7 +14570,7 @@ function renderLeave(){
     <tbody>
     ${filtered.map(r=>{
       const staffName=USERS[r.submittedBy]?.name||r.submittedBy;
-      const dateStr=r.start===r.end?r.start:`${r.start} to ${r.end}`;
+      const dateStr=r.start===r.end?fmtDateShort(r.start):`${fmtDateShort(r.start)} – ${fmtDateShort(r.end)}`;
       return `<tr style="border-bottom:1px solid var(--border);">
         ${admin?`<td style="padding:10px;font-size:13px;">${staffName}</td>`:''}
         <td style="padding:10px;"><span class="badge ${typeColor[r.type]||'badge-slate'}" style="font-size:11px;">${r.type}${r.halfDayPeriod?' '+r.halfDayPeriod:''}</span></td>
@@ -14471,12 +14579,14 @@ function renderLeave(){
         <td style="padding:10px;font-size:12px;color:var(--text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.reason)}">${escapeHtml(r.reason)}</td>
         <td style="padding:10px;text-align:center;">
           <span class="badge ${statusBadge[r.status]||'badge-slate'}">${r.status}</span>
+          ${r.approvedBy&&r.status!=='Pending'?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">by ${escapeHtml(r.approvedBy)}</div>`:''}
           ${r.approvalNotes?`<div style="font-size:10px;color:var(--text-muted);margin-top:2px;" title="${r.approvalNotes}">${r.approvalNotes.substring(0,30)}…</div>`:''}
         </td>
         <td style="padding:10px;white-space:nowrap;">
           ${r.mcUrl?`<a href="${r.mcUrl}" target="_blank" class="btn btn-outline btn-sm">📋 MC</a> `:''}
           ${admin&&r.status==='Pending'?`<button class="btn btn-primary btn-sm" onclick="openReviewLeave('${r.id}')">Review</button>`:''}
           ${!admin&&r.status==='Pending'?`<button class="btn btn-danger btn-sm" onclick="cancelLeave('${r.id}')">🗑 Cancel</button>`:''}
+          ${admin&&r.status==='Approved'?`<button class="btn btn-outline btn-sm" onclick="cancelApprovedLeave('${r.id}')" title="Cancel approved leave — the days go back to the balance">Cancel leave</button>`:''}
         </td>
       </tr>`;
     }).join('')}
@@ -14487,7 +14597,8 @@ function renderLeave(){
 
 function renderLeaveBalanceCards(){
   const container=el('leave-balance-cards'); if(!container)return;
-  initLeaveBalance(currentUser);
+  const who=(isAdmin(currentUser)&&el('leave-filter-staff')?.value)||currentUser; // Admin: the staff picked in the filter
+  const ttl=el('leave-balance-title'); if(ttl) ttl.textContent=who===currentUser?`My leave balance ${new Date().getFullYear()}`:`Leave balance ${new Date().getFullYear()} — ${USERS[who]?.name||who}`;
   const types=[
     {type:'Annual Leave',icon:'🏖️',short:'AL'},
     {type:'Medical Leave',icon:'🏥',short:'ML'},
@@ -14495,14 +14606,12 @@ function renderLeaveBalanceCards(){
     {type:'Replacement Leave',icon:'🔄',short:'RL'},
   ];
   container.innerHTML=types.map(({type,icon,short})=>{
-    const bal=getLeaveBalance(currentUser,type);
-    const ent=getDefaultEntitlement(currentUser,type);
-    const used=ent-bal;
+    const b=leaveBreakdown(who,type); const bal=b.balance, ent=b.total, used=b.used;
     const pct=ent>0?Math.max(0,Math.min(100,Math.round(used/ent*100))):0;
     return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 16px;min-width:140px;flex:1;">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${icon} ${short} (${type})</div>
       <div style="font-size:22px;font-weight:800;color:${bal<=2?'var(--red)':bal<=5?'#e65100':'var(--navy)'};">${bal}</div>
-      <div style="font-size:11px;color:var(--text-muted);">of ${ent} days remaining</div>
+      <div style="font-size:11px;color:var(--text-muted);">of ${ent} days remaining${b.carry?` · incl. ${b.carry} carried`:''}${b.earned?` · ${b.earned} earned from OT`:''}</div>
       <div style="height:4px;background:var(--border);border-radius:99px;margin-top:6px;">
         <div style="height:4px;background:${bal<=2?'var(--red)':'var(--blue)'};border-radius:99px;width:${100-pct}%;"></div>
       </div>
@@ -14510,6 +14619,13 @@ function renderLeaveBalanceCards(){
   }).join('');
 }
 
+async function cancelApprovedLeave(leaveId){
+  const r=_leaveRecords.find(x=>x.id===leaveId); if(!r) return;
+  const why=prompt(`Cancel this approved ${r.type} (${r.days} day${r.days>1?'s':''}) for ${USERS[r.submittedBy]?.name||r.submittedBy}?\nThe days go back to their balance.\n\nReason:`,''); if(why===null) return;
+  r.status='Cancelled'; r.cancelledBy=USERS[currentUser]?.name||currentUser; r.cancelledAt=new Date().toISOString(); r.approvalNotes=(r.approvalNotes?r.approvalNotes+' · ':'')+'Cancelled: '+why.trim();
+  await saveLeaveRecords(); renderLeave(); showToast('Leave cancelled — days returned to the balance','success',3000);
+  addAudit('🌴',`Approved leave ${escapeHtml(leaveId)} cancelled — ${r.days} day(s) ${escapeHtml(r.type)} for ${escapeHtml(USERS[r.submittedBy]?.name||r.submittedBy)}`);
+}
 async function cancelLeave(leaveId){
   if(!confirm('Cancel this leave request?'))return;
   _leaveRecords=_leaveRecords.filter(r=>r.id!==leaveId);
@@ -14548,7 +14664,8 @@ function openNewClaimModal(){
   el('claim-job-no').value='';
   el('claim-description').value='';
   el('claim-distance').value='';
-  el('claim-rate').value='';
+  const mr=(_settings.claimsSettings||{}).mileageRate;
+  el('claim-rate').value=mr!=null?mr:''; el('claim-rate').readOnly=mr!=null&&!isAdmin(currentUser);
   el('claim-receipt-status').textContent='📎 Click to upload receipt (JPG, PNG, PDF — max 5MB)';
   _claimReceiptFile=null;
   openModal('modal-new-claim');
@@ -14580,6 +14697,9 @@ async function saveClaim(){
   if(!date){showToast('Please enter claim date','error',3000);return;}
   if(!amount||amount<=0){showToast('Please enter a valid amount','error',3000);return;}
   if(!desc){showToast('Please enter a description','error',3000);return;}
+  const needReceipt=((_settings.claimsSettings||{}).receiptRequired||[]).includes(type);
+  const editingWithReceipt=el('claim-edit-id').value&&(_claims.find(c=>c.id===el('claim-edit-id').value)?.receiptUrl);
+  if(needReceipt&&!_claimReceiptFile&&!(typeof _claimReceiptDraft!=='undefined'&&_claimReceiptDraft)&&!editingWithReceipt){ showToast(`A receipt is required for ${type} claims — please attach it.`,'error',4000); return; }
 
   const btn=document.querySelector('#modal-new-claim .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='⏳ Submitting…';}
@@ -14683,9 +14803,10 @@ function renderClaims(){
   // Stats
   const myPending=_claims.filter(c=>c.submittedBy===currentUser&&c.status==='Pending').length;
   const allPending=_claims.filter(c=>c.status==='Pending').length;
-  const thisMonth=new Date().toISOString().slice(0,7);
-  const approvedAmt=_claims.filter(c=>c.status==='Approved'&&c.date?.startsWith(thisMonth))
-    .reduce((sum,c)=>sum+parseFloat(c.amount||0),0);
+  const thisMonth=toLocalDateStr(new Date()).slice(0,7);
+  const approvedAmt=_claims.filter(c=>c.status==='Approved').reduce((sum,c)=>sum+parseFloat(c.amount||0),0); // approved, not yet paid
+  const paidAmt=_claims.filter(c=>c.status==='Paid'&&String(c.paidAt||'').startsWith(thisMonth)).reduce((sum,c)=>sum+parseFloat(c.amount||0),0);
+  const cpdEl=el('claims-paid-amount'); if(cpdEl) cpdEl.textContent=`RM ${paidAmt.toFixed(2)}`;
   const cpEl=el('claims-pending-count'); if(cpEl) cpEl.textContent=allPending;
   const caEl=el('claims-approved-amount'); if(caEl) caEl.textContent=`RM ${approvedAmt.toFixed(2)}`;
   const mpEl=el('claims-my-pending'); if(mpEl) mpEl.textContent=myPending;
@@ -14696,7 +14817,7 @@ function renderClaims(){
     return;
   }
 
-  const statusBadge={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red'};
+  const statusBadge={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red',Paid:'badge-blue'};
   container.innerHTML=`<table style="width:100%;border-collapse:collapse;">
     <thead><tr style="background:var(--bg);">
       ${admin?'<th style="padding:10px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border);">Staff</th>':''}
@@ -14712,14 +14833,15 @@ function renderClaims(){
       const staffName=USERS[c.submittedBy]?.name||c.submittedBy;
       return `<tr style="border-bottom:1px solid var(--border);">
         ${admin?`<td style="padding:10px;font-size:13px;">${staffName}</td>`:''}
-        <td style="padding:10px;font-size:13px;white-space:nowrap;">${c.date||'—'}</td>
+        <td style="padding:10px;font-size:13px;white-space:nowrap;">${c.date?fmtDateShort(c.date):'—'}</td>
         <td style="padding:10px;font-size:13px;white-space:nowrap;">${c.type}</td>
         <td style="padding:10px;font-size:12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(c.description)}">${escapeHtml(c.description)}${c.jobNo?` <span style="color:var(--blue);">[${c.jobNo}]</span>`:''}</td>
         <td style="padding:10px;font-size:13px;font-weight:700;text-align:right;">RM ${parseFloat(c.amount||0).toFixed(2)}</td>
-        <td style="padding:10px;text-align:center;"><span class="badge ${statusBadge[c.status]||'badge-slate'}">${c.status}</span></td>
+        <td style="padding:10px;text-align:center;"><span class="badge ${statusBadge[c.status]||'badge-slate'}">${c.status}</span>${c.status==='Paid'?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">${fmtDateShort(c.paidAt)}${c.paidMethod?' · '+escapeHtml(c.paidMethod):''}</div>`:''}${c.status==='Rejected'&&c.approvalNotes?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;" title="${escapeHtml(c.approvalNotes)}">${escapeHtml(String(c.approvalNotes).slice(0,40))}</div>`:''}</td>
         <td style="padding:10px;white-space:nowrap;">
           ${c.receiptUrl?`<a href="${c.receiptUrl}" target="_blank" class="btn btn-outline btn-sm">📎 Receipt</a> `:''}
           ${admin&&c.status==='Pending'?`<button class="btn btn-primary btn-sm" onclick="openReviewClaim('${c.id}')">Review</button>`:''}
+          ${admin&&c.status==='Approved'?`<button class="btn btn-outline btn-sm" onclick="markClaimsPaid(['${c.id}'])">💵 Mark paid</button>`:''}
           ${!admin&&c.status==='Pending'?`<button class="btn btn-outline btn-sm" onclick="editClaim('${c.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="deleteClaim('${c.id}')">🗑</button>`:''}
           ${admin&&c.status!=='Pending'?`<span style="font-size:11px;color:var(--text-muted);">${c.approvedBy?'by '+c.approvedBy:''}</span>`:''}
         </td>
@@ -14753,6 +14875,40 @@ function openReviewClaim(claimId){
   openModal('modal-review-claim');
 }
 
+// Approved → Paid (date, method, reference). One claim or several at once.
+async function markClaimsPaid(ids){
+  const list=_claims.filter(c=>ids.includes(c.id)&&c.status==='Approved'); if(!list.length) return;
+  const total=list.reduce((s2,c)=>s2+parseFloat(c.amount||0),0);
+  const method=prompt(`Mark ${list.length} claim${list.length>1?'s':''} (RM ${total.toFixed(2)}) as PAID.\n\nHow was it paid? (e.g. Bank transfer, Cash, With salary)`,'Bank transfer');
+  if(method===null) return;
+  const ref=prompt('Payment reference (optional — e.g. bank reference no.):','')??'';
+  const now=new Date().toISOString(); const by=USERS[currentUser]?.name||currentUser;
+  list.forEach(c=>{ c.status='Paid'; c.paidAt=now; c.paidBy=by; c.paidMethod=method.trim(); c.paidRef=ref.trim(); });
+  await saveClaims(); renderClaims();
+  showToast(`💵 ${list.length} claim${list.length>1?'s':''} marked paid — RM ${total.toFixed(2)}`,'success',3500);
+  addAudit('💵',`${list.length} claim(s) marked paid — RM ${total.toFixed(2)} (${escapeHtml(method)})`);
+}
+function markFilteredClaimsPaid(){
+  const fs=el('claims-filter-staff')?.value||'', fm=el('claims-filter-month')?.value||'';
+  const ids=_claims.filter(c=>c.status==='Approved'&&(!fs||c.submittedBy===fs)&&(!fm||c.date?.startsWith(fm))).map(c=>c.id);
+  if(!ids.length){ alert('No approved (unpaid) claims for the current staff / month filter.'); return; }
+  markClaimsPaid(ids);
+}
+// Monthly summary for payroll: one row per staff (by type and status) + all the claims
+function exportClaimsSummary(){
+  if(typeof XLSX==='undefined'){ alert('Excel export library failed to load — please refresh.'); return; }
+  const month=el('claims-filter-month')?.value||toLocalDateStr(new Date()).slice(0,7);
+  const list=_claims.filter(c=>c.date?.startsWith(month)&&c.status!=='Rejected');
+  if(!list.length){ alert(`No claims for ${month}.`); return; }
+  const types=[...new Set(list.map(c=>c.type))].sort();
+  const per={};
+  list.forEach(c=>{ const n=USERS[c.submittedBy]?.name||c.submittedBy; const r=per[n]||(per[n]={Staff:n,...Object.fromEntries(types.map(t=>[t,0])),'Pending (RM)':0,'Approved — to pay (RM)':0,'Paid (RM)':0,'Total (RM)':0});
+    const a=parseFloat(c.amount||0); r[c.type]+=a; r['Total (RM)']+=a; r[c.status==='Paid'?'Paid (RM)':c.status==='Approved'?'Approved — to pay (RM)':'Pending (RM)']+=a; });
+  const sum=Object.values(per).map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k,typeof v==='number'?Math.round(v*100)/100:v])));
+  const det=list.map(c=>({Staff:USERS[c.submittedBy]?.name||c.submittedBy,Date:c.date,Type:c.type,Description:c.description,'Job No.':c.jobNo||'','Km':c.distance||'','Amount (RM)':parseFloat(c.amount||0),Status:c.status,'Paid on':c.paidAt?String(c.paidAt).slice(0,10):'','Paid by method':c.paidMethod||'',Reference:c.paidRef||'',Receipt:c.receiptUrl?'Yes':''}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sum),'Summary'); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(det),'Claims');
+  XLSX.writeFile(wb,`Westlab_Claims_${month}.xlsx`);
+}
 async function processClaimDecision(decision){
   const notes=el('claim-approval-notes')?.value.trim()||'';
   if(decision==='Rejected'&&!notes){showToast('Please enter reason for rejection','error',3000);return;}
@@ -15109,7 +15265,7 @@ async function cleanupExpiredCheckinSelfies(){
     if(pathsToDelete.length){
       try{
         await fetch('https://westlab-upload.sales-2fb.workers.dev',{
-          method:'DELETE', headers:{'Content-Type':'application/json'},
+          method:'DELETE', headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
           body:JSON.stringify(pathsToDelete)
         });
       }catch(e){console.warn('Selfie cleanup R2 delete failed:',e);}
@@ -16375,7 +16531,7 @@ async function confirmPermanentDeletionOfCompletedJob(jobNo){
     if(pathsToDelete.length){
       try{
         await fetch('https://westlab-upload.sales-2fb.workers.dev',{
-          method:'DELETE', headers:{'Content-Type':'application/json'},
+          method:'DELETE', headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
           body:JSON.stringify(pathsToDelete)
         });
       }catch(e){console.warn('R2 delete failed (continuing with job delete):',e);}
@@ -16436,7 +16592,7 @@ async function deleteJob(jobNo){
     try{
       await fetch('https://westlab-upload.sales-2fb.workers.dev',{
         method:'DELETE',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
         body:JSON.stringify(pathsToDelete)
       });
       console.log(`Deleted ${pathsToDelete.length} files from R2 for job ${jobNo}`);
@@ -17560,7 +17716,7 @@ async function saveRefEquipment(){
           if(oldParamCertUrl&&oldParamCertUrl!==p.certFileUrl){
             const oldPPath=extractR2Path(oldParamCertUrl);
             if(oldPPath){
-              try{ await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify([oldPPath])}); }
+              try{ await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},body:JSON.stringify([oldPPath])}); }
               catch(delErr){console.warn('Old parameter cert cleanup failed (new file still saved fine):',delErr);}
             }
           }
@@ -17734,7 +17890,7 @@ function renderRefEqTable(){
   } else { alertEl.style.display='none'; }
   const SB2={Current:'badge-green','Due Soon':'badge-amber',Overdue:'badge-red','Awaiting First Calibration':'badge-slate',Quarantine:'badge-slate','Under Repair':'badge-amber'};
   if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">🏛️</div><p>${list.length?'No matching records.':'No reference equipment added yet.'}</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">🏛️</div><p>${list.length?'No matching records.':'No reference equipment added yet.'}</p></div></td></tr>`;
     return;
   }
   tbody.innerHTML=filtered.map(r=>{
@@ -17751,47 +17907,26 @@ function renderRefEqTable(){
     }
     const linkedPurchase=(_purchasingTracker||[]).find(e=>e.refEqId===r.id&&e.status!=='Closed');
     if(linkedPurchase) availBadge+=`<br/><span class="badge badge-blue" style="margin-top:3px;cursor:pointer;" onclick="showView('purchasing-tracker')" title="${linkedPurchase.status}">🛒 Tracked in Purchasing Tracker</span>`;
-    let actions=`<button class="btn btn-outline btn-sm" onclick="viewRefEq('${r.id}')">View</button>`;
-    if(canApprove(currentUser)){
-      const today=toLocalDateStr(new Date());
-      const doneToday=(r.dailyMaintenanceLog||[]).find(m=>m.date===today);
-      if(doneToday){
-        actions+=`<span class="badge badge-green" style="margin-left:4px;font-size:10px;" title="${escapeHtml(doneToday.notes||'')}">✅ Checked today by ${USERS[doneToday.checkedBy]?.name||doneToday.checkedBy}</span>`;
-      } else {
-        actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#f0fdf4;" onclick="openDailyMaintenanceModal('${r.id}')">🔧 Daily Check</button>`;
-      }
-      if((r.dailyMaintenanceLog||[]).length){
-        actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="exportMaintenanceLogPdf('${r.id}')">📄 Export Log</button>`;
-      }
-    }
-    if(r.intermediateCheckApplicable&&canApprove(currentUser)&&avail==='Available'){
-      actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;background:#eff6ff;" onclick="openIntermediateCheckModal('${r.id}')">📋 Intermediate Check</button>`;
-    }
-    if(isAdmin(currentUser)){
-      actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditRefEqModal('${r.id}')">✏️</button>`;
-      actions+=`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteRefEq('${r.id}')">🗑</button>`;
-      if(avail==='Available'){
-        actions+=`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openSendForCalModal('${r.id}')">🔧 Send for Cal.</button>`;
-      } else if(avail==='UnderCalibration'&&r.calibrationType==='External'){
-        actions+=`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="openConfirmCalReceivedModal('${r.id}')">✅ Confirm Received</button>`;
-      }
-    }
-    if(avail==='CheckedOut'&&(isAdmin(currentUser)||currentUser===r.checkedOutBy)){
-      actions+=`<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="markRefReturned('${r.id}')">↩️ Mark Returned</button>`;
-    }
+    // one main button + a ⋯ menu for the rest (the row used to carry up to six buttons and ran off the screen)
+    const q=`'${escapeForJsAttr(r.id)}'`;
+    let main=`<button class="btn btn-outline btn-sm" onclick="viewRefEq(${q})">View</button>`;
+    if(avail==='CheckedOut'&&(isAdmin(currentUser)||currentUser===r.checkedOutBy)) main=`<button class="btn btn-primary btn-sm" onclick="markRefReturned(${q})">↩️ Mark Returned</button>`;
+    else if(isAdmin(currentUser)&&avail==='UnderCalibration'&&r.calibrationType==='External') main=`<button class="btn btn-primary btn-sm" onclick="openConfirmCalReceivedModal(${q})">✅ Confirm Received</button>`;
+    const today=toLocalDateStr(new Date());
+    const doneToday=(r.dailyMaintenanceLog||[]).find(m=>m.date===today);
+    const checkedChip=doneToday?`<div style="font-size:11px;color:var(--green);margin-top:2px;" title="${escapeHtml(doneToday.notes||'')}">✅ Checked today by ${escapeHtml(USERS[doneToday.checkedBy]?.name||doneToday.checkedBy)}</div>`:'';
+    const fmtD=x=>x?fmtDateShort(x):'—';
     return `<tr>
-    <td><span style="font-family:'DM Mono';font-size:12px;font-weight:600;">${r.id}</span></td>
-    <td>${r.name}</td>
-    <td>${[r.brand,r.model].filter(Boolean).join(' / ')||'—'}</td>
-    <td>${escapeHtml(r.serial||'—')}</td>
-    <td>${r.location||'—'}</td>
-    <td>${r.traceability||'—'}</td>
-    <td>${r.lastCal||'—'}</td>
-    <td><strong style="color:${r.rawCalStatus==='Overdue'?'var(--red)':r.rawCalStatus==='Due Soon'?'var(--amber)':'var(--green)'}">${r.dueDate||'—'}</strong></td>
-    <td><span class="badge ${SB2[r.rawCalStatus]||'badge-slate'}">${r.rawCalStatus}</span></td>
-    <td><span class="badge ${r.lifecycleStatus==='Quarantine'?'badge-red':r.lifecycleStatus==='Under Repair'?'badge-amber':'badge-green'}">${r.lifecycleStatus||'In Use'}</span></td>
+    <td style="white-space:nowrap;"><span style="font-family:'DM Mono';font-size:12px;font-weight:600;">${escapeHtml(r.id)}</span></td>
+    <td><strong>${escapeHtml(r.name||'')}</strong>
+      <div style="font-size:11.5px;color:var(--text-muted);">${[[r.brand,r.model].filter(Boolean).join(' / '),r.serial?'S/N '+r.serial:'',r.location||''].filter(Boolean).map(escapeHtml).join(' · ')}</div>${checkedChip}</td>
+    <td style="font-size:12px;">${escapeHtml(r.traceability||'—')}</td>
+    <td style="white-space:nowrap;font-size:12px;">${fmtD(r.lastCal)}</td>
+    <td style="white-space:nowrap;"><strong style="color:${r.rawCalStatus==='Overdue'?'var(--red)':r.rawCalStatus==='Due Soon'?'var(--amber)':'var(--green)'}">${fmtD(r.dueDate)}</strong></td>
+    <td><span class="badge ${SB2[r.rawCalStatus]||'badge-slate'}" style="white-space:nowrap;">${r.rawCalStatus}</span></td>
+    <td><span class="badge ${r.lifecycleStatus==='Quarantine'?'badge-red':r.lifecycleStatus==='Under Repair'?'badge-amber':'badge-green'}" style="white-space:nowrap;">${r.lifecycleStatus||'In Use'}</span></td>
     <td>${availBadge}</td>
-    <td style="white-space:nowrap;">${actions}</td>
+    <td style="white-space:nowrap;text-align:right;">${main} <button class="btn btn-outline btn-sm" title="More actions" onclick="refEqMenu(event,${q})">⋯</button></td>
   </tr>`;
   }).join('');
   renderRefCheckoutQueue();
@@ -18436,21 +18571,40 @@ async function exportMaintenanceLogPdf(refId){
   await exportHtmlAsPdf(html,`Maintenance_${r.id}_${monthName.replace(' ','_')}.pdf`,'Maintenance Log',daysInMonth);
 }
 
+function refEqMenu(ev,id){
+  ev.stopPropagation(); const r=_refEq.find(x=>x.id===id); if(!r) return; const q=`'${escapeForJsAttr(id)}'`; const avail=r.availability||'Available';
+  let h=stMenuItem('👁️ View',`viewRefEq(${q})`);
+  if(canApprove(currentUser)){
+    const today=toLocalDateStr(new Date());
+    if(!(r.dailyMaintenanceLog||[]).some(m=>m.date===today)) h+=stMenuItem('🔧 Daily check',`openDailyMaintenanceModal(${q})`);
+    if((r.dailyMaintenanceLog||[]).length) h+=stMenuItem('📄 Export maintenance log',`exportMaintenanceLogPdf(${q})`);
+    if(r.intermediateCheckApplicable&&avail==='Available') h+=stMenuItem('📋 Intermediate check',`openIntermediateCheckModal(${q})`);
+  }
+  if(avail==='CheckedOut'&&(isAdmin(currentUser)||currentUser===r.checkedOutBy)) h+=stMenuItem('↩️ Mark returned',`markRefReturned(${q})`);
+  if(isAdmin(currentUser)){
+    h+=stMenuItem('✏️ Edit',`openEditRefEqModal(${q})`);
+    if(avail==='Available') h+=stMenuItem('🔧 Send for calibration',`openSendForCalModal(${q})`);
+    else if(avail==='UnderCalibration'&&r.calibrationType==='External') h+=stMenuItem('✅ Confirm received',`openConfirmCalReceivedModal(${q})`);
+    h+='<hr/>'+stMenuItem('🗑 Delete',`deleteRefEq(${q})`,{danger:true});
+  }
+  stShowMenu(ev.currentTarget,h);
+}
 async function deleteRefEq(id){
   try{
   if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete reference equipment.','error',4000);return;}
   const r=_refEq.find(x=>x.id===id);
   if(!confirm(`Delete reference equipment "${id}"?\n\nThis will also permanently remove any uploaded certificate PDF from storage.`))return;
 
-  // Delete cert PDF from R2 if exists
-  if(r&&r.certFileUrl){
-    const path=extractR2Path(r.certFileUrl);
+  // Delete every certificate file: the old single certificate + each parameter's own
+  const certPaths=r?[r.certFileUrl,...(r.parameters||[]).map(p=>p.certFileUrl)].map(u=>extractR2Path(u)).filter(Boolean):[];
+  if(certPaths.length){
+    const path=certPaths;
     if(path){
       try{
         await fetch('https://westlab-upload.sales-2fb.workers.dev',{
           method:'DELETE',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify([path])
+          headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
+          body:JSON.stringify(path)
         });
       }catch(e){console.warn('R2 file delete failed (continuing):',e);}
     }
@@ -20062,8 +20216,29 @@ function renderStDashboardContent(){
   `;
 }
 
+// My claims + my leave / overtime on My Requests: the 10 most recent of each, pending ones cancellable
+function renderMyClaimsLeave(){
+  const st=s2=>{ const m={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate',Paid:'badge-blue'}; return `<span class="badge ${m[s2]||'badge-slate'}" style="white-space:nowrap;">${escapeHtml(s2)}</span>`; };
+  const row=(cells,action)=>`<tr style="border-bottom:1px solid var(--border);">${cells.map(c=>`<td style="padding:8px 12px;font-size:12.5px;">${c}</td>`).join('')}<td style="padding:8px 12px;text-align:right;white-space:nowrap;">${action||''}</td></tr>`;
+  const empty=t=>`<div style="padding:14px 16px;font-size:12.5px;color:var(--text-muted);">${t}</div>`;
+  const cb=el('my-requests-claims');
+  if(cb){ const mine=(_claims||[]).filter(c=>c.submittedBy===currentUser).sort((a,b)=>String(b.submittedAt||b.date).localeCompare(String(a.submittedAt||a.date))).slice(0,10);
+    cb.innerHTML=mine.length?`<table style="width:100%;border-collapse:collapse;"><tbody>${mine.map(c=>row([fmtDateShort(c.date),escapeHtml(c.type),escapeHtml(String(c.description||'').slice(0,60)),`<b>RM ${parseFloat(c.amount||0).toFixed(2)}</b>`,st(c.status)+(c.status==='Paid'&&c.paidAt?`<div style="font-size:10.5px;color:var(--text-muted);">${fmtDateShort(c.paidAt)}</div>`:'')+(c.status==='Rejected'&&c.approvalNotes?`<div style="font-size:10.5px;color:var(--text-muted);">${escapeHtml(String(c.approvalNotes).slice(0,40))}</div>`:'')],
+      c.status==='Pending'?`<button class="btn btn-outline btn-sm" onclick="deleteClaim('${c.id}').then(()=>renderMyRequests())">Cancel</button>`:'')).join('')}</tbody></table>
+      <div style="padding:8px 12px;"><a href="javascript:void(0)" onclick="showView('claims')">All my claims →</a></div>`:empty('No claims yet.'); }
+  const lb=el('my-requests-leave');
+  if(lb){ const lv=(_leaveRecords||[]).filter(r=>r.submittedBy===currentUser).map(r=>({k:'leave',at:r.submittedAt||r.start,r}));
+    const ot=(_overtime||[]).filter(o=>o.username===currentUser).map(o=>({k:'ot',at:o.submittedAt||o.date,o}));
+    const all=[...lv,...ot].sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,10);
+    lb.innerHTML=all.length?`<table style="width:100%;border-collapse:collapse;"><tbody>${all.map(x=>x.k==='leave'
+      ?row([x.r.start===x.r.end?fmtDateShort(x.r.start):`${fmtDateShort(x.r.start)} – ${fmtDateShort(x.r.end)}`,escapeHtml(x.r.type),`${x.r.days} day${x.r.days>1?'s':''}`,escapeHtml(String(x.r.reason||'').slice(0,50)),st(x.r.status)],
+          x.r.status==='Pending'?`<button class="btn btn-outline btn-sm" onclick="cancelLeave('${x.r.id}').then(()=>renderMyRequests())">Cancel</button>`:'')
+      :row([fmtDateShort(x.o.date),'Overtime',`${x.o.hours}h`,escapeHtml(x.o.compensation||''),st(x.o.status||'Pending')],'')).join('')}</tbody></table>
+      <div style="padding:8px 12px;"><a href="javascript:void(0)" onclick="showView('leave')">All my leave →</a></div>`:empty('No leave or overtime requests yet.'); }
+}
 function renderMyRequests(){
   try{
+  renderMyClaimsLeave();
   const myCheckouts=_refCheckoutRequests.filter(r=>r.requestedBy===currentUser).sort((a,b)=>(b.requestedAt||'').localeCompare(a.requestedAt||''));
   const myExtensions=_extensionRequests.filter(r=>r.requestedBy===currentUser).sort((a,b)=>(b.requestedAt||'').localeCompare(a.requestedAt||''));
 
@@ -23205,6 +23380,11 @@ function docHighestUsed(series,yymm){
 async function renderDocNumbering(){
   const card=el('doc-numbering-card'), body=el('doc-numbering-body'); if(!card||!body) return;
   const sc=el('system-check-card'); if(sc) sc.style.display=isAdmin(currentUser)?'':'none';
+  const lsc=el('leave-settings-card'); if(lsc){ lsc.style.display=isAdmin(currentUser)?'':'none';
+    if(el('ls-carry')) el('ls-carry').value=(_settings.leaveSettings||{}).carryForwardMax??'';
+    if(el('ls-holidays')) el('ls-holidays').value=getPublicHolidays().slice().sort((a,b)=>a.date.localeCompare(b.date)).map(h=>(h.date+' '+(h.name||'')).trim()).join('\n'); }
+  const csc=el('claims-settings-card'); if(csc){ csc.style.display=isAdmin(currentUser)?'':'none'; const cs=_settings.claimsSettings||{};
+    if(el('cs-mileage')) el('cs-mileage').value=cs.mileageRate??''; document.querySelectorAll('#cs-receipt-types input').forEach(cb=>cb.checked=(cs.receiptRequired||[]).includes(cb.value)); }
   const cdc=el('charge-defaults-card'); if(cdc){ cdc.style.display=isAdmin(currentUser)?'':'none'; const d=_settings.chargeDefaults||{}; ['adjustment','attempt','transport','postponement','notReady','reissue'].forEach(k=>{ const f=el('cd-'+k); if(f) f.value=d[k]??''; }); }
   if(!isAdmin(currentUser)){ card.style.display='none'; return; }
   card.style.display='';
