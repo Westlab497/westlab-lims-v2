@@ -1952,6 +1952,23 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
 
+      <div class="card" id="backup-card" style="margin-bottom:16px;display:none;">
+        <div class="card-header"><span class="card-title">🔐 Backups</span></div>
+        <div class="card-body">
+          <div style="font-size:12.5px;margin-bottom:10px;">Every <b>Monday at 8:00 am</b> an <b>encrypted</b> copy of all LIMS data is emailed to you. Only your backup password can open it — keep both the emails and the password safe.</div>
+          <button class="btn btn-outline btn-sm" onclick="sendBackupNow()">📧 Send a backup now</button>
+          <span id="backup-now-status" style="font-size:12px;color:var(--text-muted);margin-left:8px;"></span>
+          <div style="border-top:1px solid var(--border);margin:14px 0 10px;"></div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Restore from backup</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Backup file (.wlbak from the email)</label><input class="form-control" type="file" id="backup-file" accept=".wlbak,application/json"/></div>
+            <div class="form-group"><label class="form-label">Backup password</label><input class="form-control" type="password" id="backup-password" autocomplete="off"/></div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="openBackupFile()">🔓 Open backup</button>
+          <div id="backup-preview" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
       <div class="card" id="leave-settings-card" style="margin-bottom:16px;display:none;">
         <div class="card-header"><span class="card-title">🌴 Leave &amp; public holidays</span></div>
         <div class="card-body">
@@ -3861,17 +3878,26 @@ const API='https://westlab-api.sales-2fb.workers.dev';
 // Shared secret — must match the APP_SECRET value set in the Worker's Cloudflare Secrets.
 // NOTE: this is visible to anyone who views this page's source — it stops casual/opportunistic
 // access to the API, but is not a substitute for real per-user authentication.
-const APP_SECRET='D4SIG8OwfFYtiLN03of6mnnnAjz3wjC46BTgaNAJNSg';
+const APP_SECRET=''; // no longer in the page — requests carry the signed-in person's login pass instead
+let _authToken=null, _authExp=0, _sessionEnding=false;
+function authHeader(){ return _authToken?{'Authorization':'Bearer '+_authToken}:{}; }
+function sessionExpired(){
+  if(_sessionEnding||!currentUser) return; _sessionEnding=true;
+  try{localStorage.removeItem('wl_sess');}catch(e){}
+  alert('Your login has expired — please sign in again.');
+  location.reload();
+}
 
 async function apiFetch(path, opts={}, _isRetry=false){
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),35000); // 35s — generous enough for slower onsite/mobile connections
   try{
-    const headers={...(opts.headers||{}),'X-App-Secret':APP_SECRET};
+    const headers={...(opts.headers||{}),...authHeader()};
     const r=await fetch(API+path,{cache:'no-store',...opts,headers,signal:ctrl.signal}); // never serve a cached copy of a read
     clearTimeout(timer);
     if(!r.ok){
       const e=await r.text();
+      if(r.status===401&&path!=='/api/login') sessionExpired();
       throw new Error(`API error (${r.status}): ${e}`);
     }
     return await r.json();
@@ -4391,14 +4417,24 @@ async function doLogin(){
     return;
   }
   if(btn){btn.disabled=false;btn.textContent='Sign In →';}
-  if(result&&result.ok&&result.user){
+  if(result&&result.ok&&result.user&&result.token){
     if(result.user.active===false){
       err.textContent='Your account is inactive. Please contact your administrator.';
       err.style.display='block'; return;
     }
+    _authToken=result.token; _authExp=result.exp||0;
+    if(btn){btn.disabled=true;btn.textContent='Loading…';}
+    showLoadingOverlay(true);
+    try{ await loadAll(); applySettings(_settings); rebuildUsers(); }catch(e){ console.error('Load after login failed:',e); }
+    finally{ showLoadingOverlay(false); if(typeof hideLoading==='function') hideLoading(); if(btn){btn.disabled=false;btn.textContent='Sign In →';} }
     setCurrentUser(u); return;
   }
-  err.textContent='Incorrect username or password. Please try again.';
+  if(result&&result.inactive){ err.textContent='Your account is inactive. Please contact your administrator.'; err.style.display='block'; return; }
+  if(result&&result.locked){
+    err.textContent=`Too many wrong passwords — this account is locked until ${new Date(result.until).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}. Try again then, or ask Admin.`;
+    err.style.display='block'; document.getElementById('login-password').value=''; return;
+  }
+  err.textContent='Incorrect username or password. Please try again.'+(result&&result.attemptsLeft&&result.attemptsLeft<=2?` (${result.attemptsLeft} attempt${result.attemptsLeft>1?'s':''} left before the account is locked for 15 minutes)`:'');
   err.style.display='block';
   document.getElementById('login-password').value='';
   }catch(_e){
@@ -4421,7 +4457,7 @@ function setCurrentUser(username){
   const sfa=el('sidebar-footer-avatar');if(sfa)sfa.textContent=u.name.slice(0,2).toUpperCase();
   const sfn=el('sidebar-footer-name');if(sfn)sfn.textContent=u.name;
   const sfr=el('sidebar-footer-role');if(sfr)sfr.textContent=u.display;
-  try{localStorage.setItem('wl_sess',JSON.stringify({user:username,time:Date.now()}));}catch(e){}
+  try{localStorage.setItem('wl_sess',JSON.stringify({user:username,token:_authToken,exp:_authExp,time:Date.now()}));}catch(e){}
   applyRoleUI();
   applySettings(_settings);
   renderEquipmentTable();
@@ -4468,8 +4504,9 @@ function setCurrentUser(username){
 }
 
 function doLogout(){
-  currentUser=null;
+  currentUser=null; _authToken=null; _sessionEnding=true;
   try{localStorage.removeItem('wl_sess');}catch(e){}
+  location.reload(); return; // start clean: nothing from the previous login stays in memory
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('login-username').value='';
   document.getElementById('login-password').value='';
@@ -4483,22 +4520,15 @@ function doLogout(){
 
 // ── STARTUP ──
 (async function(){
+  // Wait until the whole page has been read — some screens (e.g. the customer status lookup) come after this script
+  if(document.readyState==='loading') await new Promise(r=>document.addEventListener('DOMContentLoaded',r,{once:true}));
   initSidebarCollapse();
   // Restore sidebar state immediately before anything renders
   // Show loading overlay
-  showLoadingOverlay(true);
-  try{
-    await loadAll();
-    applySettings(_settings);
-    rebuildUsers();
-  }catch(e){
-    console.error('Startup error:',e);
-  }finally{
-    showLoadingOverlay(false);
-  }
-  // Update login page lab name
+  // Nothing is loaded before someone signs in (data needs a login pass).
+  if(typeof hideLoading==='function') hideLoading(); // the start-up "Loading…" cover used to close at the end of the data load
   const ln=el('login-lab-name');
-  if(ln) ln.textContent=_settings.labName||'Westlab (M) Sdn. Bhd.';
+  if(ln) ln.textContent='Westlab (M) Sdn. Bhd.';
   // QR code direct link — ?job=WL26-00142 opens status lookup immediately, no login needed
   const urlParams=new URLSearchParams(window.location.search);
   const qrJob=urlParams.get('job');
@@ -4508,13 +4538,22 @@ function doLogout(){
     if(input){ input.value=qrJob; lookupJob(); }
     return; // skip login/session restore entirely
   }
-  // Try restore session
+  // Remembered login: only if it holds a signed pass that the server still accepts
   try{
     const sess=JSON.parse(localStorage.getItem('wl_sess')||'null');
-    if(sess&&sess.user&&(Date.now()-sess.time<8*3600*1000)){
-      setCurrentUser(sess.user); return;
+    if(sess&&sess.user&&sess.token&&sess.exp>Date.now()){
+      _authToken=sess.token; _authExp=sess.exp;
+      showLoadingOverlay(true);
+      let who=null; try{ who=await apiFetch('/api/whoami'); }catch(e){}
+      if(who&&who.ok&&who.user===sess.user){
+        try{ await loadAll(); applySettings(_settings); rebuildUsers(); }catch(e){ console.error('Startup error:',e); }
+        showLoadingOverlay(false);
+        setCurrentUser(sess.user); return;
+      }
+      showLoadingOverlay(false); _authToken=null; _sessionEnding=false;
+      try{localStorage.removeItem('wl_sess');}catch(e){}
     }
-  }catch(e){}
+  }catch(e){ showLoadingOverlay(false); }
   // Show login screen
   document.getElementById('login-screen').classList.remove('hidden');
 })();
@@ -9822,9 +9861,11 @@ function qtExpandToJobUnits(items,q){
   // (the first units of the line). The net price per unit stays as quoted.
   (items||[]).filter(it=>it&&it.eqName&&it.poAccepted!==false).forEach(it=>{
     const c=qtLineCalc(it);
-    const ordered=it.poAccepted===true?Math.max(1,Math.min(parseInt(it.poQty)||c.qty,c.qty)):c.qty;
+    const ordered=it.poAccepted===true?Math.max(1,parseInt(it.poQty)||c.qty):c.qty; // can be more than quoted
     const socN=it.socRequested?Math.min(it.poSocUnits!=null?it.poSocUnits:qtSocUnits(it),ordered):0; // SoC only for the units ordered with it
-    qtUnitDetails(it).slice(0,ordered).forEach((u,ui)=>{
+    const det=qtUnitDetails(it); const same=it.sameCal!==false;
+    while(det.length<ordered) det.push({serial:'',tagNo:'',calPoints:same?(it.calPoints||''):'',resolution:same?(it.resolution||''):''}); // extra units ordered beyond the quotation
+    det.slice(0,ordered).forEach((u,ui)=>{
       const unit={...it,serial:u.serial,tagNo:u.tagNo,calPoints:u.calPoints,resolution:u.resolution,quantity:1,
         unitPrice:Math.round(c.netUnitPrice*(1+(sur.pct&&!outFl[(items||[]).indexOf(it)]?sur.pct/100:0))*100)/100,socRequested:ui<socN,socUnitsNeeded:ui<socN?1:undefined,
         socParameters:(ui<socN&&it.socParameters)?JSON.parse(JSON.stringify(it.socParameters)):undefined};
@@ -10330,6 +10371,48 @@ async function addPriceReferenceEntry(){
   renderPriceReferenceTable();
   showToast('✅ Price reference added','success',2500);
 }
+// ── Backups: send now / open (decrypted in this browser — the password never leaves it) / restore ──
+async function sendBackupNow(){
+  const st=el('backup-now-status'); if(st) st.textContent='⏳ Making the backup…';
+  try{ const r=await apiFetch('/api/backup-now',{method:'POST'}); if(st) st.textContent=`✅ Sent to ${(r.to||[]).join(', ')} — ${Object.entries(r.counts||{}).map(([t,n])=>`${n} ${t.replace('wl_','')}`).join(', ')}`; }
+  catch(e){ if(st) st.textContent='❌ '+e.message.replace(/^API error \(\d+\): /,''); }
+}
+async function decryptBackup(fileText,password){
+  let f; try{ f=JSON.parse(fileText); }catch(e){ throw new Error('This is not a Westlab backup file.'); }
+  if(f.format!=='westlab-backup-v1') throw new Error('This is not a Westlab backup file.');
+  const b=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b(f.kdf.salt),iterations:f.kdf.iterations,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['decrypt']);
+  let gz; try{ gz=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b(f.cipher.iv)},key,b(f.data))); }catch(e){ throw new Error('Wrong password (or the file is damaged).'); }
+  const plain=await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return JSON.parse(plain);
+}
+let _openedBackup=null;
+async function openBackupFile(){
+  const f=el('backup-file').files[0], pw=el('backup-password').value, box=el('backup-preview');
+  if(!f||!pw){ alert('Choose the backup file and enter the backup password.'); return; }
+  box.innerHTML='<span style="font-size:12px;color:var(--text-muted);">⏳ Opening…</span>';
+  try{
+    _openedBackup=await decryptBackup(await f.text(),pw);
+    const t=_openedBackup.tables||{};
+    box.innerHTML=`<div class="qt-note info">✅ Backup from <b>${new Date(_openedBackup.createdAt).toLocaleString('en-MY')}</b>: ${Object.entries(t).map(([k,v])=>`${v.length} ${k.replace('wl_','')}`).join(' · ')}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin:6px 0;">Restoring puts every record in this backup back as it was then. Records created after the backup are kept; staff passwords are not changed.</div>
+      <button class="btn btn-danger btn-sm" onclick="restoreOpenedBackup()">♻️ Restore this backup</button>`;
+  }catch(e){ _openedBackup=null; box.innerHTML=`<div class="qt-note warn">❌ ${escapeHtml(e.message)}</div>`; }
+}
+async function restoreOpenedBackup(){
+  const bk=_openedBackup; if(!bk) return;
+  const typed=prompt('This overwrites current records with the backup versions.\n\nType RESTORE to continue:',''); if(typed!=='RESTORE') return;
+  const list=[]; Object.entries(bk.tables||{}).forEach(([t,rows])=>rows.forEach(r=>{ if(!(t==='wl_settings'&&r.id==='login_guard')) list.push([t,r]); }));
+  const box=el('backup-preview'); let done=0, failed=0;
+  for(const [t,r] of list){
+    try{ await apiFetch('/api/upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:t,id:r.id,data:r.data})}); done++; }catch(e){ failed++; }
+    if(done%20===0) box.innerHTML=`<span style="font-size:12px;">⏳ Restoring… ${done} of ${list.length}</span>`;
+  }
+  addAudit('♻️',`Backup from ${bk.createdAt} restored — ${done} records${failed?`, ${failed} failed`:''}`);
+  alert(`Restore finished: ${done} records restored${failed?`, ${failed} could not be written`:''}. The LIMS will now reload.`);
+  location.reload();
+}
 async function saveLeaveSettings(){
   const lines=el('ls-holidays').value.split('\n').map(l=>l.trim()).filter(Boolean); const out=[], bad=[];
   lines.forEach(l=>{ const m=l.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/); if(m&&!isNaN(new Date(m[1]+'T00:00:00'))) out.push({date:m[1],name:m[2].trim()}); else bad.push(l); });
@@ -10497,7 +10580,7 @@ function renderPriceHistoryTable(box,f,compact){
         <td style="white-space:nowrap;">${fmtDateShort(r.date)}</td><td style="white-space:nowrap;">${escapeHtml(r.quotationNo)}</td><td>${escapeHtml(r.custName)}</td>
         <td style="white-space:nowrap;font-weight:600;color:#3730a3;">${escapeHtml(r.itemCode||'—')}</td>
         <td>${escapeHtml(r.eqName)}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(qtServiceTag({accreditation:r.acc,calType:r.calType}).replace(/[\[\]]/g,''))}</div></td>
-        <td style="text-align:center;">${r.poQty!=null&&r.poQty!==r.qty?`${r.poQty} of ${r.qty}`:r.qty}</td>
+        <td style="text-align:center;">${r.poQty!=null&&r.poQty!==r.qty?(r.poQty>r.qty?`${r.poQty} <span style="font-size:11px;color:var(--text-muted);">(quoted ${r.qty})</span>`:`${r.poQty} of ${r.qty}`):r.qty}</td>
         <td style="text-align:right;">${r.unitPrice.toFixed(2)}</td><td>${escapeHtml(r.discount||'')}</td>
         <td style="text-align:right;font-weight:700;">${r.netUnit.toFixed(2)}</td><td>${priceHistoryStatusBadge(r.status)}</td></tr>`).join('')}</tbody></table></div>`
       :'<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No sent quotations match.</div>'}`;
@@ -11254,7 +11337,8 @@ function openAcceptQuotationModal(quotationId){
       <input type="checkbox" class="aq-item" data-i="${i}" checked onchange="aqUpdatePoValue()" style="width:16px;height:16px;"/>
       <span style="flex:1;">${it.itemCode?`<b style="color:#3730a3;">${escapeHtml(it.itemCode)}</b> `:''}${escapeHtml(it.eqName)}${it.socRequested?' <span style="color:var(--text-muted);">+ SoC</span>':''}</span>
       <span style="color:var(--text-muted);">quoted ${qty}</span>
-      ${qty>1?`<span>in PO</span><input type="number" class="form-control aq-qty" data-i="${i}" min="1" max="${qty}" value="${qty}" oninput="aqUpdatePoValue()" style="width:70px;padding:4px 6px;"/>`:`<input type="hidden" class="aq-qty" data-i="${i}" value="1"/>`}
+      <span>in PO</span><input type="number" class="form-control aq-qty" data-i="${i}" min="1" value="${qty}" oninput="aqUpdatePoValue()" style="width:70px;padding:4px 6px;" title="Lower it if they ordered fewer, or raise it if they ordered more (charged at the quoted unit price)"/>
+      <span id="aq-more-${i}" style="font-size:11px;color:#9a5b00;white-space:nowrap;"></span>
       ${it.socRequested?`<span title="Units the customer wants the Statement of Conformity for — 0 means no SoC" style="white-space:nowrap;">SoC units</span><input type="number" class="form-control aq-soc" data-i="${i}" min="0" max="${Math.min(qtSocUnits(it),qty)}" value="${Math.min(qtSocUnits(it),qty)}" oninput="aqUpdatePoValue()" style="width:60px;padding:4px 6px;"/>`:''}
     </div>`; }).join('')+((q.items||[]).some(it=>it.socRequested)?'<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">SoC units: set to 0 if the customer doesn\'t want the Statement of Conformity.</div>':'');
   aqUpdatePoValue();
@@ -11269,6 +11353,11 @@ function aqSelections(){
 }
 function aqUpdatePoValue(){
   const q=_quotationsV2.find(x=>x.id===_acceptQuotationId); const box=el('aq-po-value'); if(!q||!box) return;
+  // more than quoted is allowed (same unit price); SoC can cover up to the units ordered
+  document.querySelectorAll('#aq-items .aq-qty').forEach(f=>{ const i=+f.dataset.i; const it=q.items[i]; if(!it) return;
+    const quoted=Math.max(1,parseInt(it.quantity)||1), n=Math.max(1,parseInt(f.value)||1);
+    const note=el(`aq-more-${i}`); if(note) note.textContent=n>quoted?`+${n-quoted} more than quoted — at the quoted unit price`:'';
+    const sf=document.querySelector(`#aq-items .aq-soc[data-i="${i}"]`); if(sf){ sf.max=String(n); if((parseInt(sf.value)||0)>n) sf.value=String(n); } });
   const sel=aqSelections(); const full=qtGrandTotal(q);
   const val=qtValueOf(q,qtOrderedItems(q,sel));
   box.innerHTML=`PO value: RM ${val.toFixed(2)}${Math.abs(val-full)>0.004?` <span style="font-weight:normal;color:var(--text-muted);">(quotation RM ${full.toFixed(2)} — partial)</span>`:''}`;
@@ -11292,7 +11381,7 @@ async function confirmAcceptQuotation(){
       if(uploadRes.ok){ const r2=await uploadRes.json(); poDocUrl=r2.url||''; }
     }catch(e){ console.error('PO document upload failed:',e); showToast('⚠️ PO document could not be uploaded, but acceptance was still recorded.','warn',4000); }
   }
-  sel.forEach(x=>{ const it=q.items[x.i]; if(!it) return; it.poAccepted=x.on; it.poQty=x.on?Math.min(x.qty,parseInt(it.quantity)||1):0;
+  sel.forEach(x=>{ const it=q.items[x.i]; if(!it) return; it.poAccepted=x.on; it.poQty=x.on?Math.max(1,x.qty):0;
     if(it.socRequested) it.poSocUnits=x.on?Math.min(x.soc==null?qtSocUnits(it):x.soc,it.poQty):0; });
   q.status='Accepted';
   q.respondedAt=new Date().toISOString();
@@ -11777,7 +11866,7 @@ function addressLines(addr){
 async function deleteStoredFile(url){
   const pre='https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/';
   if(!url||!String(url).startsWith(pre)) return true;
-  try{ const r=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'X-File-Path':decodeURIComponent(String(url).slice(pre.length)),'X-App-Secret':APP_SECRET}}); return r.ok; }
+  try{ const r=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'X-File-Path':decodeURIComponent(String(url).slice(pre.length)),...authHeader()}}); return r.ok; }
   catch(e){ console.warn('File delete failed:',e); return false; }
 }
 function westlabLetterheadHeader(){
@@ -12350,7 +12439,7 @@ function stEntryValue(e){
 function qtOrderedItems(q,sel){ // the quotation's items as ordered (sel: [{i,on,qty}] from the accept window, or the saved PO flags)
   return (q.items||[]).map((it,i)=>{ if(!it||!it.eqName) return null;
     const on=sel?sel.find(x=>x.i===i)?.on:(it.poAccepted!==false); if(!on) return null;
-    const n=Math.max(1,Math.min(sel?(sel.find(x=>x.i===i)?.qty||1):(parseInt(it.poQty)||parseInt(it.quantity)||1),parseInt(it.quantity)||1));
+    const n=Math.max(1,sel?(sel.find(x=>x.i===i)?.qty||1):(parseInt(it.poQty)||parseInt(it.quantity)||1)); // may be more than quoted
     // SoC as ordered: the accept window's "SoC units", else what was recorded at acceptance, else as quoted
     const selSoc=sel?sel.find(x=>x.i===i)?.soc:null;
     const socN=Math.min(selSoc!=null?selSoc:(it.poSocUnits!=null?it.poSocUnits:qtSocUnits(it)),n);
@@ -15265,7 +15354,7 @@ async function cleanupExpiredCheckinSelfies(){
     if(pathsToDelete.length){
       try{
         await fetch('https://westlab-upload.sales-2fb.workers.dev',{
-          method:'DELETE', headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
+          method:'DELETE', headers:{'Content-Type':'application/json',...authHeader()},
           body:JSON.stringify(pathsToDelete)
         });
       }catch(e){console.warn('Selfie cleanup R2 delete failed:',e);}
@@ -16531,7 +16620,7 @@ async function confirmPermanentDeletionOfCompletedJob(jobNo){
     if(pathsToDelete.length){
       try{
         await fetch('https://westlab-upload.sales-2fb.workers.dev',{
-          method:'DELETE', headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
+          method:'DELETE', headers:{'Content-Type':'application/json',...authHeader()},
           body:JSON.stringify(pathsToDelete)
         });
       }catch(e){console.warn('R2 delete failed (continuing with job delete):',e);}
@@ -16592,7 +16681,7 @@ async function deleteJob(jobNo){
     try{
       await fetch('https://westlab-upload.sales-2fb.workers.dev',{
         method:'DELETE',
-        headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
+        headers:{'Content-Type':'application/json',...authHeader()},
         body:JSON.stringify(pathsToDelete)
       });
       console.log(`Deleted ${pathsToDelete.length} files from R2 for job ${jobNo}`);
@@ -17716,7 +17805,7 @@ async function saveRefEquipment(){
           if(oldParamCertUrl&&oldParamCertUrl!==p.certFileUrl){
             const oldPPath=extractR2Path(oldParamCertUrl);
             if(oldPPath){
-              try{ await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},body:JSON.stringify([oldPPath])}); }
+              try{ await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json',...authHeader()},body:JSON.stringify([oldPPath])}); }
               catch(delErr){console.warn('Old parameter cert cleanup failed (new file still saved fine):',delErr);}
             }
           }
@@ -18603,7 +18692,7 @@ async function deleteRefEq(id){
       try{
         await fetch('https://westlab-upload.sales-2fb.workers.dev',{
           method:'DELETE',
-          headers:{'Content-Type':'application/json','X-App-Secret':APP_SECRET},
+          headers:{'Content-Type':'application/json',...authHeader()},
           body:JSON.stringify(path)
         });
       }catch(e){console.warn('R2 file delete failed (continuing):',e);}
@@ -22807,12 +22896,13 @@ function openStatusLookup(){
 function closeStatusLookup(){
   el('status-lookup-screen').style.display='none';
 }
-function lookupJob(){
+async function lookupJob(){
   const raw=el('lookup-job-input').value.trim().toUpperCase();
   if(!raw){return;}
-  // Try exact match first, then partial
-  const j=_jobs.find(x=>x.jobNo.toUpperCase()===raw)||
-            _jobs.find(x=>x.jobNo.toUpperCase().includes(raw));
+  // Signed in: from memory (exact, then partial). Customers (not signed in): the public status endpoint,
+  // which only returns what this page shows.
+  let j=(_jobs||[]).find(x=>x.jobNo.toUpperCase()===raw)||(_jobs||[]).find(x=>x.jobNo.toUpperCase().includes(raw));
+  if(!j&&!_authToken){ try{ const r=await fetch(API+'/api/public/job-status?jobNo='+encodeURIComponent(raw),{cache:'no-store'}); const d=r.ok?await r.json():null; if(d&&d.found) j=d.job; }catch(e){} }
   const res=el('lookup-result');
   if(!j||j.status==='Deleted'){
     res.style.display='block';
@@ -23380,6 +23470,7 @@ function docHighestUsed(series,yymm){
 async function renderDocNumbering(){
   const card=el('doc-numbering-card'), body=el('doc-numbering-body'); if(!card||!body) return;
   const sc=el('system-check-card'); if(sc) sc.style.display=isAdmin(currentUser)?'':'none';
+  const bkc=el('backup-card'); if(bkc) bkc.style.display=isAdmin(currentUser)?'':'none';
   const lsc=el('leave-settings-card'); if(lsc){ lsc.style.display=isAdmin(currentUser)?'':'none';
     if(el('ls-carry')) el('ls-carry').value=(_settings.leaveSettings||{}).carryForwardMax??'';
     if(el('ls-holidays')) el('ls-holidays').value=getPublicHolidays().slice().sort((a,b)=>a.date.localeCompare(b.date)).map(h=>(h.date+' '+(h.name||'')).trim()).join('\n'); }
