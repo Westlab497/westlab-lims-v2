@@ -3677,6 +3677,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <button class="btn btn-outline" onclick="closeModal('modal-cert-preview')">Close</button>
       <button class="btn btn-outline" onclick="printCertificate()">🖨️ Print Page 1</button>
       <button class="btn btn-primary" id="btn-download-combined" onclick="downloadCombinedPDF()" style="display:none;">📥 Download Combined PDF (Page 1 + Data)</button>
+        <button class="btn btn-primary" id="btn-share-cert" onclick="shareCertificate()" title="Send the customer a secure link to this certificate, valid 90 days">🔗 Share with customer</button>
       <button class="btn btn-primary" id="btn-download-p1only" onclick="downloadPage1PDF()">📥 Download Page 1 PDF</button>
     </div>
   </div>
@@ -4199,17 +4200,16 @@ async function loadAll(){
     new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),ms))
   ]);
   try{
-    showLoading('Loading jobs…');
-    const jobs=await withTimeout(SB.getAll('wl_jobs')).catch(()=>[]);
-    _jobs=(jobs||[]).filter(j=>j.items&&Array.isArray(j.items));
-
     showLoading('Loading data…');
-    const [refEq,settingsRes,customers,staff]=await Promise.allSettled([
+    // jobs + the core lists load together (they don't depend on each other)
+    const [jobsRes,refEq,settingsRes,customers,staff]=await Promise.allSettled([
+      withTimeout(SB.getAll('wl_jobs')),
       withTimeout(SB.getAll('wl_ref_equipment')),
       withTimeout(apiFetch('/api/row/wl_settings/main'),15000),
       withTimeout(SB.getAll('wl_customers')),
       withTimeout(SB.getAll('wl_staff'))
     ]);
+    _jobs=((jobsRes.status==='fulfilled'?jobsRes.value:[])||[]).filter(j=>j&&j.items&&Array.isArray(j.items));
     _refEq=(refEq.status==='fulfilled'?refEq.value:[])||[];
     _customers=(customers.status==='fulfilled'?customers.value:[])||[];
     _staff=((staff.status==='fulfilled'?staff.value:[])||[]).map(s=>{
@@ -4241,25 +4241,14 @@ async function loadAll(){
       console.error('Could not load saved settings after retry — settings changes are blocked until this resolves, to avoid overwriting saved data with defaults.');
     }
     showLoading('Almost ready…');
-    await loadClaims();
-    await loadLeaveRecords();
-    await loadAttendance();
-    await loadRefCheckoutRequests();
-    await loadExtensionRequests();
-    await loadStickerData();
-    await loadAbnormalReports();
-    await loadQuotations();
-    await loadSalesTracker();
-    await loadPurchasingTracker();
-    await loadExternalPartners();
-    await loadQuotationsV2();
-    await loadInvoices();
-    await loadPurchaseOrders();
-    await loadNcrs();
+    // These lists don't depend on each other — load them all at the same time (was one after another)
+    const lr=await Promise.allSettled([loadClaims(),loadLeaveRecords(),loadAttendance(),loadRefCheckoutRequests(),loadExtensionRequests(),
+      loadStickerData(),loadAbnormalReports(),loadQuotations(),loadSalesTracker(),loadPurchasingTracker(),loadExternalPartners(),
+      loadQuotationsV2(),loadInvoices(),loadPurchaseOrders(),loadNcrs(),loadTestCheckins()]);
+    lr.forEach(r=>{ if(r.status==='rejected') console.warn('A list failed to load:',r.reason); });
     await healOrphanedQuotationLinks();
     await backfillEnquiryNumbers();
     if(typeof autoExpireQuotations==='function') autoExpireQuotations();
-    await loadTestCheckins();
     if(typeof cleanupExpiredCheckinSelfies==='function') cleanupExpiredCheckinSelfies();
   }catch(e){
     console.error('Supabase load error',e);
@@ -4556,6 +4545,10 @@ function doLogout(){
   // Show loading overlay
   // Nothing is loaded before someone signs in (data needs a login pass).
   if(typeof hideLoading==='function') hideLoading(); // the start-up "Loading…" cover used to close at the end of the data load
+  // Logo on the login screen: it's public, so fetch it directly (Settings aren't loaded before sign-in)
+  { const img=el('login-logo-img'); if(img){ const exts=['png','jpg','jpeg','webp','svg']; let i=0;
+      img.onload=()=>{ img.style.display='block'; }; img.onerror=()=>{ i++; if(i<exts.length) img.src=`${FILE_SERVICE}/file?path=settings/logo.${exts[i]}`; else img.style.display='none'; };
+      img.src=`${FILE_SERVICE}/file?path=settings/logo.${exts[0]}`; } }
   const ln=el('login-lab-name');
   if(ln) ln.textContent='Westlab (M) Sdn. Bhd.';
   // QR code direct link — ?job=WL26-00142 opens status lookup immediately, no login needed
@@ -4705,7 +4698,7 @@ function renderStaffEvalTechnicalTab(box){
   (_jobs||[]).forEach(j=>{ if(j.status==='Deleted') return; (j.items||[]).forEach(it=>{ if(it.assignedTo&&['Assigned','In Progress','On-Site'].includes(it.status)) work[it.assignedTo]=(work[it.assignedTo]||0)+1; }); });
   (typeof _ncrs!=='undefined'?_ncrs:[]).forEach(n=>{ if(n.status!=='Closed'&&n.actionOwner){ const o=ncOwn[n.actionOwner]||(ncOwn[n.actionOwner]={open:0,over:0}); o.open++; if(ncrOverdue(n)) o.over++; } });
   const techs=new Set([...Object.keys(cur),...Object.keys(work),...Object.keys(ncOwn)]);
-  (_staff||[]).forEach(s=>{ if(s.active!==false&&['Technician','Engineer','Technical Manager','Senior Technician'].includes(s.role)) techs.add(s.username); });
+  (_staff||[]).forEach(s=>{ if(s.active!==false&&['Engineer','Manager'].includes(s.role)) techs.add(s.username); });
   const pct=(a,b)=>b?Math.round(a/b*100):null;
   const rows=[...techs].map(u=>{ const c=cur[u]||{done:0,value:0,onTime:0,withDue:0,firstTime:0,rejections:0,amendments:0,handling:0,preExisting:0,visits:[],assumed:0,items:[]}; const pv=prev?.[u];
     return {u,name:USERS[u]?.name||u,c,pv,onTime:pct(c.onTime,c.withDue),firstTime:pct(c.firstTime,c.done),pvOnTime:pv?pct(pv.onTime,pv.withDue):null,
@@ -17350,7 +17343,49 @@ function downloadPage1PDF(){
 }
 
 // Download Combined PDF — merges Page 1 (html→canvas→pdf) with uploaded data PDF using pdf-lib
-async function downloadCombinedPDF(){
+// ═══ SHARE A CERTIFICATE WITH THE CUSTOMER (C2) ═══ The combined certificate PDF is stored privately and
+// the customer gets a signed link to that one file, valid 90 days. The certificate itself stays in the LIMS.
+async function shareCertificate(){
+  const j0=_jobsCache[_certPreviewJobNo]||getJob(_certPreviewJobNo); const it0=j0?.items?.[_certPreviewItemIdx||0];
+  if(!it0) return;
+  if(!(it0.status==='Completed'||it0.approvedAt)){ alert('Only approved certificates can be shared.'); return; }
+  const btn=el('btn-share-cert'); const orig=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='⏳ Preparing…'; }
+  try{
+    const r=await downloadCombinedPDF(true); if(!r) return;
+    const certNo=r.item.certNo||r.job.jobNo; const path=`shared-certificates/${certNo.replace(/[^A-Za-z0-9_-]/g,'_')}_${Date.now()}.pdf`;
+    await SB.uploadFile('files',path,new Blob([r.bytes],{type:'application/pdf'}));
+    const link=await apiFetch('/api/share-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})});
+    const rec={at:new Date().toISOString(),by:currentUser,url:link.url,exp:link.exp,path};
+    await updateJob(r.job.jobNo,jj=>{ const it=jj.items[_certPreviewItemIdx||0]; if(it){ (it.certShares=it.certShares||[]).push(rec); }
+      jj.history.push({action:`🔗 Certificate ${certNo} shared with the customer (link valid until ${fmtDateShort(new Date(link.exp).toISOString())})`,by:currentUser,time:rec.at}); });
+    addAudit('🔗',`Certificate ${escapeHtml(certNo)} shared — link valid until ${fmtDateShort(new Date(link.exp).toISOString())}`);
+    openShareDialog(r.job,r.item,rec);
+  }catch(e){ showToast('❌ Could not share: '+e.message,'error',6000); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent=orig; } }
+}
+function openShareDialog(job,item,rec){
+  const cust=(_customers||[]).find(c=>c.id===job.custId)||{};
+  const to=job.email||cust.email||''; const until=fmtDateShort(new Date(rec.exp).toISOString());
+  const subject=`Calibration Certificate ${item.certNo||''} — ${item.eqName||''}`;
+  const body=`Dear ${job.attention||cust.attention||'Sir/Madam'},\n\nPlease find your calibration certificate ${item.certNo||''} (${item.eqName||''}${item.serial?', S/N '+item.serial:''}) at the secure link below:\n\n${rec.url}\n\nThe link is valid until ${until}. Please download and keep a copy for your records.\n\nThank you.\n\nBest regards,\n${USERS[currentUser]?.name||''}\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`;
+  let ov=document.getElementById('share-cert-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='share-cert-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999997;display:flex;align-items:flex-start;justify-content:center;padding:50px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:560px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">🔗 Certificate ${escapeHtml(item.certNo||'')} — secure link</span>
+      <button onclick="document.getElementById('share-cert-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;">
+      <div style="font-size:12.5px;margin-bottom:8px;">This link opens <b>only this certificate</b> and works until <b>${until}</b>. The certificate stays in the LIMS.</div>
+      <input class="form-control" id="share-cert-url" readonly value="${escapeHtml(rec.url)}" onclick="this.select()" style="font-size:11.5px;"/>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn btn-outline" onclick="navigator.clipboard.writeText(el('share-cert-url').value).then(()=>showToast('📋 Link copied','success',2000))">📋 Copy link</button>
+        <a class="btn btn-outline" href="mailto:${encodeURIComponent(to).replace(/%40/g,'@')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}">✉️ Email</a>
+        <a class="btn btn-outline" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`${subject}\n${rec.url}\n(valid until ${until})`)}">💬 WhatsApp</a>
+      </div>
+      ${(item.certShares||[]).length>1?`<div style="font-size:11.5px;color:var(--text-muted);margin-top:12px;">Earlier links: ${(item.certShares||[]).slice(0,-1).map(x=>`${fmtDateShort(x.at)} by ${escapeHtml(USERS[x.by]?.name||x.by)} (until ${fmtDateShort(new Date(x.exp).toISOString())})`).join(' · ')}</div>`:''}
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function downloadCombinedPDF(returnBytes){
   if(!_certPreviewJobNo){showToast('No job selected','error');return;}
   const j=_jobsCache[_certPreviewJobNo]||getJob(_certPreviewJobNo);
   const itemIdx=_certPreviewItemIdx||0;
@@ -17405,8 +17440,9 @@ async function downloadCombinedPDF(){
     const copiedPages=await mergedPdf.copyPages(dataPdf,dataPdf.getPageIndices());
     copiedPages.forEach(p=>mergedPdf.addPage(p));
 
-    // Step 6: Save and download
+    // Step 6: Save and download (or hand the PDF back, for sharing)
     const mergedBytes=await mergedPdf.save();
+    if(returnBytes===true) return {bytes:mergedBytes,item,job:j};
     const blob=new Blob([mergedBytes],{type:'application/pdf'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
@@ -23168,7 +23204,7 @@ function patchNcrs(mutator){ // re-read, change, write back — two people can't
   };
   const p=_ncrPatchQueue.then(run,run); _ncrPatchQueue=p.catch(()=>{}); return p;
 }
-function canManageNcr(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Quality Manager','Technical Manager'].includes(r); }
+function canManageNcr(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Quality Manager','Manager'].includes(r); } // 'Manager' is shown as Technical Manager
 const NCR_KINDS=['Customer complaint','Nonconforming work','Audit finding','Other'];
 const NCR_SOURCES=['Customer','Internal (staff)','Internal audit','External audit / SAMM','Proficiency testing','Management review'];
 const NCR_STATUSES=['Open','Investigating','Action in progress','Verification','Closed'];
