@@ -23126,7 +23126,7 @@ function qeOpenMail(){
   window._lastMailto=url; window.location.href=url;
   showToast('✉️ Opening your email app — remember to attach the PDF','success',4000);
 }
-function canManageQtEmailTemplates(){ return isAdmin(currentUser)||['Sales','Coordinator'].includes(getUserRole(currentUser)); }
+function canManageQtEmailTemplates(){ return isAdmin(currentUser); } // Admin + MD manage; everyone else just uses the templates
 function qeRenderManage(){
   const box=el('qe-manage'); if(!box) return;
   box.innerHTML=`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">Placeholders: {attention} {customer} {quotationNo} {date} {total} {validity} {validUntil} {yourRef} {salesPerson} {designation} {mobile} {company}</div>
@@ -23144,6 +23144,7 @@ function qeEditTemplate(id){
     <div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-outline btn-sm" onclick="el('qe-edit').innerHTML=''">Cancel</button><button class="btn btn-primary btn-sm" onclick="qeSaveTemplate('${escapeForJsAttr(t.id)}')">Save template</button></div></div>`;
 }
 async function qeSaveTemplate(id){
+  if(!canManageQtEmailTemplates()){ alert('Only Admin or the Managing Director can change email templates.'); return; }
   const name=el('qet-name').value.trim(), subject=el('qet-subject').value.trim(), body=el('qet-body').value;
   if(!name||!subject||!body.trim()){ alert('Please fill in the name, subject and message.'); return; }
   const rec={id:id||('T-'+Date.now()),name,subject,body};
@@ -23153,6 +23154,7 @@ async function qeSaveTemplate(id){
   const sel=el('qe-tpl'); if(sel){ const cur=rec.id; sel.innerHTML=qtEmailTemplates().map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===cur?'selected':''}>${escapeHtml(x.name)}</option>`).join(''); qeApplyTemplate(); }
 }
 async function qeDeleteTemplate(id){
+  if(!canManageQtEmailTemplates()){ alert('Only Admin or the Managing Director can change email templates.'); return; }
   if(qtEmailTemplates().length<=1){ alert('Keep at least one template.'); return; }
   const t=qtEmailTemplates().find(x=>x.id===id); if(!t||!confirm(`Delete the template "${t.name}"?`)) return;
   await patchSettings(st=>{ const l=(st.quotationEmailTemplates&&st.quotationEmailTemplates.length)?st.quotationEmailTemplates:JSON.parse(JSON.stringify(DEFAULT_QT_EMAIL_TEMPLATES)); st.quotationEmailTemplates=l.filter(x=>x.id!==id); });
