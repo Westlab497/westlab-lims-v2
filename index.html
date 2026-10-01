@@ -3879,7 +3879,35 @@ const API='https://westlab-api.sales-2fb.workers.dev';
 // NOTE: this is visible to anyone who views this page's source — it stops casual/opportunistic
 // access to the API, but is not a substitute for real per-user authentication.
 const APP_SECRET=''; // no longer in the page — requests carry the signed-in person's login pass instead
-let _authToken=null, _authExp=0, _sessionEnding=false;
+let _authToken=null, _authExp=0, _sessionEnding=false, _fileToken=null;
+// ═══ PRIVATE FILES ═══ Stored files (certificates, signatures, receipts, MCs, photos…) are no longer
+// public. Every old public address is sent through the file service with the files-only pass, which
+// can open files but can't do anything else. Files under settings/ (the logo) stay public.
+const R2_PUBLIC='https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/';
+const FILE_SERVICE='https://westlab-upload.sales-2fb.workers.dev';
+function fileUrl(u){
+  u=String(u||''); if(!u.startsWith(R2_PUBLIC)) return u;
+  const path=decodeURIComponent(u.slice(R2_PUBLIC.length).split('?')[0]);
+  return `${FILE_SERVICE}/file?path=${encodeURIComponent(path)}${path.startsWith('settings/')?'':'&t='+encodeURIComponent(_fileToken||'')}`;
+}
+(function(){
+  const of=window.fetch.bind(window);
+  window.fetch=function(input,init){
+    try{
+      if(typeof input==='string'&&input.startsWith(R2_PUBLIC)) input=fileUrl(input);
+      else if(typeof input==='string'&&input.startsWith(FILE_SERVICE)&&_authToken&&(init?.method||'GET')!=='GET'){ // uploads / deletes carry the sign-in pass
+        const h=new Headers((init&&init.headers)||{}); if(!h.has('Authorization')) h.set('Authorization','Bearer '+_authToken); init={...(init||{}),headers:h}; }
+    }catch(e){}
+    return of(input,init);
+  };
+  const oo=window.open.bind(window);
+  window.open=function(u,...r){ return oo(typeof u==='string'?fileUrl(u):u,...r); };
+  const fix=n=>{ if(!n||n.nodeType!==1) return;
+    for(const a of ['src','href']){ const v=n.getAttribute(a); if(v&&v.startsWith(R2_PUBLIC)) n.setAttribute(a,fileUrl(v)); }
+    if(n.querySelectorAll) n.querySelectorAll(`[src^="${R2_PUBLIC}"],[href^="${R2_PUBLIC}"]`).forEach(fix); };
+  new MutationObserver(ms=>ms.forEach(m=>m.type==='attributes'?fix(m.target):m.addedNodes.forEach(fix)))
+    .observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['src','href']});
+})();
 function authHeader(){ return _authToken?{'Authorization':'Bearer '+_authToken}:{}; }
 function sessionExpired(){
   if(_sessionEnding||!currentUser) return; _sessionEnding=true;
@@ -4009,6 +4037,7 @@ const SB={
       const xhr = new XMLHttpRequest();
       xhr.open('POST', WORKER_URL);
       xhr.setRequestHeader('X-File-Path', path);
+      if(_authToken) xhr.setRequestHeader('Authorization','Bearer '+_authToken); // uploads need the sign-in pass
       xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
       xhr.timeout = 120000;
       xhr.upload.onprogress = e => {
@@ -4422,7 +4451,7 @@ async function doLogin(){
       err.textContent='Your account is inactive. Please contact your administrator.';
       err.style.display='block'; return;
     }
-    _authToken=result.token; _authExp=result.exp||0;
+    _authToken=result.token; _authExp=result.exp||0; _fileToken=result.fileToken||null;
     if(btn){btn.disabled=true;btn.textContent='Loading…';}
     showLoadingOverlay(true);
     try{ await loadAll(); applySettings(_settings); rebuildUsers(); }catch(e){ console.error('Load after login failed:',e); }
@@ -4457,7 +4486,7 @@ function setCurrentUser(username){
   const sfa=el('sidebar-footer-avatar');if(sfa)sfa.textContent=u.name.slice(0,2).toUpperCase();
   const sfn=el('sidebar-footer-name');if(sfn)sfn.textContent=u.name;
   const sfr=el('sidebar-footer-role');if(sfr)sfr.textContent=u.display;
-  try{localStorage.setItem('wl_sess',JSON.stringify({user:username,token:_authToken,exp:_authExp,time:Date.now()}));}catch(e){}
+  try{localStorage.setItem('wl_sess',JSON.stringify({user:username,token:_authToken,fileToken:_fileToken,exp:_authExp,time:Date.now()}));}catch(e){}
   applyRoleUI();
   applySettings(_settings);
   renderEquipmentTable();
@@ -4542,7 +4571,7 @@ function doLogout(){
   try{
     const sess=JSON.parse(localStorage.getItem('wl_sess')||'null');
     if(sess&&sess.user&&sess.token&&sess.exp>Date.now()){
-      _authToken=sess.token; _authExp=sess.exp;
+      _authToken=sess.token; _authExp=sess.exp; _fileToken=sess.fileToken||null;
       showLoadingOverlay(true);
       let who=null; try{ who=await apiFetch('/api/whoami'); }catch(e){}
       if(who&&who.ok&&who.user===sess.user){
@@ -23568,7 +23597,7 @@ async function pdfLoadImages(urls){
     const done=g=>{ if(g) ok.add(url); res(); };
     im.onload=()=>done(true); im.onerror=()=>done(false);
     setTimeout(()=>done(im.complete&&im.naturalWidth>0),8000);
-    im.src=url;
+    im.src=fileUrl(url);
   })));
   return ok;
 }
