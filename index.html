@@ -7280,7 +7280,7 @@ function generateQRDataUrl(text, size){
 function buildReceiptHtml(jobs){
   const s=_settings;
   const labName=s.labName||'Westlab (M) Sdn. Bhd.';
-  const labAddr=s.address||'';
+  const labAddr=addressLines(s.address||'').join('\n'); // shown with white-space:pre-line
   const logoUrl=_pdfLogoData||s.logoUrl||WESTLAB_LETTERHEAD_LOGO;
   const regNo=s.regNo||'';
   const now=new Date();
@@ -11139,6 +11139,7 @@ function renderQuotationsV2Page(){
         <td>
           <div style="display:flex;gap:4px;flex-wrap:wrap;">
             <button class="btn btn-outline btn-sm" onclick="exportQuotationV2Pdf('${q.id}')">📄 PDF</button>
+            <button class="btn btn-outline btn-sm" onclick="openQuotationEmail('${q.id}')">✉️ Email</button>
             ${q.status==='Draft'?`<button class="btn btn-outline btn-sm" onclick="openQuotationV2Modal('${q.id}')">✏️ Edit</button>`:''}
             ${q.status==='Draft'?`<button class="btn btn-primary btn-sm" onclick="sendQuotationV2('${q.id}')">📧 Sent</button>`:''}
             ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="openAcceptQuotationModal('${q.id}')">✅ Accepted</button>`:''}
@@ -11341,7 +11342,7 @@ async function respondQuotationV2(quotationId,accepted){
 // Rows are measured in the browser, then placed onto real A4 pages: the letterhead, customer
 // box and "Page X of Y" repeat on every page, totals + signatures sit at the bottom of the last
 // item page, and the Terms & Conditions follow on their own page.
-async function exportQuotationV2Pdf(quotationId){
+async function exportQuotationV2Pdf(quotationId,opts){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   const s=_settings;
   const items=(q.items||[]).filter(it=>it&&it.eqName);
@@ -11360,13 +11361,13 @@ async function exportQuotationV2Pdf(quotationId){
   const logo=await pdfLogoDataUrl();
   const labName=(s.labName||'Westlab (M) Sdn Bhd').replace(/\./g,'').toUpperCase();
   const regNo=[s.regNo,s.regNoSecondary].filter(Boolean).join(' ')||'202601005304 (1667402-A)';
-  const addressHtml=s.address?esc(s.address):'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh,<br/>47000 Sungai Buloh, Selangor.';
+  const addressHtml=s.address?addressLines(s.address).map(esc).join('<br/>'):'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh,<br/>47000 Sungai Buloh, Selangor.';
   const phone=s.phone||'0162589602', email=s.salesEmail||'sales@westlab.com.my', tin=s.tinNo||'C60571616010';
   const letterhead=`<div style="display:flex;align-items:center;">
       <img src="${logo}" crossorigin="anonymous" style="width:88px;height:auto;margin-left:18px;"/>
       <div style="flex:1;text-align:center;margin-right:106px;font-family:'Times New Roman',Times,serif;font-size:15px;line-height:1.3;">
         <div><span style="font-size:23px;font-weight:bold;">${esc(labName)}</span> <span style="font-size:10px;">(${esc(regNo)})</span></div>
-        <div style="max-width:420px;margin:0 auto;">${addressHtml}</div>
+        <div style="white-space:nowrap;">${addressHtml}</div>
         <div>Phone: ${esc(phone)}&nbsp;&nbsp;&nbsp;email: ${esc(email)}</div>
         <div>(TIN No: ${esc(tin)})</div>
       </div>
@@ -11569,7 +11570,7 @@ async function exportQuotationV2Pdf(quotationId){
     </div>`;
   // File name: quotation number + customer, e.g. "WQT-2609-0001_Envirolab Sdn Bhd.pdf"
   const safeCust=String(q.custName||'').replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'').replace(/\s+/g,' ').trim().slice(0,80);
-  await exportPagedPdf([...pageHtml,termsPage],`${q.quotationNo}${safeCust?'_'+safeCust:''}.pdf`,'Quotation',items.length,true);
+  await exportPagedPdf([...pageHtml,termsPage],`${q.quotationNo}${safeCust?'_'+safeCust:''}.pdf`,'Quotation',items.length,!(opts&&opts.download));
 }
 let _startingFromQuotationV2Id=null;
 async function createJobFromQuotationV2(quotationId){
@@ -11714,6 +11715,14 @@ function capabilityVerdictLabel(verdict){
 // ── WESTLAB LETTERHEAD ── (matches the official Westlab letterhead document; the logo is
 // embedded so documents never depend on a storage link loading)
 const WESTLAB_LETTERHEAD_LOGO='data:image/png;base64,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';
+// Address on two lines, starting the second line at the postcode:
+// "Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh," / "47000 Sungai Buloh, Selangor Darul Ehsan, Malaysia"
+// (an address that already has its own line breaks is kept as typed)
+function addressLines(addr){
+  const a=String(addr||'').trim(); if(!a) return [];
+  if(/\n/.test(a)) return a.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const m=a.match(/^(.*?,)\s*(\d{5}\b.*)$/); return m?[m[1],m[2]]:[a];
+}
 function westlabLetterheadHeader(){
   return `<div style="position:absolute;left:0;right:0;top:34px;">
     <div style="display:flex;align-items:center;padding:0 72px 0 88px;gap:36px;">
@@ -23041,6 +23050,114 @@ function exportNcrExcel(){
 }
 function jobNcrHtml(j){ const l=(_ncrs||[]).filter(n=>n.jobNo===j.jobNo); if(!l.length) return '';
   return `<div style="margin-top:14px;"><div style="font-weight:700;font-size:12.5px;">⚠️ Nonconformances / complaints</div>${l.map(n=>`<div style="font-size:12px;padding:3px 0;"><a href="javascript:void(0)" onclick="openNcrDetail('${n.id}')">${escapeHtml(n.ncNo)}</a> · ${escapeHtml(n.kind)} · ${ncrStatusBadge(n.status)}</div>`).join('')}</div>`; }
+
+</script>
+<script>
+// ═══ QUOTATION EMAIL — templates + "send from your own email" (copy / download PDF / open email app) ═══
+const DEFAULT_QT_EMAIL_TEMPLATES=[
+  {id:'new',name:'New quotation',subject:'Quotation {quotationNo} — Calibration Services | {company}',
+   body:'Dear {attention},\n\nThank you for your enquiry. Please find attached our quotation {quotationNo} dated {date} for your review.\n\nTotal: RM {total}\nThis quotation is valid for {validity} days (until {validUntil}).{yourRefLine}\n\nTo proceed, please reply with your acknowledgement or a Purchase Order. Should you have any questions, feel free to contact me.\n\nThank you.\n\nBest regards,\n{salesPerson}\n{designation}\n{company}\n{mobile}'},
+  {id:'revised',name:'Revised quotation',subject:'Revised Quotation {quotationNo} | {company}',
+   body:'Dear {attention},\n\nFurther to our discussion, please find attached our revised quotation {quotationNo} for your review.\n\nTotal: RM {total}\nValid until {validUntil}.{yourRefLine}\n\nPlease let us know if everything is in order, or send your Purchase Order to proceed.\n\nThank you.\n\nBest regards,\n{salesPerson}\n{designation}\n{company}\n{mobile}'},
+  {id:'followup',name:'Follow-up / reminder',subject:'Follow-up: Quotation {quotationNo} | {company}',
+   body:'Dear {attention},\n\nJust following up on our quotation {quotationNo} sent on {date} (attached again for your convenience). It remains valid until {validUntil}.\n\nPlease let us know if you have any questions or would like any changes. We look forward to serving you.\n\nBest regards,\n{salesPerson}\n{designation}\n{company}\n{mobile}'}];
+function qtEmailTemplates(){ return (_settings.quotationEmailTemplates&&_settings.quotationEmailTemplates.length)?_settings.quotationEmailTemplates:DEFAULT_QT_EMAIL_TEMPLATES; }
+function qtEmailFill(text,q){
+  const st=(_staff||[]).find(x=>x.username===q.createdBy)||{}; const created=new Date(q.createdAt||Date.now());
+  const vd=parseInt(q.validityDays)||30; const until=new Date(created); until.setDate(until.getDate()+vd);
+  const map={customer:q.custName||'',attention:q.attention||'Sir/Madam',quotationNo:q.quotationNo||'',date:fmtDateShort(q.createdAt||new Date().toISOString()),
+    total:qtGrandTotal(q).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),validity:String(vd),validUntil:fmtDateShort(until.toISOString()),
+    yourRef:q.yourRef||'',yourRefLine:q.yourRef?`\nYour reference: ${q.yourRef}`:'',salesPerson:st.name||USERS[q.createdBy]?.name||'',designation:st.designation||'',
+    mobile:st.mobile||'',company:_settings.labName||'Westlab (M) Sdn. Bhd.'};
+  return String(text||'').replace(/\{(\w+)\}/g,(m,k)=>k in map?map[k]:m).replace(/\n{3,}/g,'\n\n').replace(/\n+$/,'');
+}
+let _qtEmailId=null;
+function openQuotationEmail(quotationId){
+  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q) return; _qtEmailId=quotationId;
+  const cust=q.custId?(_customers||[]).find(c=>c.id===q.custId):null;
+  const main=q.email||cust?.email||'';
+  const others=(q.custId?customerContacts(q.custId):[]).filter(c=>c.email&&c.email!==main);
+  const tpls=qtEmailTemplates(); const def=q.status==='Sent'?'followup':(q.revisedFrom||/rev/i.test(q.quotationNo)?'revised':'new');
+  let ov=document.getElementById('qt-email-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='qt-email-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999995;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:720px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">✉️ Email quotation ${escapeHtml(q.quotationNo)} <span style="font-weight:400;color:var(--text-muted);font-size:13px;">— ${escapeHtml(q.custName||'')}</span></span>
+      <button onclick="document.getElementById('qt-email-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;">
+      <div class="form-group"><label class="form-label">To</label><input class="form-control" id="qe-to" value="${escapeHtml(main)}" placeholder="customer@company.com"/>
+        ${others.length?`<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:12.5px;">${others.map(c=>`<label style="display:flex;align-items:center;gap:5px;font-weight:normal;cursor:pointer;"><input type="checkbox" class="qe-contact" value="${escapeHtml(c.email)}" onchange="qeSyncTo()"/> ${escapeHtml(c.name)}${c.role?` <span style="color:var(--text-muted);">(${escapeHtml(c.role)})</span>`:''}</label>`).join('')}</div>`:''}</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">CC <span style="font-weight:normal;color:var(--text-muted);">(optional)</span></label><input class="form-control" id="qe-cc" placeholder="e.g. sales@westlab.com.my"/></div>
+        <div class="form-group"><label class="form-label">Template</label><select class="form-control" id="qe-tpl" onchange="qeApplyTemplate()">${tpls.map(t=>`<option value="${escapeHtml(t.id)}" ${t.id===def?'selected':''}>${escapeHtml(t.name)}</option>`).join('')}</select></div></div>
+      <div class="form-group"><label class="form-label">Subject</label><input class="form-control" id="qe-subject"/></div>
+      <div class="form-group"><label class="form-label">Message</label><textarea class="form-control" id="qe-body" rows="13" style="font-size:12.5px;line-height:1.5;"></textarea></div>
+      <div class="qt-note info" style="margin-bottom:12px;">📎 Attach the quotation PDF yourself: click <b>Download PDF</b>, then add the file to your email.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-outline" onclick="qeCopy()">📋 Copy message</button>
+        <button class="btn btn-outline" onclick="exportQuotationV2Pdf('${escapeForJsAttr(q.id)}',{download:true})">📄 Download PDF</button>
+        <button class="btn btn-primary" onclick="qeOpenMail()">✉️ Open in email app</button>
+        ${q.status==='Draft'?`<button class="btn btn-outline" style="margin-left:auto;" onclick="document.getElementById('qt-email-overlay').style.display='none';sendQuotationV2('${escapeForJsAttr(q.id)}')">✅ Mark as sent</button>`:''}
+      </div>
+      ${canManageQtEmailTemplates()?`<details style="margin-top:14px;"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;">⚙️ Manage templates</summary><div id="qe-manage" style="margin-top:8px;"></div></details>`:''}
+    </div></div>`;
+  ov.style.display='flex'; qeApplyTemplate(); qeRenderManage();
+}
+function qeSyncTo(){
+  const base=(el('qe-to').value||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+  const boxes=[...document.querySelectorAll('.qe-contact')];
+  const want=new Set(base.filter(e=>!boxes.some(b=>b.value===e))); boxes.forEach(b=>{ if(b.checked) want.add(b.value); });
+  el('qe-to').value=[...want].join(', ');
+}
+function qeApplyTemplate(){
+  const q=_quotationsV2.find(x=>x.id===_qtEmailId); const t=qtEmailTemplates().find(x=>x.id===el('qe-tpl').value)||qtEmailTemplates()[0]; if(!q||!t) return;
+  el('qe-subject').value=qtEmailFill(t.subject,q); el('qe-body').value=qtEmailFill(t.body,q);
+}
+async function qeCopy(){
+  const txt=el('qe-body').value;
+  try{ await navigator.clipboard.writeText(txt); showToast('📋 Message copied — paste it into your email','success',2500); }
+  catch(e){ const ta=el('qe-body'); ta.select(); document.execCommand('copy'); showToast('📋 Message copied','success',2500); }
+}
+function qeOpenMail(){
+  const to=(el('qe-to').value||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean).join(',');
+  const cc=(el('qe-cc').value||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean).join(',');
+  const params=[cc?'cc='+encodeURIComponent(cc):'', 'subject='+encodeURIComponent(el('qe-subject').value), 'body='+encodeURIComponent(el('qe-body').value)].filter(Boolean).join('&');
+  const url=`mailto:${encodeURIComponent(to).replace(/%2C/g,',').replace(/%40/g,'@')}?${params}`;
+  window._lastMailto=url; window.location.href=url;
+  showToast('✉️ Opening your email app — remember to attach the PDF','success',4000);
+}
+function canManageQtEmailTemplates(){ return isAdmin(currentUser)||['Sales','Coordinator'].includes(getUserRole(currentUser)); }
+function qeRenderManage(){
+  const box=el('qe-manage'); if(!box) return;
+  box.innerHTML=`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">Placeholders: {attention} {customer} {quotationNo} {date} {total} {validity} {validUntil} {yourRef} {salesPerson} {designation} {mobile} {company}</div>
+    ${qtEmailTemplates().map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="flex:1;">${escapeHtml(t.name)}</span>
+      <button class="btn btn-outline btn-sm" onclick="qeEditTemplate('${escapeForJsAttr(t.id)}')">✏️ Edit</button><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="qeDeleteTemplate('${escapeForJsAttr(t.id)}')">✕</button></div>`).join('')}
+    <div id="qe-edit"></div>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="qeEditTemplate(null)">+ New template</button>`;
+}
+function qeEditTemplate(id){
+  const t=id?qtEmailTemplates().find(x=>x.id===id):{id:'',name:'',subject:'Quotation {quotationNo} | {company}',body:'Dear {attention},\n\n\n\nBest regards,\n{salesPerson}\n{designation}\n{company}\n{mobile}'};
+  el('qe-edit').innerHTML=`<div style="background:var(--bg);border-radius:8px;padding:10px;margin-top:8px;">
+    <div class="form-group"><label class="form-label">Template name</label><input class="form-control" id="qet-name" value="${escapeHtml(t.name)}"/></div>
+    <div class="form-group"><label class="form-label">Subject</label><input class="form-control" id="qet-subject" value="${escapeHtml(t.subject)}"/></div>
+    <div class="form-group"><label class="form-label">Message</label><textarea class="form-control" id="qet-body" rows="9" style="font-size:12px;">${escapeHtml(t.body)}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn btn-outline btn-sm" onclick="el('qe-edit').innerHTML=''">Cancel</button><button class="btn btn-primary btn-sm" onclick="qeSaveTemplate('${escapeForJsAttr(t.id)}')">Save template</button></div></div>`;
+}
+async function qeSaveTemplate(id){
+  const name=el('qet-name').value.trim(), subject=el('qet-subject').value.trim(), body=el('qet-body').value;
+  if(!name||!subject||!body.trim()){ alert('Please fill in the name, subject and message.'); return; }
+  const rec={id:id||('T-'+Date.now()),name,subject,body};
+  await patchSettings(st=>{ const l=(st.quotationEmailTemplates&&st.quotationEmailTemplates.length)?st.quotationEmailTemplates:JSON.parse(JSON.stringify(DEFAULT_QT_EMAIL_TEMPLATES));
+    const k=l.findIndex(x=>x.id===rec.id); if(k>=0) l[k]=rec; else l.push(rec); st.quotationEmailTemplates=l; });
+  showToast('✅ Template saved','success',2000); qeRenderManage();
+  const sel=el('qe-tpl'); if(sel){ const cur=rec.id; sel.innerHTML=qtEmailTemplates().map(x=>`<option value="${escapeHtml(x.id)}" ${x.id===cur?'selected':''}>${escapeHtml(x.name)}</option>`).join(''); qeApplyTemplate(); }
+}
+async function qeDeleteTemplate(id){
+  if(qtEmailTemplates().length<=1){ alert('Keep at least one template.'); return; }
+  const t=qtEmailTemplates().find(x=>x.id===id); if(!t||!confirm(`Delete the template "${t.name}"?`)) return;
+  await patchSettings(st=>{ const l=(st.quotationEmailTemplates&&st.quotationEmailTemplates.length)?st.quotationEmailTemplates:JSON.parse(JSON.stringify(DEFAULT_QT_EMAIL_TEMPLATES)); st.quotationEmailTemplates=l.filter(x=>x.id!==id); });
+  qeRenderManage(); const sel=el('qe-tpl'); if(sel){ sel.innerHTML=qtEmailTemplates().map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join(''); qeApplyTemplate(); }
+}
 
 </script>
 <script>
