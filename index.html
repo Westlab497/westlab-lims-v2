@@ -472,6 +472,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
   .stats-grid{grid-template-columns:1fr!important;}
 }
 
+  .tab-hidden,.perm-hidden{display:none!important;}
 </style>
 </head>
 <body>
@@ -503,8 +504,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
     </div>
     <div class="form-group">
       <label class="form-label">Password</label>
-      <input class="form-control" id="login-password" type="password" placeholder="Enter password" autocomplete="current-password"/>
+      <div style="position:relative;">
+        <input class="form-control" id="login-password" type="password" placeholder="Enter password" autocomplete="current-password" style="padding-right:42px;" onkeyup="loginCapsCheck(event)" onkeydown="loginCapsCheck(event)" onblur="el('login-caps').style.display='none'"/>
+        <button type="button" id="login-eye" onclick="toggleLoginPassword()" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;padding:4px 6px;">👁</button>
+      </div>
+      <div id="login-caps" style="display:none;font-size:11.5px;color:#b45309;margin-top:4px;">⇪ Caps Lock is on</div>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:normal;margin:-4px 0 8px;cursor:pointer;"><input type="checkbox" id="login-remember" style="width:15px;height:15px;"/> Remember my username on this computer</label>
     <button class="btn btn-primary" id="login-btn" style="width:100%;padding:11px;font-size:14px;margin-top:6px;" onclick="doLogin()">Sign In →</button>
     <div class="login-footer">
       <a href="#" onclick="showForgotPassword()" style="color:var(--blue);text-decoration:none;font-size:12px;">Forgot password?</a>
@@ -1589,10 +1595,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <button class="btn btn-primary" onclick="openAddStaffModal()">+ Add Staff Account</button>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">User Accounts</span></div>
+        <div class="card-header"><span class="card-title">User Accounts</span><label style="font-size:12px;font-weight:normal;display:flex;align-items:center;gap:6px;margin-left:auto;"><input type="checkbox" id="personnel-show-inactive" onchange="_showInactiveStaff=this.checked;renderPersonnel()"/> Show inactive staff</label></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Access Level</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Mobile</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th></th></tr></thead>
             <tbody id="personnel-tbody"></tbody>
           </table>
         </div>
@@ -1752,7 +1758,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <span class="card-title">📋 Audit Log</span>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-outline btn-sm" id="audit-email-filter-btn" onclick="toggleAuditEmailFilter()">📧 Emails Only</button>
+            <select class="filter-select" id="audit-who" onchange="filterAuditLog()" style="width:140px;"><option value="">Everyone</option></select>
+            <input class="filter-select" type="date" id="audit-from" onchange="filterAuditLog()" title="From"/><input class="filter-select" type="date" id="audit-to" onchange="filterAuditLog()" title="To"/>
             <input type="text" class="form-control" id="audit-search" placeholder="Search logs…" style="width:200px;font-size:12px;" oninput="filterAuditLog()"/>
+            <button class="btn btn-outline btn-sm" onclick="exportAuditExcel()">📊 Excel</button><span id="audit-count" style="font-size:11.5px;color:var(--text-muted);"></span>
           </div>
         </div>
         <div class="card-body" style="padding:0;max-height:400px;overflow-y:auto;" id="audit-log-body">
@@ -1765,7 +1774,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="view" id="view-deleted">
       <div class="page-header">
         <div><div class="page-title">🗑️ Deleted Jobs</div>
-        <div class="page-sub">Job records deleted by admin — kept for audit trail</div></div>
+        <div class="page-sub">Deleted jobs stay here for 90 days (recoverable), then are removed for good automatically</div></div>
       </div>
       <div class="card">
         <div class="card-header">
@@ -1775,8 +1784,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Job No.</th><th>Cert No.</th><th>Customer</th><th>Equipment</th>
-              <th>Status at Deletion</th><th>Deleted By</th><th>Deleted At</th><th>Actions</th>
+              <th>Job / Item</th><th>Customer / Equipment</th><th>Reason</th><th>Status when deleted</th><th>Deleted by</th><th>Deleted</th><th></th>
             </tr></thead>
             <tbody id="deleted-tbody"></tbody>
           </table>
@@ -1894,23 +1902,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
 
       <!-- Data Backup -->
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-header"><span class="card-title">💾 Data Backup</span></div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Downloads a complete snapshot of every job, customer, staff record, reference equipment, and all other system data as a single file to your computer. Recommended weekly — if your Downloads folder is synced to OneDrive, this backs up there automatically too.</div>
-          <div id="backup-status" style="font-size:11px;color:var(--text-muted);margin-bottom:10px;"></div>
-          <button class="btn btn-primary btn-sm" id="backup-export-btn" onclick="exportFullBackup()">💾 Export Full Backup</button>
-        </div>
-      </div>
+      
 
       <!-- Quotation Log Migration -->
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-header"><span class="card-title">📈 Migrate Quotation Log to Sales Tracker</span></div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Sales Tracker now covers everything Quotation Log did — multi-item quoting, pricing, and Won/Lost tracking — plus the capability review workflow. Run this once to bring your existing quotation history into Sales Tracker. This cannot be undone, and Quotation Log's own data stays untouched either way.</div>
-          <button class="btn btn-outline btn-sm" onclick="migrateQuotationsToSalesTracker()">📈 Migrate Quotations Now</button>
-        </div>
-      </div>
+      
 
       <!-- Calibration Stickers -->
       <div class="card" style="margin-bottom:16px;">
@@ -4441,6 +4436,7 @@ async function doLogin(){
       err.style.display='block'; return;
     }
     _authToken=result.token; _authExp=result.exp||0; _fileToken=result.fileToken||null;
+    try{ if(el('login-remember')?.checked) localStorage.setItem('wl_last_username',u); else localStorage.removeItem('wl_last_username'); }catch(e){}
     if(btn){btn.disabled=true;btn.textContent='Loading…';}
     showLoadingOverlay(true);
     try{ await loadAll(); applySettings(_settings); rebuildUsers(); }catch(e){ console.error('Load after login failed:',e); }
@@ -4521,6 +4517,8 @@ function setCurrentUser(username){
   }
 }
 
+function toggleLoginPassword(){ const f=el('login-password'), b=el('login-eye'); const show=f.type==='password'; f.type=show?'text':'password'; b.textContent=show?'🙈':'👁'; b.title=show?'Hide password':'Show password'; f.focus(); }
+function loginCapsCheck(e){ const on=e.getModifierState&&e.getModifierState('CapsLock'); el('login-caps').style.display=on?'block':'none'; }
 function doLogout(){
   currentUser=null; _authToken=null; _sessionEnding=true;
   try{localStorage.removeItem('wl_sess');}catch(e){}
@@ -4545,6 +4543,8 @@ function doLogout(){
   // Show loading overlay
   // Nothing is loaded before someone signs in (data needs a login pass).
   if(typeof hideLoading==='function') hideLoading(); // the start-up "Loading…" cover used to close at the end of the data load
+  // Remembered username (only if the person ticked "Remember my username")
+  try{ const ru=localStorage.getItem('wl_last_username'); if(ru){ el('login-username').value=ru; el('login-remember').checked=true; setTimeout(()=>el('login-password')?.focus(),50); } }catch(e){}
   // Logo on the login screen: it's public, so fetch it directly (Settings aren't loaded before sign-in)
   { const img=el('login-logo-img'); if(img){ const exts=['png','jpg','jpeg','webp','svg']; let i=0;
       img.onload=()=>{ img.style.display='block'; }; img.onerror=()=>{ i++; if(i<exts.length) img.src=`${FILE_SERVICE}/file?path=settings/logo.${exts[i]}`; else img.style.display='none'; };
@@ -16671,8 +16671,9 @@ async function deleteJob(jobNo){
     return;
   }
   const itemCount=j?.items?.length||1;
-  const warn=`Delete job ${jobNo} (${itemCount} item${itemCount>1?'s':''}) for ${escapeHtml(j?.custName)}?\n\nThis will permanently remove all uploaded PDFs from storage.`;
-  if(!confirm(warn)) return;
+  const reason=prompt(`Delete job ${jobNo} (${itemCount} item${itemCount>1?'s':''}) for ${j?.custName||''}?\n\nAll its uploaded files are removed now. The job goes to Deleted Jobs, where it can be recovered for 90 days before it is removed for good.\n\nReason for deleting (required):`,'');
+  if(reason===null) return;
+  if(!reason.trim()){ alert('Please give a reason for deleting the job.'); return; }
 
   // Collect all R2 file paths to delete
   const pathsToDelete=[];
@@ -16714,6 +16715,7 @@ async function deleteJob(jobNo){
 
   // Mark job as deleted in Supabase
   await updateJob(jobNo,j=>{
+    j.statusAtDeletion=j.status; j.deleteReason=reason.trim();
     j.status='Deleted';
     j.deletedAt=new Date().toISOString();
     j.deletedBy=currentUser;
@@ -21935,47 +21937,27 @@ function renderDeletedJobs(){
   const list=_jobs.filter(j=>j.status==='Deleted');
   const q=(el('deleted-search')?.value||'').toLowerCase();
   const tbody=el('deleted-tbody'); if(!tbody)return;
-  const filtered=list.filter(j=>{
-    const items=j.items||[];
-    return !q||j.jobNo.toLowerCase().includes(q)||
-      (j.custName||'').toLowerCase().includes(q)||
-      items.some(i=>(i.eqName||'').toLowerCase().includes(q));
-  }).sort((a,b)=>new Date(b.deletedAt||0)-new Date(a.deletedAt||0));
-  if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🗑️</div><p>${list.length?'No matching records.':'No deleted jobs.'}</p></div></td></tr>`;
-    return;
-  }
+  const filtered=list.filter(j=>!q||j.jobNo.toLowerCase().includes(q)||(j.custName||'').toLowerCase().includes(q)||String(j.deleteReason||'').toLowerCase().includes(q)||(j.items||[]).some(i=>(i.eqName||'').toLowerCase().includes(q)))
+    .sort((a,b)=>new Date(b.deletedAt||0)-new Date(a.deletedAt||0));
+  if(!filtered.length){ tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🗑️</div><p>${list.length?'No matching records.':'No deleted jobs.'}</p></div></td></tr>`; return; }
   const rows=[];
   filtered.forEach(j=>{
-    const items=j.items||[];
-    rows.push(`<tr style="opacity:0.8;background:var(--bg);">
-      <td colspan="4" style="padding:6px 10px;">
-        <span style="font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;text-decoration:line-through;">${j.jobNo}</span>
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">${escapeHtml(j.custName||'—')}</span>
-      </td>
-      <td style="padding:6px 10px;font-size:11px;color:var(--text-muted);">${USERS[j.deletedBy]?.name||j.deletedBy||'Admin'}</td>
-      <td style="padding:6px 10px;font-size:11px;color:var(--text-muted);">${j.deletedAt?j.deletedAt.split('T')[0]:'—'}</td>
-      <td colspan="2" style="padding:6px 10px;">
-        <button class="btn btn-outline btn-sm" onclick="recoverJob('${j.jobNo}')">↩️ Recover</button>
-        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="permanentlyDeleteJob('${j.jobNo}')">🗑 Purge</button>
-      </td>
-    </tr>`);
-    items.forEach(item=>{
-      rows.push(`<tr style="opacity:0.7;">
-        <td style="padding:4px 10px 4px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
-        <td style="padding:4px 8px;font-size:11px;color:var(--text-muted);">${item.certNo||'—'}</td>
-        <td style="padding:4px 8px;font-size:11px;">${escapeHtml(item.eqName||'—')}</td>
-        <td style="padding:4px 8px;font-size:11px;color:var(--text-muted);">S/N: ${escapeHtml(item.serial||'—')}</td>
-        <td colspan="4"></td>
-      </tr>`);
-    });
+    const days=j.deletedAt?Math.floor((Date.now()-new Date(j.deletedAt))/864e5):null; const left=days==null?null:Math.max(0,90-days);
+    rows.push(`<tr style="background:#f6f7f9;border-top:2px solid #e2e8f0;">
+      <td style="padding:7px 10px;font-weight:800;color:var(--navy);text-decoration:line-through;white-space:nowrap;">${escapeHtml(j.jobNo)}</td>
+      <td style="padding:7px 10px;font-weight:600;">${escapeHtml(j.custName||'—')}</td>
+      <td style="padding:7px 10px;font-size:12px;">${j.deleteReason?escapeHtml(j.deleteReason):'<span style="color:var(--text-muted);">— not recorded</span>'}</td>
+      <td style="padding:7px 10px;">${j.statusAtDeletion?`<span class="badge ${STATUS_BADGE[j.statusAtDeletion]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">${escapeHtml(j.statusAtDeletion)}</span>`:'<span style="color:var(--text-muted);font-size:12px;">—</span>'}</td>
+      <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${escapeHtml(USERS[j.deletedBy]?.name||j.deletedBy||'Admin')}</td>
+      <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${j.deletedAt?fmtDateShort(j.deletedAt):'—'}${days!=null?`<div style="font-size:11px;color:${left<=7?'var(--red)':'var(--text-muted)'};">${days} day${days===1?'':'s'} ago · removed for good in ${left} day${left===1?'':'s'}</div>`:''}</td>
+      <td style="padding:7px 10px;white-space:nowrap;text-align:right;"><button class="btn btn-outline btn-sm" onclick="recoverJob('${escapeForJsAttr(j.jobNo)}')">↩️ Recover</button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="permanentlyDeleteJob('${escapeForJsAttr(j.jobNo)}')">🗑 Purge now</button></td></tr>`);
+    (j.items||[]).forEach(item=>rows.push(`<tr style="opacity:.8;"><td style="padding:4px 10px 4px 22px;font-size:11.5px;color:var(--text-muted);">Item ${item.itemNo||''}${item.certNo?' · '+escapeHtml(item.certNo):''}</td>
+      <td style="padding:4px 10px;font-size:11.5px;">${escapeHtml(item.eqName||'—')}${item.serial?` <span style="color:var(--text-muted);">S/N ${escapeHtml(item.serial)}</span>`:''}</td><td colspan="5"></td></tr>`));
   });
   tbody.innerHTML=rows.join('');
-  }catch(_e){
-    console.error("renderDeletedJobs error:",_e);
-  }
+  }catch(_e){ console.error("renderDeletedJobs error:",_e); }
 }
-
 async function recoverJob(jobNo){
   if(!isAdmin(currentUser)){alert('Only Admin can recover deleted jobs.');return;}
   const j=getJob(jobNo); if(!j)return;
@@ -22071,36 +22053,59 @@ const ROLE_DISPLAY={
   Signatory:{label:'Technical Manager',access:'Approve certs, assign jobs, view reports',badge:'badge-purple'} // legacy
 };
 
+let _loginStatus=null, _showInactiveStaff=false;
+async function loadLoginStatus(){ if(!isAdmin(currentUser)) return; try{ _loginStatus=await apiFetch('/api/login-status'); }catch(e){ _loginStatus=null; } renderPersonnel(); }
 function renderPersonnel(){
   try{
   const tbody=el('personnel-tbody'); if(!tbody)return;
-  // Build list: admin first, then staff
+  if(_loginStatus===null&&isAdmin(currentUser)){ _loginStatus=false; loadLoginStatus(); } // fetched once per visit
+  const tog=el('personnel-show-inactive'); if(tog) tog.checked=_showInactiveStaff;
   const adminUser=_settings.username||'admin';
-  const rows=[];
-  // Admin row
-  rows.push({username:adminUser,name:'Administrator',role:'Admin',active:true,isAdmin:true});
-  // Staff rows
-  (_staff||[]).forEach(s=>rows.push({...s,isAdmin:false}));
+  const rows=[{username:adminUser,name:'Administrator',role:'Admin',active:true,isAdmin:true},...(_staff||[]).map(s=>({...s,isAdmin:false}))]
+    .filter(u=>_showInactiveStaff||u.active!==false);
+  const st=_loginStatus||{}; const now=st.now||Date.now();
+  const when=t=>{ if(!t) return '<span style="color:var(--text-muted);">—</span>'; const d=Math.floor((now-t)/864e5);
+    return `<span title="${new Date(t).toLocaleString('en-MY')}">${d<=0?'Today '+new Date(t).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'}):d===1?'Yesterday':d+' days ago'}</span>`; };
   tbody.innerHTML=rows.map(u=>{
-    const rd=ROLE_DISPLAY[u.role]||ROLE_DISPLAY.Engineer;
-    return `<tr>
-      <td><strong>${u.name}</strong></td>
-      <td><span style="font-family:'DM Mono';font-size:12px;">${u.username}</span></td>
-      <td>${rd.label}${u.approvedSignatory?' <span class="badge badge-purple" style="font-size:10px;">✓ Signatory</span>':''}</td>
-      <td style="font-size:12px;color:var(--text-muted);">${rd.access}</td>
-      <td><span class="badge ${u.active!==false?rd.badge:'badge-slate'}">${u.active!==false?'Active':'Inactive'}</span></td>
-      <td style="white-space:nowrap;">
-        ${u.isAdmin?'<span style="font-size:11px;color:var(--text-muted);">Manage in Settings</span>':`
-          <button class="btn btn-outline btn-sm" onclick="openEditStaffModal('${u.username}')">✏️ Edit</button>
-          <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openResetPwModal('${u.username}')">🔑 Reset PW</button>
-          <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteStaff('${u.username}')">🗑</button>
-        `}
-      </td>
-    </tr>`;
+    const rd=ROLE_DISPLAY[u.role]||ROLE_DISPLAY.Engineer; const un=String(u.username||'').toLowerCase();
+    const g=(st.guard||{})[un]; const locked=g&&g.until&&g.until>now;
+    const q=`'${escapeForJsAttr(u.username)}'`;
+    return `<tr style="${u.active===false?'opacity:.6;':''}">
+      <td><strong>${escapeHtml(u.name||'')}</strong>${u.designation?`<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(u.designation)}</div>`:''}</td>
+      <td><span style="font-size:12.5px;">${escapeHtml(u.username)}</span></td>
+      <td title="${escapeHtml(rd.access)}">${rd.label}${u.approvedSignatory?' <span class="badge badge-purple" style="font-size:10px;">✓ Signatory</span>':''}</td>
+      <td style="font-size:12.5px;white-space:nowrap;">${escapeHtml(u.mobile||'—')}</td>
+      <td style="font-size:12.5px;white-space:nowrap;">${u.joinDate?fmtDateShort(u.joinDate):'—'}</td>
+      <td style="font-size:12.5px;white-space:nowrap;">${isAdmin(currentUser)?when((st.last||{})[un]):'—'}</td>
+      <td>${locked?`<span class="badge badge-red" title="Too many wrong passwords">🔒 Locked until ${new Date(g.until).toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'})}</span>`
+          :`<span class="badge ${u.active!==false?rd.badge:'badge-slate'}">${u.active!==false?'Active':'Inactive'}</span>`}</td>
+      <td style="white-space:nowrap;text-align:right;">
+        ${locked&&isAdmin(currentUser)?`<button class="btn btn-primary btn-sm" onclick="unlockStaff(${q})">🔓 Unlock</button> `:''}
+        ${u.isAdmin?'<span style="font-size:11px;color:var(--text-muted);">Manage in Settings</span>':`<button class="btn btn-outline btn-sm" onclick="openEditStaffModal(${q})">✏️ Edit</button>
+          <button class="btn btn-outline btn-sm" title="More actions" onclick="staffMenu(event,${q})">⋯</button>`}
+      </td></tr>`;
   }).join('');
-  }catch(_e){
-    console.error("renderPersonnel error:",_e);
-  }
+  }catch(_e){ console.error("renderPersonnel error:",_e); }
+}
+function staffMenu(ev,username){
+  ev.stopPropagation(); const st=(_staff||[]).find(x=>x.username===username); if(!st) return; const q=`'${escapeForJsAttr(username)}'`;
+  let h=stMenuItem('🔑 Reset password',`openResetPwModal(${q})`);
+  h+=st.active!==false?stMenuItem('⏸ Deactivate (can no longer sign in)',`setStaffActive(${q},false)`):stMenuItem('▶️ Reactivate',`setStaffActive(${q},true)`);
+  if(isAdmin(currentUser)) h+='<hr/>'+stMenuItem('🗑 Delete permanently…',`deleteStaff(${q})`,{danger:true});
+  stShowMenu(ev.currentTarget,h);
+}
+async function setStaffActive(username,active){
+  const st=(_staff||[]).find(x=>x.username===username); if(!st) return;
+  if(!confirm(active?`Reactivate ${st.name}? They will be able to sign in again.`:`Deactivate ${st.name}?\n\nThey won't be able to sign in. Their name stays on past jobs, certificates and records. You can reactivate them any time.`)) return;
+  const rec={...st,active}; delete rec.password;
+  await SB.upsert('wl_staff',username,rec); st.active=active; rebuildUsers(); renderPersonnel();
+  addAudit(active?'▶️':'⏸',`Staff account ${escapeHtml(st.name)} ${active?'reactivated':'deactivated'}`);
+  showToast(active?'Reactivated':'Deactivated — they can no longer sign in','success',3000);
+}
+async function unlockStaff(username){
+  try{ await apiFetch('/api/unlock-user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+    addAudit('🔓',`Account ${escapeHtml(username)} unlocked`); showToast('🔓 Unlocked — they can sign in again','success',3000); await loadLoginStatus(); }
+  catch(e){ showToast('Could not unlock: '+e.message,'error',5000); }
 }
 
 // ── STAFF SIGNATURE HANDLING ──
@@ -22283,7 +22288,7 @@ async function deleteStaff(username){
   try{
   if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete a staff account.','error',4000);return;}
   const s=_staff.find(x=>x.username===username);
-  if(!confirm(`Delete account for "${s?.name}"? They will no longer be able to log in.`))return;
+  if(!confirm(`Permanently delete the account for "${s?.name}"?\n\nThis removes it completely — their name may disappear from past records. Usually it's better to DEACTIVATE instead (⋯ → Deactivate), which keeps their history.\n\nDelete anyway?`))return;
   await SB.delete('wl_staff',username);
   _staff=_staff.filter(x=>x.username!==username);
   rebuildUsers();
@@ -22929,17 +22934,67 @@ function toggleAuditEmailFilter(){
   if(btn) btn.className=_auditEmailFilterOn?'btn btn-primary btn-sm':'btn btn-outline btn-sm';
   filterAuditLog();
 }
-function filterAuditLog(){
-  const q=(el('audit-search')?.value||'').toLowerCase();
-  const body=el('audit-log-body'); if(!body)return;
+
+// ═══ TABS FOR LONG PAGES (Settings, Reports) ═══ Sections are grouped into tabs by their title, so the
+// existing sections and their code stay as they are; a tab only hides what belongs to another tab.
+const SETTINGS_TABS=[['company','🏢 Company',['Company Information','Company Logo','Admin Login']],
+  ['docs','🔢 Documents & numbering',['Job & Certificate Counters','Document Numbering','Standard charges']],
+  ['ops','⚙️ Operations',['Turnaround Time','Calibration Stickers','Claims','Leave & public holidays']],
+  ['system','🖥️ System',['Email Configuration','Backups','System check']]];
+let _settingsTab='company', _reportsTab='overview';
+function cardTitleOf(c){ return (c.querySelector('.card-title')?.textContent||c.querySelector('.card-header')?.textContent||'').trim(); }
+function applySettingsTabs(){
+  const view=el('view-settings'); if(!view) return;
+  let bar=el('settings-tabs');
+  if(!bar){ bar=document.createElement('div'); bar.id='settings-tabs'; bar.className='st-tabs'; bar.style.margin='0 0 14px';
+    const hdr=view.querySelector('.page-header'); (hdr||view.firstElementChild).insertAdjacentElement('afterend',bar); }
+  bar.innerHTML=SETTINGS_TABS.map(([k,l])=>`<button class="st-tab ${_settingsTab===k?'active':''}" onclick="_settingsTab='${k}';applySettingsTabs()">${l}</button>`).join('');
+  view.querySelectorAll('.card').forEach(c=>{ if(c.parentElement&&c.parentElement.closest('#view-settings .card')) return; // only top-level sections
+    const t=cardTitleOf(c); const tab=(SETTINGS_TABS.find(([,,ks])=>ks.some(x=>t.includes(x)))||[])[0]||'system';
+    c.classList.toggle('tab-hidden',tab!==_settingsTab); });
+}
+function applyReportsTabs(){
+  const view=el('view-reports'); if(!view) return;
+  let bar=el('reports-tabs');
+  if(!bar){ bar=document.createElement('div'); bar.id='reports-tabs'; bar.className='st-tabs'; bar.style.margin='0 0 14px';
+    const hdr=view.querySelector('.page-header'); (hdr||view.firstElementChild).insertAdjacentElement('afterend',bar);
+    // engineer workload / performance are on the Dashboard and in Staff Evaluation — point there instead
+    const hide=x=>{ if(x) x.classList.add('perm-hidden'); };
+    const wb=el('rep-workload-box'); if(wb){ hide(wb.closest('.card')||wb); const t=wb.closest('.card')?.previousElementSibling; if(t&&/Engineer Workload/.test(t.textContent)) hide(t); }
+    hide(el('chart-engineer')?.closest('.card')); hide(el('rep-engineer-table')?.closest('.card'));
+    const tat=el('rep-tat-table')?.closest('.card');
+    if(tat&&!el('rep-staffeval-link')) tat.insertAdjacentHTML('beforebegin',`<div class="card" id="rep-staffeval-link" style="margin-bottom:14px;"><div class="card-body" style="display:flex;align-items:center;gap:10px;font-size:13px;">👤 Engineer workload and performance are in <b>Staff Evaluation</b> (and today's workload on the Dashboard). <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="showView('staff-evaluation')">Open Staff Evaluation →</button></div></div>`);
+  }
+  bar.innerHTML=[['overview','📊 Overview'],['performance','⏱️ Performance'],['audit','📋 Audit Log']].map(([k,l])=>`<button class="st-tab ${_reportsTab===k?'active':''}" onclick="_reportsTab='${k}';applyReportsTabs()">${l}</button>`).join('');
+  const group=n=>{ if(n.id==='reports-tabs'||n.classList.contains('page-header')) return null;
+    if(n.querySelector('#audit-log-body')||n.id==='audit-log-body') return 'audit';
+    if(n.querySelector('#rep-tat-table,#rep-top-customers,#rep-kiv-list')||n.id==='rep-staffeval-link') return 'performance';
+    return 'overview'; };
+  [...view.children].forEach(n=>{ const g=group(n); if(g) n.classList.toggle('tab-hidden',g!==_reportsTab); });
+  if(_reportsTab==='audit') filterAuditLog();
+}
+function auditFiltered(){
+  const q=(el('audit-search')?.value||'').toLowerCase(), who=el('audit-who')?.value||'', from=el('audit-from')?.value||'', to=el('audit-to')?.value||'';
   let logs=_settings.auditLog||[];
   if(_auditEmailFilterOn) logs=logs.filter(l=>l.icon==='📧');
-  const filtered=q?logs.filter(l=>(l.msg||'').toLowerCase().includes(q)||(l.by||'').toLowerCase().includes(q)):logs;
+  return logs.filter(l=>{ const d=l.ts?toLocalDateStr(new Date(l.ts)):'';
+    return (!q||String(l.msg||'').toLowerCase().includes(q)||String(l.by||'').toLowerCase().includes(q))&&(!who||l.by===who)&&(!from||d>=from)&&(!to||d<=to); });
+}
+function exportAuditExcel(){
+  if(typeof XLSX==='undefined'){ alert('Excel export library failed to load — please refresh.'); return; }
+  const rows=auditFiltered().map(l=>({Date:l.ts?new Date(l.ts).toLocaleString('en-MY'):'','By':l.by||'system',Action:String(l.msg||'').replace(/<[^>]+>/g,''),Type:l.icon||''}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Audit Log'); XLSX.writeFile(wb,`Westlab_Audit_Log_${toLocalDateStr(new Date())}.xlsx`);
+}
+function filterAuditLog(){
+  const body=el('audit-log-body'); if(!body)return;
+  const ws=el('audit-who'); if(ws&&ws.options.length<=1){ [...new Set((_settings.auditLog||[]).map(l=>l.by).filter(Boolean))].sort().forEach(b=>ws.add(new Option(b,b))); }
+  const filtered=auditFiltered();
+  const cnt=el('audit-count'); if(cnt) cnt.textContent=`${filtered.length} entr${filtered.length===1?'y':'ies'}${filtered.length>1000?' (showing the latest 1,000)':''}`;
   if(!filtered.length){
     body.innerHTML='<div class="empty-state" style="padding:20px;"><p>No audit records found.</p></div>';
     return;
   }
-  body.innerHTML=filtered.slice(0,200).map(l=>`
+  body.innerHTML=filtered.slice(0,1000).map(l=>`
     <div style="display:flex;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border);font-size:12px;align-items:flex-start;">
       <span style="font-size:16px;">${l.icon||'📋'}</span>
       <div style="flex:1;">
@@ -23175,6 +23230,9 @@ function renderQuickAccess(){
     }
     if(name==='dashboard') renderQuickAccess();
     if(name==='capa') renderNcrPage();
+    if(name==='settings') setTimeout(applySettingsTabs,0);
+    if(name==='reports') setTimeout(applyReportsTabs,0);
+    if(name==='personnel'){ _loginStatus=null; renderPersonnel(); }
     if(name==='price-reference'){ if(!canViewPriceReference(currentUser)){ alert('You do not have access to the Price Reference.'); return orig.call(this,'dashboard'); } renderPriceReferencePage(); }
     renderCategoryNav();
     return r;
