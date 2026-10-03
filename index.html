@@ -1127,9 +1127,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <option value="Sent">Sent</option>
           <option value="Accepted">Accepted</option>
           <option value="Rejected">Rejected</option>
+          <option value="Expired">Expired</option>
+          <option value="Superseded">Superseded (older revisions)</option>
         </select>
+        <select class="form-control" id="qtv2-filter-cust" onchange="renderQuotationsV2Page()" style="width:auto;max-width:240px;"><option value="">All customers</option></select>
         <input class="form-control" id="qtv2-search" placeholder="Search quotation no., customer, or PO…" oninput="renderQuotationsV2Page()" style="width:260px;"/>
       </div>
+      <div id="qtv2-summary"></div>
       <div id="quotations-v2-list"></div>
     </div>
 
@@ -3512,6 +3516,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <button class="modal-close" onclick="closeModal('modal-add-customer')">✕</button>
     </div>
     <div class="modal-body">
+      <div id="cust-quote-summary"></div>
       <input type="hidden" id="cust-edit-id"/>
 
       <!-- Customer Type -->
@@ -3774,12 +3779,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <span class="modal-title">📄 Preview</span>
       <button class="modal-close" onclick="closeModal('modal-pdf-preview')">✕</button>
     </div>
-    <div class="modal-body" style="flex:1;padding:0;overflow:hidden;">
+    <div class="modal-body" style="flex:1;padding:0;overflow:hidden;" id="pdf-preview-body">
       <iframe id="pdf-preview-frame" style="width:100%;height:100%;border:none;"></iframe>
+      <div id="pdf-preview-pages" style="display:none;height:100%;overflow:auto;background:#e5e7eb;padding:8px;-webkit-overflow-scrolling:touch;"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-pdf-preview')">Close</button>
-      <button class="btn btn-outline" onclick="printPreviewedPdf()">🖨️ Print</button>
+      <button class="btn btn-outline" id="pdf-print-btn" onclick="printPreviewedPdf()">🖨️ Print</button>
+      <button class="btn btn-outline" id="pdf-open-btn" style="display:none;" onclick="window.open(_pdfPreviewUrl,'_blank')">↗️ Open in new tab</button>
       <button class="btn btn-primary" onclick="downloadPreviewedPdf()">⬇️ Download</button>
     </div>
   </div>
@@ -7866,10 +7873,50 @@ async function exportPagedPdf(pagesHtml,filename,auditLabel,rowCount,previewMode
     frame.style.display='none'; frame.style.position=''; frame.style.left=''; frame.innerHTML='';
   }
 }
+// Phones can't show a PDF inside a frame (iPhone shows only page 1, frozen; Android often shows nothing),
+// so on phones every page is drawn as a picture in a scrollable, zoomable list (PDF.js). Computers keep
+// the browser's own PDF viewer.
+function isPhoneLike(){ return window.matchMedia('(max-width: 820px)').matches||/iPhone|iPad|iPod|Android/i.test(navigator.userAgent); }
+let _pdfJsLoading=null;
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(_pdfJsLoading) return _pdfJsLoading;
+  _pdfJsLoading=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    sc.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; res(window.pdfjsLib); }catch(e){ rej(e); } };
+    sc.onerror=()=>{ _pdfJsLoading=null; rej(new Error('Could not load the PDF viewer')); }; document.head.appendChild(sc); });
+  return _pdfJsLoading;
+}
+async function renderPdfPages(url){
+  const box=el('pdf-preview-pages'); box.innerHTML='<div style="text-align:center;padding:30px;color:#555;font-size:13px;">⏳ Loading the PDF…</div>';
+  try{
+    const lib=await loadPdfJs();
+    const pdf=await lib.getDocument({url}).promise;
+    box.innerHTML='';
+    const width=Math.max(280,box.clientWidth-16), ratio=Math.min(window.devicePixelRatio||1,3);
+    for(let n=1;n<=pdf.numPages;n++){
+      const page=await pdf.getPage(n); const v1=page.getViewport({scale:1}); const scale=width/v1.width;
+      const vp=page.getViewport({scale:scale*ratio});
+      const c=document.createElement('canvas'); c.width=Math.floor(vp.width); c.height=Math.floor(vp.height);
+      c.style.cssText=`width:${width}px;height:${Math.floor(vp.height/ratio)}px;display:block;margin:0 auto 8px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15);`;
+      c.className='pdf-page-canvas'; box.appendChild(c);
+      await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+    }
+    box.insertAdjacentHTML('beforeend',`<div style="text-align:center;font-size:11.5px;color:#555;padding:4px 0 10px;">${pdf.numPages} page${pdf.numPages>1?'s':''} · pinch to zoom</div>`);
+  }catch(e){
+    console.warn('PDF preview failed:',e);
+    box.innerHTML=`<div style="text-align:center;padding:30px 16px;font-size:13px;color:#333;">The preview couldn't be shown on this device.<br/><br/>
+      <button class="btn btn-primary" onclick="window.open(_pdfPreviewUrl,'_blank')">↗️ Open the PDF</button> <button class="btn btn-outline" onclick="downloadPreviewedPdf()">⬇️ Download</button></div>`;
+  }
+}
 function openPdfPreviewModal(url,filename){
   _pdfPreviewUrl=url; _pdfPreviewFilename=filename;
-  el('pdf-preview-frame').src=url;
-  openModal('modal-pdf-preview');
+  const phone=isPhoneLike();
+  el('pdf-preview-frame').style.display=phone?'none':'';
+  el('pdf-preview-pages').style.display=phone?'block':'none';
+  el('pdf-print-btn').style.display=phone?'none':'';   // printing from the preview only works on computers
+  el('pdf-open-btn').style.display=phone?'':'none';
+  if(phone){ el('pdf-preview-frame').removeAttribute('src'); openModal('modal-pdf-preview'); setTimeout(()=>renderPdfPages(url),60); }
+  else { el('pdf-preview-frame').src=url; openModal('modal-pdf-preview'); }
 }
 function downloadPreviewedPdf(){
   if(!_pdfPreviewUrl)return;
@@ -10522,6 +10569,7 @@ function qtHistoryStatus(q,it){
   if(q.status==='Accepted') return it.poAccepted===false?'Not in PO':'Accepted';
   if(['Lost','Rejected','Cancelled'].includes(q.status)) return 'Lost';
   if(q.status==='Expired') return 'Expired';
+  if(q.status==='Superseded') return 'Superseded';
   return 'Sent';
 }
 function priceHistoryRecords(){
@@ -10552,7 +10600,7 @@ function customerDealerPct(custId,dealerTicked){
 function priceSuggestions(o){
   const std=o.itemCode?qtStdByCode(o.itemCode):qtFindStandard(o.eqName,o.acc,o.calType);
   const code=o.itemCode||std?.itemCode||'';
-  const recs=priceHistoryRecords().filter(r=>r.quotationId!==o.excludeQuotationId&&priceRecordMatches(r,code,o.eqName,o.acc,o.calType));
+  const recs=priceHistoryRecords().filter(r=>r.quotationId!==o.excludeQuotationId&&r.status!=='Superseded'&&priceRecordMatches(r,code,o.eqName,o.acc,o.calType));
   const mine=o.custId?recs.filter(r=>r.custId===o.custId):[];
   const out=[];
   const a=mine.find(r=>r.status==='Accepted'); if(a) out.push({kind:'Last accepted',price:a.unitPrice,discount:a.discount,ref:a});
@@ -11260,25 +11308,66 @@ async function saveQuotationV2(quotationId){
   showToast(`✅ Quotation ${q.quotationNo} saved`,'success',3000);
   addAudit('📄',`Quotation ${q.quotationNo} ${isNew?'created':'updated'} for ${custName}`);
 }
+// ═══ REVISIONS ═══ A sent quotation is never edited in place: "Revise" copies it to WQT-…-R1 (then -R2…),
+// the original is kept, read-only, as "Superseded" — a record of exactly what the customer received.
+function qtBaseNo(q){ return q.baseNo||String(q.quotationNo||'').replace(/-R\d+$/,''); }
+async function reviseQuotationV2(id){
+  const q=_quotationsV2.find(x=>x.id===id); if(!q) return;
+  if(!['Sent','Expired'].includes(q.status)){ alert('Only sent or expired quotations can be revised. Drafts can simply be edited.'); return; }
+  const rev=(q.revision||0)+1, base=qtBaseNo(q), no=`${base}-R${rev}`;
+  if(!confirm(`Make revision ${no}?\n\nEverything is copied into ${no} for you to change (fix mistakes, add or remove items, update prices).\n${q.quotationNo} is kept on record as "Superseded".`)) return;
+  const copy=JSON.parse(JSON.stringify(q)); const now=new Date().toISOString();
+  ['sentAt','respondedAt','poNumber','poDocUrl','createdJobNo','supersededBy','supersededAt','statusBeforeSupersede'].forEach(k=>delete copy[k]);
+  (copy.items||[]).forEach(it=>{ delete it.poAccepted; delete it.poQty; delete it.poSocUnits; });
+  Object.assign(copy,{id:'QT-'+Date.now(),quotationNo:no,baseNo:base,revision:rev,revisedFrom:q.id,status:'Draft',createdAt:now,createdBy:currentUser});
+  q.statusBeforeSupersede=q.status; q.status='Superseded'; q.supersededBy=copy.id; q.supersededAt=now;
+  _quotationsV2.push(copy); await saveQuotationsV2();
+  const en=q.linkedSalesTrackerId?_salesTracker.find(e=>e.id===q.linkedSalesTrackerId):null;
+  if(en&&en.linkedQuotationId===q.id){ en.linkedQuotationId=copy.id; (en.statusHistory=en.statusHistory||[]).push({status:en.status,date:now,by:currentUser,note:`Quotation revised: ${q.quotationNo} → ${no}`}); await saveSalesTracker(); }
+  addAudit('✏️',`Quotation ${escapeHtml(q.quotationNo)} revised → ${escapeHtml(no)}`);
+  renderQuotationsV2Page(); showToast(`✏️ ${no} created — make your changes, then send it`,'success',4000);
+  openQuotationV2Modal(copy.id);
+}
+// Per-customer summary: quotations, amount quoted, accepted value and rate, last quoted
+function qtSummary(list){
+  const real=list.filter(q=>q.status!=='Superseded'), sent=real.filter(q=>q.status!=='Draft'), acc=real.filter(q=>q.status==='Accepted');
+  const val=q=>{ const po=qtPoValue(q); return po!=null?po:qtGrandTotal(q); };
+  return {count:real.length,sent:sent.length,quoted:sent.reduce((a,q)=>a+qtGrandTotal(q),0),accepted:acc.length,acceptedValue:acc.reduce((a,q)=>a+val(q),0),
+    last:sent.map(q=>q.sentAt||q.createdAt).filter(Boolean).sort().pop()||null};
+}
+function qtSummaryHtml(list,cust){
+  const s2=qtSummary(list); if(!s2.count) return '';
+  const rm=v=>'RM '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return `<div style="background:#f0f7ff;border:1px solid #cfe2ff;border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:13px;">
+    <b>${cust?escapeHtml(cust):'All customers'}${cust?'':' (shown)'}:</b> ${s2.count} quotation${s2.count>1?'s':''} · <b>${rm(s2.quoted)}</b> quoted
+    · <b>${rm(s2.acceptedValue)}</b> accepted (${s2.accepted} of ${s2.sent} sent${s2.sent?`, ${Math.round(s2.accepted/s2.sent*100)}%`:''})${s2.last?` · last quoted ${fmtDateShort(s2.last)}`:''}</div>`;
+}
 function renderQuotationsV2Page(){
   const box=el('quotations-v2-list'); if(!box)return;
   if(!canUseQuotationSystem(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
   const statusFilter=el('qtv2-filter-status')?.value||'';
   const search=(el('qtv2-search')?.value||'').toLowerCase();
   let list=[..._quotationsV2].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  const custFilter=el('qtv2-filter-cust')?.value||'';
+  { const cs=el('qtv2-filter-cust'); if(cs){ const names=[...new Set(_quotationsV2.map(q=>q.custName).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+      cs.innerHTML='<option value="">All customers</option>'+names.map(n=>`<option value="${escapeHtml(n)}" ${n===custFilter?'selected':''}>${escapeHtml(n)}</option>`).join(''); } }
   if(statusFilter) list=list.filter(q=>q.status===statusFilter);
+  else list=list.filter(q=>q.status!=='Superseded'); // older revisions only when asked for
+  if(custFilter) list=list.filter(q=>q.custName===custFilter);
   if(search) list=list.filter(q=>(q.custName||'').toLowerCase().includes(search)||(q.quotationNo||'').toLowerCase().includes(search)||(q.poNumber||'').toLowerCase().includes(search));
+  const sb=el('qtv2-summary'); if(sb) sb.innerHTML=qtSummaryHtml(list,custFilter);
   if(!list.length){ box.innerHTML='<div class="empty-state"><p>No quotations yet.</p></div>'; return; }
   const statusBadge=s=>{
-    const colors={Draft:'badge-amber',Sent:'badge-blue',Accepted:'badge-green',Rejected:'badge-red'};
+    const colors={Draft:'badge-amber',Sent:'badge-blue',Accepted:'badge-green',Rejected:'badge-red',Superseded:'badge-slate',Expired:'badge-slate'};
     return `<span class="badge ${colors[s]||'badge-amber'}">${s}</span>`;
   };
   box.innerHTML=`<div class="table-wrap"><table>
     <thead><tr><th>Quotation No.</th><th>Customer</th><th>Items</th><th>Total (RM)</th><th>Status</th><th>Created</th><th>PO</th><th>Actions</th></tr></thead>
     <tbody>${list.map(q=>{
       const total=qtGrandTotal(q);
-      return `<tr>
-        <td style="font-weight:700;">${q.quotationNo}</td>
+      const sup=q.status==='Superseded'?_quotationsV2.find(x=>x.id===q.supersededBy):null;
+      return `<tr style="${q.status==='Superseded'?'opacity:.6;':''}">
+        <td style="font-weight:700;">${q.quotationNo}${sup?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">replaced by ${escapeHtml(sup.quotationNo)}</div>`:''}${q.revision?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">revision ${q.revision}</div>`:''}</td>
         <td>${escapeHtml(q.custName)}</td>
         <td style="text-align:center;">${(q.items||[]).length}</td>
         <td style="text-align:right;">${total.toFixed(2)}${(()=>{ const po=qtPoValue(q); return po!=null&&Math.abs(po-total)>0.004?`<div style="font-size:11px;color:#9a5b00;">PO RM ${po.toFixed(2)} (partial)</div>`:''; })()}</td>
@@ -11290,6 +11379,7 @@ function renderQuotationsV2Page(){
             <button class="btn btn-outline btn-sm" onclick="exportQuotationV2Pdf('${q.id}')">📄 PDF</button>
             <button class="btn btn-outline btn-sm" onclick="openQuotationEmail('${q.id}')">✉️ Email</button>
             ${q.status==='Draft'?`<button class="btn btn-outline btn-sm" onclick="openQuotationV2Modal('${q.id}')">✏️ Edit</button>`:''}
+            ${['Sent','Expired'].includes(q.status)&&!q.createdJobNo?`<button class="btn btn-outline btn-sm" onclick="reviseQuotationV2('${q.id}')" title="Make a revised version (-R${(q.revision||0)+1}); this one is kept on record">✏️ Revise</button>`:''}
             ${q.status==='Draft'?`<button class="btn btn-primary btn-sm" onclick="sendQuotationV2('${q.id}')">📧 Sent</button>`:''}
             ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="openAcceptQuotationModal('${q.id}')">✅ Accepted</button>`:''}
             <!-- No "Mark Rejected" action — a Sent quotation simply stays Sent indefinitely if
@@ -11472,6 +11562,10 @@ async function deleteQuotationV2(quotationId,opts){
   }
   _quotationsV2.splice(idx,1);
   await saveQuotationsV2();
+  if(q.revisedFrom){ const prev=_quotationsV2.find(x=>x.id===q.revisedFrom);
+    if(prev&&prev.status==='Superseded'&&prev.supersededBy===q.id){ prev.status=prev.statusBeforeSupersede||'Sent'; delete prev.supersededBy; delete prev.supersededAt; delete prev.statusBeforeSupersede; await saveQuotationsV2();
+      const en=prev.linkedSalesTrackerId?_salesTracker.find(e=>e.id===prev.linkedSalesTrackerId):null; if(en&&!en.linkedQuotationId){ en.linkedQuotationId=prev.id; await saveSalesTracker(); }
+      showToast(`${prev.quotationNo} is current again`,'success',3000); } }
   if(q.poDocUrl&&!(await deleteStoredFile(q.poDocUrl))) showToast('⚠️ The quotation was deleted, but its PO document file could not be removed (the upload worker may need updating).','warn',7000);
   let entriesFixed=0;
   linkedEntries.forEach(e=>{ if(e.linkedQuotationId===q.id||!e.linkedQuotationId){ if(unlinkDeletedQuotationFromEntry(e,q.quotationNo)) entriesFixed++; } });
@@ -11549,7 +11643,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
       <div style="width:33%;">
         <div style="font-weight:bold;font-size:16.5px;margin-bottom:6px;white-space:nowrap;">QUOTATION : ${esc(q.quotationNo)}</div>
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
-          ${[['Your Ref.',q.yourRef||''],['Our Ref.',q.ourRef||(_salesTracker.find(e=>e.id===q.linkedSalesTrackerId)?.enquiryNo||'')],['Sales Person',creatorName],['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:92px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
+          ${[['Your Ref.',q.yourRef||''],['Our Ref.',q.ourRef||(_salesTracker.find(e=>e.id===q.linkedSalesTrackerId)?.enquiryNo||'')],['Sales Person',creatorName],...(q.revision?[['Revision',`R${q.revision}`]]:[]),['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:92px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
         </table>
       </div>
     </div>
@@ -18803,7 +18897,7 @@ function openAddCustomerModal(){
   el('cust-type-dealer').checked=false;
   el('cust-type-direct').checked=true;
   el('cust-type-enduser-only').checked=false;
-  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=20; custToggleDealerRow(); custSetContacts([]);
+  if(el('cust-dealer-discount')) el('cust-dealer-discount').value=20; custToggleDealerRow(); custSetContacts([]); if(el('cust-quote-summary')) el('cust-quote-summary').innerHTML='';
   el('cust-type-conflict-warning').style.display='none';
   el('cust-payment-terms').value='credit';
   const adGroup=el('cust-always-direct-group');
@@ -18831,6 +18925,8 @@ function openEditCustomerModal(custId){
   el('cust-type-direct').checked=types.includes('Direct');
   el('cust-type-enduser-only').checked=types.includes('EndUserOnly');
   if(el('cust-dealer-discount')) el('cust-dealer-discount').value=(c.dealerDiscount!=null&&c.dealerDiscount!=='')?c.dealerDiscount:20; custToggleDealerRow(); custSetContacts(c.contacts||[]);
+  { const box=el('cust-quote-summary'); if(box){ const ql=(_quotationsV2||[]).filter(q=>(q.custId&&q.custId===c.id)||(!q.custId&&q.custName===c.company));
+      box.innerHTML=ql.length&&canUseQuotationSystem(currentUser)?qtSummaryHtml(ql,c.company).replace('</div>',` · <a href="javascript:void(0)" onclick="closeModal('modal-add-customer');showView('quotations-v2');setTimeout(()=>{const f=el('qtv2-filter-cust'); if(f){f.value=${JSON.stringify(c.company).replace(/"/g,'&quot;')};renderQuotationsV2Page();}},50)">View quotations →</a></div>`):''; } }
   checkCustTypeConflict();
   const adGroup=el('cust-always-direct-group');
   if(adGroup) adGroup.style.display=isAdmin(currentUser)?'block':'none';
