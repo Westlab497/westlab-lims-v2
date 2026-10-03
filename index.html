@@ -11823,26 +11823,26 @@ async function exportQuotationV2Pdf(quotationId,opts){
   const TD='padding:3px 3px 5px;vertical-align:top;';
   // Build every row (each quotation line, then its SoC lines)
   const outFlags=qtOutsourcedFlags(q,items);
+  // Recalibration / adjustment / results: printed once when every item is the same, otherwise per item
+  const reqSig=items.map(it=>qtRequirementLines(it).join('|')); const reqCommon=items.length&&reqSig.every(x=>x===reqSig[0])?qtRequirementLines(items[0]):null;
   const groups=items.map((it,i)=>{
     const c=qtLineCalc(it);
     const units=qtUnitDetails(it);
     const sameCal=it.sameCal!==false;
     const L=[];
     String(it.stdDescription||'').split('\n').map(x=>x.trim()).filter(Boolean).forEach(x=>L.push(esc(x)));
-    L.push('Brand: '+esc(it.brand||''));
-    L.push('Model: '+esc(it.model||''));
-    L.push('S/N: '+esc(units.map(u=>u.serial).filter(Boolean).join(', ')));
-    const tags=units.map(u=>u.tagNo).filter(Boolean); if(tags.length) L.push('Tag No.: '+esc(tags.join(', ')));
-    L.push('Range / Capacity: '+esc(it.range||''));
+    // Compact: identity on one line, measurement details on the next; empty fields are left out
+    const join=a=>a.filter(([,v])=>String(v||'').trim()).map(([k,v])=>`${k}${k?' ':''}${esc(String(v).trim())}`).join(' · ');
+    const serials=units.map(u=>u.serial).filter(Boolean), tags=units.map(u=>u.tagNo).filter(Boolean);
+    const idLine=join([['',[it.brand,it.model].filter(Boolean).join(' / ')],['S/N',serials.join(', ')],['Tag',tags.join(', ')]]); if(idLine) L.push(idLine);
     if(sameCal||units.length<2){
-      L.push('Resolution: '+esc(units[0]?.resolution||''));
-      if(it.spec) L.push('Specification: '+esc(it.spec));
-      L.push('Calibration Points: '+esc(units[0]?.calPoints||''));
+      const m=join([['Range',it.range],['Resolution',units[0]?.resolution],['Spec',it.spec]]); if(m) L.push(m);
+      if(String(units[0]?.calPoints||'').trim()) L.push('Points '+esc(units[0].calPoints));
     }else{
-      if(it.spec) L.push('Specification: '+esc(it.spec));
-      units.forEach((u,ui)=>L.push(`Unit ${ui+1}${u.serial?' (S/N '+esc(u.serial)+')':''}: Resolution ${esc(u.resolution||'—')}; Cal Points ${esc(u.calPoints||'—')}`));
+      const m=join([['Range',it.range],['Spec',it.spec]]); if(m) L.push(m);
+      units.forEach((u,ui)=>L.push(`Unit ${ui+1}${u.serial?' (S/N '+esc(u.serial)+')':''}: Resolution ${esc(u.resolution||'—')} · Points ${esc(u.calPoints||'—')}`));
     }
-    qtRequirementLines(it).forEach(x=>L.push(esc(x)));
+    if(!reqCommon) L.push(esc(qtRequirementLines(it).map(x=>x.replace(' (standard — please tell us if you need a different interval)',' (standard)')).join(' · ')));
     const discTxt=c.baseDisc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.baseDisc.toFixed(2)):'';
     const rows=[`<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(it.itemCode||'')}</td>
       <td style="${TD}"><div>${outFlags[i]?'* ':''}${esc(it.eqName)} ${qtServiceTag(it)}</div><div style="padding-left:6px;">${L.join('<br/>')}</div></td>
@@ -11866,7 +11866,9 @@ async function exportQuotationV2Pdf(quotationId,opts){
     q.siteAddress?['Site',[q.siteAddress.replace(/\n/g,', '),q.siteArea?'('+q.siteArea+')':''].filter(Boolean).join(' ')]:null,
     (q.siteContact||q.siteMobile)?['Site contact',[q.siteContact,q.siteMobile].filter(Boolean).join(' · ')]:null,
     q.siteAccess?['Site access',q.siteAccess.replace(/\n/g,'; ')]:null].filter(Boolean);
-  const siteBlock=siteLines.length?`<table style="border-collapse:collapse;font-size:11.5px;margin:0 0 8px;">${siteLines.map(([k,v])=>`<tr><td style="font-weight:bold;width:170px;vertical-align:top;padding:1px 0;">${esc(k)}</td><td style="width:14px;vertical-align:top;">:</td><td style="vertical-align:top;">${esc(v)}</td></tr>`).join('')}</table>`:'';
+  // Compact: label + value side by side, several per line
+  const siteBlock=(reqCommon?`<div style="font-size:11px;margin:0 0 4px;"><b>For all items:</b> ${esc(reqCommon.join(' · '))}</div>`:'')
+    +(siteLines.length?`<div style="font-size:11px;margin:0 0 6px;line-height:1.45;">${siteLines.map(([k,v])=>`<span style="display:inline-block;margin-right:18px;"><b>${esc(k.replace('Items delivered & returned by','Delivery & return'))}:</b> ${esc(v)}</span>`).join('')}</div>`:'');
   const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;">${siteBlock}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.5;">
