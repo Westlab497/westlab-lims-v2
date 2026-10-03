@@ -1088,6 +1088,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-sub">Enquiry-to-collection status pipeline</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-outline" id="st-recal-btn" onclick="openRecalDue()" title="Customers' equipment due for recalibration — start an enquiry">🔁 Recalibration due</button>
           <button class="btn btn-outline" onclick="stOpenMoreMenu(event)">More ▾</button>
           <button class="btn btn-primary" id="sales-new-entry-btn" onclick="openTrackerEntryModal('sales')">+ New Entry</button>
         </div>
@@ -1957,6 +1958,12 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div style="font-size:12.5px;margin-bottom:10px;">Every <b>Monday at 8:00 am</b> an <b>encrypted</b> copy of all LIMS data is emailed to you. Only your backup password can open it — keep both the emails and the password safe.</div>
           <button class="btn btn-outline btn-sm" onclick="sendBackupNow()">📧 Send a backup now</button>
           <span id="backup-now-status" style="font-size:12px;color:var(--text-muted);margin-left:8px;"></span>
+          <div style="border-top:1px solid var(--border);margin:14px 0 10px;"></div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">📁 Files (certificates, POs, signatures, receipts…)</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">The weekly email covers the records; the files themselves are downloaded here as zip files — keep them on your external hard drive. Downloading is free.</div>
+          <button class="btn btn-outline btn-sm" onclick="downloadStoredFiles(true)">⬇️ Download new files since last time</button>
+          <button class="btn btn-outline btn-sm" onclick="downloadStoredFiles(false)">⬇️ Download all files</button>
+          <div id="files-dl-status" style="font-size:12px;color:var(--text-muted);margin-top:6px;"></div>
           <div style="border-top:1px solid var(--border);margin:14px 0 10px;"></div>
           <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Restore from backup</div>
           <div class="form-row">
@@ -10441,6 +10448,45 @@ async function addPriceReferenceEntry(){
   showToast('✅ Price reference added','success',2500);
 }
 // ── Backups: send now / open (decrypted in this browser — the password never leaves it) / restore ──
+// ── Download stored files as zip(s) — everything, or only what was added since the last download ──
+let _jszipLoading=null;
+function loadJsZip(){ if(window.JSZip) return Promise.resolve(window.JSZip); if(_jszipLoading) return _jszipLoading;
+  _jszipLoading=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; sc.onload=()=>res(window.JSZip); sc.onerror=()=>{ _jszipLoading=null; rej(new Error('Could not load the zip tool')); }; document.head.appendChild(sc); });
+  return _jszipLoading; }
+function filesDlStatusInit(){ const st=el('files-dl-status'); const last=(_settings.fileBackup||{}).lastAt; if(st&&!st.dataset.busy) st.textContent=last?`Last download: ${new Date(last).toLocaleString('en-MY')}`:'Not downloaded yet.'; }
+async function downloadStoredFiles(onlyNew){
+  const st=el('files-dl-status'); const say=t=>{ if(st) st.textContent=t; };
+  if(st&&st.dataset.busy) return; if(st) st.dataset.busy='1';
+  const startedAt=new Date().toISOString(); const since=onlyNew?(_settings.fileBackup||{}).lastAt:null;
+  try{
+    say('⏳ Listing files…');
+    const objs=[]; let cursor=null;
+    do{ const r=await fetch(`${FILE_SERVICE}/list${cursor?'?cursor='+encodeURIComponent(cursor):''}`,{headers:authHeader()});
+      if(!r.ok) throw new Error(r.status===403?'Only Admin or the Managing Director can download all files.':'Could not list the files ('+r.status+').');
+      const d=await r.json(); objs.push(...d.objects); cursor=d.truncated?d.cursor:null; }while(cursor);
+    const list=objs.filter(o=>!since||new Date(o.uploaded)>new Date(since));
+    if(!list.length){ say(since?`No new files since ${new Date(since).toLocaleString('en-MY')}.`:'There are no files yet.'); return; }
+    const total=list.reduce((a,o)=>a+(o.size||0),0), mb=b=>(b/1048576).toFixed(1)+' MB';
+    if(!confirm(`Download ${list.length} file${list.length>1?'s':''} (${mb(total)})${since?' added since your last download':''}?\n\nThey'll come as zip file(s) in your Downloads folder — copy them to your external hard drive.`)) return;
+    const JSZip=await loadJsZip(); const day=toLocalDateStr(new Date()); const PART=400*1048576;
+    let zip=new JSZip(), partBytes=0, part=1, done=0, failed=[];
+    const flush=async(last)=>{ if(!partBytes&&!last) return; if(!Object.keys(zip.files).length) return;
+      const blob=await zip.generateAsync({type:'blob',compression:'STORE'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`Westlab_Files_${onlyNew?'new_':''}${day}${(last&&part===1)?'':'_part'+part}.zip`; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),60000); zip=new JSZip(); partBytes=0; part++; };
+    for(const o of list){
+      try{ const r=await fetch(`${FILE_SERVICE}/file?path=${encodeURIComponent(o.key)}&t=${encodeURIComponent(_fileToken||'')}`); if(!r.ok) throw new Error(r.status);
+        const b=await r.arrayBuffer(); zip.file(o.key,b); partBytes+=b.byteLength; }catch(e){ failed.push(o.key); }
+      done++; if(done%5===0||done===list.length) say(`⏳ Downloading ${done} of ${list.length} files…`);
+      if(partBytes>=PART) await flush(false);
+    }
+    await flush(true);
+    await patchSettings(x=>{ x.fileBackup={...(x.fileBackup||{}),lastAt:startedAt,lastCount:list.length-failed.length}; });
+    addAudit('⬇️',`Stored files downloaded for backup — ${list.length-failed.length} file(s)${onlyNew?' (new since last time)':''}`);
+    say(`✅ ${list.length-failed.length} file${list.length-failed.length===1?'':'s'} downloaded${part>2?` in ${part-1} zip files`:''}${failed.length?` · ${failed.length} could not be read`:''}. Copy the zip${part>2?'s':''} to your external hard drive.`);
+  }catch(e){ say('❌ '+e.message); }
+  finally{ if(st) delete st.dataset.busy; }
+}
 async function sendBackupNow(){
   const st=el('backup-now-status'); if(st) st.textContent='⏳ Making the backup…';
   try{ const r=await apiFetch('/api/backup-now',{method:'POST'}); if(st) st.textContent=`✅ Sent to ${(r.to||[]).join(', ')} — ${Object.entries(r.counts||{}).map(([t,n])=>`${n} ${t.replace('wl_','')}`).join(', ')}`; }
@@ -10898,28 +10944,93 @@ function lookupPriceGuidance(eqName,custId){
 }
 let _qtv2Folded=new Set(), _qtv2DetailsOpen=new Set(); // screen-only state, by item id
 let _qtv2SourceEntry=null; // the Sales Tracker enquiry this quotation was made from (if any)
+// A changed / added quotation item can get its own capability check. A "Can do" answer covers the item
+// as it was when checked — if it's changed again, the check no longer applies and the flag comes back.
+function qtCapSig(it){ return JSON.stringify([...QT_DIFF_FIELDS.map(([f])=>String(it[f]??'').trim()),qtSocSig(it)]); }
 function qtItemFlags(){
   if(!_qtv2SourceEntry) return _qtv2DraftItems.map(()=>null);
   const m=qtMatchEnquiryItems(_qtv2DraftItems,_qtv2SourceEntry);
-  return _qtv2DraftItems.map((qi,i)=>qtCompareToEnquiry(qi,m[i].ei));
+  return _qtv2DraftItems.map((qi,i)=>{ const r=qtCompareToEnquiry(qi,m[i].ei);
+    const cc=qi.capCheck, valid=cc&&cc.sig===qtCapSig(qi);
+    if(r&&r.needsReview&&valid){ r.check=cc; if(cc.status==='Can Do'){ r.needsReview=false; r.added=false; r.confirmed=true; } }
+    return r; });
+}
+function qtCapCheckHtml(r,i){
+  const cc=r.check, can=canReviewCapability(currentUser);
+  if(cc&&cc.status==='Cannot Do') return `<div style="margin-top:6px;color:#b42318;"><b>❌ Not capable</b> — ${escapeHtml(USERS[cc.decidedBy]?.name||cc.decidedBy||'')}${cc.note?': '+escapeHtml(cc.note):''}. Remove the item or arrange outsourcing before sending.</div>`;
+  if(cc&&cc.status==='Requested') return `<div style="margin-top:6px;">⏳ <b>Capability check requested</b> by ${escapeHtml(USERS[cc.by]?.name||cc.by||'')}, ${fmtDateShort(cc.at)}.
+      ${can?` <button class="btn btn-primary btn-sm" onclick="qtCapCheck(${i},'Can Do')">✅ Can do</button> <button class="btn btn-outline btn-sm" onclick="qtCapCheck(${i},'Cannot Do')">❌ Cannot do</button>`:' Waiting for a reviewer.'}</div>`;
+  return `<div style="margin-top:6px;"><button class="btn btn-outline btn-sm" onclick="qtCapCheck(${i},'Requested')">🔍 Request capability check</button>${can?` <span style="font-size:11.5px;color:var(--text-muted);">or decide now:</span> <button class="btn btn-outline btn-sm" onclick="qtCapCheck(${i},'Can Do')">✅ Can do</button> <button class="btn btn-outline btn-sm" onclick="qtCapCheck(${i},'Cannot Do')">❌ Cannot do</button>`:''}</div>`;
+}
+// Reviewers' list of requested checks — technical details only, no prices (Technical Managers don't use
+// quotations). Opens from the Dashboard.
+function openCapCheckQueue(){
+  const rows=[]; (_quotationsV2||[]).filter(q=>['Draft','Sent'].includes(q.status)).forEach(q=>(q.items||[]).forEach((it,i)=>{ if(it.capCheck&&it.capCheck.status==='Requested') rows.push({q,it,i}); }));
+  let ov=document.getElementById('capq-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='capq-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999995;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  const v=x=>escapeHtml(x||'—');
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:760px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">🔍 Capability checks requested (${rows.length})</span>
+      <button onclick="document.getElementById('capq-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:12px 18px;">${rows.length?rows.map(({q,it,i})=>`<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;">
+        <div style="display:flex;justify-content:space-between;gap:8px;"><b>${v(it.eqName)}</b><span style="color:var(--text-muted);">${v(q.quotationNo)} · ${v(q.custName)}</span></div>
+        <div style="margin-top:4px;">${[it.brand||it.model?`${v(it.brand)} ${v(it.model)}`:'','Range '+v(it.range),it.resolution?'Resolution '+v(it.resolution):'',it.spec?'Spec '+v(it.spec):'',qtServiceTag({accreditation:it.accreditationRequested,calType:it.calType}).replace(/[\[\]]/g,''),it.socRequested?'SoC: '+v(qtSocText(it)):''].filter(Boolean).join(' · ')}</div>
+        ${it.calPoints?`<div style="color:var(--text-muted);">Points: ${v(it.calPoints)}</div>`:''}
+        <div style="margin-top:4px;color:#b45309;">What changed: ${v(it.capCheck.changes)}</div>
+        <div style="margin-top:4px;color:var(--text-muted);">Requested by ${v(USERS[it.capCheck.by]?.name||it.capCheck.by)}, ${fmtDateShort(it.capCheck.at)}</div>
+        <div style="margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="decideCapCheck('${escapeForJsAttr(q.id)}',${i},'Can Do')">✅ Can do</button> <button class="btn btn-outline btn-sm" onclick="decideCapCheck('${escapeForJsAttr(q.id)}',${i},'Cannot Do')">❌ Cannot do</button></div>
+      </div>`).join(''):'<div style="padding:16px;text-align:center;color:var(--text-muted);">Nothing waiting. ✅</div>'}</div></div>`;
+  ov.style.display='flex';
+}
+async function decideCapCheck(qid,i,status){
+  if(!canReviewCapability(currentUser)){ alert('Only a reviewer (Admin, MD or Technical Manager) can decide.'); return; }
+  const q=_quotationsV2.find(x=>x.id===qid); const it=q?.items?.[i]; if(!it) return;
+  const note=prompt(status==='Can Do'?'Capability confirmed. Note (optional — e.g. which procedure / reference standard covers it):':'Why can\'t it be done? (e.g. outside range, no reference standard):','');
+  if(note===null) return; if(status==='Cannot Do'&&!note.trim()){ alert('Please give a reason.'); return; }
+  it.capCheck={...it.capCheck,status,sig:qtCapSig(it),decidedBy:currentUser,decidedAt:new Date().toISOString(),note:note.trim()};
+  await saveQuotationsV2();
+  addAudit('🔍',`Capability check on ${escapeHtml(it.eqName||'item')} (${escapeHtml(q.quotationNo)}): ${status}${note.trim()?' — '+escapeHtml(note.trim()):''}`);
+  showToast(status==='Can Do'?'✅ Confirmed':'❌ Marked not capable','success',2500); openCapCheckQueue(); if(typeof renderDashboard==='function') renderDashboard();
+}
+async function qtCapCheck(i,status){
+  const it=_qtv2DraftItems[i]; if(!it) return;
+  const r=qtItemFlags()[i]; const now=new Date().toISOString();
+  if(status==='Requested'){ it.capCheck={status,sig:qtCapSig(it),at:now,by:currentUser,changes:r?(r.added?'Not in the enquiry':qtChangesText(r.changes)):''}; }
+  else{
+    if(!canReviewCapability(currentUser)){ alert('Only a reviewer (Admin, MD or Technical Manager) can decide.'); return; }
+    const note=prompt(status==='Can Do'?'Capability confirmed. Note (optional — e.g. which procedure / reference standard covers it):':'Why can\'t it be done? (e.g. outside range, no reference standard):','');
+    if(note===null) return;
+    if(status==='Cannot Do'&&!note.trim()){ alert('Please give a reason.'); return; }
+    it.capCheck={...(it.capCheck||{at:now,by:currentUser}),status,sig:qtCapSig(it),decidedBy:currentUser,decidedAt:now,note:note.trim()};
+  }
+  // saved quotations are updated straight away, so reviewers see requests (and requesters see answers) at once
+  if(_qtv2EditingId){ const q=_quotationsV2.find(x=>x.id===_qtv2EditingId); const key=qtItemKey(it); const sv=q&&(q.items||[]).find(x=>x.id===key);
+    if(sv){ sv.capCheck=JSON.parse(JSON.stringify(it.capCheck)); await saveQuotationsV2(); } }
+  addAudit('🔍',`Capability check on ${escapeHtml(it.eqName||'item')}: ${status}${it.capCheck.note?' — '+escapeHtml(it.capCheck.note):''}`);
+  renderQtv2ItemsList();
 }
 function qtFlagBadge(r){
   if(!r) return '';
+  if(r.check&&r.check.status==='Cannot Do') return '<span class="qt-flag warn" style="background:#fee2e2;color:#b42318;">❌ Not capable</span>';
+  if(r.confirmed) return '<span class="qt-flag info">✅ Capability confirmed</span>';
+  if(r.check&&r.check.status==='Requested') return '<span class="qt-flag warn">⏳ Check requested</span>';
   if(r.added) return '<span class="qt-flag warn">➕ Not in enquiry</span>';
   if(r.needsReview) return '<span class="qt-flag warn">⚠ Check capability</span>';
   if(r.changes.length) return '<span class="qt-flag info">✎ Changed from enquiry</span>';
   return '';
 }
-function qtFlagNote(r){
+function qtFlagNote(r,i){
   if(!r) return '';
-  if(r.added) return `<div class="qt-note warn">⚠ <b>Not in the enquiry</b> — this item wasn't covered by the capability review. Check it can be done before sending.</div>`;
+  const conf=r.confirmed?`<div style="margin-top:4px;">✅ <b>Capability confirmed</b> by ${escapeHtml(USERS[r.check.decidedBy]?.name||r.check.decidedBy||'')}, ${fmtDateShort(r.check.decidedAt)}${r.check.note?' — '+escapeHtml(r.check.note):''}</div>`:'';
+  if(r.added) return `<div class="qt-note warn">⚠ <b>Not in the enquiry</b> — this item wasn't covered by the capability review. Check it can be done before sending.${qtCapCheckHtml(r,i)}</div>`;
   const ch=r.changes.length?`<div><b>Changed from enquiry:</b> ${escapeHtml(qtChangesText(r.changes))}</div>`:'';
-  if(r.needsReview) return `<div class="qt-note warn">${ch}<div>⚠ ${r.changes.some(c=>c.cap)?'These changes weren\'t covered by the capability review':'This enquiry item hasn\'t passed capability review'} — check before sending.</div></div>`;
+  if(r.needsReview) return `<div class="qt-note warn">${ch}<div>⚠ ${r.changes.some(c=>c.cap)?'These changes weren\'t covered by the capability review':'This enquiry item hasn\'t passed capability review'} — check before sending.</div>${qtCapCheckHtml(r,i)}</div>`;
+  if(conf) return `<div class="qt-note info">${ch}${conf}</div>`;
   return ch?`<div class="qt-note info">${ch}</div>`:'';
 }
 function qtRefreshDiffs(){
   const flags=qtItemFlags();
-  flags.forEach((r,i)=>{ const a=el(`qtv2-item-flag-${i}`); if(a) a.innerHTML=qtFlagBadge(r); const b=el(`qtv2-item-diff-${i}`); if(b) b.innerHTML=qtFlagNote(r); });
+  flags.forEach((r,i)=>{ const a=el(`qtv2-item-flag-${i}`); if(a) a.innerHTML=qtFlagBadge(r); const b=el(`qtv2-item-diff-${i}`); if(b) b.innerHTML=qtFlagNote(r,i); });
 }
 function qtItemKey(it){ if(!it.id) it.id='QI-'+Date.now()+'-'+Math.floor(Math.random()*100000); return it.id; }
 function qtToggleFold(id){ _qtv2Folded.has(id)?_qtv2Folded.delete(id):_qtv2Folded.add(id); renderQtv2ItemsList(); }
@@ -11310,6 +11421,55 @@ async function saveQuotationV2(quotationId){
 }
 // ═══ REVISIONS ═══ A sent quotation is never edited in place: "Revise" copies it to WQT-…-R1 (then -R2…),
 // the original is kept, read-only, as "Superseded" — a record of exactly what the customer received.
+// ═══ FOLLOW-UPS ═══ Sent quotations with no reply: due 7 days after sending (or on the date set at the last
+// follow-up). Follow up by email, WhatsApp or a call, and log what happened.
+const QT_FOLLOWUP_DAYS=7;
+function qtNeedsFollowUp(q){
+  if(!q||q.status!=='Sent') return false;
+  const today=toLocalDateStr(new Date());
+  if(q.nextFollowUpOn) return q.nextFollowUpOn<=today;
+  const base=(q.followUps||[]).slice(-1)[0]?.at||q.sentAt||q.createdAt; if(!base) return false;
+  return (Date.now()-new Date(base).getTime())>=QT_FOLLOWUP_DAYS*864e5;
+}
+function openFollowUp(id){
+  const q=_quotationsV2.find(x=>x.id===id); if(!q) return;
+  const cust=q.custId?(_customers||[]).find(c=>c.id===q.custId):null;
+  const phone=(q.mobile||cust?.mobile||q.tel||cust?.tel||'').trim(); const intl=phone.replace(/[^0-9]/g,'').replace(/^0/,'60');
+  const t=qtEmailTemplates().find(x=>x.id==='followup')||qtEmailTemplates()[0];
+  const waText=qtEmailFill(t.body,q).replace(/\n{2,}/g,'\n\n');
+  const days=Math.floor((Date.now()-new Date(q.sentAt||q.createdAt).getTime())/864e5);
+  const next=new Date(); next.setDate(next.getDate()+QT_FOLLOWUP_DAYS);
+  let ov=document.getElementById('fu-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='fu-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999995;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:560px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">📞 Follow up ${escapeHtml(q.quotationNo)} <span style="font-weight:400;color:var(--text-muted);font-size:13px;">— ${escapeHtml(q.custName||'')}</span></span>
+      <button onclick="document.getElementById('fu-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;">
+      <div style="font-size:12.5px;margin-bottom:10px;">Sent ${fmtDateShort(q.sentAt||q.createdAt)} (${days} day${days===1?'':'s'} ago) · RM ${qtGrandTotal(q).toFixed(2)}${q.attention?` · ${escapeHtml(q.attention)}`:''}${phone?` · ${escapeHtml(phone)}`:''}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="btn btn-outline" onclick="document.getElementById('fu-overlay').style.display='none';openQuotationEmail('${escapeForJsAttr(q.id)}');setTimeout(()=>{const s2=el('qe-tpl'); if(s2){s2.value='followup';qeApplyTemplate();}},50)">✉️ Email</button>
+        ${phone?`<a class="btn btn-outline" target="_blank" rel="noopener" href="https://wa.me/${intl}?text=${encodeURIComponent(waText)}">💬 WhatsApp</a><a class="btn btn-outline" href="tel:${escapeHtml(phone.replace(/\s/g,''))}">📞 Call ${escapeHtml(phone)}</a>`
+          :'<span style="font-size:12px;color:var(--text-muted);align-self:center;">No phone number on this quotation or customer — WhatsApp / call need one.</span>'}
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:10px;font-weight:700;font-size:13px;margin-bottom:6px;">Log this follow-up</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">How</label><select class="form-control" id="fu-method"><option value="call">📞 Call</option><option value="whatsapp">💬 WhatsApp</option><option value="email">✉️ Email</option></select></div>
+        <div class="form-group"><label class="form-label">Next follow-up</label><input class="form-control" type="date" id="fu-next" value="${toLocalDateStr(next)}"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">What happened</label><input class="form-control" id="fu-note" placeholder="e.g. Customer reviewing with purchasing, call back next week"/></div>
+      ${(q.followUps||[]).length?`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">Earlier: ${(q.followUps||[]).slice().reverse().map(f=>`${fmtDateShort(f.at)} ${{email:'✉️',whatsapp:'💬',call:'📞'}[f.method]||''} ${escapeHtml(USERS[f.by]?.name||f.by)}${f.note?' — '+escapeHtml(f.note):''}`).join('<br/>')}</div>`:''}
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('fu-overlay').style.display='none'">Close</button><button class="btn btn-primary" onclick="saveFollowUp('${escapeForJsAttr(q.id)}')">Save follow-up</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function saveFollowUp(id){
+  const q=_quotationsV2.find(x=>x.id===id); if(!q) return;
+  const f={at:new Date().toISOString(),by:currentUser,method:el('fu-method').value,note:el('fu-note').value.trim()};
+  (q.followUps=q.followUps||[]).push(f); q.nextFollowUpOn=el('fu-next').value||'';
+  await saveQuotationsV2(); document.getElementById('fu-overlay').style.display='none';
+  addAudit('📞',`Follow-up on ${escapeHtml(q.quotationNo)} (${f.method})${f.note?' — '+escapeHtml(f.note):''}`);
+  showToast('📞 Follow-up saved','success',2500); renderQuotationsV2Page(); if(typeof renderDashboard==='function') renderDashboard();
+}
 function qtBaseNo(q){ return q.baseNo||String(q.quotationNo||'').replace(/-R\d+$/,''); }
 async function reviseQuotationV2(id){
   const q=_quotationsV2.find(x=>x.id===id); if(!q) return;
@@ -11366,12 +11526,15 @@ function renderQuotationsV2Page(){
     <tbody>${list.map(q=>{
       const total=qtGrandTotal(q);
       const sup=q.status==='Superseded'?_quotationsV2.find(x=>x.id===q.supersededBy):null;
+      const lf=(q.followUps||[]).slice(-1)[0];
+      const fuNote=q.status==='Sent'?(lf?`<div style="font-size:11px;color:var(--text-muted);">${{email:'✉️',whatsapp:'💬',call:'📞'}[lf.method]||'📞'} followed up ${fmtDateShort(lf.at)}${q.nextFollowUpOn?` · next ${fmtDateShort(q.nextFollowUpOn)}`:''}</div>`:'')+(qtNeedsFollowUp(q)?`<div style="font-size:11px;color:#b45309;font-weight:700;">⏰ follow up due</div>`:''):'';
+      const capReq=(q.items||[]).some(it=>it.capCheck&&it.capCheck.status==='Requested')?'<div style="font-size:11px;color:#b45309;">🔍 capability check requested</div>':'';
       return `<tr style="${q.status==='Superseded'?'opacity:.6;':''}">
         <td style="font-weight:700;">${q.quotationNo}${sup?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">replaced by ${escapeHtml(sup.quotationNo)}</div>`:''}${q.revision?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">revision ${q.revision}</div>`:''}</td>
         <td>${escapeHtml(q.custName)}</td>
         <td style="text-align:center;">${(q.items||[]).length}</td>
         <td style="text-align:right;">${total.toFixed(2)}${(()=>{ const po=qtPoValue(q); return po!=null&&Math.abs(po-total)>0.004?`<div style="font-size:11px;color:#9a5b00;">PO RM ${po.toFixed(2)} (partial)</div>`:''; })()}</td>
-        <td>${statusBadge(q.status)}</td>
+        <td>${statusBadge(q.status)}${fuNote}${capReq}</td>
         <td style="font-size:11.5px;color:var(--text-muted);">${fmtDateShort(q.createdAt)}<br/>by ${USERS[q.createdBy]?.name||q.createdBy||''}</td>
         <td style="font-size:11px;">${q.poNumber?`📎 ${q.poNumber}${q.poDocUrl?` — <a href="javascript:void(0)" onclick="openSignedUrl('${q.poDocUrl}')">view</a>`:''}`:'—'}</td>
         <td>
@@ -11379,6 +11542,7 @@ function renderQuotationsV2Page(){
             <button class="btn btn-outline btn-sm" onclick="exportQuotationV2Pdf('${q.id}')">📄 PDF</button>
             <button class="btn btn-outline btn-sm" onclick="openQuotationEmail('${q.id}')">✉️ Email</button>
             ${q.status==='Draft'?`<button class="btn btn-outline btn-sm" onclick="openQuotationV2Modal('${q.id}')">✏️ Edit</button>`:''}
+            ${q.status==='Sent'?`<button class="btn ${qtNeedsFollowUp(q)?'btn-primary':'btn-outline'} btn-sm" onclick="openFollowUp('${q.id}')" title="Follow up by email, WhatsApp or call">📞 Follow up</button>`:''}
             ${['Sent','Expired'].includes(q.status)&&!q.createdJobNo?`<button class="btn btn-outline btn-sm" onclick="reviseQuotationV2('${q.id}')" title="Make a revised version (-R${(q.revision||0)+1}); this one is kept on record">✏️ Revise</button>`:''}
             ${q.status==='Draft'?`<button class="btn btn-primary btn-sm" onclick="sendQuotationV2('${q.id}')">📧 Sent</button>`:''}
             ${q.status==='Sent'?`<button class="btn btn-primary btn-sm" style="background:var(--green);" onclick="openAcceptQuotationModal('${q.id}')">✅ Accepted</button>`:''}
@@ -11415,7 +11579,11 @@ async function sendQuotationV2(quotationId){
   const srcEntry=q.linkedSalesTrackerId?_salesTracker.find(e=>e.id===q.linkedSalesTrackerId):null;
   if(srcEntry){
     const m=qtMatchEnquiryItems(q.items,srcEntry);
-    const risky=(q.items||[]).map((qi,i)=>({qi,r:qtCompareToEnquiry(qi,m[i].ei)})).filter(x=>x.r.needsReview);
+    const risky=(q.items||[]).map((qi,i)=>({qi,r:qtCompareToEnquiry(qi,m[i].ei)})).filter(x=>{
+      const cc=x.qi.capCheck, valid=cc&&cc.sig===qtCapSig(x.qi);
+      return x.r.needsReview&&!(valid&&cc.status==='Can Do'); });   // items a reviewer confirmed are fine
+    const notCapable=(q.items||[]).filter(qi=>qi.capCheck&&qi.capCheck.status==='Cannot Do'&&qi.capCheck.sig===qtCapSig(qi));
+    if(notCapable.length&&!confirm(`❌ ${notCapable.map(x=>x.eqName||'Item').join(', ')} ${notCapable.length>1?'were':'was'} judged NOT capable by the reviewer.\n\nRemove ${notCapable.length>1?'them':'it'} or arrange outsourcing first. Send anyway?`)) return;
     if(risky.length&&!confirm(`${q.quotationNo} has ${risky.length} item${risky.length>1?'s':''} the capability review didn't cover:\n\n${risky.map(x=>'• '+(x.qi.eqName||'Item')+(x.r.added?' — not in the enquiry':(x.r.changes.some(c=>c.cap)?' — '+qtChangesText(x.r.changes.filter(c=>c.cap)):' — its enquiry item has not passed capability review'))).join('\n')}\n\nSend it anyway?`)) return;
   }
   if(!confirm(`Mark ${q.quotationNo} as sent to the customer?`))return;
@@ -13155,6 +13323,62 @@ async function autoCreateCustomerFromProspect(entry){
   entry.custId=custId; // link the enquiry back to the newly-created customer
   addAudit('🏢',`Customer <strong>${entry.name}</strong> auto-created from Sales Tracker enquiry`);
 }
+// ═══ RECALIBRATION DUE → NEW ENQUIRY ═══ Completed items with a next-due date (latest calibration of each
+// piece of equipment), grouped by customer. "Create enquiry" pre-fills a new enquiry; once it's saved the
+// items leave this list.
+let _recalWindow=60, _recalPending=null;
+function recalDueItems(){
+  const latest=new Map(), today=toLocalDateStr(new Date());
+  (_jobs||[]).forEach(j=>{ if(j.status==='Deleted') return; (j.items||[]).forEach((it,idx)=>{
+    if(it.status!=='Completed'||!it.nextDue) return;
+    const key=[j.custId||j.custName,(it.serial||'').trim().toLowerCase()||[it.eqName,it.brand,it.model].join('|').toLowerCase()].join('#');
+    const when=it.approvedAt||it.calData?.date||j.receiveDate||'';
+    const prev=latest.get(key); if(!prev||when>prev.when) latest.set(key,{j,it,idx,when}); }); });
+  const limit=new Date(); limit.setDate(limit.getDate()+_recalWindow); const lim=toLocalDateStr(limit);
+  return [...latest.values()].filter(x=>!x.it.recalEnquiryAt&&x.it.nextDue<=lim).map(x=>({...x,overdue:x.it.nextDue<today}));
+}
+function openRecalDue(){
+  const rows=recalDueItems(); const groups=new Map();
+  rows.forEach(r=>{ const k=r.j.custId||r.j.custName; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(r); });
+  const gs=[...groups.entries()].sort((a,b)=>a[1].reduce((m,x)=>x.it.nextDue<m?x.it.nextDue:m,'9')<b[1].reduce((m,x)=>x.it.nextDue<m?x.it.nextDue:m,'9')?-1:1);
+  let ov=document.getElementById('recal-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='recal-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:999990;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
+  const v=x=>escapeHtml(x||'');
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:880px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;">
+      <span style="font-weight:700;font-size:15px;">🔁 Recalibration due <span style="font-weight:400;font-size:13px;color:var(--text-muted);">— ${rows.length} item${rows.length===1?'':'s'}, ${gs.length} customer${gs.length===1?'':'s'}</span></span>
+      <span style="display:flex;gap:8px;align-items:center;"><select class="filter-select" onchange="_recalWindow=+this.value;openRecalDue()">${[[0,'Overdue only'],[30,'Due within 30 days'],[60,'Due within 60 days'],[90,'Due within 90 days']].map(([d,l])=>`<option value="${d}" ${_recalWindow===d?'selected':''}>${l}</option>`).join('')}</select>
+      <button onclick="document.getElementById('recal-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></span></div>
+    <div style="padding:12px 18px;">${gs.length?gs.map(([k,list],gi)=>`<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f6f7f9;border-bottom:1px solid var(--border);border-radius:8px 8px 0 0;">
+        <b>${v(list[0].j.custName)}</b><button class="btn btn-primary btn-sm" onclick="createRecalEnquiry(${gi})">📝 Create enquiry</button></div>
+      <table style="width:100%;font-size:12.5px;border-collapse:collapse;"><tbody>${list.map((r,ri)=>`<tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 10px;width:26px;"><input type="checkbox" class="recal-cb" data-g="${gi}" data-r="${ri}" checked/></td>
+        <td style="padding:6px 10px;"><b>${v(r.it.eqName)}</b><div style="color:var(--text-muted);font-size:11.5px;">${[[r.it.brand,r.it.model].filter(Boolean).join(' / '),r.it.serial?'S/N '+r.it.serial:''].filter(Boolean).map(v).join(' · ')}</div></td>
+        <td style="padding:6px 10px;white-space:nowrap;color:var(--text-muted);">last ${r.when?fmtDateShort(r.when):'—'}<div>${v(r.j.jobNo)}</div></td>
+        <td style="padding:6px 10px;white-space:nowrap;font-weight:700;color:${r.overdue?'var(--red)':'#b45309'};">due ${fmtDateShort(r.it.nextDue)}${r.overdue?'<div style="font-size:11px;">overdue</div>':''}</td>
+        <td style="padding:6px 10px;white-space:nowrap;text-align:right;">${parseFloat(r.it.price)?'RM '+parseFloat(r.it.price).toFixed(2):''}</td></tr>`).join('')}</tbody></table></div>`).join('')
+      :`<div style="padding:24px;text-align:center;color:var(--text-muted);">Nothing due ${_recalWindow?`within ${_recalWindow} days`:'(overdue)'}. ✅</div>`}</div></div>`;
+  window._recalGroups=gs.map(([,list])=>list);
+  ov.style.display='flex';
+}
+function createRecalEnquiry(gi){
+  const list=(window._recalGroups||[])[gi]||[];
+  const picked=list.filter((r,ri)=>document.querySelector(`.recal-cb[data-g="${gi}"][data-r="${ri}"]`)?.checked);
+  if(!picked.length){ alert('Tick at least one item.'); return; }
+  const j=picked[0].j;
+  document.getElementById('recal-overlay').style.display='none';
+  openTrackerEntryModal('sales',null);
+  setTimeout(()=>{
+    if(j.custId&&(_customers||[]).some(c=>c.id===j.custId)) selectTrackerCustomer(j.custId,j.custName); else el('tk-name').value=j.custName||'';
+    _salesDraftItems=picked.map(r=>({id:'SI-'+Date.now()+'-'+Math.floor(Math.random()*100000),eqName:r.it.eqName||'',brand:r.it.brand||'',model:r.it.model||'',spec:r.it.spec||'',range:r.it.range||'',
+      resolution:r.it.resolution||'',calPoints:r.it.calPoints||'',calType:r.it.calType||'Lab',accreditationRequested:r.it.accreditationRequested||r.it.accreditation||'',quantity:1,price:parseFloat(r.it.price)||0,capabilityVerdict:null,outcome:'Pending',
+      remark:`Recalibration due ${fmtDateShort(r.it.nextDue)}${r.it.serial?' · S/N '+r.it.serial:''} · last job ${r.j.jobNo}`}));
+    renderSalesItemsList();
+    _recalPending=picked.map(r=>({jobNo:r.j.jobNo,idx:r.idx}));
+    showToast(`🔁 ${picked.length} item${picked.length>1?'s':''} filled in from the last calibration — check and save`,'success',3500);
+  },120);
+}
 async function saveTrackerEntry(type,entryId){
   // T&C 11 reminder — asked before anything is changed, so Cancel leaves nothing half-saved
   if(type==='sales'&&(_salesDraftItems||[]).some(it=>it.calType==='Onsite')){
@@ -13230,6 +13454,8 @@ async function saveTrackerEntry(type,entryId){
   entry.status=newStatus;
   if(isNew||oldStatus!==entry.status) entry.statusHistory.push({status:entry.status,date:new Date().toISOString(),by:currentUser});
   await trackerSave(type);
+  if(_recalPending&&isNew&&type==='sales'){ const pend=_recalPending; _recalPending=null;   // these due items now have an enquiry
+    for(const x of pend){ try{ await updateJob(x.jobNo,jj=>{ const it=jj.items[x.idx]; if(it){ it.recalEnquiryAt=new Date().toISOString(); it.recalEnquiryId=entry.id; } }); }catch(e){} } }
   document.getElementById('tracker-entry-overlay').style.display='none';
   renderTrackerPage(type);
   showToast(`✅ ${isNew?'Entry added':'Entry updated'}`,'success',2500);
@@ -17077,6 +17303,14 @@ function renderNeedsAttention(){
   if(typeof canUseInvoiceSystem==='function'&&canUseInvoiceSystem(currentUser)){
     const pr=pendingChargeReviews();
     if(pr.length) items.push({icon:'💵',text:`${pr.length} possible charge${pr.length>1?'s':''} to review (${[...new Set(pr.map(x=>CHARGE_REVIEW_LABEL[x.r.type]))].join(', ').toLowerCase()})`,onclick:`viewJobDetail('${escapeForJsAttr(pr[0].j.jobNo)}')`});
+  }
+  if(typeof canUseSalesTracker==='function'&&canUseSalesTracker(currentUser)&&getUserRole(currentUser)!=='Quality Manager'){ const rd=recalDueItems().filter(r=>r.it.nextDue<=toLocalDateStr(new Date(Date.now()+30*864e5)));
+    if(rd.length){ const n=new Set(rd.map(r=>r.j.custId||r.j.custName)).size; items.push({icon:'🔁',text:`${rd.length} item${rd.length>1?'s':''} due for recalibration within 30 days (${n} customer${n>1?'s':''}) — start an enquiry`,onclick:`_recalWindow=30;openRecalDue()`}); } }
+  { const due=(_quotationsV2||[]).filter(q=>qtNeedsFollowUp(q)&&(q.createdBy===currentUser||isAdmin(currentUser)));
+    if(due.length) items.push({icon:'📞',text:`${due.length} quotation${due.length>1?'s':''} waiting for a reply — follow up (${due.map(q=>q.quotationNo).slice(0,3).join(', ')}${due.length>3?'…':''})`,onclick:`openFollowUp('${escapeForJsAttr(due[0].id)}')`}); }
+  if(typeof canReviewCapability==='function'&&canReviewCapability(currentUser)){
+    const req=(_quotationsV2||[]).filter(q=>['Draft','Sent'].includes(q.status)&&(q.items||[]).some(it=>it.capCheck&&it.capCheck.status==='Requested'));
+    if(req.length) items.push({icon:'🔍',text:`${req.length} quotation${req.length>1?'s':''} waiting for a capability check (${req.map(q=>q.quotationNo).slice(0,3).join(', ')}${req.length>3?'…':''})`,onclick:`openCapCheckQueue()`});
   }
   if(typeof _ncrs!=='undefined'){
     const mine=_ncrs.filter(n=>n.status!=='Closed'&&n.actionOwner===currentUser);
@@ -23689,7 +23923,7 @@ function docHighestUsed(series,yymm){
 async function renderDocNumbering(){
   const card=el('doc-numbering-card'), body=el('doc-numbering-body'); if(!card||!body) return;
   const sc=el('system-check-card'); if(sc) sc.style.display=isAdmin(currentUser)?'':'none';
-  const bkc=el('backup-card'); if(bkc) bkc.style.display=isAdmin(currentUser)?'':'none';
+  const bkc=el('backup-card'); if(bkc){ bkc.style.display=isAdmin(currentUser)?'':'none'; filesDlStatusInit(); }
   const lsc=el('leave-settings-card'); if(lsc){ lsc.style.display=isAdmin(currentUser)?'':'none';
     if(el('ls-carry')) el('ls-carry').value=(_settings.leaveSettings||{}).carryForwardMax??'';
     if(el('ls-holidays')) el('ls-holidays').value=getPublicHolidays().slice().sort((a,b)=>a.date.localeCompare(b.date)).map(h=>(h.date+' '+(h.name||'')).trim()).join('\n'); }
