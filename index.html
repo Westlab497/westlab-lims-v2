@@ -14541,7 +14541,9 @@ function openRequestQuotesModal(){
     <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">📨 Request quotes for ${rows.length} item${rows.length>1?'s':''}</span>
       <button onclick="document.getElementById('osr-new-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
     <div style="padding:14px 18px;font-size:13px;">
-      <div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:12px;max-height:110px;overflow-y:auto;font-size:12px;">${rows.map(r=>`${escapeHtml(r.entry.name)} — ${escapeHtml(r.item.eqName)}${r.item.range?' · '+escapeHtml(r.item.range):''} × ${parseFloat(r.item.quantity)||1}`).join('<br/>')}</div>
+      <div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:12px;max-height:150px;overflow-y:auto;font-size:12.5px;">
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:4px;">For ${escapeHtml([...new Set(rows.map(r=>r.entry.name))].join(', '))}</div>
+        ${rows.map(r=>`<div style="padding:3px 0;border-top:1px solid var(--border);"><b>${escapeHtml(r.item.eqName)}</b> × ${parseFloat(r.item.quantity)||1}${r.item.range?`<div style="font-size:11.5px;color:var(--text-muted);">${escapeHtml(r.item.range)}</div>`:''}</div>`).join('')}</div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Service needed</label><select class="form-control" id="osr-service" onchange="osrVendorChecks()">${PARTNER_SERVICES.map(x=>`<option>${x}</option>`).join('')}</select></div>
         <div class="form-group"><label class="form-label">Quotes needed by</label><input class="form-control" type="date" id="osr-reply-by" value="${toLocalDateStr(new Date(Date.now()+3*864e5))}"/></div>
@@ -14556,7 +14558,10 @@ function osrVendorChecks(){
   const svc=el('osr-service')?.value||'Calibration'; const names=window._bulkEqNames||[];
   const handles=p=>(p.capabilities||[]).some(c=>names.some(n=>n.includes(String(c).toLowerCase())||String(c).toLowerCase().includes(n)));
   const list=_externalPartners.filter(p=>partnerServices(p).includes(svc)).sort((a,b)=>(handles(b)-handles(a))||String(a.name).localeCompare(String(b.name)));
-  el('osr-vendor-checks').innerHTML=list.length?list.map(p=>`<label style="display:flex;gap:8px;align-items:center;font-weight:normal;padding:3px 0;"><input type="checkbox" class="osr-v" value="${p.id}" ${handles(p)?'checked':''}/> ${handles(p)?'✓ ':''}${escapeHtml(p.name)}${p.email?` <span style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(p.email)}</span>`:''}</label>`).join('')
+  el('osr-vendor-checks').innerHTML=list.length?list.map(p=>`<label style="display:flex;gap:10px;align-items:flex-start;font-weight:normal;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <input type="checkbox" class="osr-v" value="${p.id}" ${handles(p)?'checked':''} style="width:18px;height:18px;margin-top:2px;flex-shrink:0;"/>
+      <span style="min-width:0;flex:1;"><span style="font-weight:600;">${escapeHtml(p.name)}</span>${handles(p)?' <span class="badge badge-green" style="font-size:10px;">handles these items</span>':''}
+        ${p.email?`<div style="color:var(--text-muted);font-size:11.5px;overflow-wrap:anywhere;">${escapeHtml(p.email)}</div>`:'<div style="color:#b45309;font-size:11.5px;">no email saved — use 📋 copy</div>'}</span></label>`).join('')
     :`<div style="color:var(--text-muted);font-size:12px;">No vendor offers ${svc.toLowerCase()} yet — tick the service on partners in External Partners.</div>`;
 }
 async function createOsr(){
@@ -14590,9 +14595,12 @@ function openOsr(id){
     <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">📨 ${escapeHtml(o.no)} — ${escapeHtml(o.service)} <span class="badge badge-blue" style="font-size:11px;">${escapeHtml(osrStatusOf(o))}</span></span>
       <button onclick="document.getElementById('osr-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
     <div style="padding:12px 18px;font-size:12.5px;">
-      <div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:12px;">${o.items.map(it=>`<div>• <b>${escapeHtml(it.eqName)}</b> × ${it.qty} — ${escapeHtml(it.custName)}${it.range?' · '+escapeHtml(it.range):''}${it.accreditation?' · '+escapeHtml(it.accreditation):''}${it.requiredBy?` · <span style="color:#b45309;">needed by ${fmtDateShort(it.requiredBy)}</span>`:''}</div>`).join('')}</div>
+      <div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:12px;">
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:3px;">For ${escapeHtml([...new Set(o.items.map(i=>i.custName))].join(', '))}</div>
+        ${o.items.map(it=>`<div style="padding:3px 0;border-top:1px solid var(--border);"><b>${escapeHtml(it.eqName)}</b> × ${it.qty}<div style="font-size:11.5px;color:var(--text-muted);">${[it.range,it.accreditation].filter(Boolean).map(escapeHtml).join(' · ')}${it.requiredBy?` <span style="color:#b45309;">· needed by ${fmtDateShort(it.requiredBy)}</span>`:''}</div></div>`).join('')}</div>
       <div style="font-weight:700;margin-bottom:6px;">Vendors</div>
-      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      ${isPhoneLike()?osrVendorCards(o,{quoted,tot,cheapest,fastest,today,can}):''}
+      <div style="overflow-x:auto;${isPhoneLike()?'display:none;':''}"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead><tr style="background:#f6f7f9;"><th style="text-align:left;padding:6px;">Vendor</th>${o.items.map(it=>`<th style="text-align:right;padding:6px;">${escapeHtml(it.eqName.slice(0,18))}<div style="font-weight:normal;color:var(--text-muted);">per unit</div></th>`).join('')}<th style="text-align:right;padding:6px;">Total</th><th style="padding:6px;">Lead time</th><th style="padding:6px;">Meets req.</th><th style="padding:6px;">Valid until</th><th style="padding:6px;">Track record</th><th style="padding:6px;"></th></tr></thead>
         <tbody>${o.vendors.map((v,vi)=>{ const t=tot(v); const tr=vendorTrackRecord(v.partnerId); const isSel=o.selected&&o.selected.partnerId===v.partnerId; const expired=v.validUntil&&v.validUntil<today;
           return `<tr style="border-top:1px solid var(--border);${isSel?'background:#ecfdf5;':''}">
@@ -14616,6 +14624,28 @@ function openOsr(id){
         <span><button class="btn btn-outline btn-sm" onclick="osrAddVendor('${o.id}')">+ Ask another vendor</button> <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="osrCancel('${o.id}')">Cancel request</button></span></div>`:''}
     </div></div>`;
   ov.style.display='flex';
+}
+// Phones: one card per vendor, buttons right underneath (no sideways scrolling)
+function osrVendorCards(o,c){
+  return o.vendors.map((v,vi)=>{ const t=c.tot(v); const tr=vendorTrackRecord(v.partnerId); const isSel=o.selected&&o.selected.partnerId===v.partnerId; const expired=v.validUntil&&v.validUntil<c.today;
+    const cheap=v.status==='Quoted'&&t===c.cheapest&&c.quoted.length>1, fast=v.status==='Quoted'&&(parseFloat(v.leadDays)||999)===c.fastest&&c.quoted.length>1;
+    const row=(k,val)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;"><span style="color:var(--text-muted);">${k}</span><span style="text-align:right;">${val}</span></div>`;
+    return `<div style="border:1px solid ${isSel?'#86efac':'var(--border)'};background:${isSel?'#ecfdf5':'#fff'};border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;">
+      <div style="font-weight:700;">${escapeHtml(v.name)} ${isSel?'<span class="badge badge-green" style="font-size:10px;">chosen</span>':''}</div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">${v.status==='Quoted'?`quoted ${fmtDateShort(v.quotedAt)}${v.quoteRef?' · ref '+escapeHtml(v.quoteRef):''}${v.quoteFileUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(v.quoteFileUrl)}')">quotation PDF</a>`:''}`:(v.status==='Declined'?'declined':'waiting for quote')}</div>
+      ${v.status==='Quoted'?`${o.items.map(it=>row(`${escapeHtml(it.eqName)} × ${it.qty}`,`RM ${(parseFloat(v.prices[it.key])||0).toFixed(2)} /unit`)).join('')}
+        ${row('<b>Total</b>',`<b style="${cheap?'color:#15803d;':''}">RM ${t.toFixed(2)}${cheap?' 💰':''}</b>`)}
+        ${row('Lead time',`<span style="${fast?'color:#15803d;font-weight:700;':''}">${v.leadDays||'—'} days${fast?' ⚡':''}</span>`)}
+        ${row('Meets requirement',{Yes:'✅ Yes',Partly:'⚠️ Partly',No:'❌ No'}[v.meets]||'—')}
+        ${row('Valid until',v.validUntil?`<span style="${expired?'color:var(--red);':''}">${fmtDateShort(v.validUntil)}${expired?' (expired)':''}</span>`:'—')}`:''}
+      ${row('Track record',`<span style="font-size:11.5px;">${trackRecordText(tr)}</span>`)}
+      ${c.can&&!o.selected&&o.status!=='Cancelled'?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn btn-outline btn-sm" onclick="osrEmail('${o.id}',${vi})">✉️ Email</button>
+        <button class="btn btn-outline btn-sm" onclick="osrCopy('${o.id}',${vi})">📋 Copy</button>
+        <button class="btn btn-outline btn-sm" onclick="openOsrQuote('${o.id}',${vi})">${v.status==='Quoted'?'Edit quote':'Record quote'}</button>
+        ${v.status==='Requested'?`<button class="btn btn-outline btn-sm" onclick="osrDecline('${o.id}',${vi})">Declined</button>`:''}
+        ${v.status==='Quoted'?`<button class="btn btn-primary btn-sm" onclick="osrChoose('${o.id}',${vi})">Choose</button>`:''}</div>`:''}
+    </div>`; }).join('');
 }
 function osrEmail(id,vi){ const o=_osrs.find(x=>x.id===id); const v=o.vendors[vi]; const p=_externalPartners.find(x=>x.id===v.partnerId);
   window.location.href=`mailto:${encodeURIComponent(p?.email||v.email||'')}?subject=${encodeURIComponent(`Request for quotation — ${o.service} (${o.no})`)}&body=${encodeURIComponent(osrRequestText(o,v))}`; }
