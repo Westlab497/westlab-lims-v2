@@ -25757,22 +25757,23 @@ function renderPurchaseOrdersPage(){
     else if(st==='pay') next=admin?btn('💵 Mark paid',`poMarkPaid('${p.id}')`,'','btn-primary'):'<span style="font-size:12px;color:var(--text-muted);">⏳ waiting for payment</span>';
     else if(st==='done') next='<span style="font-size:12px;color:#15803d;font-weight:600;">✅ Completed</span>';
     else next=`<span class="badge ${poBadgeClass(p.status)}">${escapeHtml(p.status)}</span>${p.status==='Superseded'?` <span style="font-size:11px;color:var(--text-muted);">replaced by ${escapeHtml(p.supersededBy||'')}</span>`:''}`;
-    // everything else
+    // everything else: one quiet line of links (red for Cancel / Delete)
+    const L=(label,fn,red)=>`<button type="button" onclick="${fn}" style="background:none;border:none;padding:2px 2px;cursor:pointer;font-size:12px;font-weight:600;color:${red?'var(--red)':'var(--primary,#2563eb)'};white-space:nowrap;">${label}</button>`;
     const more=[
-      btn('📄 PDF',`exportPurchaseOrderPdf('${p.id}')`),
-      p.quoteFileUrl?btn('📎 Quotation',`openSignedUrl('${escapeForJsAttr(p.quoteFileUrl)}')`):'',
-      p.invoice?.fileUrl?btn('📎 Invoice',`openSignedUrl('${escapeForJsAttr(p.invoice.fileUrl)}')`):'',
-      st!=='invoice'&&['send','receive'].includes(st)&&!p.invoice?btn('🧾 Record invoice',`openPoInvoice('${p.id}')`):'',
-      out&&['Approved','Sent','Received'].includes(p.status)&&st!=='send'&&!(st==='receive'&&!allOnDo)?btn('🚚 New Delivery Order',`openPoDoModal('${p.id}')`):'',
-      !out&&p.status==='Approved'&&st!=='send'?btn('📤 Mark sent',`poMarkSent('${p.id}')`):'',
-      p.status==='Pending Approval'?btn('↩️ Back to draft',`poBackToDraft('${p.id}')`):'',
-      approver&&p.status==='Draft'?btn('✅ Approve',`poApprove('${p.id}')`,'color:var(--green);'):'',
-      ['Approved','Sent'].includes(p.status)?btn('✏️ Revise',`poRevise('${p.id}')`):'',
-      (admin&&['Approved','Sent'].includes(p.status))?btn('Cancel PO',`poCancel('${p.id}')`,'color:var(--red);'):'',
-      admin?btn('🗑️ Delete',`poDelete('${p.id}')`,'color:var(--red);'):''].join('');
+      L('📄 PDF',`exportPurchaseOrderPdf('${p.id}')`),
+      p.quoteFileUrl?L('📎 Quotation',`openSignedUrl('${escapeForJsAttr(p.quoteFileUrl)}')`):'',
+      p.invoice?.fileUrl?L('📎 Invoice',`openSignedUrl('${escapeForJsAttr(p.invoice.fileUrl)}')`):'',
+      ['send','receive'].includes(st)&&!p.invoice?L('🧾 Record invoice',`openPoInvoice('${p.id}')`):'',
+      out&&['Approved','Sent','Received'].includes(p.status)&&st!=='send'&&st!=='receive'&&!allOnDo?L('🚚 New DO',`openPoDoModal('${p.id}')`):'',
+      !out&&p.status==='Approved'&&st!=='send'?L('📤 Mark sent',`poMarkSent('${p.id}')`):'',
+      p.status==='Pending Approval'?L('↩️ Back to draft',`poBackToDraft('${p.id}')`):'',
+      approver&&p.status==='Draft'?L('✅ Approve',`poApprove('${p.id}')`):'',
+      ['Approved','Sent'].includes(p.status)?L('✏️ Revise',`poRevise('${p.id}')`):'',
+      (admin&&['Approved','Sent'].includes(p.status))?L('Cancel PO',`poCancel('${p.id}')`,true):'',
+      admin?L('🗑️ Delete',`poDelete('${p.id}')`,true):''].filter(Boolean).join('');
     const doLines=dos.length?`<div style="margin-top:6px;border-top:1px dashed var(--border);padding-top:6px;font-size:12px;">${dos.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;padding:2px 0;">
         <span>🚚 <b>${escapeHtml(d.doNumber)}</b> · ${fmtDateShort(d.date||d.createdAt)} · ${(d.items||[]).length} item(s)${d.deliveredBy?' · '+escapeHtml(d.deliveredBy):''} · ${d.returnedAt?`<span style="color:var(--green);">back ${fmtDateShort(d.returnedAt)}</span>${(d.returnCheck?.problems||[]).length?' <span style="color:var(--red);">⚠ '+escapeHtml(d.returnCheck.problems.join('; '))+'</span>':''}`:'<span style="color:var(--amber);">with supplier</span>'}</span>
-        <span>${btn('📄',`exportSupplierDoPdf('${p.id}','${d.doNumber}')`)}${(admin&&!d.returnedAt)?btn('🗑️',`poDoDelete('${p.id}','${d.doNumber}')`,'color:var(--red);'):''}</span></div>`).join('')}</div>`:'';
+        <span style="display:flex;gap:12px;">${L('📄 DO PDF',`exportSupplierDoPdf('${p.id}','${d.doNumber}')`)}${(admin&&!d.returnedAt)?L('🗑️ Delete DO',`poDoDelete('${p.id}','${d.doNumber}')`,true):''}</span></div>`).join('')}</div>`:'';
     const od=poOverdue(p);
     return `<div class="card" style="padding:12px 14px;margin-bottom:10px;overflow:visible;${od?'border-color:#fecaca;':''}">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start;">
@@ -25780,11 +25781,8 @@ function renderPurchaseOrdersPage(){
           <div style="font-size:12px;color:var(--text-muted);">${[fmtDateShort(p.poDate||p.createdAt),poPurposeLabel(p.purpose),p.status==='Rejected'&&p.rejectReason?`<span style="color:var(--red);">rejected: ${escapeHtml(p.rejectReason)}</span>`:'',p.invoice&&!p.paidAt?`invoice ${escapeHtml(p.invoice.no)}`:''].filter(x=>x&&x!=='—').join(' · ')}</div></div>
         <div style="text-align:right;white-space:nowrap;font-weight:700;">${p.currency&&p.currency!=='MYR'?`${escapeHtml(p.currency)} ${t.total.toFixed(2)}<div style="font-size:11px;font-weight:normal;color:var(--text-muted);">≈ RM ${(t.total*(parseFloat(p.fxRate)||0)).toFixed(2)}</div>`:'RM '+t.total.toFixed(2)}</div></div>
       ${['approval','closed'].includes(st)?`<div style="margin:6px 0 2px;"><span class="badge ${poBadgeClass(p.status)}">${p.status==='Draft'?'Draft (not submitted)':escapeHtml(p.status)}</span></div>`:poProgressHtml(p)}
-      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;">
-        <div>${next}</div>
-        <details style="position:relative;"><summary class="btn btn-outline btn-sm" style="list-style:none;cursor:pointer;margin:2px;">More ▾</summary>
-          <div style="position:absolute;right:0;z-index:50;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.12);padding:6px;display:flex;flex-direction:column;align-items:stretch;min-width:190px;">${more}</div></details>
-      </div>${doLines}</div>`;
+      <div style="margin-top:6px;">${next}</div>
+      ${more?`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px 14px;margin-top:6px;">${more}</div>`:''}${doLines}</div>`;
   }).join('');
 }
 
