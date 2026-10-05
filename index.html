@@ -12561,7 +12561,9 @@ function openPr(id){
         ${r.invoice?`<div style="font-size:12.5px;">Invoice <b>${escapeHtml(r.invoice.no)}</b> · ${rm2(r.invoice.amount)} · dated ${fmtDateShort(r.invoice.date)} · due <b style="${!r.paidAt&&r.invoice.dueDate<today?'color:var(--red);':''}">${fmtDateShort(r.invoice.dueDate)}</b>${r.invoice.fileUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(r.invoice.fileUrl)}')">invoice</a>`:''}</div>
           ${r.paidAt?`<div style="font-size:12.5px;color:#15803d;margin-top:3px;">💵 Paid ${fmtDateShort(r.paidAt)}${r.paidRef?' · '+escapeHtml(r.paidRef):''}</div>`:(isMD()||isAdmin(currentUser)?`<button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="prMarkPaid('${r.id}')">💵 Mark paid</button>`:'')}`
           :(canBuy()?`<button class="btn btn-outline btn-sm" onclick="openPrInvoice('${r.id}')">🧾 Record supplier invoice</button>`:'')}`:''}
-      ${canBuy()&&!r.paidAt&&!['Cancelled','Rejected'].includes(r.status)&&!prLivePo(r)?`<div style="text-align:right;margin-top:12px;"><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="prCancel('${r.id}')">Cancel request</button></div>`:''}
+      ${(canBuy()&&!r.paidAt&&!['Cancelled','Rejected'].includes(r.status)&&!prLivePo(r))||(isAdmin(currentUser)&&!prLivePo(r))?`<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        ${canBuy()&&!r.paidAt&&!['Cancelled','Rejected'].includes(r.status)&&!prLivePo(r)?`<button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="prCancel('${r.id}')">Cancel request</button>`:''}
+        ${isAdmin(currentUser)&&!prLivePo(r)?`<button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="prDelete('${r.id}')">🗑️ Delete</button>`:''}</div>`:''}
     </div></div>`;
   ov.style.display='flex';
 }
@@ -12571,6 +12573,15 @@ async function prApprove(id,ok){
   if(ok){ const note=prompt('Approve — note (optional):',''); if(note===null) return; r.approval={by:currentUser,at:new Date().toISOString(),note:note.trim()}; }
   else { const why=prompt('Reject — reason:'); if(!why||!why.trim()) return; r.status='Rejected'; r.rejectedBy=currentUser; r.rejectReason=why.trim(); }
   await savePrs(); addAudit(ok?'✅':'❌',`Purchase request ${r.no} ${ok?'approved':'rejected'}`); openPr(id); renderPrSections(); if(typeof renderDashboard==='function') renderDashboard();
+}
+async function prDelete(id){
+  if(!isAdmin(currentUser)) return; const r=_prs.find(x=>x.id===id); if(!r) return;
+  if(prLivePo(r)){ alert(`${r.no} still has PO ${r.poNumber}. Cancel or delete that PO first (Purchase Orders → More).`); return; }
+  const why=prompt(`Permanently delete purchase request ${r.no}? This cannot be undone.\n\nReason:`); if(!why||!why.trim()) return;
+  _prs=_prs.filter(x=>x.id!==id); await savePrs();
+  addAudit('🗑️',`Purchase request ${r.no} deleted — ${escapeHtml(why.trim())}`);
+  document.getElementById('pr-overlay')&&(document.getElementById('pr-overlay').style.display='none');
+  renderPrSections(); showToast(`🗑️ ${r.no} deleted`,'success',3000);
 }
 async function prCancel(id){ const r=_prs.find(x=>x.id===id); const why=prompt('Cancel this request — reason:'); if(!why||!why.trim()) return; r.status='Cancelled'; r.cancelReason=why.trim(); await savePrs(); openPr(id); renderPrSections(); }
 function prAskSuppliers(id){
@@ -12716,7 +12727,14 @@ function renderPrSections(){
   if(!box) return;
   const now=new Date(), ym=toLocalDateStr(now).slice(0,7), today=toLocalDateStr(now);
   // requests still pointing at a PO that no longer exists: move that PO's records to history (once)
-  { let ch=false; _prs.forEach(r=>{ if(r.poNumber&&!prPo(r)){ prArchiveGonePo(r,'deleted'); ch=true; } }); if(ch) savePrs().catch(()=>{}); }
+  { let ch=false; _prs.forEach(r=>{ if(r.poNumber&&!prPo(r)){ prArchiveGonePo(r,'deleted'); ch=true; return; }
+      // cleaned by an earlier version: the PO link was removed but its delivery / invoice stayed on the request
+      const last=(r.oldPoNumbers||[]).slice(-1)[0];
+      if(!r.poNumber&&last&&last.gone==='deleted'&&!last.invoice&&!last.receipts&&(r.invoice||(r.receipts||[]).length)){
+        if((r.receipts||[]).length) last.receipts=r.receipts; if(r.verified) last.verified=r.verified; if(r.invoice) last.invoice=r.invoice; if(r.paidAt){ last.paidAt=r.paidAt; last.paidRef=r.paidRef; }
+        ['receipts','verified','invoice','paidAt','paidRef','paidBy'].forEach(k=>delete r[k]); r.receipts=[];
+        r.poGoneNote=`PO ${last.no} was deleted — create a new PO. Its delivery / invoice records were moved to this request's history.`; ch=true; } });
+    if(ch) savePrs().catch(()=>{}); }
   const live=_prs.filter(r=>!['Cancelled','Rejected'].includes(r.status));
   // every invoice counted ONCE: a PO's own invoice, or (if the PO has none) the request's invoice for that PO
   const spend=[]; const seenPo=new Set();
