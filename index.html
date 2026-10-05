@@ -4870,7 +4870,7 @@ function applyRoleUI(){
   el('nav-admin-section').style.display=(admin||manager)?'':'none';
   el('nav-personnel').classList.toggle('hidden-nav', !admin);
   el('nav-deleted').classList.toggle('hidden-nav', !admin);
-  el('nav-reports').classList.toggle('hidden-nav', !(admin||manager));
+  el('nav-reports').classList.toggle('hidden-nav', !(admin||manager||canSeeSalesReport(currentUser)||canSeePurchReport(currentUser)));
   el('nav-settings').classList.toggle('hidden-nav', !admin);
 
   // Dashboard buttons
@@ -12845,6 +12845,13 @@ function addressLines(addr){
 }
 // PO / DO style: one part per line, like SIRIM's —
 //   Lot 497, Jalan Perusahaan 3, / Bandar Baru Sungai Buloh, / 47000 Sungai Buloh, Selangor, / Malaysia
+// Is this "deliver to" just our own business address? (then it isn't printed — the letterhead already says it)
+function isOwnAddress(txt){
+  const n=t=>String(t||'').toLowerCase().replace(/sdn\.?\s*bhd\.?|\(m\)|[^a-z0-9]/g,'');
+  const mine=n(_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor'); const t=n(txt);
+  if(!t) return true; if(!mine) return false;
+  return t.includes(mine)||mine.includes(t.replace(n(_settings.labName||'Westlab'),''))||t.replace(n(_settings.labName||'Westlab'),'')===mine;
+}
 function addressLinesPo(addr){
   const a=String(addr||'').trim(); if(!a) return [];
   if(/\n/.test(a)) return a.split(/\n+/).map(x=>x.trim()).filter(Boolean);
@@ -19048,7 +19055,7 @@ function renderDashboard(){
 
   // ── Recent activity (same people who can open the audit log) ──
   const actCard=el('dash-activity-card');
-  const canAudit=!el('nav-reports')||!el('nav-reports').classList.contains('hidden-nav');
+  const canAudit=canViewReports(currentUser); // the audit trail stays with Admin, MD, Technical and Quality Manager
   if(actCard) actCard.style.display=canAudit?'':'none';
   if(canAudit&&el('dash-activity')){
     const log=(_settings.auditLog||[]).slice(0,8);
@@ -24906,6 +24913,154 @@ function applySettingsTabs(){
     const t=cardTitleOf(c); const tab=(SETTINGS_TABS.find(([,,ks])=>ks.some(x=>t.includes(x)))||[])[0]||'system';
     c.classList.toggle('tab-hidden',tab!==_settingsTab); });
 }
+// ═══ MONTHLY SALES + PURCHASING REPORTS (Reports page tabs) ═══
+function canSeeSalesReport(u){ const r=getUserRole(u||currentUser); return isAdmin(u||currentUser)||['Sales','Coordinator'].includes(r); }
+function canSeePurchReport(u){ return isAdmin(u||currentUser)||canUsePurchasingTracker(u||currentUser); }
+const ymOf=d=>String(d||'').slice(0,7);
+const prevYm=ym=>{ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
+const nextYm=ym=>{ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m,1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
+const ymLabel=ym=>{ const [y,m]=ym.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'short',year:'numeric'}); };
+const daysBetween=(a,b)=>{ const x=new Date(a), y=new Date(b); return isNaN(x)||isNaN(y)?null:Math.max(0,(y-x)/864e5); };
+const avgOf=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+function qtTotalOf(q){ try{ return qtQuotationTotal(q.items); }catch(e){ return 0; } }
+// ── Sales figures for one month ──
+function salesMonth(ym){
+  const live=(_quotationsV2||[]).filter(q=>q.status!=='Superseded');
+  const sent=live.filter(q=>ymOf(q.sentAt)===ym);
+  const acc=live.filter(q=>q.status==='Accepted'&&ymOf(q.respondedAt||q.updatedAt)===ym);
+  const expired=live.filter(q=>q.status==='Expired'||(q.status==='Sent'&&q.sentAt&&(()=>{ const d=new Date(q.sentAt); d.setDate(d.getDate()+(parseInt(q.validityDays)||30)); return toLocalDateStr(d)<toLocalDateStr(new Date()); })())).filter(q=>{ const d=new Date(q.sentAt||q.createdAt); d.setDate(d.getDate()+(parseInt(q.validityDays)||30)); return ymOf(toLocalDateStr(d))===ym; });
+  const enq=(_salesTracker||[]).filter(e=>e.type==='sales'&&ymOf(e.createdAt)===ym);
+  const lostItems=[]; (_salesTracker||[]).filter(e=>e.type==='sales').forEach(e=>{ const h=(e.statusHistory||[]).filter(x=>/Lost/i.test(x.status||'')).slice(-1)[0];
+    (e.items||[]).forEach(it=>{ if(it.outcome==='Lost'){ const when=h?.date||e.updatedAt||e.createdAt; if(ymOf(when)===ym) lostItems.push({cust:e.name,eq:it.eqName,reason:it.lostReason||e.lostReason||'Not stated'}); } }); });
+  const reasons={}; lostItems.forEach(x=>reasons[x.reason]=(reasons[x.reason]||0)+1); expired.forEach(()=>reasons['No reply (quotation expired)']=(reasons['No reply (quotation expired)']||0)+1);
+  const decided=acc.length+expired.length+new Set(lostItems.map(x=>x.cust)).size;
+  const resp=sent.map(q=>{ const e=(_salesTracker||[]).find(x=>x.id===q.linkedSalesTrackerId); return e?daysBetween(e.createdAt,q.sentAt):null; }).filter(x=>x!=null);
+  const fuDone=live.reduce((n,q)=>n+(q.followUps||[]).filter(f=>ymOf(f.at)===ym).length,0);
+  const fuWaiting=ym===ymOf(toLocalDateStr(new Date()))?live.filter(q=>typeof qtNeedsFollowUp==='function'&&qtNeedsFollowUp(q)).length:null;
+  let outSell=0,outCost=0; acc.forEach(q=>(q.items||[]).forEach(it=>{ if(!it||!it.outsourceVendorId||it.poAccepted===false) return; const qty=parseFloat(it.poQty)||parseFloat(it.quantity)||1; outSell+=qtLineCalc(it).total; outCost+=(parseFloat(it.outsourceCost)||0)*qty; }));
+  const byCust={}; acc.forEach(q=>{ byCust[q.custName||'—']=(byCust[q.custName||'—']||0)+qtTotalOf(q); });
+  const nym=nextYm(ym); let recal=[]; try{ recal=(recalDueItems()||[]).filter(x=>ymOf(x.nextDue||x.due||'')===nym); }catch(e){}
+  return {enq:enq.length,sentN:sent.length,sentV:sent.reduce((a,q)=>a+qtTotalOf(q),0),accN:acc.length,accV:acc.reduce((a,q)=>a+qtTotalOf(q),0),
+    lostN:lostItems.length+expired.length,reasons,win:decided?acc.length/decided*100:null,resp:avgOf(resp),fuDone,fuWaiting,outSell,outCost,
+    top:Object.entries(byCust).sort((a,b)=>b[1]-a[1]).slice(0,5),recalN:recal.length,recalCust:[...new Set(recal.map(x=>x.custName||x.cust||''))].filter(Boolean).length};
+}
+// ── Purchasing figures for one month ──
+function spendRowsAll(){
+  const rows=[]; const seenPo=new Set(); const prs=(typeof _prs!=='undefined'?_prs:[]).filter(r=>!['Cancelled','Rejected'].includes(r.status));
+  (_purchaseOrders||[]).filter(p=>p.invoice&&!['Cancelled','Superseded'].includes(p.status)).forEach(p=>{ seenPo.add(p.poNumber); const rate=p.currency&&p.currency!=='MYR'?(parseFloat(p.fxRate)||0):1; const r=prs.find(x=>x.poNumber===p.poNumber);
+    rows.push({sup:p.supplierName||'—',amt:(parseFloat(p.invoice.amount)||0)*rate,date:p.invoice.date,paidAt:p.paidAt,purpose:p.purpose==='outsource'?'Outsourcing':(r?.purpose||'Goods & other')}); });
+  prs.filter(r=>r.invoice&&!(r.poNumber&&seenPo.has(r.poNumber))).forEach(r=>rows.push({sup:r.selected?.name||'—',amt:parseFloat(r.invoice.amount)||0,date:r.invoice.date,paidAt:r.paidAt,purpose:r.purpose||'Other'}));
+  return rows;
+}
+function purchMonth(ym){
+  const rows=spendRowsAll(); const end=ym+'-31';
+  const inv=rows.filter(x=>ymOf(x.date)===ym), paid=rows.filter(x=>ymOf(x.paidAt)===ym), owed=rows.filter(x=>String(x.date)<=end&&!(x.paidAt&&String(x.paidAt).slice(0,10)<=end));
+  const bySup={}, byPur={}; inv.forEach(x=>{ bySup[x.sup]=(bySup[x.sup]||0)+x.amt; byPur[x.purpose]=(byPur[x.purpose]||0)+x.amt; });
+  const pos=(_purchaseOrders||[]).filter(p=>p.status!=='Superseded');
+  const raised=pos.filter(p=>ymOf(p.createdAt)===ym), approved=pos.filter(p=>ymOf(p.approvedAt)===ym);
+  const apprDays=approved.map(p=>daysBetween(p.submittedAt||p.createdAt,p.approvedAt)).filter(x=>x!=null);
+  const del=[]; pos.forEach(p=>{ if(p.purpose!=='outsource'&&ymOf(p.receivedAt)===ym) del.push({lead:daysBetween(p.sentAt||p.approvedAt||p.createdAt,p.receivedAt),onTime:p.requiredDate?String(p.receivedAt).slice(0,10)<=p.requiredDate:null});
+    (p.deliveryOrders||[]).forEach(d=>{ if(ymOf(d.returnedAt)===ym){ const sh=(typeof _osrs!=='undefined'?_osrs:[]).map(o=>(o.shipments||{})[p.poNumber]).find(Boolean); del.push({lead:daysBetween(d.date||d.createdAt,d.returnedAt),onTime:sh?.expectedBack?String(d.returnedAt).slice(0,10)<=sh.expectedBack:null}); } }); });
+  const timed=del.filter(x=>x.onTime!=null);
+  const prs=(typeof _prs!=='undefined'?_prs:[]);
+  const checked=prs.filter(r=>ymOf(r.verified?.at)===ym).length;
+  let problems=0; prs.forEach(r=>(r.receipts||[]).forEach(x=>{ if(ymOf(x.date)===ym&&Object.values(x.lines||{}).some(l=>l.qty>0&&l.condition&&l.condition!=='OK')) problems++; }));
+  pos.forEach(p=>(p.deliveryOrders||[]).forEach(d=>{ if(ymOf(d.returnCheck?.date)===ym&&(d.returnCheck.problems||[]).length) problems++; }));
+  return {inv:inv.reduce((a,x)=>a+x.amt,0),paid:paid.reduce((a,x)=>a+x.amt,0),owed:owed.reduce((a,x)=>a+x.amt,0),
+    bySup:Object.entries(bySup).sort((a,b)=>b[1]-a[1]),byPur:Object.entries(byPur).sort((a,b)=>b[1]-a[1]),
+    raised:raised.length,approved:approved.length,apprDays:avgOf(apprDays),delN:del.length,lead:avgOf(del.map(x=>x.lead).filter(x=>x!=null)),onTime:timed.length?timed.filter(x=>x.onTime).length/timed.length*100:null,checked,problems};
+}
+// ── rendering ──
+const fmtRM=v=>'RM '+(parseFloat(v)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+function deltaHtml(now,before,money,lowerIsBetter){
+  if(now==null||before==null) return '';
+  const d=now-before; if(Math.abs(d)<0.005) return `<span style="color:var(--text-muted);">same as last month</span>`;
+  const good=lowerIsBetter?d<0:d>0; const txt=money?fmtRM(Math.abs(d)):(Number.isInteger(d)?Math.abs(d):Math.abs(d).toFixed(1));
+  return `<span style="color:${good?'#15803d':'#b91c1c'};">${d>0?'▲':'▼'} ${txt} vs last month</span>`;
+}
+function bizCard(label,val,sub){ return `<div class="card" style="padding:10px 12px;min-width:0;"><div style="font-size:11.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div><div style="font-size:19px;font-weight:700;white-space:nowrap;">${val}</div><div style="font-size:11px;min-height:14px;">${sub||''}</div></div>`; }
+function barChart(title,series,money){
+  const max=Math.max(1,...series.map(x=>Math.max(x.a||0,x.b||0)));
+  return `<div class="card" style="padding:12px 14px;margin-bottom:12px;"><div style="font-weight:700;font-size:13px;margin-bottom:8px;">${title}</div>
+    <div style="display:grid;grid-template-columns:repeat(${series.length},minmax(0,1fr));gap:4px;align-items:end;height:130px;">${series.map(x=>`<div title="${escapeHtml(x.label)}: ${money?fmtRM(x.a):x.a}${x.b!=null?' / '+(money?fmtRM(x.b):x.b):''}" style="display:flex;gap:1px;align-items:end;height:100%;justify-content:center;">
+      <div style="width:45%;height:${Math.round((x.a||0)/max*100)}%;min-height:${x.a?2:0}px;background:#93c5fd;border-radius:3px 3px 0 0;"></div>${x.b!=null?`<div style="width:45%;height:${Math.round((x.b||0)/max*100)}%;min-height:${x.b?2:0}px;background:#22c55e;border-radius:3px 3px 0 0;"></div>`:''}</div>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(${series.length},minmax(0,1fr));gap:4px;margin-top:3px;">${series.map(x=>`<div style="font-size:9.5px;color:var(--text-muted);text-align:center;white-space:nowrap;overflow:hidden;">${x.label.split(' ')[0]}</div>`).join('')}</div>
+    ${series[0]?.legend?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">${series[0].legend}</div>`:''}</div>`;
+}
+const listCard=(title,rows,empty)=>`<div class="card" style="padding:10px 12px;margin-bottom:12px;font-size:12.5px;"><b>${title}</b>${rows.length?rows.map(([k,v])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px solid var(--border);"><span style="min-width:0;overflow-wrap:anywhere;">${escapeHtml(k)}</span><b style="white-space:nowrap;">${v}</b></div>`).join(''):`<div style="color:var(--text-muted);padding-top:4px;">${empty}</div>`}</div>`;
+function monthPicker(id,fn){ const v=window['_'+id]||ymOf(toLocalDateStr(new Date()));
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+    <button class="btn btn-outline btn-sm" onclick="window._${id}=prevYm(window._${id}||'${v}');${fn}()">‹</button>
+    <input type="month" class="form-control" id="${id}" value="${v}" onchange="window._${id}=this.value;${fn}()" style="width:auto;"/>
+    <button class="btn btn-outline btn-sm" onclick="window._${id}=nextYm(window._${id}||'${v}');${fn}()">›</button>
+    <span style="margin-left:auto;display:flex;gap:6px;">
+      <button class="btn btn-outline btn-sm" onclick="exportBizReport('${id==='repSalesM'?'sales':'purch'}','xlsx')">📊 Excel</button>
+      <button class="btn btn-outline btn-sm" onclick="exportBizReport('${id==='repSalesM'?'sales':'purch'}','pdf')">📄 PDF</button></span></div>`; }
+function renderSalesReport(){
+  const box=el('rep-sales'); if(!box) return; if(!canSeeSalesReport()){ box.innerHTML=''; return; }
+  const ym=window._repSalesM||ymOf(toLocalDateStr(new Date())); const m=salesMonth(ym), p=salesMonth(prevYm(ym));
+  const months=[]; let x=ym; for(let i=0;i<12;i++){ months.unshift(x); x=prevYm(x); }
+  const series=months.map(k=>{ const s=salesMonth(k); return {label:ymLabel(k),a:s.sentV,b:s.accV,legend:'<span style="color:#60a5fa;">■</span> quoted &nbsp; <span style="color:#22c55e;">■</span> accepted (RM)'}; });
+  const margin=m.outSell-m.outCost;
+  box.innerHTML=monthPicker('repSalesM','renderSalesReport')+`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px;">
+      ${bizCard('Enquiries received',m.enq,deltaHtml(m.enq,p.enq))}
+      ${bizCard('Quotations sent',m.sentN,`${fmtRM(m.sentV)}`)}
+      ${bizCard('Accepted',fmtRM(m.accV),[`${m.accN} quotation${m.accN===1?'':'s'}`,deltaHtml(m.accV,p.accV,true)].filter(Boolean).join(' · '))}
+      ${bizCard('Win rate',m.win==null?'—':m.win.toFixed(0)+'%',m.win==null?'nothing decided yet':deltaHtml(m.win,p.win))}
+      ${bizCard('Lost / expired',m.lostN,deltaHtml(m.lostN,p.lostN,false,true))}
+      ${bizCard('Avg response',m.resp==null?'—':m.resp.toFixed(1)+' days',['enquiry → quotation sent',deltaHtml(m.resp,p.resp,false,true)].filter(Boolean).join(' · '))}
+      ${bizCard('Follow-ups done',m.fuDone,m.fuWaiting!=null?`${m.fuWaiting} still waiting for a reply`:'')}
+      ${bizCard('Recalibration due',m.recalN,`next month · ${m.recalCust} customer${m.recalCust===1?'':'s'}`)}
+    </div>
+    ${barChart('Last 12 months — quoted vs accepted',series,true)}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+      ${listCard('Top customers (accepted)',m.top.map(([k,v])=>[k,fmtRM(v)]),'No accepted quotations this month.')}
+      ${listCard('Lost — reasons',Object.entries(m.reasons).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),'Nothing lost this month.')}
+      ${listCard('Outsourced work (accepted)',m.outSell?[['Selling value',fmtRM(m.outSell)],['Vendor cost',fmtRM(m.outCost)],['Margin',`${fmtRM(margin)} (${m.outCost?Math.round(margin/m.outCost*100):0}%)`]]:[],'No outsourced work accepted this month.')}
+    </div>`;
+}
+function renderPurchReport(){
+  const box=el('rep-purch'); if(!box) return; if(!canSeePurchReport()){ box.innerHTML=''; return; }
+  const ym=window._repPurchM||ymOf(toLocalDateStr(new Date())); const m=purchMonth(ym), p=purchMonth(prevYm(ym));
+  const months=[]; let x=ym; for(let i=0;i<12;i++){ months.unshift(x); x=prevYm(x); }
+  const series=months.map(k=>{ const s=purchMonth(k); return {label:ymLabel(k),a:s.inv,b:s.paid,legend:'<span style="color:#60a5fa;">■</span> invoiced &nbsp; <span style="color:#22c55e;">■</span> paid (RM)'}; });
+  box.innerHTML=monthPicker('repPurchM','renderPurchReport')+`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px;">
+      ${bizCard('Spend (invoiced)',fmtRM(m.inv),deltaHtml(m.inv,p.inv,true,true))}
+      ${bizCard('Paid',fmtRM(m.paid),'')}
+      ${bizCard('Still owed',fmtRM(m.owed),'at month end')}
+      ${bizCard('POs raised / approved',`${m.raised} / ${m.approved}`,m.apprDays==null?'':`avg approval ${m.apprDays.toFixed(1)} days`)}
+      ${bizCard('Deliveries',m.delN,m.lead==null?'':`avg ${m.lead.toFixed(1)} days from order`)}
+      ${bizCard('On time',m.onTime==null?'—':m.onTime.toFixed(0)+'%',m.onTime==null?'no due dates set':deltaHtml(m.onTime,p.onTime))}
+      ${bizCard('Checked before use',m.checked,'ISO/IEC 17025 6.6.2 c')}
+      ${bizCard('Delivery problems',m.problems,m.problems?'<span style="color:#b91c1c;">see the requests / DOs</span>':'none')}
+    </div>
+    ${barChart('Last 12 months — invoiced vs paid',series,true)}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+      ${listCard('Spend by supplier',m.bySup.map(([k,v])=>[k,fmtRM(v)]),'No invoices this month.')}
+      ${listCard('Spend by purpose',m.byPur.map(([k,v])=>[k,fmtRM(v)]),'No invoices this month.')}
+    </div>`;
+}
+// ── export: one sheet / one page with the month's figures ──
+function exportBizReport(kind,fmt){
+  const sales=kind==='sales'; const ym=(sales?window._repSalesM:window._repPurchM)||ymOf(toLocalDateStr(new Date())); const m=sales?salesMonth(ym):purchMonth(ym);
+  const rows=sales?[['Enquiries received',m.enq],['Quotations sent',m.sentN],['Quoted value (RM)',+m.sentV.toFixed(2)],['Accepted quotations',m.accN],['Accepted value (RM)',+m.accV.toFixed(2)],['Win rate %',m.win==null?'':+m.win.toFixed(1)],['Lost / expired',m.lostN],
+      ['Avg response (days)',m.resp==null?'':+m.resp.toFixed(1)],['Follow-ups done',m.fuDone],['Outsourced selling (RM)',+m.outSell.toFixed(2)],['Outsourced cost (RM)',+m.outCost.toFixed(2)],['Recalibration due next month',m.recalN],
+      [],['Top customers (accepted)',''],...m.top.map(([k,v])=>[k,+v.toFixed(2)]),[],['Lost — reasons',''],...Object.entries(m.reasons).map(([k,v])=>[k,v])]
+    :[['Spend invoiced (RM)',+m.inv.toFixed(2)],['Paid (RM)',+m.paid.toFixed(2)],['Still owed at month end (RM)',+m.owed.toFixed(2)],['POs raised',m.raised],['POs approved',m.approved],['Avg approval (days)',m.apprDays==null?'':+m.apprDays.toFixed(1)],
+      ['Deliveries',m.delN],['Avg lead time (days)',m.lead==null?'':+m.lead.toFixed(1)],['On time %',m.onTime==null?'':+m.onTime.toFixed(0)],['Checked before use',m.checked],['Delivery problems',m.problems],
+      [],['Spend by supplier',''],...m.bySup.map(([k,v])=>[k,+v.toFixed(2)]),[],['Spend by purpose',''],...m.byPur.map(([k,v])=>[k,+v.toFixed(2)])];
+  const title=`${sales?'Sales':'Purchasing'} summary — ${ymLabel(ym)}`;
+  if(fmt==='xlsx'){ if(typeof XLSX==='undefined'){ alert('Excel export library failed to load — please refresh.'); return; }
+    const ws=XLSX.utils.aoa_to_sheet([[title],[],...rows]); ws['!cols']=[{wch:36},{wch:16}]; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Summary'); XLSX.writeFile(wb,`${sales?'Sales':'Purchasing'}_summary_${ym}.xlsx`); return; }
+  (async()=>{ const lh=await westlabQtLetterhead();
+    const html=`<div class="pdf-doc" style="width:794px;height:1123px;padding:30px 38px 40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;font-size:12px;background:#fff;">${lh}
+      <div style="font-size:16px;font-weight:bold;margin-bottom:10px;">${escapeHtml(title)}</div>
+      <table style="width:100%;border-collapse:collapse;">${rows.map(r=>r.length?`<tr><td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;${r[1]===''?'font-weight:bold;padding-top:12px;':''}">${escapeHtml(String(r[0]))}</td><td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:right;">${r[1]===''?'':escapeHtml(String(r[1]))}</td></tr>`:'').join('')}</table>
+      <div style="font-size:10px;color:#666;margin-top:14px;">Generated ${new Date().toLocaleString('en-GB')} by ${escapeHtml(USERS[currentUser]?.name||currentUser||'')}</div></div>`;
+    await exportPagedPdf([html],`${sales?'Sales':'Purchasing'}_summary_${ym}.pdf`,title,1); })();
+}
 function applyReportsTabs(){
   const view=el('view-reports'); if(!view) return;
   let bar=el('reports-tabs');
@@ -24918,13 +25073,24 @@ function applyReportsTabs(){
     const tat=el('rep-tat-table')?.closest('.card');
     if(tat&&!el('rep-staffeval-link')) tat.insertAdjacentHTML('beforebegin',`<div class="card" id="rep-staffeval-link" style="margin-bottom:14px;"><div class="card-body" style="display:flex;align-items:center;gap:10px;font-size:13px;">👤 Engineer workload and performance are in <b>Staff Evaluation</b> (and today's workload on the Dashboard). <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="showView('staff-evaluation')">Open Staff Evaluation →</button></div></div>`);
   }
-  bar.innerHTML=[['overview','📊 Overview'],['performance','⏱️ Performance'],['audit','📋 Audit Log']].map(([k,l])=>`<button class="st-tab ${_reportsTab===k?'active':''}" onclick="_reportsTab='${k}';applyReportsTabs()">${l}</button>`).join('');
+  // who sees which tab: job reports + audit (Admin, MD, Technical/Quality Manager), Sales (Admin/MD + sales staff), Purchasing (Admin/MD + purchasing roles)
+  const jobs=canViewReports(currentUser);
+  const tabs=[...(jobs?[['overview','📊 Overview'],['performance','⏱️ Performance']]:[]),...(canSeeSalesReport()?[['sales','📈 Sales']]:[]),...(canSeePurchReport()?[['purchasing','🛒 Purchasing']]:[]),...(jobs?[['audit','📋 Audit Log']]:[])];
+  if(!tabs.some(([k])=>k===_reportsTab)) _reportsTab=tabs[0]?.[0]||'overview';
+  bar.innerHTML=tabs.map(([k,l])=>`<button class="st-tab ${_reportsTab===k?'active':''}" onclick="_reportsTab='${k}';applyReportsTabs()">${l}</button>`).join('');
+  ['rep-sales','rep-purch'].forEach(id=>{ if(!el(id)){ const d=document.createElement('div'); d.id=id; view.appendChild(d); } });
+  const biz=['sales','purchasing'].includes(_reportsTab);
+  const hdrCtl=view.querySelector('.page-header > div:last-child'); if(hdrCtl) hdrCtl.style.display=biz?'none':'';
+  const sub=el('reports-sub'); if(sub) sub.textContent=biz?(_reportsTab==='sales'?'Monthly sales — enquiries, quotations, wins and follow-ups':'Monthly purchasing — spend, POs, deliveries and checks'):'Live data from your job records';
   const group=n=>{ if(n.id==='reports-tabs'||n.classList.contains('page-header')) return null;
+    if(n.id==='rep-sales') return 'sales'; if(n.id==='rep-purch') return 'purchasing';
     if(n.querySelector('#audit-log-body')||n.id==='audit-log-body') return 'audit';
     if(n.querySelector('#rep-tat-table,#rep-top-customers,#rep-kiv-list')||n.id==='rep-staffeval-link') return 'performance';
     return 'overview'; };
   [...view.children].forEach(n=>{ const g=group(n); if(g) n.classList.toggle('tab-hidden',g!==_reportsTab); });
   if(_reportsTab==='audit') filterAuditLog();
+  if(_reportsTab==='sales') renderSalesReport();
+  if(_reportsTab==='purchasing') renderPurchReport();
 }
 function auditFiltered(){
   const q=(el('audit-search')?.value||'').toLowerCase(), who=el('audit-who')?.value||'', from=el('audit-from')?.value||'', to=el('audit-to')?.value||'';
@@ -25868,7 +26034,7 @@ function openPurchaseOrderModal(poId,opts){
   const purpose=ex?ex.purpose:((entry&&entry.linkedSalesTrackerId)?'outsource':'goods');
   _poLines=ex?JSON.parse(JSON.stringify(ex.items||[])):[{description:entry?String(entry.remark||entry.name||'').slice(0,240):'',serial:'',qty:1,unitPrice:parseFloat(entry?.quotedPrice)||0}];
   const v=x=>escapeHtml(x==null?'':String(x));
-  const deliverDefault=ex?.deliverTo||[(_settings.labName||'Westlab (M) Sdn. Bhd.'),(_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor.')].join('\n');
+  const deliverDefault=ex?.deliverTo&&!isOwnAddress(ex.deliverTo)?ex.deliverTo:''; // empty = our business address
   const jobs=(_jobs||[]).filter(j=>j&&!j.deleted&&j.status!=='Deleted'&&(j.items||[]).length).sort((a,b)=>String(b.jobNo).localeCompare(String(a.jobNo))).slice(0,80);
   let ov=document.getElementById('po-overlay');
   if(!ov){ ov=document.createElement('div'); ov.id='po-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;'; document.body.appendChild(ov); }
@@ -25918,7 +26084,7 @@ function openPurchaseOrderModal(poId,opts){
         <div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="po-sst" ${ex?.sstApplied?'checked':''} onchange="poRecalc()"/> Supplier charges SST (8%)</label></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Delivery / collection</label><select class="form-control" id="po-del-method" onchange="el('po-courier-row').style.display=this.value==='Courier'?'':'none'">${['','Vendor collects from us','We deliver (own transport)','Courier','Vendor delivers to us'].map(x=>`<option value="${x}" ${(ex?.deliveryMethod||'')===x?'selected':''}>${x||'— Not specified —'}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Delivery / collection</label><select class="form-control" id="po-del-method" onchange="el('po-courier-row').style.display=this.value==='Courier'?'':'none'">${['','We drop off & collect (own transport)','Vendor collects from us','Courier','Vendor delivers to us'].map(x=>`<option value="${x}" ${((ex?.deliveryMethod==='We deliver (own transport)'?'We drop off & collect (own transport)':ex?.deliveryMethod)||'')===x?'selected':''}>${x||'— Not specified —'}</option>`).join('')}</select></div>
         <div class="form-group"><label class="form-label">Currency</label><div style="display:flex;gap:6px;"><select class="form-control" id="po-currency" onchange="el('po-fx-wrap').style.display=this.value==='MYR'?'none':'';poRecalc()" style="flex:1;">${Object.keys(PO_CURRENCIES).map(c=>`<option ${(ex?.currency||'MYR')===c?'selected':''}>${c}</option>`).join('')}</select>
           <span id="po-fx-wrap" style="display:${(ex?.currency||'MYR')==='MYR'?'none':''};flex:1;"><input class="form-control" id="po-fx" type="number" min="0" step="0.0001" placeholder="RM per 1 unit" value="${v(ex?.fxRate||'')}" oninput="poRecalc()" title="Exchange rate: RM for 1 unit of the currency"/></span></div></div>
       </div>
@@ -25931,7 +26097,7 @@ function openPurchaseOrderModal(poId,opts){
         <div id="po-quote-current" style="font-size:12px;margin-top:4px;">${ex?.quoteFileUrl?`📎 Attached — <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(ex.quoteFileUrl)}')">view</a> (choose a file only to replace it)`:''}</div>
         <label style="display:flex;gap:6px;align-items:center;font-weight:normal;font-size:12px;margin-top:6px;cursor:pointer;"><input type="checkbox" id="po-no-quote" ${ex?.noQuoteReason?'checked':''} onchange="el('po-no-quote-why').style.display=this.checked?'':'none'"/> No quotation for this purchase</label>
         <input class="form-control" id="po-no-quote-why" placeholder="Why? (e.g. small walk-in purchase, price list)" value="${v(ex?.noQuoteReason||'')}" style="margin-top:4px;display:${ex?.noQuoteReason?'':'none'};"/></div>
-      <div class="form-group"><label class="form-label">Deliver To <span style="font-weight:normal;color:var(--text-muted);">(where the vendor sends the items back / delivers — name, then address)</span></label><textarea class="form-control" id="po-deliver-to" rows="2">${v(deliverDefault)}</textarea></div>
+      <div class="form-group"><label class="form-label">Deliver To <span style="font-weight:normal;color:var(--text-muted);">(leave empty — only fill in if the items must go to a different address)</span></label><textarea class="form-control" id="po-deliver-to" rows="2" placeholder="Our address is used. e.g. Customer site name, then its address">${v(deliverDefault)}</textarea></div>
       <div class="form-group"><label class="form-label">Cert To <span style="font-weight:normal;color:var(--text-muted);">(calibration POs — the client's name, then address; empty = Westlab)</span></label><textarea class="form-control" id="po-cert-to" rows="2" placeholder="Westlab (M) Sdn. Bhd. and our address">${v(ex?.certTo||'')}</textarea></div>
       <div class="form-group"><label class="form-label">Remarks / special instructions</label><textarea class="form-control" id="po-remarks" rows="2">${v(ex?.remarks||'')}</textarea></div>
       <div id="po-totals" style="text-align:right;font-size:13px;margin-bottom:12px;"></div>
@@ -26087,7 +26253,13 @@ async function savePurchaseOrder(submit){
       }catch(e){ await tryRollbackSequence('WPO_'+docYymm(),parseInt(newNumber.split('-')[2],10)); throw e; } // don't burn a number on a failed save
     }
   }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
-  if(renameTo&&saved){ await poRelink(exNo,renameTo); addAudit('✏️',`PO number changed: ${exNo} → ${renameTo}`); }
+  if(renameTo&&saved){ await poRelink(exNo,renameTo); addAudit('✏️',`PO number changed: ${exNo} → ${renameTo}`);
+    // the old number was the newest one issued this month? hand it back, so the next PO gets it (e.g. 0002 → 0001 frees 0002)
+    const m=String(exNo).match(/^([A-Z]+)-(\d{4})-(\d{4})$/);
+    if(m){ const [,pre,yymm,sq]=m; const seqNum=parseInt(sq,10);
+      const newer=(_purchaseOrders||[]).some(o=>{ const x=String(o.poNumber||'').match(/^([A-Z]+)-(\d{4})-(\d{4})/); return x&&x[1]===pre&&x[2]===yymm&&parseInt(x[3],10)>=seqNum; });
+      if(!newer){ const r=await tryRollbackSequence(`${pre}_${yymm}`,seqNum);
+        showToast(r==='freed'?`✏️ ${exNo} → ${renameTo}. ${exNo} is free again — the next PO will use it.`:`✏️ PO number changed to ${renameTo}.`,'success',5000); } } }
   if(window._prPoCtx&&saved){ const pr=_prs.find(x=>x.id===window._prPoCtx.id); window._prPoCtx=null; if(pr){ if(pr.poNumber&&pr.poNumber!==saved.poNumber) (pr.oldPoNumbers=pr.oldPoNumbers||[]).push({no:pr.poNumber,gone:'replaced',at:new Date().toISOString()}); pr.poNumber=saved.poNumber; delete pr.poGoneNote; await savePrs(); addAudit('🧾',`${pr.no}: PO ${saved.poNumber} raised`); } }
   if(window._osPoCtx&&saved){ const cx=window._osPoCtx; window._osPoCtx=null; // link the vendor PO back to the quotation + request
     const q=_quotationsV2.find(x=>x.id===cx.qid); if(q){ q.outsourcePos={...(q.outsourcePos||{}),[cx.vendorId]:saved.poNumber}; await saveQuotationsV2();
@@ -26448,7 +26620,7 @@ async function exportPurchaseOrderPdf(poId){
   // a name + address block: the first line is the name, the rest is the address (one part per line)
   const block=txt=>{ const ls=String(txt||'').split('\n').map(x=>x.trim()).filter(Boolean); if(!ls.length) return null; const rest=ls.slice(1); return [ls[0],...(rest.length>1?rest:addressLinesPo(rest[0]||''))]; };
   const certTo=outsource?(block(po.certTo)||[ourName,...addressLinesPo(s.address||ourAddr.join(', '))]):null;
-  const deliverTo=block(po.deliverTo);
+  const deliverTo=po.deliverTo&&!isOwnAddress(po.deliverTo)?block(po.deliverTo):null; // only when it's somewhere else
   const nameAddr=(label,ls)=>`<div style="font-weight:bold;">${label}</div><div style="font-weight:bold;">${esc(ls[0])}</div>${ls.slice(1).map(x=>`<div>${esc(x)}</div>`).join('')}<div style="height:8px;"></div>`;
   if(certTo||deliverTo||remarkLines.length||po.deliveryMethod){ n++;
     rows.push(line(n,'',`<div>REMARK</div><div style="font-size:11px;padding-left:4px;line-height:1.45;">
