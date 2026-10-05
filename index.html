@@ -591,7 +591,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="nav-section-label">Overview</div>
     <button class="nav-item active" onclick="showView('dashboard')" data-label="Dashboard"><span class="nav-icon"><i class="ti ti-layout-dashboard"></i></span><span class="nav-label">Dashboard</span></button>
 
-    <button class="nav-item" id="nav-my-drafts" onclick="showView('my-drafts')" data-label="My Drafts"><span class="nav-icon"><i class="ti ti-file-pencil"></i></span><span class="nav-text">My Drafts <span class="nav-badge" id="drafts-badge" style="display:none;">0</span></span></button>
+    <button class="nav-item" id="nav-my-drafts" onclick="showView('my-drafts')" data-label="My Drafts"><span class="nav-icon"><i class="ti ti-file-pencil"></i></span><span class="nav-text">My Drafts <span class="nav-badge" id="drafts-badge" style="background:#f59e0b;display:none;">0</span></span></button>
 
     <div class="nav-section-label">Job Management</div>
     <button class="nav-item hidden-nav" id="nav-my-jobs" onclick="showView('my-jobs')"><span class="nav-icon"><i class="ti ti-clipboard-list"></i></span><span class="nav-text">My Jobs <span class="nav-badge" id="my-jobs-badge" style="display:none;">0</span></span></button>
@@ -24999,6 +24999,7 @@ function navLabelOf(id){ const b=navLegacyBtn(id); if(!b) return id; return (b.g
 function navIconOf(id){ return navLegacyBtn(id)?.querySelector('.nav-icon i')?.className||'ti ti-point'; }
 function navBadgeOf(id){
   const bd=navLegacyBtn(id)?.querySelector('.nav-badge'); if(!bd) return 0;
+  if(bd.id==='drafts-badge') return 0; // drafts are shown in amber, not in the red "needs action" totals
   if(bd.style.display==='none') return 0;
   const n=parseInt(bd.textContent,10); return isFinite(n)&&n>0?n:0;
 }
@@ -25007,10 +25008,10 @@ function navCatOfView(view){ return NAV_CATEGORIES.find(c=>c.items.some(([id])=>
 function navVisibleItems(cat){ return cat.items.filter(([id])=>navAvailable(id)); }
 function renderCategoryNav(){
   const box=document.getElementById('cat-nav'); if(!box) return;
-  const btn=(id,icon,label,onclick,badge,extra='')=>`<button class="nav-item${_navActiveCat===id?' active':''}" id="navcat-${id}" onclick="${onclick}" data-label="${escapeHtml(label)}" ${extra}><span class="nav-icon"><i class="ti ${icon}"></i></span><span class="nav-text">${escapeHtml(label)}${badge?` <span class="nav-badge">${badge}</span>`:''}</span></button>`;
+  const btn=(id,icon,label,onclick,badge,extra='',drafts=0)=>`<button class="nav-item${_navActiveCat===id?' active':''}" id="navcat-${id}" onclick="${onclick}" data-label="${escapeHtml(label)}" ${extra}><span class="nav-icon"><i class="ti ${icon}"></i></span><span class="nav-text" style="display:flex;align-items:center;gap:4px;min-width:0;flex:1;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escapeHtml(label)}</span>${badge?`<span class="nav-badge" style="flex-shrink:0;">${badge}</span>`:''}${typeof draftMark==='function'?draftMark(drafts).replace('margin-left:4px;','margin-left:0;flex-shrink:0;'):''}</span></button>`;
   box.innerHTML=btn('dashboard','ti-layout-dashboard','Dashboard',"showView('dashboard')",0)
     +'<div class="nav-section-label">Modules</div>'
-    +NAV_CATEGORIES.filter(c=>navVisibleItems(c).length).map(c=>btn(c.id,c.icon,c.label,`openNavCategory('${c.id}')`,navVisibleItems(c).reduce((s,[id])=>s+navBadgeOf(id),0))).join('')
+    +NAV_CATEGORIES.filter(c=>navVisibleItems(c).length).map(c=>btn(c.id,c.icon,c.label,`openNavCategory('${c.id}')`,navVisibleItems(c).reduce((s,[id])=>s+navBadgeOf(id),0),'',navVisibleItems(c).reduce((s,[id])=>s+(typeof navDraftCountOf==='function'?navDraftCountOf(id):0),0))).join('')
     +`<button class="nav-item" onclick="doLogout()" style="margin-top:8px;color:rgba(255,100,100,.8);" data-label="Logout"><span class="nav-icon"><i class="ti ti-logout"></i></span><span class="nav-label">Logout</span></button>`;
 }
 function openNavCategory(catId){
@@ -25030,9 +25031,10 @@ function renderLauncher(){
   el('launcher-title').innerHTML=`<i class="ti ${cat.icon}" style="color:${cat.color};"></i> ${escapeHtml(cat.label)}`;
   el('launcher-sub').textContent=cat.sub;
   const vis=navVisibleItems(cat);
-  grid.innerHTML=vis.map(([id,desc])=>{ const n=navBadgeOf(id);
+  grid.innerHTML=vis.map(([id,desc])=>{ const n=navBadgeOf(id), dn=typeof navDraftCountOf==='function'?navDraftCountOf(id):0;
     return `<button class="launcher-tile" onclick="navTileGo('${id}')" style="--tile:${cat.color};">
       ${n?`<span class="launcher-badge">${n}</span>`:''}
+      ${dn?`<span title="${dn} unfinished draft${dn>1?'s':''}" style="position:absolute;top:8px;right:${n?44:8}px;background:#f59e0b;color:#fff;border-radius:999px;font-size:11px;font-weight:700;line-height:1;padding:4px 7px;">📝${dn}</span>`:''}
       <span class="launcher-icon"><i class="${navIconOf(id)}"></i></span>
       <span class="launcher-name">${escapeHtml(navLabelOf(id))}</span>
       <span class="launcher-desc">${escapeHtml(desc)}</span></button>`; }).join('')
@@ -26577,10 +26579,18 @@ draftWrapSubmit('savePurchaseOrder',['po']);
 
 // ── "My Drafts" on the Dashboard ──
 function updateDraftsBadge(){
-  const b=document.getElementById('drafts-badge'); if(!b) return;
+  const b=document.getElementById('drafts-badge');
   const n=Object.values(_draftsCache||{}).filter(d=>d&&DRAFT_FORMS[d.formId]).length;
-  b.textContent=n; b.style.display=n>0?'inline':'none';
+  if(b){ b.textContent=n; b.style.display=n>0?'inline':'none'; }
+  // amber draft marks on the module groups and tiles
+  if(typeof renderCategoryNav==='function') renderCategoryNav();
+  if(document.getElementById('view-launcher')?.classList.contains('active')&&typeof renderLauncher==='function') renderLauncher();
 }
+// Unfinished drafts per module (each draft counted once, on its main page)
+function navDraftCountOf(navId){ const view=navViewOf(navId); if(!view||typeof DRAFT_PAGES==='undefined') return 0;
+  if(view==='my-drafts') return Object.values(_draftsCache||{}).filter(d=>d&&DRAFT_FORMS[d.formId]).length; // My Drafts = all of them
+  return Object.values(_draftsCache||{}).filter(d=>d&&DRAFT_FORMS[d.formId]&&(DRAFT_PAGES[d.formId]||[])[0]===view).length; }
+function draftMark(n){ return n?`<span class="draft-mark" title="${n} unfinished draft${n>1?'s':''}" style="display:inline-block;background:#f59e0b;color:#fff;border-radius:999px;font-size:10px;font-weight:700;line-height:1;padding:3px 6px;margin-left:4px;">📝${n}</span>`:''; }
 async function renderMyDrafts(){
   const all=await loadDrafts();
   updateDraftsBadge();
@@ -26615,7 +26625,7 @@ async function draftDiscardByKey(key){
   catch(e){ showToast('❌ '+e.message,'error',5000); }
 }
 // Drafts also show on the page they belong to (My Drafts still lists them all)
-const DRAFT_PAGES={quotation:['quotations-v2'],po:['purchase-orders','purchasing-tracker'],tracker:['sales-tracker'],capability:['capability-review','sales-tracker'],
+var DRAFT_PAGES={quotation:['quotations-v2'],po:['purchase-orders','purchasing-tracker'],tracker:['sales-tracker'],capability:['capability-review','sales-tracker'],
   job:['equipment'],editJob:['equipment','completed'],cal:['my-jobs'],cannotCal:['my-jobs'],condition:['my-jobs'],abnormal:['my-jobs'],
   customer:['customers'],refEq:['ref-eq'],partner:['external-partners'],claim:['claims','my-requests'],travel:['claims','my-requests']};
 async function renderPageDrafts(viewName){
