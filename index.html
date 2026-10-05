@@ -12449,13 +12449,16 @@ function prStatus(r){
   if(r.paidAt) return 'Paid';
   if(r.invoice) return 'Invoice received';
   if((r.receipts||[]).length){ const need=PR_VERIFY.includes(r.purpose)&&!r.verified; return need?'Received — check before use':'Received'; }
-  if(r.poNumber){ const po=prPo(r); if(!po||po.status==='Draft') return 'PO draft — submit for MD approval'; if(po.status==='Pending Approval') return 'PO waiting for MD approval'; if(po.status==='Rejected') return 'PO rejected — revise';
+  if(prLivePo(r)){ const po=prLivePo(r); if(po.status==='Draft') return 'PO draft — submit for MD approval'; if(po.status==='Pending Approval') return 'PO waiting for MD approval'; if(po.status==='Rejected') return 'PO rejected — revise';
     return 'PO approved'; }
   if(r.selected) return 'Supplier chosen — create PO';
   if((r.suppliers||[]).length){ const q=r.suppliers.filter(s=>s.status==='Quoted').length, d=r.suppliers.filter(s=>s.status!=='Requested').length; return d===r.suppliers.length?(q?'Ready to compare':'All declined'):`Waiting for quotes (${q}/${r.suppliers.length})`; }
   return 'New — get quotes';
 }
 function prPo(r){ return (_purchaseOrders||[]).find(p=>p.poNumber===r.poNumber)||null; }
+// The request's PO only counts if it still exists and isn't cancelled — otherwise a new PO can be raised
+function prLivePo(r){ if(!r.poNumber) return null; const po=prPo(r); return po&&po.status!=='Cancelled'?po:null; }
+function prPoGone(r){ return !!r.poNumber&&!prLivePo(r); }
 const prBadge=st=>/waiting for MD|check before use|overdue|draft/i.test(st)?'badge-amber':/Paid|Received$|PO approved/.test(st)?'badge-green':/Rejected|rejected|Cancelled/.test(st)?'badge-red':'badge-blue';
 function prTotal(r){ const s=r.selected&&(r.suppliers||[]).find(x=>x.partnerId===r.selected.partnerId); return (r.items||[]).reduce((a,it)=>a+(parseFloat(s?s.prices[it.key]:it.estPrice)||0)*(parseFloat(it.qty)||1),0); }
 function prOverlay(id,w){ let ov=document.getElementById(id); if(!ov){ ov=document.createElement('div'); ov.id=id; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 10px;overflow-y:auto;'; document.body.appendChild(ov); } ov.dataset.w=w; return ov; }
@@ -12507,7 +12510,10 @@ async function submitNewPr(){
 }
 // ── the request window ──
 function openPr(id){
-  const r=_prs.find(x=>x.id===id); if(!r) return; const st=prStatus(r); const phone=isPhoneLike(); const today=toLocalDateStr(new Date());
+  const r=_prs.find(x=>x.id===id); if(!r) return;
+  // a PO that was deleted earlier: clean the dangling link (and remember it) so the request can carry on
+  if(r.poNumber&&!prPo(r)&&(_purchaseOrders||[]).length>=0){ (r.oldPoNumbers=r.oldPoNumbers||[]).push({no:r.poNumber,gone:'deleted',at:new Date().toISOString()}); r.poGoneNote=`PO ${r.poNumber} was deleted — create a new PO.`; delete r.poNumber; savePrs().catch(()=>{}); }
+  else if(r.poNumber&&prPo(r)?.status==='Cancelled'){ r.poGoneNote=`PO ${r.poNumber} was cancelled — create a new PO.`; } const st=prStatus(r); const phone=isPhoneLike(); const today=toLocalDateStr(new Date());
   const ov=prOverlay('pr-overlay',960);
   const quoted=(r.suppliers||[]).filter(s=>s.status==='Quoted'); const tot=s=>(r.items||[]).reduce((a,it)=>a+(parseFloat(s.prices[it.key])||0)*(parseFloat(it.qty)||1),0);
   const cheapest=quoted.length?Math.min(...quoted.map(tot)):null, fastest=quoted.length?Math.min(...quoted.map(s=>parseFloat(s.leadDays)||999)):null;
@@ -12535,19 +12541,20 @@ function openPr(id){
         ${(r.suppliers||[]).length?r.suppliers.map(supCard).join(''):`<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:6px;">No suppliers asked yet.</div>`}
         ${canBuy()&&!r.selected&&r.status!=='Cancelled'?`<button class="btn btn-outline btn-sm" onclick="prAskSuppliers('${r.id}')">+ Ask supplier(s) for a quote</button> <span style="font-size:11.5px;color:var(--text-muted);">💰 cheapest · ⚡ fastest · quotation PDF required</span>`:''}`:''}
       ${r.selected?`<div class="qt-note info" style="margin-top:10px;">✅ <b>${escapeHtml(r.selected.name)}</b> chosen — ${escapeHtml(r.selected.reason)} · ${rm2(prTotal(r))}
-        ${r.poNumber?(()=>{ const po=prPo(r); const st=po?po.status:'Draft';
+        ${r.poGoneNote&&!prLivePo(r)?`<div style="margin-top:4px;color:#b45309;">⚠ ${escapeHtml(r.poGoneNote)}</div>`:''}
+        ${prLivePo(r)?(()=>{ const po=prLivePo(r); const st=po.status;
             return `<div style="margin-top:4px;">PO: <b>${escapeHtml(r.poNumber)}</b> — ${st==='Pending Approval'?'⏳ waiting for MD approval':st==='Approved'||!['Draft','Rejected','Pending Approval'].includes(st)?`✅ approved${po?.approvedBy?' by '+escapeHtml(USERS[po.approvedBy]?.name||po.approvedBy):''} — send it to the supplier`:st==='Rejected'?`❌ rejected${po?.rejectReason?' — '+escapeHtml(po.rejectReason):''}. Revise and resubmit it in Purchase Orders.`:'draft — open it in Purchase Orders and submit it for MD approval'}</div>`; })()
           :(canBuy()?`<div style="margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="prCreatePo('${r.id}')">🧾 Create PO (for MD approval)</button></div>`:'')}</div>`:''}
-      ${r.poNumber?`<div style="font-weight:700;margin:12px 0 6px;">📦 Receiving</div>
+      ${prLivePo(r)||(r.receipts||[]).length?`<div style="font-weight:700;margin:12px 0 6px;">📦 Receiving</div>
         ${rec.map(x=>`<div style="font-size:12.5px;padding:4px 0;border-top:1px solid var(--border);">${fmtDateShort(x.date)} — ${r.items.map(it=>`${escapeHtml(it.desc)}: ${x.lines[it.key]?.qty??0} ${escapeHtml(x.lines[it.key]?.condition||'')}`).join(' · ')}${x.notes?' · '+escapeHtml(x.notes):''} <span style="color:var(--text-muted);">(${escapeHtml(USERS[x.by]?.name||x.by)})</span></div>`).join('')}
-        ${canBuy()&&!prFullyReceived(r)?(['Approved','Sent','Partially Delivered','Delivered','Closed'].includes(prPo(r)?.status)||(prPo(r)&&!['Draft','Pending Approval','Rejected'].includes(prPo(r).status))?`<button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openPrReceive('${r.id}')">📥 Record delivery</button>`:'<div style="font-size:12px;color:var(--text-muted);">Deliveries can be recorded once the MD has approved the PO.</div>'):''}
+        ${canBuy()&&!prFullyReceived(r)&&prLivePo(r)?(prLivePo(r)&&!['Draft','Pending Approval','Rejected'].includes(prLivePo(r).status)?`<button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openPrReceive('${r.id}')">📥 Record delivery</button>`:'<div style="font-size:12px;color:var(--text-muted);">Deliveries can be recorded once the MD has approved the PO.</div>'):''}
         ${rec.length&&PR_VERIFY.includes(r.purpose)?(r.verified?`<div class="qt-note info" style="margin-top:8px;">✔️ Checked before use by ${escapeHtml(USERS[r.verified.by]?.name||r.verified.by)}, ${fmtDateShort(r.verified.at)} — ${escapeHtml(r.verified.note)}${r.verified.certUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(r.verified.certUrl)}')">certificate</a>`:''}</div>`
           :(canBuy()?`<div class="qt-note warn" style="margin-top:8px;">This ${r.purpose==='Equipment'?'equipment':'reference standard'} must be <b>checked before use</b> (ISO/IEC 17025 6.6.2 c).<div style="margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="openPrVerify('${r.id}')">✔️ Record check</button></div></div>`:'')):''}`:''}
       ${rec.length?`<div style="font-weight:700;margin:12px 0 6px;">🧾 Invoice &amp; payment</div>
         ${r.invoice?`<div style="font-size:12.5px;">Invoice <b>${escapeHtml(r.invoice.no)}</b> · ${rm2(r.invoice.amount)} · dated ${fmtDateShort(r.invoice.date)} · due <b style="${!r.paidAt&&r.invoice.dueDate<today?'color:var(--red);':''}">${fmtDateShort(r.invoice.dueDate)}</b>${r.invoice.fileUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(r.invoice.fileUrl)}')">invoice</a>`:''}</div>
           ${r.paidAt?`<div style="font-size:12.5px;color:#15803d;margin-top:3px;">💵 Paid ${fmtDateShort(r.paidAt)}${r.paidRef?' · '+escapeHtml(r.paidRef):''}</div>`:(isMD()||isAdmin(currentUser)?`<button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="prMarkPaid('${r.id}')">💵 Mark paid</button>`:'')}`
           :(canBuy()?`<button class="btn btn-outline btn-sm" onclick="openPrInvoice('${r.id}')">🧾 Record supplier invoice</button>`:'')}`:''}
-      ${canBuy()&&!r.paidAt&&!['Cancelled','Rejected'].includes(r.status)&&!r.poNumber?`<div style="text-align:right;margin-top:12px;"><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="prCancel('${r.id}')">Cancel request</button></div>`:''}
+      ${canBuy()&&!r.paidAt&&!['Cancelled','Rejected'].includes(r.status)&&!prLivePo(r)?`<div style="text-align:right;margin-top:12px;"><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="prCancel('${r.id}')">Cancel request</button></div>`:''}
     </div></div>`;
   ov.style.display='flex';
 }
@@ -12616,7 +12623,7 @@ async function prChoose(id,si){
 }
 function prCreatePo(id){
   const r=_prs.find(x=>x.id===id); if(!r||!r.selected) return; const s=r.suppliers.find(x=>x.partnerId===r.selected.partnerId);
-  window._prPoCtx={id}; openPurchaseOrderModal(null,{supplierId:r.selected.partnerId,fromPr:true});
+  window._prPoCtx={id}; openPurchaseOrderModal(null,{supplierId:r.selected.partnerId,fromPr:true,quoteFileUrl:s?.quoteFileUrl||''});
   setTimeout(()=>{ _poLines=r.items.map(it=>({description:it.desc,serial:'',qty:parseFloat(it.qty)||1,unitPrice:parseFloat(s?.prices[it.key])||0})); if(typeof renderPoLines==='function') renderPoLines();
     if(el('po-your-ref')) el('po-your-ref').value=s?.quoteRef||''; if(el('po-req-no')) el('po-req-no').value=r.no;
     const rm=el('po-remarks'); if(rm&&!rm.value) rm.value=r.jobNo?`Job ${r.jobNo}.`:''; },150);
@@ -15178,7 +15185,8 @@ function createOutsourcePo(qid){
       .map(o=>o.vendors.find(v=>v.partnerId===g.vendorId)).filter(v=>v&&v.validUntil&&v.validUntil<today);
     if(vq.length&&!confirm(`${g.name}'s quotation expired on ${fmtDateShort(vq[0].validUntil)}.\n\nAsk them to confirm the price before sending the PO. Continue to the PO?`)) return; }
   window._osPoCtx={qid,vendorId:g.vendorId};
-  openPurchaseOrderModal(null,{supplierId:g.vendorId,fromOsr:true});
+  const vq=[...new Set(g.items.map(({it})=>it.outsourceOsrId))].map(id=>_osrs.find(o=>o.id===id)).filter(Boolean).map(o=>o.vendors.find(v=>v.partnerId===g.vendorId)).find(v=>v&&v.quoteFileUrl);
+  openPurchaseOrderModal(null,{supplierId:g.vendorId,fromOsr:true,quoteFileUrl:vq?.quoteFileUrl||''});
   setTimeout(()=>{ const pu=el('po-purpose'); if(pu){ pu.value='outsource'; pu.dispatchEvent(new Event('change',{bubbles:true})); }
     _poLines=g.items.map(({it})=>{ const qty=parseInt(it.poQty)||parseFloat(it.quantity)||1; return {description:osrPoDescription(it),serial:(it.units||[]).map(u=>u.serial).filter(Boolean).join(', '),qty,unitPrice:parseFloat(it.outsourceCost)||0}; });
     if(typeof renderPoLines==='function') renderPoLines();
@@ -18782,7 +18790,9 @@ function renderNeedsAttention(){
       const ap=live.filter(r=>prStatus(r)==='New — get quotes'); if(ap.length) items.push({icon:'🛒',text:`${ap.length} new purchase request${ap.length>1?'s':''} — ask suppliers for quotes`,onclick:`openPr('${escapeForJsAttr(ap[0].id)}')`});
       const dr=live.filter(r=>/^PO draft|^PO rejected/.test(prStatus(r))); if(dr.length) items.push({icon:'🧾',text:`${dr.length} purchase request PO${dr.length>1?'s need':' needs'} submitting for MD approval (${dr.map(r=>r.poNumber).slice(0,3).join(', ')})`,onclick:`showView('purchase-orders')`});
       const ck=live.filter(r=>prStatus(r)==='Received — check before use'); if(ck.length) items.push({icon:'✔️',level:'high',text:`${ck.length} received item${ck.length>1?'s':''} must be checked before use (${ck.map(r=>r.no).slice(0,3).join(', ')})`,onclick:`openPr('${escapeForJsAttr(ck[0].id)}')`}); }
-    if(isAdmin(currentUser)){ const due=live.filter(r=>r.invoice&&!r.paidAt&&r.invoice.dueDate<=soon); if(due.length) items.push({icon:'💵',level:due.some(r=>r.invoice.dueDate<today)?'high':'',text:`${due.length} supplier invoice${due.length>1?'s':''} due${due.some(r=>r.invoice.dueDate<today)?' (some overdue)':' within 7 days'} — ${due.slice(0,2).map(r=>`${escapeHtml(r.selected?.name||'')} ${rm2(r.invoice.amount)}`).join(', ')}`,onclick:`openPr('${escapeForJsAttr(due[0].id)}')`}); } }
+    if(isAdmin(currentUser)){ const poDue=(_purchaseOrders||[]).filter(p=>p.invoice&&!p.paidAt&&p.status!=='Superseded'&&p.invoice.dueDate<=soon&&!live.some(r=>r.poNumber===p.poNumber));
+      if(poDue.length) items.push({icon:'💵',level:poDue.some(p=>p.invoice.dueDate<today)?'high':'',text:`${poDue.length} PO invoice${poDue.length>1?'s':''} due${poDue.some(p=>p.invoice.dueDate<today)?' (some overdue)':' within 7 days'} — ${poDue.slice(0,2).map(p=>`${escapeHtml(p.supplierName||'')} ${escapeHtml(p.currency||'RM')} ${(parseFloat(p.invoice.amount)||0).toFixed(2)}`).join(', ')}`,onclick:`showView('purchase-orders')`});
+      const due=live.filter(r=>r.invoice&&!r.paidAt&&r.invoice.dueDate<=soon); if(due.length) items.push({icon:'💵',level:due.some(r=>r.invoice.dueDate<today)?'high':'',text:`${due.length} supplier invoice${due.length>1?'s':''} due${due.some(r=>r.invoice.dueDate<today)?' (some overdue)':' within 7 days'} — ${due.slice(0,2).map(r=>`${escapeHtml(r.selected?.name||'')} ${rm2(r.invoice.amount)}`).join(', ')}`,onclick:`openPr('${escapeForJsAttr(due[0].id)}')`}); } }
   if(typeof canUseOutsourcingQueue==='function'&&canUseOutsourcingQueue(currentUser)){
     const ready=(_osrs||[]).filter(o=>osrStatusOf(o)==='Ready to compare');
     if(ready.length) items.push({icon:'📨',text:`${ready.length} outsourcing request${ready.length>1?'s':''} ready — compare the vendor quotes and choose (${ready.map(o=>o.no).slice(0,3).join(', ')})`,onclick:`openOsr('${escapeForJsAttr(ready[0].id)}')`});
@@ -25605,11 +25615,13 @@ function poTotals(po){
   const subtotal=(po.items||[]).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)-(parseFloat(l.discount)||0),0);
   const sst=po.sstApplied?Math.round(subtotal*0.08*100)/100:0;
   const exact=Math.round((subtotal+sst)*100)/100;
-  const total=Math.round(exact*20)/20; // Malaysian rounding to the nearest 5 sen
+  const total=(po.currency&&po.currency!=='MYR')?exact:Math.round(exact*20)/20; // Malaysian rounding to the nearest 5 sen (RM only)
   return {subtotal,sst,rounding:Math.round((total-exact)*100)/100,total};
 }
 // "TWO THOUSAND SIXTEEN AND CENTS THIRTY FIVE ONLY"
-function amountInWordsMYR(n){
+function amountInWordsMYR(n,cur){ if(cur&&cur!=='MYR') return amountInWordsCur(n); return amountInWordsCurMY(n); }
+function amountInWordsCur(n){ return amountInWordsCurMY(n); }
+function amountInWordsCurMY(n){
   const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
   const tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
   const w3=x=>{ let r=[]; if(x>=100){ r.push(ones[Math.floor(x/100)]+' HUNDRED'); x%=100; } if(x>=20){ r.push(tens[Math.floor(x/10)]+(x%10?' '+ones[x%10]:'')); } else if(x>0) r.push(ones[x]); return r.join(' '); };
@@ -25634,7 +25646,7 @@ async function westlabQtLetterhead(){
       </div></div>
     <div style="border-top:1.3px solid #000;margin:10px 0 12px;"></div>`;
 }
-function poBadgeClass(st){ return {Draft:'badge-slate','Pending Approval':'badge-amber',Approved:'badge-green',Sent:'badge-blue',Received:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate'}[st]||'badge-slate'; }
+function poBadgeClass(st){ return {Superseded:'badge-slate',Draft:'badge-slate','Pending Approval':'badge-amber',Approved:'badge-green',Sent:'badge-blue',Received:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate'}[st]||'badge-slate'; }
 function updatePoBadge(){
   const b=document.getElementById('po-badge'); if(!b) return;
   const n=canApprovePO(currentUser)?(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length:0;
@@ -25657,15 +25669,20 @@ function renderPurchaseOrdersPage(){
       const btn=(label,fn,style='')=>`<button class="btn btn-outline btn-sm" style="margin:2px;${style}" onclick="${fn}">${label}</button>`;
       const actions=[
         btn('📄 PDF',`exportPurchaseOrderPdf('${p.id}')`),
+        p.quoteFileUrl?btn('📎 Quotation',`openSignedUrl('${escapeForJsAttr(p.quoteFileUrl)}')`):'',
         ['Draft','Rejected'].includes(p.status)?btn('✏️ Edit',`openPurchaseOrderModal('${p.id}')`)+btn('📨 Submit',`poSubmit('${p.id}')`):'',
         (approver&&['Draft','Pending Approval'].includes(p.status))?btn('✅ Approve',`poApprove('${p.id}')`,'color:var(--green);')+(p.status==='Pending Approval'?btn('❌ Reject',`poReject('${p.id}')`,'color:var(--red);'):''):'',
         (!approver&&p.status==='Pending Approval')?'<span style="font-size:11px;color:var(--text-muted);">waiting for MD</span>':'',
         p.status==='Pending Approval'?btn('↩️ Back to draft',`poBackToDraft('${p.id}')`):'',
         p.status==='Approved'?btn('📤 Mark Sent',`poMarkSent('${p.id}')`):'',
+        ['Approved','Sent'].includes(p.status)?btn('✏️ Revise',`poRevise('${p.id}')`):'',
+        ['Approved','Sent','Received'].includes(p.status)&&!p.invoice?btn('🧾 Invoice',`openPoInvoice('${p.id}')`):'',
+        p.invoice&&!p.paidAt&&admin?btn('💵 Paid',`poMarkPaid('${p.id}')`):'',
+        p.invoice?.fileUrl?btn('📎 Invoice',`openSignedUrl('${escapeForJsAttr(p.invoice.fileUrl)}')`):'',
         p.status==='Sent'?btn('📥 Mark Received',`poMarkReceived('${p.id}')`):'',
         canDo?btn(`🚚 Delivery Order${dos.length?' ('+dos.length+')':''}`,`openPoDoModal('${p.id}')`):'',
         (admin&&['Approved','Sent'].includes(p.status))?btn('Cancel PO',`poCancel('${p.id}')`,'color:var(--red);'):'',
-        (admin&&['Draft','Rejected','Cancelled','Pending Approval'].includes(p.status))?btn('🗑️',`poDelete('${p.id}')`,'color:var(--red);'):'',
+        admin?btn('🗑️',`poDelete('${p.id}')`,'color:var(--red);'):'',
       ].join('');
       const doRows=dos.length?`<tr><td colspan="7" style="background:#f8fafc;padding:6px 14px 8px 30px;font-size:12px;">
         ${dos.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:2px 0;">
@@ -25677,8 +25694,8 @@ function renderPurchaseOrdersPage(){
         <td style="white-space:nowrap;">${fmtDateShort(p.poDate||p.createdAt)}</td>
         <td>${escapeHtml(p.supplierName||'')}</td>
         <td style="font-size:12px;">${poPurposeLabel(p.purpose)}</td>
-        <td style="text-align:right;">${t.total.toFixed(2)}</td>
-        <td><span class="badge ${poBadgeClass(p.status)}">${p.status==='Draft'?'Draft (not submitted)':p.status}</span>${p.status==='Rejected'&&p.rejectReason?`<div style="font-size:11px;color:var(--red);">${escapeHtml(p.rejectReason)}</div>`:''}${p.approvedBy&&['Approved','Sent','Received'].includes(p.status)?`<div style="font-size:11px;color:var(--text-muted);">by ${escapeHtml(staffNameOf(p.approvedBy))}</div>`:''}</td>
+        <td style="text-align:right;white-space:nowrap;">${p.currency&&p.currency!=='MYR'?`${escapeHtml(p.currency)} ${t.total.toFixed(2)}<div style="font-size:11px;color:var(--text-muted);">≈ RM ${(t.total*(parseFloat(p.fxRate)||0)).toFixed(2)}</div>`:t.total.toFixed(2)}</td>
+        <td><span class="badge ${poBadgeClass(p.status)}">${p.status==='Draft'?'Draft (not submitted)':p.status}</span>${p.status==='Rejected'&&p.rejectReason?`<div style="font-size:11px;color:var(--red);">${escapeHtml(p.rejectReason)}</div>`:''}${p.approvedBy&&['Approved','Sent','Received'].includes(p.status)?`<div style="font-size:11px;color:var(--text-muted);">by ${escapeHtml(staffNameOf(p.approvedBy))}</div>`:''}${p.status==='Superseded'?`<div style="font-size:11px;color:var(--text-muted);">replaced by ${escapeHtml(p.supersededBy||'')}</div>`:''}${p.invoice?`<div style="font-size:11px;${p.paidAt?'color:#15803d;':(p.invoice.dueDate<toLocalDateStr(new Date())?'color:var(--red);':'color:var(--text-muted);')}">${p.paidAt?'💵 paid':'🧾 invoice '+escapeHtml(p.invoice.no)+' · due '+fmtDateShort(p.invoice.dueDate)}</div>`:''}</td>
         <td>${actions}</td></tr>${doRows}`;
     }).join('')}</tbody></table></div></div>`;
 }
@@ -25687,9 +25704,10 @@ function renderPurchaseOrdersPage(){
 let _poLines=[]; let _poEditingId=null;
 function openPurchaseOrderModal(poId,opts){
   if(!canUsePurchasingTracker(currentUser)){ alert('You do not have access to this.'); return; }
-  opts=opts||{}; if(!opts.fromOsr) window._osPoCtx=null; if(!opts.fromPr) window._prPoCtx=null;
+  opts=opts||{}; if(!opts.fromOsr) window._osPoCtx=null; if(!opts.fromPr) window._prPoCtx=null; window._poQuotePrefill=opts.quoteFileUrl||'';
   const ex=poId?(_purchaseOrders||[]).find(p=>p.id===poId):null;
   if(ex&&!['Draft','Rejected'].includes(ex.status)){ alert(`This purchase order is ${ex.status} and can no longer be edited.`); return; }
+  setTimeout(()=>{ const c=el('po-quote-current'); if(c&&!ex?.quoteFileUrl&&window._poQuotePrefill) c.innerHTML=`📎 The supplier's quotation from the request is attached — <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(window._poQuotePrefill)}')">view</a>`; },50);
   _poEditingId=ex?ex.id:null;
   const entry=(ex?.linkedPurchasingEntryId||opts.entryId)?(_purchasingTracker||[]).find(e=>e.id===(ex?.linkedPurchasingEntryId||opts.entryId)):null;
   let sup=ex?(_externalPartners||[]).find(p=>p.id===ex.supplierId):(opts.supplierId?(_externalPartners||[]).find(p=>p.id===opts.supplierId):null);
@@ -25745,6 +25763,20 @@ function openPurchaseOrderModal(poId,opts){
         <div class="form-group"><label class="form-label">Payment terms</label><input class="form-control" id="po-payment-terms" placeholder="e.g. Net 30 days" value="${v(ex?.paymentTerms||sup?.paymentTerms||'')}"/></div>
         <div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="po-sst" ${ex?.sstApplied?'checked':''} onchange="poRecalc()"/> Supplier charges SST (8%)</label></div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Delivery / collection</label><select class="form-control" id="po-del-method" onchange="el('po-courier-row').style.display=this.value==='Courier'?'':'none'">${['','Vendor collects from us','We deliver (own transport)','Courier','Vendor delivers to us'].map(x=>`<option value="${x}" ${(ex?.deliveryMethod||'')===x?'selected':''}>${x||'— Not specified —'}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Currency</label><div style="display:flex;gap:6px;"><select class="form-control" id="po-currency" onchange="el('po-fx-wrap').style.display=this.value==='MYR'?'none':'';poRecalc()" style="flex:1;">${Object.keys(PO_CURRENCIES).map(c=>`<option ${(ex?.currency||'MYR')===c?'selected':''}>${c}</option>`).join('')}</select>
+          <span id="po-fx-wrap" style="display:${(ex?.currency||'MYR')==='MYR'?'none':''};flex:1;"><input class="form-control" id="po-fx" type="number" min="0" step="0.0001" placeholder="RM per 1 unit" value="${v(ex?.fxRate||'')}" oninput="poRecalc()" title="Exchange rate: RM for 1 unit of the currency"/></span></div></div>
+      </div>
+      <div class="form-row" id="po-courier-row" style="display:${ex?.deliveryMethod==='Courier'?'':'none'};">
+        <div class="form-group"><label class="form-label">Courier</label><input class="form-control" id="po-courier" value="${v(ex?.courierName||'')}" placeholder="e.g. GDEX, J&T, Lalamove"/></div>
+        <div class="form-group"><label class="form-label">Tracking no.</label><input class="form-control" id="po-tracking" value="${v(ex?.trackingNo||'')}"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Supplier's quotation <span style="font-weight:normal;color:var(--text-muted);">(PDF or photo — needed before submitting for approval)</span></label>
+        <input class="form-control" type="file" id="po-quote-file" accept=".pdf,image/*"/>
+        <div id="po-quote-current" style="font-size:12px;margin-top:4px;">${ex?.quoteFileUrl?`📎 Attached — <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(ex.quoteFileUrl)}')">view</a> (choose a file only to replace it)`:''}</div>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal;font-size:12px;margin-top:6px;cursor:pointer;"><input type="checkbox" id="po-no-quote" ${ex?.noQuoteReason?'checked':''} onchange="el('po-no-quote-why').style.display=this.checked?'':'none'"/> No quotation for this purchase</label>
+        <input class="form-control" id="po-no-quote-why" placeholder="Why? (e.g. small walk-in purchase, price list)" value="${v(ex?.noQuoteReason||'')}" style="margin-top:4px;display:${ex?.noQuoteReason?'':'none'};"/></div>
       <div class="form-group"><label class="form-label">Deliver To <span style="font-weight:normal;color:var(--text-muted);">(where the vendor sends the items back / delivers — name, then address)</span></label><textarea class="form-control" id="po-deliver-to" rows="2">${v(deliverDefault)}</textarea></div>
       <div class="form-group"><label class="form-label">Cert To <span style="font-weight:normal;color:var(--text-muted);">(calibration POs — the client's name, then address; empty = Westlab)</span></label><textarea class="form-control" id="po-cert-to" rows="2" placeholder="Westlab (M) Sdn. Bhd. and our address">${v(ex?.certTo||'')}</textarea></div>
       <div class="form-group"><label class="form-label">Remarks / special instructions</label><textarea class="form-control" id="po-remarks" rows="2">${v(ex?.remarks||'')}</textarea></div>
@@ -25818,8 +25850,9 @@ function poUpdateLine(i,f,val){
   poRecalc();
 }
 function poRecalc(){
-  const t=poTotals({items:_poLines,sstApplied:!!el('po-sst')?.checked});
-  const box=el('po-totals'); if(box) box.innerHTML=`Subtotal: <b>RM ${t.subtotal.toFixed(2)}</b>${t.sst?` &nbsp; SST 8%: <b>RM ${t.sst.toFixed(2)}</b>`:''}${t.rounding?` &nbsp; Rounding: <b>${t.rounding<0?'−':'+'}RM ${Math.abs(t.rounding).toFixed(2)}</b>`:''} &nbsp; Total: <b style="font-size:15px;">RM ${t.total.toFixed(2)}</b>`;
+  const cur=el('po-currency')?.value||'MYR';
+  const t=poTotals({items:_poLines,sstApplied:!!el('po-sst')?.checked,currency:cur});
+  const box=el('po-totals'); if(box) box.innerHTML=`Subtotal: <b>RM ${t.subtotal.toFixed(2)}</b>${t.sst?` &nbsp; SST 8%: <b>RM ${t.sst.toFixed(2)}</b>`:''}${t.rounding?` &nbsp; Rounding: <b>${t.rounding<0?'−':'+'}RM ${Math.abs(t.rounding).toFixed(2)}</b>`:''} &nbsp; Total: <b style="font-size:15px;">${cur==='MYR'?'RM':cur} ${t.total.toFixed(2)}</b>${cur!=='MYR'&&parseFloat(el('po-fx')?.value)>0?` <span style="color:var(--text-muted);">(≈ RM ${(t.total*parseFloat(el('po-fx').value)).toFixed(2)})</span>`:''}`;
   _poLines.forEach((l,i)=>{ const a=el('po-line-amt-'+i); if(a) a.textContent=((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)-(parseFloat(l.discount)||0)).toFixed(2); });
 }
 function renderPoLines(){
@@ -25842,6 +25875,7 @@ function renderPoLines(){
   poRecalc();
 }
 function poAfterRestore(){ poPurposeChanged(); poShowSupplierSummary(); }
+const PO_CURRENCIES={MYR:'Malaysian Ringgit',USD:'US Dollar',SGD:'Singapore Dollar',EUR:'Euro',GBP:'Pound Sterling',JPY:'Japanese Yen',CNY:'Chinese Yuan',AUD:'Australian Dollar'};
 async function savePurchaseOrder(submit){
   const sup=(_externalPartners||[]).find(p=>p.id===el('po-supplier-id')?.value);
   if(!sup){ alert('Please choose a supplier from the Supplier Database (or add a new one).'); return; }
@@ -25857,7 +25891,19 @@ async function savePurchaseOrder(submit){
       itemCode:String(l.itemCode||'').trim()||undefined,discount:parseFloat(l.discount)||undefined,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined})),
     sstApplied:!!el('po-sst').checked,deliverTo:el('po-deliver-to').value.trim(),requiredDate:el('po-required-date').value||'',
     paymentTerms:el('po-payment-terms').value.trim(),remarks:el('po-remarks').value.trim(),
+    deliveryMethod:el('po-del-method')?.value||'',courierName:(el('po-courier')?.value||'').trim(),trackingNo:(el('po-tracking')?.value||'').trim(),
+    currency:el('po-currency')?.value||'MYR',fxRate:el('po-currency')?.value&&el('po-currency').value!=='MYR'?(parseFloat(el('po-fx')?.value)||0):undefined,
+    noQuoteReason:el('po-no-quote')?.checked?(el('po-no-quote-why')?.value||'').trim():'',
     poDate:el('po-date')?.value||toLocalDateStr(new Date()),yourRef:(el('po-your-ref')?.value||'').trim(),requisitionNo:(el('po-req-no')?.value||'').trim(),certTo:(el('po-cert-to')?.value||'').trim(),supplierFax:sup.fax||''};
+  // the supplier's quotation travels with the PO
+  const qf=el('po-quote-file')?.files&&el('po-quote-file').files[0];
+  const exPo=_poEditingId?(_purchaseOrders||[]).find(x=>x.id===_poEditingId):null;
+  let quoteUrl=exPo?.quoteFileUrl||window._poQuotePrefill||'';
+  if(qf){ quoteUrl=await prUpload(qf,'purchase-orders'); if(!quoteUrl){ alert("The supplier's quotation couldn't be uploaded — nothing was saved. Please try again."); return; } }
+  fields.quoteFileUrl=quoteUrl||undefined;
+  if(el('po-no-quote')?.checked&&!fields.noQuoteReason){ alert('Please say why there is no quotation.'); el('po-no-quote-why')?.focus(); return; }
+  if(submit&&!quoteUrl&&!fields.noQuoteReason){ alert("Attach the supplier's quotation (or tick \"No quotation\" and give the reason) before submitting for approval."); return; }
+  if(fields.currency!=='MYR'&&!(fields.fxRate>0)){ alert(`Enter the exchange rate (RM for 1 ${fields.currency}).`); el('po-fx')?.focus(); return; }
   let saved=null, newNumber=null;
   try{
     if(_poEditingId){
@@ -25877,7 +25923,7 @@ async function savePurchaseOrder(submit){
       }catch(e){ await tryRollbackSequence('WPO_'+docYymm(),parseInt(newNumber.split('-')[2],10)); throw e; } // don't burn a number on a failed save
     }
   }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
-  if(window._prPoCtx&&saved){ const pr=_prs.find(x=>x.id===window._prPoCtx.id); window._prPoCtx=null; if(pr){ pr.poNumber=saved.poNumber; await savePrs(); addAudit('🧾',`${pr.no}: PO ${saved.poNumber} raised`); } }
+  if(window._prPoCtx&&saved){ const pr=_prs.find(x=>x.id===window._prPoCtx.id); window._prPoCtx=null; if(pr){ if(pr.poNumber&&pr.poNumber!==saved.poNumber) (pr.oldPoNumbers=pr.oldPoNumbers||[]).push({no:pr.poNumber,gone:'replaced',at:new Date().toISOString()}); pr.poNumber=saved.poNumber; delete pr.poGoneNote; await savePrs(); addAudit('🧾',`${pr.no}: PO ${saved.poNumber} raised`); } }
   if(window._osPoCtx&&saved){ const cx=window._osPoCtx; window._osPoCtx=null; // link the vendor PO back to the quotation + request
     const q=_quotationsV2.find(x=>x.id===cx.qid); if(q){ q.outsourcePos={...(q.outsourcePos||{}),[cx.vendorId]:saved.poNumber}; await saveQuotationsV2();
       const osrIds=[...new Set((q.items||[]).filter(it=>it.outsourceVendorId===cx.vendorId).map(it=>it.outsourceOsrId).filter(Boolean))];
@@ -25957,6 +26003,72 @@ function poRefreshFromQuotation(){
   const rm=el('po-remarks'); if(rm&&/^As per your quotation/i.test(rm.value.trim())) rm.value=''; // the old automatic sentence
   renderPoLines(); showToast(`↻ ${n} line${n===1?'':'s'} updated from the quotation — quantities and prices unchanged. Save to keep.`,'success',4000);
 }
+// ── Supplier invoice on the PO, checked against the PO amount and what was actually delivered ──
+function openPoInvoice(id){
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return; const t=poTotals(po); const cur=po.currency||'MYR';
+  const days=parseInt(String(po.paymentTerms||'').match(/\d+/)?.[0]||'30',10); const due=new Date(); due.setDate(due.getDate()+days);
+  let ov=document.getElementById('poinv-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='poinv-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 10px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:480px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">🧾 Supplier invoice — ${escapeHtml(po.poNumber)}</span><button onclick="document.getElementById('poinv-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:12px 16px;font-size:13px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">PO total ${escapeHtml(cur)} ${t.total.toFixed(2)} · ${escapeHtml(poDeliveredText(po))}</div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Invoice no. <span class="req">*</span></label><input class="form-control" id="poi-no"/></div>
+        <div class="form-group"><label class="form-label">Amount (${escapeHtml(cur)}) <span class="req">*</span></label><input class="form-control" id="poi-amt" type="number" min="0" step="0.01" value="${t.total.toFixed(2)}"/></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Invoice date</label><input class="form-control" id="poi-date" type="date" value="${toLocalDateStr(new Date())}"/></div>
+        <div class="form-group"><label class="form-label">Payment due</label><input class="form-control" id="poi-due" type="date" value="${toLocalDateStr(due)}"/></div></div>
+      <div class="form-group"><label class="form-label">Invoice file</label><input class="form-control" type="file" id="poi-file" accept=".pdf,image/*"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('poinv-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="savePoInvoice('${po.id}')">Save invoice</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+function poDelivered(po){ if(po.purpose==='outsource'){ const dos=po.deliveryOrders||[]; return dos.length>0&&dos.every(d=>d.returnedAt); } return ['Received','Closed'].includes(po.status); }
+function poDeliveredText(po){ if(po.purpose==='outsource'){ const dos=po.deliveryOrders||[]; if(!dos.length) return 'no Delivery Order yet'; const back=dos.filter(d=>d.returnedAt).length; return `${back} of ${dos.length} Delivery Order${dos.length>1?'s':''} back`; } return po.status==='Received'?'goods received':'not marked received yet'; }
+async function savePoInvoice(id){
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); const no=el('poi-no').value.trim(), amt=parseFloat(el('poi-amt').value);
+  if(!no||!(amt>=0)){ alert('Enter the invoice number and amount.'); return; }
+  const t=poTotals(po); const warn=[];
+  if(Math.abs(amt-t.total)>0.01) warn.push(`the amount (${amt.toFixed(2)}) differs from the PO (${t.total.toFixed(2)}) by ${Math.abs(amt-t.total).toFixed(2)}`);
+  if(!poDelivered(po)) warn.push(`delivery isn't complete (${poDeliveredText(po)})`);
+  if(warn.length&&!confirm(`Check before saving:\n\n• ${warn.join('\n• ')}\n\nSave the invoice anyway?`)) return;
+  const f=el('poi-file').files&&el('poi-file').files[0]; let url=''; if(f){ url=await prUpload(f,'purchase-orders/invoices'); if(!url){ alert("The invoice file couldn't be uploaded — nothing was saved."); return; } }
+  const inv={no,amount:amt,date:el('poi-date').value,dueDate:el('poi-due').value,fileUrl:url,by:currentUser,checks:warn};
+  try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===id); if(p) p.invoice=inv; }); }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  try{ const r=(typeof _prs!=='undefined'?_prs:[]).find(x=>x.poNumber===po.poNumber); if(r&&!r.invoice){ r.invoice={...inv}; await savePrs(); } }catch(e){}
+  document.getElementById('poinv-overlay').style.display='none'; renderPurchaseOrdersPage();
+  addAudit('🧾',`${po.poNumber}: supplier invoice ${escapeHtml(no)} recorded${warn.length?' — '+escapeHtml(warn.join('; ')):''}`);
+}
+async function poMarkPaid(id){
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po||!isAdmin(currentUser)) return;
+  const ref=prompt(`Mark ${po.poNumber} invoice ${po.invoice?.no||''} as paid — payment reference:`,''); if(ref===null) return; const now=new Date().toISOString();
+  try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===id); if(p){ p.paidAt=now; p.paidRef=ref.trim(); p.paidBy=currentUser; } }); }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  try{ const r=(typeof _prs!=='undefined'?_prs:[]).find(x=>x.poNumber===po.poNumber); if(r&&!r.paidAt){ r.paidAt=now; r.paidRef=ref.trim(); r.paidBy=currentUser; await savePrs(); } }catch(e){}
+  renderPurchaseOrdersPage(); addAudit('💵',`${po.poNumber}: invoice paid`);
+}
+// ── PO revisions: WPO-…-R1 replaces an approved/sent PO; the original is kept as "Superseded" ──
+async function poRevise(id){
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  const base=String(po.poNumber).replace(/-R\d+$/,''); const rev=(parseInt(po.revision)||0)+1; const newNo=`${base}-R${rev}`;
+  const why=prompt(`Create revision ${newNo}?\n\n${po.poNumber} will be kept as "Superseded". The revision needs MD approval again.\n\nWhat is changing?`); if(!why||!why.trim()) return;
+  const now=new Date().toISOString(); const nid='PO-'+Date.now();
+  try{ await patchPurchaseOrders(arr=>{ const o=arr.find(x=>x.id===id); if(!o) throw new Error('This PO no longer exists.');
+      const c=JSON.parse(JSON.stringify(o)); ['approvedBy','approvedAt','sentAt','sentBy','receivedAt','receivedBy','submittedAt','submittedBy','rejectReason','invoice','paidAt','paidRef','paidBy','backToDraftBy','backToDraftAt'].forEach(k=>delete c[k]);
+      Object.assign(c,{id:nid,poNumber:newNo,revision:rev,revisedFrom:o.poNumber,revisionReason:why.trim(),status:'Draft',createdAt:now,createdBy:currentUser,poDate:toLocalDateStr(new Date())});
+      o.statusBeforeSupersede=o.status; o.status='Superseded'; o.supersededBy=newNo; o.supersededAt=now; c.deliveryOrders=o.deliveryOrders||[]; o.deliveryOrders=[]; arr.push(c); }); }
+  catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  await poRelink(po.poNumber,newNo);
+  addAudit('✏️',`${po.poNumber} revised → ${newNo}: ${escapeHtml(why.trim())}`); renderPurchaseOrdersPage();
+  showToast(`✏️ ${newNo} created — edit it, then submit for MD approval`,'success',4000); openPurchaseOrderModal(nid);
+}
+// Everything that points at a PO number follows it to the revision (and back if the revision is deleted)
+async function poRelink(from,to){
+  try{ let a=false,b=false,c=false;
+    (_quotationsV2||[]).forEach(q=>Object.entries(q.outsourcePos||{}).forEach(([v,n])=>{ if(n===from){ q.outsourcePos[v]=to; a=true; } }));
+    (typeof _prs!=='undefined'?_prs:[]).forEach(r=>{ if(r.poNumber===from){ r.poNumber=to; b=true; } });
+    (typeof _osrs!=='undefined'?_osrs:[]).forEach(o=>{ if((o.poNumbers||[]).includes(from)){ o.poNumbers=o.poNumbers.map(x=>x===from?to:x); if(o.shipments&&o.shipments[from]){ o.shipments[to]=o.shipments[from]; delete o.shipments[from]; } c=true; } });
+    if(a) await saveQuotationsV2(); if(b) await savePrs(); if(c) await saveOsrs();
+  }catch(e){ console.warn('PO relink',e); }
+}
 async function poCancel(id){
   if(!isAdmin(currentUser)) return;
   const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
@@ -25967,47 +26079,71 @@ async function poCancel(id){
 async function poDelete(id){
   if(!isAdmin(currentUser)) return;
   const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
-  if(!['Draft','Rejected','Cancelled','Pending Approval'].includes(po.status)){ alert('An approved or sent PO can only be cancelled, not deleted.'); return; }
-  if(!confirm(`Permanently delete ${po.poNumber}? This cannot be undone.`)) return;
+  const live=!['Draft','Rejected','Cancelled','Pending Approval'].includes(po.status);
+  const why=prompt(`Permanently delete ${po.poNumber} (${po.status})? This cannot be undone.${live?'\n\nThis PO was already approved/sent — it is normally better to Cancel it so the record stays.':''}\n\nReason for deleting:`);
+  if(!why||!why.trim()) return;
   const parts=String(po.poNumber||'').split('-'); let wasHighest=false, rb=null;
   if(parts.length===3){
     const [prefix,yymm,seqStr]=parts; const seqNum=parseInt(seqStr,10);
     wasHighest=!(_purchaseOrders||[]).some(o=>{ if(o.id===id) return false; const p2=String(o.poNumber||'').split('-'); return p2.length===3&&p2[0]===prefix&&p2[1]===yymm&&parseInt(p2[2],10)>seqNum; });
     if(wasHighest) rb=await tryRollbackSequence(`${prefix}_${yymm}`,seqNum);
   }
-  try{ await patchPurchaseOrders(arr=>{ const i=arr.findIndex(x=>x.id===id); if(i>-1) arr.splice(i,1); }); }
+  let restored=null;
+  try{ await patchPurchaseOrders(arr=>{ const i=arr.findIndex(x=>x.id===id); if(i>-1){ const gone=arr[i]; arr.splice(i,1);
+      if(gone.revisedFrom){ const o=arr.find(x=>x.poNumber===gone.revisedFrom&&x.status==='Superseded'); if(o){ o.status=o.statusBeforeSupersede||'Approved'; delete o.supersededBy; delete o.supersededAt; o.deliveryOrders=gone.deliveryOrders||[]; restored=o.poNumber; } } } }); }
   catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  if(restored){ await poRelink(po.poNumber,restored); renderPurchaseOrdersPage(); addAudit('🗑️',`Revision ${po.poNumber} deleted — ${restored} is current again (${escapeHtml(why.trim())})`); showToast(`${po.poNumber} deleted — ${restored} is current again`,'success',4000); return; }
+  // nothing may keep pointing at a PO that no longer exists
+  try{
+    let chQ=false,chP=false,chO=false;
+    (_quotationsV2||[]).forEach(q=>Object.entries(q.outsourcePos||{}).forEach(([v,n])=>{ if(n===po.poNumber){ delete q.outsourcePos[v]; chQ=true; } }));
+    (typeof _prs!=='undefined'?_prs:[]).forEach(r=>{ if(r.poNumber===po.poNumber){ delete r.poNumber; chP=true; } });
+    (typeof _osrs!=='undefined'?_osrs:[]).forEach(o=>{ if((o.poNumbers||[]).includes(po.poNumber)){ o.poNumbers=o.poNumbers.filter(x=>x!==po.poNumber); if(o.shipments) delete o.shipments[po.poNumber]; if(!o.poNumbers.length&&o.status==='PO raised') o.status='Selected'; chO=true; } });
+    if(chQ) await saveQuotationsV2(); if(chP) await savePrs(); if(chO) await saveOsrs();
+  }catch(e){ console.warn('unlink after PO delete',e); }
   renderPurchaseOrdersPage(); docDeleteToast(po.poNumber,wasHighest,rb);
-  addAudit('🗑️',`Purchase Order ${po.poNumber} deleted`);
+  addAudit('🗑️',`Purchase Order ${po.poNumber} (${po.status}, ${escapeHtml(po.supplierName||'')}) deleted — ${escapeHtml(why.trim())}`);
 }
 
 // ── Delivery Orders for items sent to a supplier (created from the PO) ──
+const DO_ACCESSORIES=['Carrying case','Power adaptor / charger','Probe(s)','Cables','Batteries','Manual','Previous certificate'];
 function openPoDoModal(poId){
   const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
   if(po.purpose!=='outsource'||!['Approved','Sent','Received'].includes(po.status)){ alert('A Delivery Order can be created once an outsourced-calibration PO has been approved.'); return; }
   const sentSoFar=new Set((po.deliveryOrders||[]).flatMap(d=>(d.items||[]).map(x=>x.lineKey)));
   let ov=document.getElementById('po-do-overlay');
-  if(!ov){ ov=document.createElement('div'); ov.id='po-do-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;'; document.body.appendChild(ov); }
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:700;font-size:15px;">🚚 New Delivery Order — ${escapeHtml(po.poNumber)}</span>
-      <button onclick="document.getElementById('po-do-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
-    </div>
-    <div style="padding:16px 20px;">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Items going to <b>${escapeHtml(po.supplierName)}</b>. Tick what is being handed over now.</div>
-      ${(po.items||[]).map((l,i)=>{ const key=`${i}:${l.description}:${l.serial||''}`; const done=sentSoFar.has(key);
-        return `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:normal;margin-bottom:5px;${done?'opacity:.55;':'cursor:pointer;'}"><input type="checkbox" class="po-do-line" value="${i}" ${done?'disabled':'checked'}/> ${escapeHtml(l.description)}${l.serial?' — S/N '+escapeHtml(l.serial):''} (qty ${l.qty})${done?' <i>already on a Delivery Order</i>':''}</label>`; }).join('')}
-      <div class="form-row" style="margin-top:10px;">
+  if(!ov){ ov=document.createElement('div'); ov.id='po-do-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 10px;overflow-y:auto;'; document.body.appendChild(ov); }
+  const byDefault=po.deliveryMethod==='Courier'?[po.courierName,po.trackingNo?'tracking '+po.trackingNo:''].filter(Boolean).join(', ')||'Courier':(po.deliveryMethod==='Vendor collects from us'?'Collected by '+po.supplierName:'');
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:680px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:15px;">🚚 New Delivery Order — <span style="white-space:nowrap;">${escapeHtml(po.poNumber)}</span></span>
+      <button onclick="document.getElementById('po-do-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;font-size:13px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Items going to <b>${escapeHtml(po.supplierName)}</b>. Tick what is being handed over now, with its accessories and condition.</div>
+      ${(po.items||[]).map((l,i)=>{ const key=`${i}:${l.description}:${l.serial||''}`; const done=sentSoFar.has(key); const first=String(l.description||'').split('\n')[0];
+        return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;${done?'opacity:.55;':''}">
+          <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;${done?'':'cursor:pointer;'}"><input type="checkbox" class="po-do-line" value="${i}" ${done?'disabled':'checked'} style="margin-top:3px;" onchange="el('do-x-${i}').style.display=this.checked?'':'none'"/> <span>${escapeHtml(first)}${l.serial?' — S/N '+escapeHtml(l.serial):''} (qty ${l.qty})${done?' <i style="font-weight:normal;">already on a Delivery Order</i>':''}</span></label>
+          ${done?'':`<div id="do-x-${i}" style="padding-left:24px;margin-top:6px;">
+            <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:3px;">Accessories sent with it</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:2px 10px;">${DO_ACCESSORIES.map(a=>`<label style="font-weight:normal;display:flex;gap:6px;align-items:center;font-size:12.5px;cursor:pointer;"><input type="checkbox" class="do-acc-${i}" value="${a}"/> ${a}</label>`).join('')}</div>
+            <input class="form-control" id="do-accother-${i}" placeholder="Other accessories" style="margin-top:5px;"/>
+            <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:11.5px;color:var(--text-muted);">Condition</span>
+              <input class="form-control" id="do-cond-${i}" value="Good" style="flex:1;min-width:180px;" placeholder="e.g. Good / scratched housing / display faint"/></div></div>`}
+        </div>`; }).join('')}
+      <div class="form-row" style="margin-top:6px;">
         <div class="form-group"><label class="form-label">Date</label><input class="form-control" type="date" id="po-do-date" value="${toLocalDateStr(new Date())}"/></div>
-        <div class="form-group"><label class="form-label">Delivered by</label><input class="form-control" id="po-do-by" placeholder="Staff name, or courier / lorry"/></div>
+        <div class="form-group"><label class="form-label">Delivered by</label><input class="form-control" id="po-do-by" value="${escapeHtml(byDefault)}" placeholder="Staff / courier"/></div>
       </div>
-      <div class="form-group"><label class="form-label">Remarks <span style="font-weight:normal;color:var(--text-muted);">(condition, accessories included, special handling)</span></label><textarea class="form-control" id="po-do-remarks" rows="2"></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Total packages</label><input class="form-control" type="number" min="1" id="po-do-pkgs" value="1"/></div>
+        <div class="form-group"><label class="form-label">Handling notes</label><input class="form-control" id="po-do-handling" placeholder="e.g. Fragile"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Photos <span style="font-weight:normal;color:var(--text-muted);">(optional — condition when sent)</span></label><input class="form-control" type="file" id="po-do-photos" accept="image/*" multiple/></div>
+      <div class="form-group"><label class="form-label">Remarks</label><textarea class="form-control" id="po-do-remarks" rows="2"></textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn btn-outline" onclick="document.getElementById('po-do-overlay').style.display='none'">Cancel</button>
-        <button class="btn btn-primary" id="po-do-create-btn" onclick="createPoDeliveryOrder('${po.id}')">Create Delivery Order</button>
-      </div>
-    </div>
-  </div>`;
+        <button class="btn btn-primary" id="po-do-create-btn" onclick="createPoDeliveryOrder('${po.id}')">Create Delivery Order</button></div>
+    </div></div>`;
   ov.style.display='flex';
 }
 async function createPoDeliveryOrder(poId){
@@ -26019,10 +26155,16 @@ async function createPoDeliveryOrder(poId){
   let doNumber=null;
   try{
     doNumber=await getNextDocNumber('WDO');
+    const photos=[]; for(const f of [...(el('po-do-photos')?.files||[])]){ const u=await prUpload(f,`delivery-orders/${doNumber}`); if(u) photos.push(u); }
     const rec={doNumber,createdAt:now,createdBy:currentUser,date:el('po-do-date').value||toLocalDateStr(new Date()),deliveredBy:el('po-do-by').value.trim(),remarks:el('po-do-remarks').value.trim(),returnedAt:null,
-      items:picked.map(i=>{ const l=po.items[i]; return {lineKey:`${i}:${l.description}:${l.serial||''}`,description:l.description,serial:l.serial||'',itemCode:l.itemCode||undefined,qty:l.qty,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined}; })};
+      packages:Math.max(1,parseInt(el('po-do-pkgs')?.value)||1),handling:(el('po-do-handling')?.value||'').trim(),photos,
+      items:picked.map(i=>{ const l=po.items[i]; return {lineKey:`${i}:${l.description}:${l.serial||''}`,description:l.description,serial:l.serial||'',itemCode:l.itemCode||undefined,qty:l.qty,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined,
+        accessories:[...document.querySelectorAll('.do-acc-'+i+':checked')].map(c=>c.value),accOther:(el('do-accother-'+i)?.value||'').trim(),condition:(el('do-cond-'+i)?.value||'').trim()}; })};
     try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); if(!p) throw new Error('This purchase order no longer exists.'); (p.deliveryOrders=p.deliveryOrders||[]).push(rec); }); }
     catch(e){ await tryRollbackSequence('WDO_'+docYymm(),parseInt(doNumber.split('-')[2],10)); throw e; }
+    try{ let ch=false; (typeof _osrs!=='undefined'?_osrs:[]).forEach(o=>{ if(!(o.poNumbers||[]).includes(po.poNumber)) return; const sh=(o.shipments=o.shipments||{})[po.poNumber]=(o.shipments[po.poNumber]||{});
+        if(!sh.sentAt){ const v=o.vendors.find(x=>x.partnerId===o.selected?.partnerId); sh.sentAt=rec.date; sh.expectedBack=addWorkingDaysHol(rec.date,v?.leadDays||0); sh.sentBy=currentUser; sh.viaDo=doNumber; ch=true; } });
+      if(ch) await saveOsrs(); }catch(e){ console.warn('osr sent date',e); }
     for(const it of rec.items){ if(it.jobNo){ try{ await updateJob(it.jobNo,j=>{ j.history.push({action:`📤 Item ${it.itemNo||''} (${escapeHtml(it.description)}) sent to supplier ${escapeHtml(po.supplierName)} — Delivery Order ${doNumber} (PO ${po.poNumber})`,by:currentUser,time:now}); }); }catch(e){ console.warn('Could not add job history:',e); } } }
     document.getElementById('po-do-overlay').style.display='none';
     renderPurchaseOrdersPage();
@@ -26031,15 +26173,47 @@ async function createPoDeliveryOrder(poId){
     exportSupplierDoPdf(poId,doNumber);
   }catch(e){ showToast('❌ '+e.message,'error',6000); if(btn){ btn.disabled=false; btn.textContent='Create Delivery Order'; } }
 }
-async function poDoMarkReturned(poId,doNumber){
-  const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
-  const note=prompt(`Mark ${doNumber} as returned from ${po.supplierName}.\n\nNote (e.g. "with supplier's certificate no. 123") — optional:`); if(note===null) return;
-  const now=new Date().toISOString(); let rec=null;
-  try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); const d=(p?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!d) throw new Error('That Delivery Order no longer exists.'); d.returnedAt=now; d.returnedBy=currentUser; d.returnNote=note.trim(); rec=d; }); }
+function poDoMarkReturned(poId,doNumber){
+  const po=(_purchaseOrders||[]).find(p=>p.id===poId); const d=(po?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!po||!d) return;
+  let ov=document.getElementById('do-ret-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='do-ret-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 10px;overflow-y:auto;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:640px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">📥 Items back — <span style="white-space:nowrap;">${escapeHtml(doNumber)}</span></span>
+      <button onclick="document.getElementById('do-ret-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:14px 18px;font-size:13px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Check each item and its accessories against what was sent to <b>${escapeHtml(po.supplierName)}</b>.</div>
+      ${(d.items||[]).map((it,i)=>{ const acc=[...(it.accessories||[]),...(it.accOther?[it.accOther]:[])];
+        return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+          <label style="display:flex;gap:8px;align-items:flex-start;font-weight:600;cursor:pointer;"><input type="checkbox" class="dr-back" data-i="${i}" checked style="margin-top:3px;"/> <span>${escapeHtml(String(it.description||'').split('\n')[0])}${it.serial?' — S/N '+escapeHtml(it.serial):''} <span style="font-weight:normal;color:var(--text-muted);">(sent: ${escapeHtml(it.condition||'—')})</span></span></label>
+          ${acc.length?`<div style="padding-left:24px;margin-top:5px;"><div style="font-size:11.5px;color:var(--text-muted);margin-bottom:2px;">Accessories back</div>${acc.map(a=>`<label style="display:flex;gap:6px;align-items:center;font-weight:normal;font-size:12.5px;cursor:pointer;"><input type="checkbox" class="dr-acc-${i}" value="${escapeHtml(a)}" checked/> ${escapeHtml(a)}</label>`).join('')}</div>`:''}
+          <div style="padding-left:24px;display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap;"><span style="font-size:11.5px;color:var(--text-muted);">Condition now</span>
+            <select class="form-control" id="dr-cond-${i}" style="width:auto;"><option>Good</option><option>Damaged</option><option>Other</option></select>
+            <input class="form-control" id="dr-note-${i}" placeholder="Notes (e.g. cert no., damage)" style="flex:1;min-width:160px;"/></div></div>`; }).join('')}
+      <div class="form-row"><div class="form-group"><label class="form-label">Received back on</label><input class="form-control" type="date" id="dr-date" value="${toLocalDateStr(new Date())}"/></div>
+        <div class="form-group"><label class="form-label">Note</label><input class="form-control" id="dr-note" placeholder="e.g. with supplier's certificates"/></div></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('do-ret-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="savePoDoReturn('${po.id}','${escapeForJsAttr(doNumber)}')">Save</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function savePoDoReturn(poId,doNumber){
+  const po=(_purchaseOrders||[]).find(p=>p.id===poId); const d0=(po?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!po||!d0) return;
+  const date=el('dr-date').value||toLocalDateStr(new Date()); const note=(el('dr-note')?.value||'').trim(); const nowIso=new Date().toISOString();
+  const check=(d0.items||[]).map((it,i)=>{ const sent=[...(it.accessories||[]),...(it.accOther?[it.accOther]:[])]; const back=[...document.querySelectorAll('.dr-acc-'+i+':checked')].map(c=>c.value);
+    return {lineKey:it.lineKey,returned:!!document.querySelector(`.dr-back[data-i="${i}"]`)?.checked,accMissing:sent.filter(a=>!back.includes(a)),condition:el('dr-cond-'+i)?.value||'Good',note:(el('dr-note-'+i)?.value||'').trim()}; });
+  const problems=check.map((c,i)=>{ const it=d0.items[i]; const nm=String(it.description||'').split('\n')[0]; const p=[]; if(!c.returned) p.push('not returned'); if(c.accMissing.length) p.push('missing: '+c.accMissing.join(', ')); if(c.condition!=='Good') p.push(c.condition.toLowerCase()+(c.note?' ('+c.note+')':'')); return p.length?`${nm}: ${p.join('; ')}`:''; }).filter(Boolean);
+  const allBack=check.every(c=>c.returned);
+  let rec=null;
+  try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); const d=(p?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!d) throw new Error('That Delivery Order no longer exists.');
+      d.returnCheck={date,by:currentUser,items:check,problems}; if(allBack){ d.returnedAt=date+'T12:00:00'; d.returnedBy=currentUser; d.returnNote=note; } rec=d; }); }
   catch(e){ showToast('❌ '+e.message,'error',6000); return; }
-  for(const it of (rec.items||[])){ if(it.jobNo){ try{ await updateJob(it.jobNo,j=>{ j.history.push({action:`📥 Item ${it.itemNo||''} (${escapeHtml(it.description)}) returned from supplier ${escapeHtml(po.supplierName)} (${doNumber})${note.trim()?' — '+escapeHtml(note.trim()):''}`,by:currentUser,time:now}); }); }catch(e){} } }
-  renderPurchaseOrdersPage(); showToast(`↩️ ${doNumber} marked as returned`,'success',3500);
-  addAudit('↩️',`Delivery Order ${doNumber} returned from ${escapeHtml(po.supplierName)}`);
+  for(const [ix,it] of (rec.items||[]).entries()){ if(it.jobNo){ const itNote=check[ix]?.note||''; try{ await updateJob(it.jobNo,j=>{ j.history.push({action:`📥 Item ${it.itemNo||''} (${escapeHtml(String(it.description).split('\n')[0])}) returned from supplier ${escapeHtml(po.supplierName)} (${doNumber})${[itNote,note].filter(Boolean).length?' — '+escapeHtml([itNote,note].filter(Boolean).join('; ')):''}${problems.length?' — ⚠ '+escapeHtml(problems.join(' | ')):''}`,by:currentUser,time:nowIso}); }); }catch(e){} } }
+  // outsourcing request: back from the vendor once every DO of this PO is back
+  try{ const pAll=(_purchaseOrders||[]).find(x=>x.id===poId); if(allBack&&(pAll.deliveryOrders||[]).every(x=>x.returnedAt)){ let ch=false;
+      (typeof _osrs!=='undefined'?_osrs:[]).forEach(o=>{ const sh=(o.shipments||{})[po.poNumber]; if(sh&&sh.sentAt&&!sh.receivedAt){ sh.receivedAt=date; sh.receivedBy=currentUser; ch=true; } }); if(ch) await saveOsrs(); } }catch(e){}
+  document.getElementById('do-ret-overlay').style.display='none'; renderPurchaseOrdersPage();
+  addAudit('↩️',`Delivery Order ${doNumber}: items back from ${escapeHtml(po.supplierName)}${problems.length?' — problems: '+escapeHtml(problems.join(' | ')):''}`);
+  if(problems.length) alert(`Recorded, with problems:\n\n• ${problems.join('\n• ')}\n\nContact ${po.supplierName}. If it affects a customer's item or our work, raise an NC.`);
+  else showToast(`↩️ ${doNumber}: everything back in order`,'success',3500);
 }
 async function poDoDelete(poId,doNumber){
   if(!isAdmin(currentUser)) return;
@@ -26056,6 +26230,8 @@ async function poDoDelete(poId,doNumber){
 }
 
 // ── PDFs ──
+// Same cleaning as the quotation's file name (no characters Windows/phones can't save)
+function safeFileName(t){ return String(t||'').replace(/[\\/:*?"<>|\u0000-\u001f]+/g,'').replace(/\s+/g,' ').trim().slice(0,80); }
 async function exportPurchaseOrderPdf(poId){
   const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
   const esc=v=>escapeHtml(v==null?'':String(v));
@@ -26071,7 +26247,7 @@ async function exportPurchaseOrderPdf(poId){
   const reqNo=po.requisitionNo||'';
   const title=`PURCHASE ORDER : ${po.poNumber}`;
   const topBlock=(pageNo,pageCount)=>`
-    ${approved?'':`<div style="text-align:center;color:#b91c1c;font-weight:bold;border:1.5px solid #b91c1c;padding:3px;margin-bottom:8px;">${po.status==='Cancelled'?'CANCELLED':'NOT APPROVED — DO NOT SEND TO SUPPLIER'}</div>`}
+    ${approved?'':`<div style="text-align:center;color:#b91c1c;font-weight:bold;border:1.5px solid #b91c1c;padding:3px;margin-bottom:8px;">${po.status==='Cancelled'?'CANCELLED':po.status==='Superseded'?`SUPERSEDED — replaced by ${esc(po.supersededBy||'')}`:'NOT APPROVED — DO NOT SEND TO SUPPLIER'}</div>`}
     <div style="padding-left:57%;white-space:nowrap;font-weight:bold;font-size:${Math.min(16.5,Math.floor(10*284/(title.length*0.64))/10)}px;margin-bottom:4px;">${esc(title)}</div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
       <div style="width:55%;">
@@ -26109,19 +26285,20 @@ async function exportPurchaseOrderPdf(poId){
   const certTo=outsource?(block(po.certTo)||[ourName,...addressLinesPo(s.address||ourAddr.join(', '))]):null;
   const deliverTo=block(po.deliverTo);
   const nameAddr=(label,ls)=>`<div style="font-weight:bold;">${label}</div><div style="font-weight:bold;">${esc(ls[0])}</div>${ls.slice(1).map(x=>`<div>${esc(x)}</div>`).join('')}<div style="height:8px;"></div>`;
-  if(certTo||deliverTo||remarkLines.length){ n++;
+  if(certTo||deliverTo||remarkLines.length||po.deliveryMethod){ n++;
     rows.push(line(n,'',`<div>REMARK</div><div style="font-size:11px;padding-left:4px;line-height:1.45;">
       ${certTo?nameAddr('Cert To:',certTo):''}${deliverTo?nameAddr('Deliver To:',deliverTo):''}
+      ${po.deliveryMethod?`<div><b>Delivery / collection:</b> ${esc(po.deliveryMethod)}${po.deliveryMethod==='Courier'&&(po.courierName||po.trackingNo)?` (${esc([po.courierName,po.trackingNo?'tracking '+po.trackingNo:''].filter(Boolean).join(', '))})`:''}</div><div style="height:6px;"></div>`:''}
       ${remarkLines.map(x=>`<div style="font-weight:bold;">${esc(x)}</div>`).join('')}</div>`,'','','','')); }
   const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;display:flex;justify-content:space-between;align-items:center;gap:14px;">
-      <div style="font-size:11px;">Malaysian Ringgit : ${esc(amountInWordsMYR(t.total))}</div>
-      <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;"><b>Total (MYR)</b><span style="border:1px solid #000;min-width:100px;padding:2px 6px;text-align:right;font-weight:bold;">${money(t.total)}</span></div></div>
+      <div style="font-size:11px;">${esc(PO_CURRENCIES[po.currency||'MYR']||po.currency)} : ${esc(amountInWordsMYR(t.total,po.currency))}</div>
+      <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;"><b>Total (${esc(po.currency||'MYR')})</b><span style="border:1px solid #000;min-width:100px;padding:2px 6px;text-align:right;font-weight:bold;">${money(t.total)}</span></div></div>
     <div style="font-size:10.5px;color:#444;margin-top:10px;">Please quote this PO number on all delivery orders, invoices and correspondence.</div>
     <div style="margin-top:46px;width:200px;">
       <div style="height:44px;display:flex;align-items:flex-end;justify-content:center;">${apprSigRes.data?`<img src="${apprSigRes.data}" style="max-height:42px;max-width:180px;"/>`:''}</div>
       <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;text-align:center;">Authorised Signature</div>
       ${approved?`<div style="font-size:10.5px;text-align:center;">${esc(staffNameOf(po.approvedBy))}</div>`:''}</div>`;
-  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${po.poNumber}.pdf`,label:'Purchase Order',count:(po.items||[]).length,letterhead,pinFooter:true});
+  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${po.poNumber}${safeFileName(po.supplierName)?'_'+safeFileName(po.supplierName):''}.pdf`,label:'Purchase Order',count:(po.items||[]).length,letterhead,pinFooter:true});
 }
 async function exportSupplierDoPdf(poId,doNumber){
   const po=(_purchaseOrders||[]).find(p=>p.id===poId); const d=(po?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!po||!d) return;
@@ -26153,12 +26330,13 @@ async function exportSupplierDoPdf(poId,doNumber){
   const colsHtml='<colgroup><col style="width:34px"><col style="width:84px"><col><col style="width:80px"><col style="width:130px"></colgroup>';
   const headRow=`<tr><th style="${TH}">No</th><th style="${TH}">Item Code</th><th style="${TH}">Description</th><th style="${TH}text-align:center;">Qty</th><th style="${TH}"></th></tr>`;
   const items=d.items||[];
-  const rows=items.map((l,i)=>{ const ls=String(l.description||'').split('\n').map(x=>x.trim()).filter(Boolean); const subs=[...ls.slice(1),...(l.serial&&!/S\/N/.test(String(l.description||''))?['S/N: '+l.serial]:[]),...(l.remarks?['Remarks: '+l.remarks]:[])];
+  const rows=items.map((l,i)=>{ const ls=String(l.description||'').split('\n').map(x=>x.trim()).filter(Boolean); const accs=[...(l.accessories||[]),...(l.accOther?[l.accOther]:[])];
+    const subs=[...ls.slice(1),...(l.serial&&!/S\/N/.test(String(l.description||''))?['S/N: '+l.serial]:[]),...(accs.length?['Accessories: '+accs.join(', ')]:[]),...(l.condition?['Condition: '+l.condition]:[]),...(l.remarks?['Remarks: '+l.remarks]:[])];
     return `<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(l.itemCode||'')}</td><td style="${TD}"><div>${esc(ls[0]||'')}</div>${subs.map(x=>`<div style="font-size:11px;padding-left:4px;">${esc(x)}</div>`).join('')}</td><td style="${TD}text-align:center;">${(parseFloat(l.qty)||0).toFixed(2)}</td><td style="${TD}"></td></tr>`; });
   const totalQty=items.reduce((a,l)=>a+(parseFloat(l.qty)||0),0);
   const issSig=d.createdBy?(await pdfStaffSignature(d.createdBy)).data:'';
   const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;display:flex;justify-content:space-between;gap:12px;">
-      <div style="font-size:11px;max-width:52%;">${d.deliveredBy?`Delivered by : ${esc(d.deliveredBy)}`:''}${d.remarks?`<div style="margin-top:3px;">Remarks : ${esc(d.remarks)}</div>`:''}</div>
+      <div style="font-size:11px;max-width:52%;line-height:1.5;">${d.packages?`<div>Total packages : ${d.packages}</div>`:''}${d.handling?`<div><b>Handling : ${esc(d.handling)}</b></div>`:''}${d.deliveredBy?`<div>Delivered by : ${esc(d.deliveredBy)}</div>`:''}${d.remarks?`<div>Remarks : ${esc(d.remarks)}</div>`:''}</div>
       <div style="width:43%;"><div>Total : &nbsp; ${totalQty.toFixed(2)}</div>
       <div style="margin-top:14px;">Goods Received in Good Condition and Order</div></div></div>
     <div style="display:flex;justify-content:space-between;margin-top:46px;">
@@ -26167,7 +26345,7 @@ async function exportSupplierDoPdf(poId,doNumber){
         ${d.createdBy?`<div style="font-size:10.5px;text-align:center;">${esc(staffNameOf(d.createdBy))}</div>`:''}</div>
       <div style="width:200px;"><div style="height:44px;"></div><div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;">Received By :</div></div>
     </div>`;
-  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${d.doNumber}.pdf`,label:'Delivery Order',count:items.length,letterhead,pinFooter:true});
+  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${d.doNumber}${safeFileName(po.supplierName)?'_'+safeFileName(po.supplierName):''}.pdf`,label:'Delivery Order',count:items.length,letterhead,pinFooter:true});
 }
 
 </script>
