@@ -12734,6 +12734,20 @@ function addressLines(addr){
   if(/\n/.test(a)) return a.split(/\n+/).map(x=>x.trim()).filter(Boolean);
   const m=a.match(/^(.*?,)\s*(\d{5}\b.*)$/); return m?[m[1],m[2]]:[a];
 }
+// PO / DO style: one part per line, like SIRIM's —
+//   Lot 497, Jalan Perusahaan 3, / Bandar Baru Sungai Buloh, / 47000 Sungai Buloh, Selangor, / Malaysia
+function addressLinesPo(addr){
+  const a=String(addr||'').trim(); if(!a) return [];
+  if(/\n/.test(a)) return a.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const parts=a.split(/,\s*/).map(x=>x.trim()).filter(Boolean); if(parts.length<2) return [a];
+  const pc=parts.findIndex(x=>/\b\d{5}\b/.test(x)); const out=[];
+  const before=pc>0?parts.slice(0,pc):parts.slice(0,-1);
+  for(let i=0;i<before.length;i+=2) out.push(before.slice(i,i+2).join(', '));
+  if(pc>=0){ const rest=parts.slice(pc); const last=rest[rest.length-1]; const hasCountry=rest.length>1&&/^malaysia$/i.test(last);
+    out.push((hasCountry?rest.slice(0,-1):rest).join(', ')); if(hasCountry) out.push(last); }
+  else out.push(parts[parts.length-1]);
+  return out.map((l,i,arr)=>i<arr.length-1&&!l.endsWith(',')?l+',':l);
+}
 // Deletes a file the LIMS stored (e.g. a customer PO document). Needs the updated upload worker
 // (DELETE support, protected by the app secret). Returns true if removed (or nothing to remove).
 async function deleteStoredFile(url){
@@ -15148,6 +15162,7 @@ function createOutsourcePo(qid){
     if(typeof renderPoLines==='function') renderPoLines();
     const refs=[...new Set(g.items.map(({it})=>it.outsourceQuoteRef).filter(Boolean))], osrs=[...new Set(g.items.map(({it})=>(_osrs.find(o=>o.id===it.outsourceOsrId)||{}).no).filter(Boolean))];
     if(el('po-your-ref')) el('po-your-ref').value=refs.join(', '); if(el('po-req-no')) el('po-req-no').value=osrs.join(', ');
+    const ct=el('po-cert-to'); if(ct&&!ct.value) ct.value=poClientCertTo(q);
     const rm=el('po-remarks'); if(rm&&!rm.value) rm.value='';
   },150);
 }
@@ -25703,8 +25718,8 @@ function openPurchaseOrderModal(poId,opts){
         <div class="form-group"><label class="form-label">Payment terms</label><input class="form-control" id="po-payment-terms" placeholder="e.g. Net 30 days" value="${v(ex?.paymentTerms||sup?.paymentTerms||'')}"/></div>
         <div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="po-sst" ${ex?.sstApplied?'checked':''} onchange="poRecalc()"/> Supplier charges SST (8%)</label></div>
       </div>
-      <div class="form-group"><label class="form-label">Deliver to</label><textarea class="form-control" id="po-deliver-to" rows="2">${v(deliverDefault)}</textarea></div>
-      <div class="form-group"><label class="form-label">Certificate to <span style="font-weight:normal;color:var(--text-muted);">(calibration POs — printed under REMARK; leave empty for Westlab)</span></label><textarea class="form-control" id="po-cert-to" rows="2" placeholder="Westlab (M) Sdn. Bhd. and our address">${v(ex?.certTo||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">Deliver To <span style="font-weight:normal;color:var(--text-muted);">(where the vendor sends the items back / delivers — name, then address)</span></label><textarea class="form-control" id="po-deliver-to" rows="2">${v(deliverDefault)}</textarea></div>
+      <div class="form-group"><label class="form-label">Cert To <span style="font-weight:normal;color:var(--text-muted);">(calibration POs — the client's name, then address; empty = Westlab)</span></label><textarea class="form-control" id="po-cert-to" rows="2" placeholder="Westlab (M) Sdn. Bhd. and our address">${v(ex?.certTo||'')}</textarea></div>
       <div class="form-group"><label class="form-label">Remarks / special instructions</label><textarea class="form-control" id="po-remarks" rows="2">${v(ex?.remarks||'')}</textarea></div>
       <div id="po-totals" style="text-align:right;font-size:13px;margin-bottom:12px;"></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
@@ -25905,9 +25920,14 @@ async function poBackToDraft(id){
 function poSourceQuotation(po){ const q=(_quotationsV2||[]).find(x=>Object.values(x.outsourcePos||{}).includes(po.poNumber)); if(!q) return null;
   const vid=Object.entries(q.outsourcePos||{}).find(([,n])=>n===po.poNumber)?.[0];
   return {q,items:(q.items||[]).filter(it=>it&&it.outsourceVendorId===vid&&it.poAccepted!==false)}; }
+// The certificate is issued to the client: their company name, then their address
+function poClientCertTo(q){ const c=(_customers||[]).find(x=>x.id===q.custId)||(_customers||[]).find(x=>String(x.company||'').trim().toLowerCase()===String(q.custName||'').trim().toLowerCase());
+  return [c?.company||q.custName||'',...addressLinesPo(c?.address||'')].filter(Boolean).join('\n'); }
 function poRefreshFromQuotation(){
   const po=(_purchaseOrders||[]).find(p=>p.id===_poEditingId); const src=po&&poSourceQuotation(po); if(!src){ alert('This PO was not created from a quotation.'); return; }
   let n=0; src.items.forEach((it,i)=>{ const l=_poLines[i]; if(!l) return; l.description=osrPoDescription(it); if(!l.serial) l.serial=(it.units||[]).map(u=>u.serial).filter(Boolean).join(', '); n++; });
+  const ct=el('po-cert-to'); if(ct&&!ct.value.trim()) ct.value=poClientCertTo(src.q);
+  const rm=el('po-remarks'); if(rm&&/^As per your quotation/i.test(rm.value.trim())) rm.value=''; // the old automatic sentence
   renderPoLines(); showToast(`↻ ${n} line${n===1?'':'s'} updated from the quotation — quantities and prices unchanged. Save to keep.`,'success',4000);
 }
 async function poCancel(id){
@@ -26045,7 +26065,7 @@ async function exportPurchaseOrderPdf(poId){
             .map(([k,v])=>`<tr><td style="width:100px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
         </table></div>
     </div>
-    ${po.deliverTo?`<div style="display:flex;gap:6px;margin:0 0 8px;line-height:1.35;"><b style="white-space:nowrap;">Deliver To :</b><span style="white-space:pre-line;">${esc(po.deliverTo)}</span></div>`:''}`;
+`;
   const TH='padding:4px 3px;font-weight:normal;text-align:left;border-top:1px solid #000;border-bottom:1px solid #000;';
   const TD='padding:3px 3px 6px;vertical-align:top;';
   const colsHtml='<colgroup><col style="width:34px"><col style="width:84px"><col><col style="width:52px"><col style="width:78px"><col style="width:64px"><col style="width:84px"></colgroup>';
@@ -26057,10 +26077,14 @@ async function exportPurchaseOrderPdf(poId){
   if(po.sstApplied){ n++; rows.push(line(n,'','<div>SST</div>','1.00',money(t.sst),'',money(t.sst))); }
   if(t.rounding){ n++; rows.push(line(n,'','<div>ROUNDING ADJUSTMENT</div>','1.00',t.rounding.toFixed(2),'',signed(t.rounding))); }
   const remarkLines=String(po.remarks||'').split('\n').map(x=>x.trim()).filter(Boolean);
-  const certTo=outsource?(po.certTo&&po.certTo.trim()?po.certTo.trim().split('\n'):[ourName,...ourAddr]):null;
-  if(certTo||remarkLines.length){ n++;
+  // a name + address block: the first line is the name, the rest is the address (one part per line)
+  const block=txt=>{ const ls=String(txt||'').split('\n').map(x=>x.trim()).filter(Boolean); if(!ls.length) return null; const rest=ls.slice(1); return [ls[0],...(rest.length>1?rest:addressLinesPo(rest[0]||''))]; };
+  const certTo=outsource?(block(po.certTo)||[ourName,...addressLinesPo(s.address||ourAddr.join(', '))]):null;
+  const deliverTo=block(po.deliverTo);
+  const nameAddr=(label,ls)=>`<div style="font-weight:bold;">${label}</div><div style="font-weight:bold;">${esc(ls[0])}</div>${ls.slice(1).map(x=>`<div>${esc(x)}</div>`).join('')}<div style="height:8px;"></div>`;
+  if(certTo||deliverTo||remarkLines.length){ n++;
     rows.push(line(n,'',`<div>REMARK</div><div style="font-size:11px;padding-left:4px;line-height:1.45;">
-      ${certTo?`<div style="font-weight:bold;">Cert To:</div><div style="font-weight:bold;">${esc(certTo[0])}</div>${certTo.slice(1).map(x=>`<div>${esc(x)}</div>`).join('')}<div style="height:8px;"></div>`:''}
+      ${certTo?nameAddr('Cert To:',certTo):''}${deliverTo?nameAddr('Deliver To:',deliverTo):''}
       ${remarkLines.map(x=>`<div style="font-weight:bold;">${esc(x)}</div>`).join('')}</div>`,'','','','')); }
   const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;display:flex;justify-content:space-between;align-items:center;gap:14px;">
       <div style="font-size:11px;">Malaysian Ringgit : ${esc(amountInWordsMYR(t.total))}</div>
