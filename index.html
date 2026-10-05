@@ -12739,26 +12739,53 @@ function renderPrSections(){
   // every invoice counted ONCE: a PO's own invoice, or (if the PO has none) the request's invoice for that PO
   const spend=[]; const seenPo=new Set();
   (_purchaseOrders||[]).filter(p=>p.invoice&&!['Cancelled','Superseded'].includes(p.status)).forEach(p=>{ seenPo.add(p.poNumber); const rate=p.currency&&p.currency!=='MYR'?(parseFloat(p.fxRate)||0):1;
-    spend.push({sup:p.supplierName||'—',amt:(parseFloat(p.invoice.amount)||0)*rate,date:p.invoice.date,paid:!!p.paidAt,due:p.invoice.dueDate}); });
-  live.filter(r=>r.invoice&&!(r.poNumber&&seenPo.has(r.poNumber))).forEach(r=>spend.push({sup:r.selected?.name||'—',amt:parseFloat(r.invoice.amount)||0,date:r.invoice.date,paid:!!r.paidAt,due:r.invoice.dueDate}));
+    const r=_prs.find(x=>x.poNumber===p.poNumber);
+    spend.push({sup:p.supplierName||'—',amt:(parseFloat(p.invoice.amount)||0)*rate,date:p.invoice.date,paid:!!p.paidAt,due:p.invoice.dueDate,inv:p.invoice.no,poNo:p.poNumber,poId:p.id,prId:r?.id,prNo:r?.no}); });
+  live.filter(r=>r.invoice&&!(r.poNumber&&seenPo.has(r.poNumber))).forEach(r=>spend.push({sup:r.selected?.name||'—',amt:parseFloat(r.invoice.amount)||0,date:r.invoice.date,paid:!!r.paidAt,due:r.invoice.dueDate,inv:r.invoice.no,poNo:r.poNumber||'',prId:r.id,prNo:r.no}));
+  window._spendRows=spend;
   const spentMonth=spend.filter(x=>String(x.date).slice(0,7)===ym).reduce((a,x)=>a+x.amt,0);
   const openPos=(_purchaseOrders||[]).filter(p=>['send','receive'].includes(poStage(p)));
   const owedL=spend.filter(x=>!x.paid);
   const owed=owedL.map(x=>({invoice:{amount:x.amt,dueDate:x.due}}));
   const bySup={}; spend.filter(x=>String(x.date).slice(0,4)===ym.slice(0,4)).forEach(x=>{ bySup[x.sup]=(bySup[x.sup]||0)+x.amt; });
   const top=Object.entries(bySup).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const filt=(el('pr-filter')?.value)||'open';
-  const list=_prs.filter(r=>filt==='all'||(filt==='open'?!['Paid','Cancelled','Rejected'].includes(prStatus(r)):prStatus(r)===filt)).slice().reverse();
+  const prTab=(r,t)=>{ const st=prStatus(r); if(t==='all') return true; if(t==='done') return st==='Paid'; if(t==='cancelled') return ['Cancelled','Rejected'].includes(st);
+    if(t==='approval') return /waiting for MD|PO draft|PO rejected/.test(st); if(t==='pay') return st==='Invoice received'; return !['Paid','Cancelled','Rejected'].includes(st); };
+  const filt=window._prTab||'open';
+  const list=_prs.filter(r=>prTab(r,filt)).slice().reverse();
+  const PR_TABS=[['open','Open'],['approval','Waiting PO approval'],['pay','To pay'],['done','Completed'],['cancelled','Cancelled'],['all','All']];
   const card=(k,v,sub)=>`<div class="card" style="padding:10px 12px;flex:1 1 150px;min-width:0;"><div style="font-size:11.5px;color:var(--text-muted);">${k}</div><div style="font-size:18px;font-weight:700;">${v}</div>${sub?`<div style="font-size:11.5px;color:var(--text-muted);">${sub}</div>`:''}</div>`;
   box.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      ${card('Spent this month (invoiced)',rm2(spentMonth))}${card('Open POs (not fully received)',openPos.length)}${card('Invoices to pay',owed.length,owed.length?rm2(owed.reduce((a,r)=>a+(parseFloat(r.invoice.amount)||0),0))+(owed.some(r=>r.invoice.dueDate<today)?' · some overdue':''):'')}${card('POs waiting for MD approval',(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length)}</div>
-    ${top.length?`<div class="card" style="padding:10px 12px;margin-bottom:12px;font-size:12.5px;"><b>Spend by supplier (${ym.slice(0,4)})</b>${top.map(([n,v])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-top:1px solid var(--border);"><span style="min-width:0;overflow-wrap:anywhere;">${escapeHtml(n)}</span><b style="white-space:nowrap;">${rm2(v)}</b></div>`).join('')}</div>`:''}
+      ${card('Spent this month (invoiced)',rm2(spentMonth),spend.some(x=>String(x.date).slice(0,7)===ym)?'<a href="javascript:void(0)" onclick="openSpendDetail(\'month\')">see what →</a>':'')}${card('Open POs (not fully received)',openPos.length)}${card('Invoices to pay',owed.length,owed.length?rm2(owed.reduce((a,r)=>a+(parseFloat(r.invoice.amount)||0),0))+(owed.some(r=>r.invoice.dueDate<today)?' · some overdue':''):'')}${card('POs waiting for MD approval',(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length)}</div>
+    ${top.length?`<div class="card" style="padding:10px 12px;margin-bottom:12px;font-size:12.5px;"><b>Spend by supplier (${ym.slice(0,4)})</b>${top.map(([n,v])=>`<div onclick="openSpendDetail('sup',${escapeHtml(JSON.stringify(n))})" style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--border);cursor:pointer;"><span style="min-width:0;overflow-wrap:anywhere;color:var(--primary,#2563eb);">${escapeHtml(n)} ›</span><b style="white-space:nowrap;">${rm2(v)}</b></div>`).join('')}</div>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;"><div style="font-weight:700;font-size:15px;">Purchase requests</div>
-      <select class="form-control" id="pr-filter" style="width:auto;" onchange="renderPrSections()">${[['open','Open'],['PO waiting for MD approval','PO waiting for MD approval'],['Invoice received','Invoices to pay'],['Paid','Paid'],['all','All']].map(([v,l])=>`<option value="${v}" ${filt===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      </div>
+    <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;-webkit-overflow-scrolling:touch;">${PR_TABS.map(([k,l])=>`<button class="btn btn-sm ${filt===k?'btn-primary':'btn-outline'}" style="white-space:nowrap;" onclick="window._prTab='${k}';renderPrSections()">${l} <span style="opacity:.8;">(${_prs.filter(r=>prTab(r,k)).length})</span></button>`).join('')}</div>
     ${list.length?list.map(row).join(''):'<div style="color:var(--text-muted);font-size:13px;margin-bottom:8px;">Nothing here.</div>'}
     <div style="font-weight:700;font-size:15px;margin:18px 0 4px;">History (earlier purchasing entries — read only)</div>`;
 }
 function renderPurchasingTrackerPage(){ renderPrSections(); renderTrackerPage('purchasing'); }
+// What makes up a spend figure: each invoice with its PO / request, and a way to open them
+function openSpendDetail(kind,sup){
+  const ym=toLocalDateStr(new Date()).slice(0,7);
+  const rows=(window._spendRows||[]).filter(x=>kind==='month'?String(x.date).slice(0,7)===ym:(x.sup===sup&&String(x.date).slice(0,4)===ym.slice(0,4))).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  let ov=document.getElementById('spend-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='spend-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 10px;overflow-y:auto;'; document.body.appendChild(ov); }
+  const total=rows.reduce((a,x)=>a+x.amt,0);
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:560px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">${kind==='month'?'Spent this month':escapeHtml(sup)+' — '+ym.slice(0,4)}</span><button onclick="document.getElementById('spend-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button></div>
+    <div style="padding:8px 16px 14px;font-size:13px;">
+      ${rows.map(x=>`<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+          <div style="min-width:0;">${kind==='month'?`<b>${escapeHtml(x.sup)}</b><br/>`:''}<span style="font-size:12px;color:var(--text-muted);">${[x.poNo,x.prNo,x.inv?'invoice '+x.inv:'',fmtDateShort(x.date)].filter(Boolean).map(escapeHtml).join(' · ')}</span>
+            <div style="font-size:11.5px;${x.paid?'color:#15803d;':'color:#b45309;'}">${x.paid?'💵 paid':'⏳ not paid yet'}</div></div>
+          <b style="white-space:nowrap;">${rm2(x.amt)}</b></div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          ${x.prId?`<button class="btn btn-outline btn-sm" onclick="document.getElementById('spend-overlay').style.display='none';openPr('${x.prId}')">Open request</button>`:''}
+          ${x.poId?`<button class="btn btn-outline btn-sm" onclick="document.getElementById('spend-overlay').style.display='none';_poTab='all';showView('purchase-orders');setTimeout(()=>{ const s=el('po-search'); if(s){ s.value=${escapeHtml(JSON.stringify(x.poNo))}; renderPurchaseOrdersPage(); } },200)">Open PO</button>`:''}</div></div>`).join('')||'<div style="color:var(--text-muted);padding:10px 0;">Nothing here.</div>'}
+      <div style="display:flex;justify-content:space-between;padding-top:8px;font-weight:700;"><span>Total</span><span>${rm2(total)}</span></div></div></div>`;
+  ov.style.display='flex';
+}
 // Maps the internal stored verdict value to a professional display label — the stored
 // value itself ('Can Do'/'Cannot Do'/'Can Do (External)') never changes, so existing data
 // and all comparisons keep working; only what's shown on screen/exports changes.
