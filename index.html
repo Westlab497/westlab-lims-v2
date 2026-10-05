@@ -25839,8 +25839,9 @@ function openPurchaseOrderModal(poId,opts){
         ${ex&&poSourceQuotation(ex)?`<button type="button" class="btn btn-outline btn-sm" onclick="poRefreshFromQuotation()">↻ Refresh item details from the quotation</button>`:''}</div>
       <div id="po-lines"></div>
       <button type="button" class="btn btn-outline btn-sm" style="margin:6px 0 12px;" onclick="poAddLine()">+ Add line</button>
+      ${ex&&isAdmin(currentUser)?`<div class="form-group" style="max-width:320px;"><label class="form-label">PO number <span style="font-weight:normal;color:var(--text-muted);">(Admin — change only if needed)</span></label><input class="form-control" id="po-number" value="${v(ex.poNumber||'')}" style="font-weight:700;"/></div>`:''}
       <div class="form-row">
-        <div class="form-group"><label class="form-label">PO date <span style="font-weight:normal;color:var(--text-muted);">(today unless changed)</span></label><input class="form-control" type="date" id="po-date" value="${v(ex?.poDate||(ex?toLocalDateStr(new Date(ex.approvedAt||ex.createdAt||Date.now())):toLocalDateStr(new Date())))}"/></div>
+        <div class="form-group"><label class="form-label">PO date</label><input class="form-control" type="date" id="po-date" value="${v(ex?.poDate||(ex?toLocalDateStr(new Date(ex.approvedAt||ex.createdAt||Date.now())):toLocalDateStr(new Date())))}"/></div>
         <div class="form-group"><label class="form-label">Required by</label><input class="form-control" type="date" id="po-required-date" value="${v(ex?.requiredDate||'')}"/></div>
       </div>
       <div class="form-row">
@@ -25992,17 +25993,27 @@ async function savePurchaseOrder(submit){
   if(el('po-no-quote')?.checked&&!fields.noQuoteReason){ alert('Please say why there is no quotation.'); el('po-no-quote-why')?.focus(); return; }
   if(submit&&!quoteUrl&&!fields.noQuoteReason){ alert("Attach the supplier's quotation (or tick \"No quotation\" and give the reason) before submitting for approval."); return; }
   if(fields.currency!=='MYR'&&!(fields.fxRate>0)){ alert(`Enter the exchange rate (RM for 1 ${fields.currency}).`); el('po-fx')?.focus(); return; }
+  // a changed PO number (Admin): unique, no spaces; links follow it after saving
+  const exNo=exPo?.poNumber||''; let renameTo='';
+  if(_poEditingId&&el('po-number')){ const nn=el('po-number').value.trim().toUpperCase();
+    if(!nn){ alert('The PO number cannot be empty.'); return; }
+    if(/\s/.test(nn)){ alert('The PO number cannot contain spaces.'); return; }
+    if(nn!==exNo){ if((_purchaseOrders||[]).some(x=>x.id!==_poEditingId&&String(x.poNumber).toUpperCase()===nn)){ alert(`${nn} is already used by another PO.`); return; }
+      if(!confirm(`Change the PO number from ${exNo} to ${nn}?`)) return; renameTo=nn; } }
   let saved=null, newNumber=null;
   try{
     if(_poEditingId){
       await patchPurchaseOrders(arr=>{
         const p=arr.find(x=>x.id===_poEditingId); if(!p) throw new Error('This purchase order no longer exists.');
         if(!['Draft','Rejected'].includes(p.status)) throw new Error(`This purchase order is already ${p.status} and can no longer be edited.`);
-        Object.assign(p,fields); p.status=submit?'Pending Approval':'Draft'; p.updatedAt=now; p.updatedBy=currentUser;
+        if(renameTo&&arr.some(x=>x.id!==p.id&&String(x.poNumber).toUpperCase()===renameTo)) throw new Error(`${renameTo} is already used by another PO.`);
+        Object.assign(p,fields); if(renameTo){ (p.numberHistory=p.numberHistory||[]).push({from:p.poNumber,to:renameTo,by:currentUser,at:now}); p.poNumber=renameTo; }
+        p.status=submit?'Pending Approval':'Draft'; p.updatedAt=now; p.updatedBy=currentUser;
         if(submit){ p.submittedAt=now; p.submittedBy=currentUser; } delete p.rejectReason; saved=p;
       });
     }else{
       newNumber=await getNextDocNumber('WPO');
+      for(let guard=0;guard<50&&(_purchaseOrders||[]).some(x=>x.poNumber===newNumber);guard++) newNumber=await getNextDocNumber('WPO'); // skip numbers set by hand
       try{
         await patchPurchaseOrders(arr=>{
           const p={id:'PO-'+Date.now(),poNumber:newNumber,status:submit?'Pending Approval':'Draft',createdBy:currentUser,createdAt:now,deliveryOrders:[],...fields};
@@ -26011,6 +26022,7 @@ async function savePurchaseOrder(submit){
       }catch(e){ await tryRollbackSequence('WPO_'+docYymm(),parseInt(newNumber.split('-')[2],10)); throw e; } // don't burn a number on a failed save
     }
   }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  if(renameTo&&saved){ await poRelink(exNo,renameTo); addAudit('✏️',`PO number changed: ${exNo} → ${renameTo}`); }
   if(window._prPoCtx&&saved){ const pr=_prs.find(x=>x.id===window._prPoCtx.id); window._prPoCtx=null; if(pr){ if(pr.poNumber&&pr.poNumber!==saved.poNumber) (pr.oldPoNumbers=pr.oldPoNumbers||[]).push({no:pr.poNumber,gone:'replaced',at:new Date().toISOString()}); pr.poNumber=saved.poNumber; delete pr.poGoneNote; await savePrs(); addAudit('🧾',`${pr.no}: PO ${saved.poNumber} raised`); } }
   if(window._osPoCtx&&saved){ const cx=window._osPoCtx; window._osPoCtx=null; // link the vendor PO back to the quotation + request
     const q=_quotationsV2.find(x=>x.id===cx.qid); if(q){ q.outsourcePos={...(q.outsourcePos||{}),[cx.vendorId]:saved.poNumber}; await saveQuotationsV2();
