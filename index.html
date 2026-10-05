@@ -855,7 +855,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="card"><div class="card-header" style="flex-wrap:wrap;gap:8px;">
         <div class="st-tabs" id="ncr-tabs"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <select class="filter-select" id="ncr-filter-kind" onchange="renderNcrPage()"><option value="">All types</option><option>Customer complaint</option><option>Nonconforming work</option><option>Audit finding</option><option>Other</option></select>
+          <select class="filter-select" id="ncr-filter-kind" onchange="renderNcrPage()"><option value="">All (supplies / does)</option><option>Customer complaint</option><option>Nonconforming work</option><option>Audit finding</option><option>Other</option></select>
           <input class="filter-select" id="ncr-search" placeholder="Search…" oninput="renderNcrPage()" style="width:180px;"/>
         </div></div>
         <div id="ncr-list"></div></div>
@@ -14699,21 +14699,34 @@ function allKnownCapabilities(){
 // ══════════════════════════════════════════════════
 const SUPPLIER_TYPES=['Calibration / Outsourcing Partner','Equipment Supplier','Accessories & Consumables','Service Provider','Other'];
 // A supplier can be several types (e.g. calibration partner AND consumables); the first is the main one
-function supplierTypesOf(p){ const a=Array.isArray(p?.supplierTypes)?p.supplierTypes.filter(Boolean):[]; return a.length?a:[p?.supplierType||SUPPLIER_TYPES[0]]; }
-function supplierTypeOf(p){ return supplierTypesOf(p)[0]; }
-// What an outside company can do for us — one company can offer several (e.g. calibration AND repair)
-const PARTNER_SERVICES=['Calibration','Repair','Testing','Other'];
-function partnerServices(p){ if(Array.isArray(p?.services)&&p.services.length) return p.services; return supplierTypesOf(p||{}).includes('Calibration / Outsourcing Partner')?['Calibration']:[]; }
-function partnerServiceChips(p){ return partnerServices(p).map(x=>`<span class="badge badge-blue" style="font-size:10px;margin-right:3px;">${escapeHtml(x)}</span>`).join(''); }
+// ONE list of what a supplier supplies / does (replaces the old "Type" + "Services offered").
+// Older records are converted from their type(s) and services on the fly.
+const SUPPLIER_OFFERINGS=['Calibration','Repair','Testing','Equipment','Accessories & consumables','Other services','Other'];
+const PARTNER_SERVICES=['Calibration','Repair','Testing','Other']; // services you can request quotes for (outsourcing)
+function supplierOfferings(p){
+  if(Array.isArray(p?.offerings)&&p.offerings.length) return p.offerings;
+  const out=new Set(); const T={'Calibration / Outsourcing Partner':'Calibration','Equipment Supplier':'Equipment','Accessories & Consumables':'Accessories & consumables','Service Provider':'Other services','Other':'Other'};
+  const types=Array.isArray(p?.supplierTypes)&&p.supplierTypes.length?p.supplierTypes:(p?.supplierType?[p.supplierType]:[]);
+  types.forEach(t=>{ if(T[t]) out.add(T[t]); });
+  (Array.isArray(p?.services)?p.services:[]).forEach(x=>out.add(x==='Other'?'Other services':x));
+  if(!out.size) out.add('Calibration'); // the old default type
+  return SUPPLIER_OFFERINGS.filter(x=>out.has(x));
+}
+function offeringLabel(p,x){ return x==='Other'&&String(p?.offeringsOther||'').trim()?`Other: ${p.offeringsOther.trim()}`:x; }
+function supplierTypesOf(p){ return supplierOfferings(p).map(x=>offeringLabel(p,x)); } // for display / search
+function supplierTypeOf(p){ return supplierTypesOf(p).join(', '); }
+// Outsourcing uses the technical services from the same list
+function partnerServices(p){ const o=supplierOfferings(p); const out=o.filter(x=>['Calibration','Repair','Testing'].includes(x)); if(o.includes('Other services')) out.push('Other'); return out; }
+function partnerServiceChips(p){ return supplierOfferings(p).map(x=>`<span class="badge ${['Calibration','Repair','Testing'].includes(x)?'badge-blue':'badge-slate'}" style="font-weight:600;">${escapeHtml(offeringLabel(p,x))}</span>`).join(''); }
 function renderExternalPartnersPage(){
   const box=el('external-partners-list'); if(!box)return;
   if(!canUseExternalPartners(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
   const typeSel=el('ep-type-filter');
-  if(typeSel&&typeSel.options.length<=1) SUPPLIER_TYPES.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t; typeSel.appendChild(o); });
+  if(typeSel&&typeSel.options.length<=1) SUPPLIER_OFFERINGS.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t; typeSel.appendChild(o); });
   const typeFilter=typeSel?.value||'';
   const q=(el('ep-search')?.value||'').toLowerCase();
   const list=_externalPartners.filter(p=>{
-    if(typeFilter&&!supplierTypesOf(p).includes(typeFilter)) return false;
+    if(typeFilter&&!supplierOfferings(p).includes(typeFilter)) return false;
     if(!q) return true;
     return [p.name,p.contactPerson,p.email,p.phone,p.mobile,p.notes].some(v=>String(v||'').toLowerCase().includes(q))||(p.capabilities||[]).some(c=>String(c).toLowerCase().includes(q))||partnerServices(p).some(c=>c.toLowerCase().includes(q));
   }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
@@ -14730,7 +14743,7 @@ function renderExternalPartnersPage(){
       <div style="padding:14px 16px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
           <div style="min-width:240px;flex:1;">
-            <div style="font-weight:700;font-size:14px;">${escapeHtml(p.name||'')} ${partnerServiceChips(p)}<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${supplierTypesOf(p).map(t=>`<span class="badge badge-slate" style="font-weight:600;">${escapeHtml(t)}</span>`).join('')}</div></div>
+            <div style="font-weight:700;font-size:14px;">${escapeHtml(p.name||'')}<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${partnerServiceChips(p)}</div></div>
             ${contact?`<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${contact}</div>`:''}
             ${p.address?`<div style="font-size:12px;color:var(--text-muted);white-space:pre-line;margin-top:2px;">${escapeHtml(p.address)}</div>`:''}
             <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">${[p.paymentTerms?'Payment: '+escapeHtml(p.paymentTerms):'',p.sstNo?'SST Reg. No.: '+escapeHtml(p.sstNo):'',p.tinNo?'TIN: '+escapeHtml(p.tinNo):'',p.website?escapeHtml(p.website):''].filter(Boolean).join(' · ')}</div>
@@ -14778,8 +14791,9 @@ function openExternalPartnerModal(partnerId,opts){
         <div class="form-group"><label class="form-label">Supplier Name <span class="req">*</span></label><input class="form-control" id="ep-name" value="${v(existing?.name||opts?.name||'')}"/></div>
         
       </div>
-      <div class="form-group"><label class="form-label">Type <span style="font-weight:normal;color:var(--text-muted);">(tick all that apply)</span></label>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:4px 14px;">${SUPPLIER_TYPES.map(t=>`<label style="font-weight:normal;display:flex;gap:6px;align-items:center;cursor:pointer;font-size:13px;"><input type="checkbox" class="ep-type-cb" value="${t}" ${(existing?supplierTypesOf(existing):[opts?.supplierType||SUPPLIER_TYPES[0]]).includes(t)?'checked':''}/> ${t}</label>`).join('')}</div></div>
+      <div class="form-group"><label class="form-label">What they supply / do <span class="req">*</span> <span style="font-weight:normal;color:var(--text-muted);">(tick all that apply)</span></label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:4px 14px;">${SUPPLIER_OFFERINGS.map(t=>`<label style="font-weight:normal;display:flex;gap:6px;align-items:center;cursor:pointer;font-size:13px;"><input type="checkbox" class="ep-offer" value="${t}" ${(existing?supplierOfferings(existing):(opts?.service?[opts.service==='Other'?'Other services':opts.service]:['Calibration'])).includes(t)?'checked':''} ${t==='Other'?`onchange="el('ep-offer-other').style.display=this.checked?'':'none'"`:''}/> ${t}</label>`).join('')}</div>
+          <input class="form-control" id="ep-offer-other" placeholder="Other — what do they supply? (e.g. gas cylinders, IT services)" value="${v(existing?.offeringsOther||'')}" style="margin-top:6px;${existing&&supplierOfferings(existing).includes('Other')?'':'display:none;'}"/></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Contact Person</label><input class="form-control" id="ep-contact" value="${v(existing?.contactPerson)}"/></div>
         <div class="form-group"><label class="form-label">Designation</label><input class="form-control" id="ep-designation" value="${v(existing?.designation)}"/></div>
@@ -14807,8 +14821,7 @@ function openExternalPartnerModal(partnerId,opts){
           <div class="form-group"><label class="form-label">Account No.</label><input class="form-control" id="ep-bank-acct-no" value="${v(existing?.bankAccountNo)}"/></div>
         </div>
       </div>`:''}
-      <div class="form-group"><label class="form-label">Services offered <span style="font-weight:normal;color:var(--text-muted);">(tick all that apply — used to pick vendors when outsourcing)</span></label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;">${PARTNER_SERVICES.map(x=>`<label style="font-weight:normal;display:flex;gap:5px;align-items:center;cursor:pointer;"><input type="checkbox" class="ep-svc" value="${x}" ${partnerServices(existing||{supplierType:opts?.supplierType}).includes(x)||(opts?.service===x)?'checked':''}/> ${x}</label>`).join('')}</div></div>
+
       <div class="form-group"><label class="form-label">Capabilities <span style="font-weight:normal;color:var(--text-muted);">(comma-separated — e.g. Pressure Calibration, Flow Calibration)</span></label>
         <input class="form-control" id="ep-capabilities" value="${v((existing?.capabilities||[]).join(', '))}" list="ep-cap-suggestions"/>
         <datalist id="ep-cap-suggestions">${knownCaps.map(c=>`<option value="${v(c)}"></option>`).join('')}</datalist>
@@ -14833,9 +14846,11 @@ async function saveExternalPartner(partnerId){
     partner={id:'EXT-'+Date.now(),priceHistory:[],createdAt:new Date().toISOString(),createdBy:currentUser}; _externalPartners.push(partner);
   }
   partner.name=name;
-  const types=[...document.querySelectorAll('.ep-type-cb:checked')].map(c=>c.value);
-  if(!types.length){ alert('Tick at least one supplier type.'); return; }
-  partner.supplierTypes=types; partner.supplierType=types[0];
+  const offerings=[...document.querySelectorAll('.ep-offer:checked')].map(c=>c.value);
+  if(!offerings.length){ alert('Tick at least one thing they supply / do.'); return; }
+  const otherTxt=(el('ep-offer-other')?.value||'').trim();
+  if(offerings.includes('Other')&&!otherTxt){ alert('Please type what "Other" is.'); el('ep-offer-other')?.focus(); return; }
+  partner.offerings=offerings; partner.offeringsOther=offerings.includes('Other')?otherTxt:'';
   partner.contactPerson=el('ep-contact').value.trim();
   partner.designation=el('ep-designation')?.value.trim()||'';
   partner.phone=el('ep-phone').value.trim();
@@ -14853,7 +14868,7 @@ async function saveExternalPartner(partnerId){
     partner.bankAccountNo=el('ep-bank-acct-no').value.trim();
   }
   partner.capabilities=el('ep-capabilities').value.split(',').map(c=>c.trim()).filter(Boolean);
-  partner.services=[...document.querySelectorAll('.ep-svc:checked')].map(c=>c.value);
+  delete partner.services; delete partner.supplierTypes; delete partner.supplierType; // replaced by the one list
   partner.notes=el('ep-notes').value.trim();
   await saveExternalPartners();
   document.getElementById('ext-partner-overlay').style.display='none';
