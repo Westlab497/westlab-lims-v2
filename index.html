@@ -1233,10 +1233,9 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;">
         <input class="form-control" id="po-search" placeholder="Search PO no., supplier…" oninput="renderPurchaseOrdersPage()" style="width:260px;"/>
-        <select class="form-control" id="po-status-filter" onchange="renderPurchaseOrdersPage()" style="width:auto;">
-          <option value="">All statuses</option><option>Draft</option><option>Pending Approval</option><option>Approved</option><option>Sent</option><option>Received</option><option>Rejected</option><option>Cancelled</option>
-        </select>
+
       </div>
+      <div id="po-tabs" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;-webkit-overflow-scrolling:touch;"></div>
       <div id="po-list"></div>
     </div>
 
@@ -12457,6 +12456,14 @@ function prStatus(r){
 }
 function prPo(r){ return (_purchaseOrders||[]).find(p=>p.poNumber===r.poNumber)||null; }
 // The request's PO only counts if it still exists and isn't cancelled — otherwise a new PO can be raised
+// A PO that is gone takes its delivery / invoice / payment records with it (kept in the request's history)
+function prArchiveGonePo(r,why){
+  const rec={no:r.poNumber,gone:why,at:new Date().toISOString()};
+  if((r.receipts||[]).length) rec.receipts=r.receipts; if(r.verified) rec.verified=r.verified; if(r.invoice) rec.invoice=r.invoice; if(r.paidAt){ rec.paidAt=r.paidAt; rec.paidRef=r.paidRef; }
+  (r.oldPoNumbers=r.oldPoNumbers||[]).push(rec);
+  r.poGoneNote=`PO ${r.poNumber} was ${why} — create a new PO.${rec.invoice||rec.receipts?' Its delivery / invoice records were moved to this request\'s history.':''}`;
+  ['poNumber','receipts','verified','invoice','paidAt','paidRef','paidBy'].forEach(k=>delete r[k]); r.receipts=[];
+}
 function prLivePo(r){ if(!r.poNumber) return null; const po=prPo(r); return po&&po.status!=='Cancelled'?po:null; }
 function prPoGone(r){ return !!r.poNumber&&!prLivePo(r); }
 const prBadge=st=>/waiting for MD|check before use|overdue|draft/i.test(st)?'badge-amber':/Paid|Received$|PO approved/.test(st)?'badge-green':/Rejected|rejected|Cancelled/.test(st)?'badge-red':'badge-blue';
@@ -12512,7 +12519,7 @@ async function submitNewPr(){
 function openPr(id){
   const r=_prs.find(x=>x.id===id); if(!r) return;
   // a PO that was deleted earlier: clean the dangling link (and remember it) so the request can carry on
-  if(r.poNumber&&!prPo(r)&&(_purchaseOrders||[]).length>=0){ (r.oldPoNumbers=r.oldPoNumbers||[]).push({no:r.poNumber,gone:'deleted',at:new Date().toISOString()}); r.poGoneNote=`PO ${r.poNumber} was deleted — create a new PO.`; delete r.poNumber; savePrs().catch(()=>{}); }
+  if(r.poNumber&&!prPo(r)){ prArchiveGonePo(r,'deleted'); savePrs().catch(()=>{}); }
   else if(r.poNumber&&prPo(r)?.status==='Cancelled'){ r.poGoneNote=`PO ${r.poNumber} was cancelled — create a new PO.`; } const st=prStatus(r); const phone=isPhoneLike(); const today=toLocalDateStr(new Date());
   const ov=prOverlay('pr-overlay',960);
   const quoted=(r.suppliers||[]).filter(s=>s.status==='Quoted'); const tot=s=>(r.items||[]).reduce((a,it)=>a+(parseFloat(s.prices[it.key])||0)*(parseFloat(it.qty)||1),0);
@@ -12708,10 +12715,19 @@ function renderPrSections(){
       ${my.length?my.slice(0,10).map(row).join(''):'<div style="color:var(--text-muted);font-size:13px;">None yet.</div>'}`; }
   if(!box) return;
   const now=new Date(), ym=toLocalDateStr(now).slice(0,7), today=toLocalDateStr(now);
+  // requests still pointing at a PO that no longer exists: move that PO's records to history (once)
+  { let ch=false; _prs.forEach(r=>{ if(r.poNumber&&!prPo(r)){ prArchiveGonePo(r,'deleted'); ch=true; } }); if(ch) savePrs().catch(()=>{}); }
   const live=_prs.filter(r=>!['Cancelled','Rejected'].includes(r.status));
-  const spentMonth=live.filter(r=>r.invoice&&String(r.invoice.date).slice(0,7)===ym).reduce((a,r)=>a+(parseFloat(r.invoice.amount)||0),0);
-  const openPos=live.filter(r=>r.poNumber&&!prFullyReceived(r)), owed=live.filter(r=>r.invoice&&!r.paidAt);
-  const bySup={}; live.filter(r=>r.invoice&&String(r.invoice.date).slice(0,4)===ym.slice(0,4)).forEach(r=>{ const n=r.selected?.name||'—'; bySup[n]=(bySup[n]||0)+(parseFloat(r.invoice.amount)||0); });
+  // every invoice counted ONCE: a PO's own invoice, or (if the PO has none) the request's invoice for that PO
+  const spend=[]; const seenPo=new Set();
+  (_purchaseOrders||[]).filter(p=>p.invoice&&!['Cancelled','Superseded'].includes(p.status)).forEach(p=>{ seenPo.add(p.poNumber); const rate=p.currency&&p.currency!=='MYR'?(parseFloat(p.fxRate)||0):1;
+    spend.push({sup:p.supplierName||'—',amt:(parseFloat(p.invoice.amount)||0)*rate,date:p.invoice.date,paid:!!p.paidAt,due:p.invoice.dueDate}); });
+  live.filter(r=>r.invoice&&!(r.poNumber&&seenPo.has(r.poNumber))).forEach(r=>spend.push({sup:r.selected?.name||'—',amt:parseFloat(r.invoice.amount)||0,date:r.invoice.date,paid:!!r.paidAt,due:r.invoice.dueDate}));
+  const spentMonth=spend.filter(x=>String(x.date).slice(0,7)===ym).reduce((a,x)=>a+x.amt,0);
+  const openPos=(_purchaseOrders||[]).filter(p=>['send','receive'].includes(poStage(p)));
+  const owedL=spend.filter(x=>!x.paid);
+  const owed=owedL.map(x=>({invoice:{amount:x.amt,dueDate:x.due}}));
+  const bySup={}; spend.filter(x=>String(x.date).slice(0,4)===ym.slice(0,4)).forEach(x=>{ bySup[x.sup]=(bySup[x.sup]||0)+x.amt; });
   const top=Object.entries(bySup).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const filt=(el('pr-filter')?.value)||'open';
   const list=_prs.filter(r=>filt==='all'||(filt==='open'?!['Paid','Cancelled','Rejected'].includes(prStatus(r)):prStatus(r)===filt)).slice().reverse();
@@ -18790,8 +18806,10 @@ function renderNeedsAttention(){
       const ap=live.filter(r=>prStatus(r)==='New — get quotes'); if(ap.length) items.push({icon:'🛒',text:`${ap.length} new purchase request${ap.length>1?'s':''} — ask suppliers for quotes`,onclick:`openPr('${escapeForJsAttr(ap[0].id)}')`});
       const dr=live.filter(r=>/^PO draft|^PO rejected/.test(prStatus(r))); if(dr.length) items.push({icon:'🧾',text:`${dr.length} purchase request PO${dr.length>1?'s need':' needs'} submitting for MD approval (${dr.map(r=>r.poNumber).slice(0,3).join(', ')})`,onclick:`showView('purchase-orders')`});
       const ck=live.filter(r=>prStatus(r)==='Received — check before use'); if(ck.length) items.push({icon:'✔️',level:'high',text:`${ck.length} received item${ck.length>1?'s':''} must be checked before use (${ck.map(r=>r.no).slice(0,3).join(', ')})`,onclick:`openPr('${escapeForJsAttr(ck[0].id)}')`}); }
+    if(canUsePurchasingTracker(currentUser)){ const late=(_purchaseOrders||[]).filter(p=>['send','receive'].includes(poStage(p))&&poOverdue(p));
+      if(late.length) items.push({icon:'📦',level:'high',text:`${late.length} PO${late.length>1?'s':''} not received by the required date (${late.slice(0,2).map(p=>`${escapeHtml(p.poNumber)} ${escapeHtml(p.supplierName||'')}, due ${fmtDateShort(p.requiredDate)}`).join('; ')})`,onclick:`_poTab='receive';showView('purchase-orders')`}); }
     if(isAdmin(currentUser)){ const poDue=(_purchaseOrders||[]).filter(p=>p.invoice&&!p.paidAt&&p.status!=='Superseded'&&p.invoice.dueDate<=soon&&!live.some(r=>r.poNumber===p.poNumber));
-      if(poDue.length) items.push({icon:'💵',level:poDue.some(p=>p.invoice.dueDate<today)?'high':'',text:`${poDue.length} PO invoice${poDue.length>1?'s':''} due${poDue.some(p=>p.invoice.dueDate<today)?' (some overdue)':' within 7 days'} — ${poDue.slice(0,2).map(p=>`${escapeHtml(p.supplierName||'')} ${escapeHtml(p.currency||'RM')} ${(parseFloat(p.invoice.amount)||0).toFixed(2)}`).join(', ')}`,onclick:`showView('purchase-orders')`});
+      if(poDue.length) items.push({icon:'💵',level:poDue.some(p=>p.invoice.dueDate<today)?'high':'',text:`${poDue.length} PO invoice${poDue.length>1?'s':''} due${poDue.some(p=>p.invoice.dueDate<today)?' (some overdue)':' within 7 days'} — ${poDue.slice(0,2).map(p=>`${escapeHtml(p.supplierName||'')} ${escapeHtml(p.currency||'RM')} ${(parseFloat(p.invoice.amount)||0).toFixed(2)}`).join(', ')}`,onclick:`_poTab='pay';showView('purchase-orders')`});
       const due=live.filter(r=>r.invoice&&!r.paidAt&&r.invoice.dueDate<=soon); if(due.length) items.push({icon:'💵',level:due.some(r=>r.invoice.dueDate<today)?'high':'',text:`${due.length} supplier invoice${due.length>1?'s':''} due${due.some(r=>r.invoice.dueDate<today)?' (some overdue)':' within 7 days'} — ${due.slice(0,2).map(r=>`${escapeHtml(r.selected?.name||'')} ${rm2(r.invoice.amount)}`).join(', ')}`,onclick:`openPr('${escapeForJsAttr(due[0].id)}')`}); } }
   if(typeof canUseOutsourcingQueue==='function'&&canUseOutsourcingQueue(currentUser)){
     const ready=(_osrs||[]).filter(o=>osrStatusOf(o)==='Ready to compare');
@@ -25652,52 +25670,104 @@ function updatePoBadge(){
   const n=canApprovePO(currentUser)?(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length:0;
   b.textContent=n; b.style.display=n>0?'inline':'none';
 }
+// ── Where each PO is: Approved → Sent → Received (or items back) → Invoiced → Paid ──
+function poStage(p){
+  if(['Cancelled','Superseded'].includes(p.status)) return 'closed';
+  if(['Draft','Rejected','Pending Approval'].includes(p.status)) return 'approval';
+  if(p.paidAt) return 'done';
+  const out=p.purpose==='outsource', dos=p.deliveryOrders||[];
+  const received=out?(dos.length>0&&dos.every(d=>d.returnedAt)):['Received','Closed'].includes(p.status);
+  if(!received){ if(out) return dos.length?'receive':'send'; return p.status==='Approved'?'send':'receive'; }
+  return p.invoice?'pay':'invoice';
+}
+const PO_TABS=[['open','Open'],['approval','Waiting approval'],['send','To send'],['receive','To receive'],['invoice','To invoice'],['pay','To pay'],['done','Done'],['all','All']];
+let _poTab='open';
+function poOverdue(p){ const st=poStage(p), today=toLocalDateStr(new Date());
+  if(st==='receive'||st==='send') return !!(p.requiredDate&&p.requiredDate<today)&&`due ${fmtDateShort(p.requiredDate)}`;
+  if(st==='pay') return !!(p.invoice?.dueDate&&p.invoice.dueDate<today)&&`payment due ${fmtDateShort(p.invoice.dueDate)}`;
+  return false; }
+function poProgressHtml(p){
+  const out=p.purpose==='outsource', dos=p.deliveryOrders||[], who=u=>u?' · '+escapeHtml(staffNameOf(u)):'';
+  const firstDo=dos.map(d=>d.date||d.createdAt).filter(Boolean).sort()[0], back=dos.length&&dos.every(d=>d.returnedAt)?dos.map(d=>d.returnedAt).sort().slice(-1)[0]:null;
+  const steps=[
+    ['Approved',p.approvedAt,p.approvedBy],
+    [out?'Sent to vendor':'Sent',out?firstDo:p.sentAt,out?(dos[0]?.createdBy):p.sentBy],
+    [out?'Back':'Received',out?back:p.receivedAt,out?(dos.find(d=>d.returnedAt)?.returnedBy):p.receivedBy],
+    ['Invoiced',p.invoice?.date,p.invoice?.by],
+    ['Paid',p.paidAt,p.paidBy]];
+  const cur=steps.findIndex(x=>!x[1]); const od=poOverdue(p);
+  if(isPhoneLike()){ // one compact row of five steps; the overdue note on its own line
+    const short=d=>{ const x=new Date(String(d).length<=10?d+'T00:00:00':d); return isNaN(x)?'':x.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); };
+    return `<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin:8px 0 4px;">${steps.map(([lab,at],i)=>{ const done=!!at, now=i===cur&&!['approval','closed'].includes(poStage(p));
+      const col=done?'#15803d':(now?(od?'#b91c1c':'#b45309'):'#94a3b8'), bg=done?'#ecfdf5':(now?(od?'#fef2f2':'#fffbeb'):'#f8fafc');
+      return `<div style="background:${bg};border:1px solid ${done?'#bbf7d0':(now?(od?'#fecaca':'#fde68a'):'#e2e8f0')};border-radius:6px;padding:4px 3px;text-align:center;min-width:0;">
+        <div style="font-size:12px;color:${col};line-height:1;">${done?'✓':(now?'⏳':'○')}</div>
+        <div style="font-size:10px;font-weight:700;color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lab.replace('Sent to vendor','Sent')}</div>
+        <div style="font-size:9.5px;color:var(--text-muted);white-space:nowrap;">${done?short(at):(now?'next':'&nbsp;')}</div></div>`; }).join('')}</div>
+      ${od?`<div style="font-size:11.5px;color:#b91c1c;font-weight:600;margin-bottom:2px;">⚠ Overdue — ${escapeHtml(od)}</div>`:''}`;
+  }
+  return `<div style="display:flex;gap:0;align-items:stretch;flex-wrap:wrap;margin:8px 0 4px;">${steps.map(([lab,at,by],i)=>{ const done=!!at, now=i===cur&&!['approval','closed'].includes(poStage(p));
+    const col=done?'#15803d':(now?(od?'#b91c1c':'#b45309'):'#94a3b8'), bg=done?'#ecfdf5':(now?(od?'#fef2f2':'#fffbeb'):'#f8fafc');
+    return `<div style="flex:1 1 92px;min-width:92px;background:${bg};border:1px solid ${done?'#bbf7d0':(now?(od?'#fecaca':'#fde68a'):'#e2e8f0')};${i?'border-left:none;':''}padding:5px 8px;${i===0?'border-radius:8px 0 0 8px;':''}${i===steps.length-1?'border-radius:0 8px 8px 0;':''}">
+      <div style="font-size:11.5px;font-weight:700;color:${col};">${done?'✓':(now?'⏳':'○')} ${lab}</div>
+      <div style="font-size:10.5px;color:var(--text-muted);line-height:1.3;">${done?fmtDateShort(at)+who(by):(now&&od?`<span style="color:#b91c1c;font-weight:600;">overdue — ${escapeHtml(od)}</span>`:(now?'next':''))}</div></div>`; }).join('')}</div>`;
+}
 function renderPurchaseOrdersPage(){
   const box=el('po-list'); if(!box) return;
   updatePoBadge();
   if(!canUsePurchasingTracker(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
-  const q=(el('po-search')?.value||'').toLowerCase(), sf=el('po-status-filter')?.value||'';
-  const list=(_purchaseOrders||[]).filter(p=>(!sf||p.status===sf)&&(!q||String(p.poNumber||'').toLowerCase().includes(q)||String(p.supplierName||'').toLowerCase().includes(q)))
+  const q=(el('po-search')?.value||'').toLowerCase();
+  const all=(_purchaseOrders||[]).filter(p=>!q||String(p.poNumber||'').toLowerCase().includes(q)||String(p.supplierName||'').toLowerCase().includes(q))
     .sort((a,b)=>String(b.poNumber||'').localeCompare(String(a.poNumber||'')));
-  if(!list.length){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🧾</div><p>No purchase orders yet. Click "+ New Purchase Order" to create one.</p></div>'; return; }
+  const inTab=(p,t)=>t==='all'||(t==='open'?!['done','closed'].includes(poStage(p)):(t==='done'?['done','closed'].includes(poStage(p)):poStage(p)===t));
+  const tabs=el('po-tabs'); if(tabs) tabs.innerHTML=PO_TABS.map(([k,l])=>{ const n=all.filter(p=>inTab(p,k)).length; const od=['open','send','receive','pay'].includes(k)&&all.some(p=>inTab(p,k)&&poOverdue(p));
+    return `<button class="btn btn-sm ${_poTab===k?'btn-primary':'btn-outline'}" onclick="_poTab='${k}';renderPurchaseOrdersPage()" style="white-space:nowrap;">${l} <span style="opacity:.8;">(${n})</span>${od?` <span style="color:${_poTab===k?'#fff':'#b91c1c'};">●</span>`:''}</button>`; }).join('');
+  const list=all.filter(p=>inTab(p,_poTab));
+  if(!list.length){ box.innerHTML=`<div class="empty-state"><div class="empty-icon">🧾</div><p>${(_purchaseOrders||[]).length?'Nothing here.':'No purchase orders yet. Click "+ New Purchase Order" to create one.'}</p></div>`; return; }
   const admin=isAdmin(currentUser), approver=canApprovePO(currentUser);
-  box.innerHTML=`<div class="card"><div class="table-wrap"><table>
-    <thead><tr><th>PO No.</th><th>Date</th><th>Supplier</th><th>For</th><th style="text-align:right;">Total (RM)</th><th>Status</th><th>Actions</th></tr></thead>
-    <tbody>${list.map(p=>{
-      const t=poTotals(p); const dos=p.deliveryOrders||[];
-      const canDo=p.purpose==='outsource'&&['Approved','Sent','Received'].includes(p.status);
-      const btn=(label,fn,style='')=>`<button class="btn btn-outline btn-sm" style="margin:2px;${style}" onclick="${fn}">${label}</button>`;
-      const actions=[
-        btn('📄 PDF',`exportPurchaseOrderPdf('${p.id}')`),
-        p.quoteFileUrl?btn('📎 Quotation',`openSignedUrl('${escapeForJsAttr(p.quoteFileUrl)}')`):'',
-        ['Draft','Rejected'].includes(p.status)?btn('✏️ Edit',`openPurchaseOrderModal('${p.id}')`)+btn('📨 Submit',`poSubmit('${p.id}')`):'',
-        (approver&&['Draft','Pending Approval'].includes(p.status))?btn('✅ Approve',`poApprove('${p.id}')`,'color:var(--green);')+(p.status==='Pending Approval'?btn('❌ Reject',`poReject('${p.id}')`,'color:var(--red);'):''):'',
-        (!approver&&p.status==='Pending Approval')?'<span style="font-size:11px;color:var(--text-muted);">waiting for MD</span>':'',
-        p.status==='Pending Approval'?btn('↩️ Back to draft',`poBackToDraft('${p.id}')`):'',
-        p.status==='Approved'?btn('📤 Mark Sent',`poMarkSent('${p.id}')`):'',
-        ['Approved','Sent'].includes(p.status)?btn('✏️ Revise',`poRevise('${p.id}')`):'',
-        ['Approved','Sent','Received'].includes(p.status)&&!p.invoice?btn('🧾 Invoice',`openPoInvoice('${p.id}')`):'',
-        p.invoice&&!p.paidAt&&admin?btn('💵 Paid',`poMarkPaid('${p.id}')`):'',
-        p.invoice?.fileUrl?btn('📎 Invoice',`openSignedUrl('${escapeForJsAttr(p.invoice.fileUrl)}')`):'',
-        p.status==='Sent'?btn('📥 Mark Received',`poMarkReceived('${p.id}')`):'',
-        canDo?btn(`🚚 Delivery Order${dos.length?' ('+dos.length+')':''}`,`openPoDoModal('${p.id}')`):'',
-        (admin&&['Approved','Sent'].includes(p.status))?btn('Cancel PO',`poCancel('${p.id}')`,'color:var(--red);'):'',
-        admin?btn('🗑️',`poDelete('${p.id}')`,'color:var(--red);'):'',
-      ].join('');
-      const doRows=dos.length?`<tr><td colspan="7" style="background:#f8fafc;padding:6px 14px 8px 30px;font-size:12px;">
-        ${dos.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:2px 0;">
-          <span>🚚 <b>${escapeHtml(d.doNumber)}</b> · ${fmtDateShort(d.date||d.createdAt)} · ${(d.items||[]).length} item(s)${d.deliveredBy?' · by '+escapeHtml(d.deliveredBy):''} ·
-            ${d.returnedAt?`<span style="color:var(--green);">returned ${fmtDateShort(d.returnedAt)}${d.returnNote?' — '+escapeHtml(d.returnNote):''}</span>`:'<span style="color:var(--amber);">with supplier</span>'}</span>
-          <span>${btn('📄 PDF',`exportSupplierDoPdf('${p.id}','${d.doNumber}')`)}${!d.returnedAt?btn('↩️ Mark returned',`poDoMarkReturned('${p.id}','${d.doNumber}')`):''}${(admin&&!d.returnedAt)?btn('🗑️',`poDoDelete('${p.id}','${d.doNumber}')`,'color:var(--red);'):''}</span></div>`).join('')}</td></tr>`:'';
-      return `<tr>
-        <td style="font-weight:600;white-space:nowrap;">${escapeHtml(p.poNumber||'')}</td>
-        <td style="white-space:nowrap;">${fmtDateShort(p.poDate||p.createdAt)}</td>
-        <td>${escapeHtml(p.supplierName||'')}</td>
-        <td style="font-size:12px;">${poPurposeLabel(p.purpose)}</td>
-        <td style="text-align:right;white-space:nowrap;">${p.currency&&p.currency!=='MYR'?`${escapeHtml(p.currency)} ${t.total.toFixed(2)}<div style="font-size:11px;color:var(--text-muted);">≈ RM ${(t.total*(parseFloat(p.fxRate)||0)).toFixed(2)}</div>`:t.total.toFixed(2)}</td>
-        <td><span class="badge ${poBadgeClass(p.status)}">${p.status==='Draft'?'Draft (not submitted)':p.status}</span>${p.status==='Rejected'&&p.rejectReason?`<div style="font-size:11px;color:var(--red);">${escapeHtml(p.rejectReason)}</div>`:''}${p.approvedBy&&['Approved','Sent','Received'].includes(p.status)?`<div style="font-size:11px;color:var(--text-muted);">by ${escapeHtml(staffNameOf(p.approvedBy))}</div>`:''}${p.status==='Superseded'?`<div style="font-size:11px;color:var(--text-muted);">replaced by ${escapeHtml(p.supersededBy||'')}</div>`:''}${p.invoice?`<div style="font-size:11px;${p.paidAt?'color:#15803d;':(p.invoice.dueDate<toLocalDateStr(new Date())?'color:var(--red);':'color:var(--text-muted);')}">${p.paidAt?'💵 paid':'🧾 invoice '+escapeHtml(p.invoice.no)+' · due '+fmtDateShort(p.invoice.dueDate)}</div>`:''}</td>
-        <td>${actions}</td></tr>${doRows}`;
-    }).join('')}</tbody></table></div></div>`;
+  const btn=(label,fn,style='',cls='btn-outline')=>`<button class="btn ${cls} btn-sm" style="margin:2px;${style}" onclick="${fn}">${label}</button>`;
+  box.innerHTML=list.map(p=>{
+    const t=poTotals(p); const dos=p.deliveryOrders||[]; const st=poStage(p); const out=p.purpose==='outsource';
+    const openDo=dos.find(d=>!d.returnedAt); const sentKeys=new Set(dos.flatMap(d=>(d.items||[]).map(x=>x.lineKey))); const allOnDo=(p.items||[]).every((l,i)=>sentKeys.has(`${i}:${l.description}:${l.serial||''}`));
+    // the ONE next step
+    let next='';
+    if(st==='approval'){ if(['Draft','Rejected'].includes(p.status)) next=btn('✏️ Edit',`openPurchaseOrderModal('${p.id}')`)+btn('📨 Submit for approval',`poSubmit('${p.id}')`,'','btn-primary');
+      else next=approver?btn('✅ Approve',`poApprove('${p.id}')`,'','btn-primary')+btn('❌ Reject',`poReject('${p.id}')`,'color:var(--red);'):'<span style="font-size:12px;color:var(--text-muted);">⏳ waiting for the MD</span>'; }
+    else if(st==='send') next=out?btn('🚚 Create Delivery Order',`openPoDoModal('${p.id}')`,'','btn-primary'):btn('📤 Mark sent',`poMarkSent('${p.id}')`,'','btn-primary');
+    else if(st==='receive') next=out?(openDo?btn(`📦 Items back (${escapeHtml(openDo.doNumber)})`,`poDoMarkReturned('${p.id}','${escapeForJsAttr(openDo.doNumber)}')`,'','btn-primary'):'')+(!allOnDo?btn('🚚 Delivery Order for the rest',`openPoDoModal('${p.id}')`):''):btn('📥 Mark received',`poMarkReceived('${p.id}')`,'','btn-primary');
+    else if(st==='invoice') next=btn('🧾 Record invoice',`openPoInvoice('${p.id}')`,'','btn-primary');
+    else if(st==='pay') next=admin?btn('💵 Mark paid',`poMarkPaid('${p.id}')`,'','btn-primary'):'<span style="font-size:12px;color:var(--text-muted);">⏳ waiting for payment</span>';
+    else if(st==='done') next='<span style="font-size:12px;color:#15803d;font-weight:600;">✅ Completed</span>';
+    else next=`<span class="badge ${poBadgeClass(p.status)}">${escapeHtml(p.status)}</span>${p.status==='Superseded'?` <span style="font-size:11px;color:var(--text-muted);">replaced by ${escapeHtml(p.supersededBy||'')}</span>`:''}`;
+    // everything else
+    const more=[
+      btn('📄 PDF',`exportPurchaseOrderPdf('${p.id}')`),
+      p.quoteFileUrl?btn('📎 Quotation',`openSignedUrl('${escapeForJsAttr(p.quoteFileUrl)}')`):'',
+      p.invoice?.fileUrl?btn('📎 Invoice',`openSignedUrl('${escapeForJsAttr(p.invoice.fileUrl)}')`):'',
+      st!=='invoice'&&['send','receive'].includes(st)&&!p.invoice?btn('🧾 Record invoice',`openPoInvoice('${p.id}')`):'',
+      out&&['Approved','Sent','Received'].includes(p.status)&&st!=='send'&&!(st==='receive'&&!allOnDo)?btn('🚚 New Delivery Order',`openPoDoModal('${p.id}')`):'',
+      !out&&p.status==='Approved'&&st!=='send'?btn('📤 Mark sent',`poMarkSent('${p.id}')`):'',
+      p.status==='Pending Approval'?btn('↩️ Back to draft',`poBackToDraft('${p.id}')`):'',
+      approver&&p.status==='Draft'?btn('✅ Approve',`poApprove('${p.id}')`,'color:var(--green);'):'',
+      ['Approved','Sent'].includes(p.status)?btn('✏️ Revise',`poRevise('${p.id}')`):'',
+      (admin&&['Approved','Sent'].includes(p.status))?btn('Cancel PO',`poCancel('${p.id}')`,'color:var(--red);'):'',
+      admin?btn('🗑️ Delete',`poDelete('${p.id}')`,'color:var(--red);'):''].join('');
+    const doLines=dos.length?`<div style="margin-top:6px;border-top:1px dashed var(--border);padding-top:6px;font-size:12px;">${dos.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;padding:2px 0;">
+        <span>🚚 <b>${escapeHtml(d.doNumber)}</b> · ${fmtDateShort(d.date||d.createdAt)} · ${(d.items||[]).length} item(s)${d.deliveredBy?' · '+escapeHtml(d.deliveredBy):''} · ${d.returnedAt?`<span style="color:var(--green);">back ${fmtDateShort(d.returnedAt)}</span>${(d.returnCheck?.problems||[]).length?' <span style="color:var(--red);">⚠ '+escapeHtml(d.returnCheck.problems.join('; '))+'</span>':''}`:'<span style="color:var(--amber);">with supplier</span>'}</span>
+        <span>${btn('📄',`exportSupplierDoPdf('${p.id}','${d.doNumber}')`)}${(admin&&!d.returnedAt)?btn('🗑️',`poDoDelete('${p.id}','${d.doNumber}')`,'color:var(--red);'):''}</span></div>`).join('')}</div>`:'';
+    const od=poOverdue(p);
+    return `<div class="card" style="padding:12px 14px;margin-bottom:10px;overflow:visible;${od?'border-color:#fecaca;':''}">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="min-width:0;flex:1 1 260px;"><div style="font-weight:700;font-size:14px;"><span style="white-space:nowrap;">${escapeHtml(p.poNumber||'')}</span> · ${escapeHtml(p.supplierName||'')}</div>
+          <div style="font-size:12px;color:var(--text-muted);">${[fmtDateShort(p.poDate||p.createdAt),poPurposeLabel(p.purpose),p.status==='Rejected'&&p.rejectReason?`<span style="color:var(--red);">rejected: ${escapeHtml(p.rejectReason)}</span>`:'',p.invoice&&!p.paidAt?`invoice ${escapeHtml(p.invoice.no)}`:''].filter(x=>x&&x!=='—').join(' · ')}</div></div>
+        <div style="text-align:right;white-space:nowrap;font-weight:700;">${p.currency&&p.currency!=='MYR'?`${escapeHtml(p.currency)} ${t.total.toFixed(2)}<div style="font-size:11px;font-weight:normal;color:var(--text-muted);">≈ RM ${(t.total*(parseFloat(p.fxRate)||0)).toFixed(2)}</div>`:'RM '+t.total.toFixed(2)}</div></div>
+      ${['approval','closed'].includes(st)?`<div style="margin:6px 0 2px;"><span class="badge ${poBadgeClass(p.status)}">${p.status==='Draft'?'Draft (not submitted)':escapeHtml(p.status)}</span></div>`:poProgressHtml(p)}
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+        <div>${next}</div>
+        <details style="position:relative;"><summary class="btn btn-outline btn-sm" style="list-style:none;cursor:pointer;margin:2px;">More ▾</summary>
+          <div style="position:absolute;right:0;z-index:50;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.12);padding:6px;display:flex;flex-direction:column;align-items:stretch;min-width:190px;">${more}</div></details>
+      </div>${doLines}</div>`;
+  }).join('');
 }
 
 // ── PO form ──
@@ -26097,7 +26167,7 @@ async function poDelete(id){
   try{
     let chQ=false,chP=false,chO=false;
     (_quotationsV2||[]).forEach(q=>Object.entries(q.outsourcePos||{}).forEach(([v,n])=>{ if(n===po.poNumber){ delete q.outsourcePos[v]; chQ=true; } }));
-    (typeof _prs!=='undefined'?_prs:[]).forEach(r=>{ if(r.poNumber===po.poNumber){ delete r.poNumber; chP=true; } });
+    (typeof _prs!=='undefined'?_prs:[]).forEach(r=>{ if(r.poNumber===po.poNumber){ prArchiveGonePo(r,'deleted'); chP=true; } });
     (typeof _osrs!=='undefined'?_osrs:[]).forEach(o=>{ if((o.poNumbers||[]).includes(po.poNumber)){ o.poNumbers=o.poNumbers.filter(x=>x!==po.poNumber); if(o.shipments) delete o.shipments[po.poNumber]; if(!o.poNumbers.length&&o.status==='PO raised') o.status='Selected'; chO=true; } });
     if(chQ) await saveQuotationsV2(); if(chP) await savePrs(); if(chO) await saveOsrs();
   }catch(e){ console.warn('unlink after PO delete',e); }
