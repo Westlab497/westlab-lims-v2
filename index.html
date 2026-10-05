@@ -838,8 +838,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <div class="table-wrap"><table>
           <thead><tr><th>Doc ID</th><th>Title</th><th>Type</th><th>Rev</th><th>Owner</th><th>Review Due</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            <tr><td><span style="font-family:'DM Mono';font-size:12px;">SOP-LAB-007</span></td><td>Sample Receipt &amp; Handling</td><td>SOP</td><td>Rev 5</td><td>Jay</td><td><strong style="color:var(--red)">01 Apr 2026</strong></td><td><span class="badge badge-amber">Review Due</span></td><td><button class="btn btn-outline btn-sm">Review</button></td></tr>
-            <tr><td><span style="font-family:'DM Mono';font-size:12px;">SOP-LAB-015</span></td><td>Calibration Procedure — Thermal</td><td>SOP</td><td>Rev 3</td><td>Edmund</td><td>28 Mar 2027</td><td><span class="badge badge-green">Active</span></td><td><button class="btn btn-outline btn-sm">View</button></td></tr>
+            <tr><td><span style="font-family:'DM Mono';font-size:12px;white-space:nowrap;">SOP-LAB-007</span></td><td>Sample Receipt &amp; Handling</td><td>SOP</td><td style="white-space:nowrap;">Rev 5</td><td>Jay</td><td><strong style="color:var(--red)">01 Apr 2026</strong></td><td><span class="badge badge-amber">Review Due</span></td><td><button class="btn btn-outline btn-sm">Review</button></td></tr>
+            <tr><td><span style="font-family:'DM Mono';font-size:12px;white-space:nowrap;">SOP-LAB-015</span></td><td>Calibration Procedure — Thermal</td><td>SOP</td><td style="white-space:nowrap;">Rev 3</td><td>Edmund</td><td style="white-space:nowrap;">28 Mar 2027</td><td><span class="badge badge-green">Active</span></td><td><button class="btn btn-outline btn-sm">View</button></td></tr>
           </tbody>
         </table></div>
       </div>
@@ -1162,14 +1162,17 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="view" id="view-purchasing-tracker">
       <div class="page-header">
         <div>
-          <div class="page-title">🛒 Purchasing Tracker</div>
-          <div class="page-sub">External vendor/service procurement pipeline</div>
+          <div class="page-title">🛒 Purchasing</div>
+          <div class="page-sub">Request → supplier quotes → PO (MD approval) → receive &amp; check → invoice &amp; payment</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline" onclick="exportTrackerExcel('purchasing')">📊 Excel</button>
-          <button class="btn btn-outline" onclick="exportTrackerPdf('purchasing')">📄 PDF</button>
-          <button class="btn btn-primary" onclick="openTrackerEntryModal('purchasing')">+ New Entry</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="openNewPr()">+ New purchase request</button>
         </div>
+      </div>
+      <div id="pr-section"></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="exportTrackerExcel('purchasing')">📊 History Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="exportTrackerPdf('purchasing')">📄 History PDF</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <select class="form-control" id="pt-filter-month" onchange="renderPurchasingTrackerPage()" style="width:auto;">
@@ -1423,6 +1426,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
         </div>
       </div>
       <div id="my-requests-summary-strip" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;"></div>
+      <div id="my-pr-section" style="margin-bottom:8px;"></div>
       <div class="form-section-title" style="margin-top:0;">🧾 My Claims</div>
       <div id="my-requests-claims" class="card"></div>
       <div class="form-section-title">🌴 My Leave &amp; Overtime</div>
@@ -3802,9 +3806,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-pdf-preview')">Close</button>
       <button class="btn btn-outline" id="pdf-print-btn" onclick="printPreviewedPdf()">🖨️ Print</button>
-      <button class="btn btn-outline" id="pdf-open-btn" style="display:none;" onclick="window.open(_pdfPreviewUrl,'_blank')">↗️ Open in new tab</button>
+      <button class="btn btn-outline" id="pdf-open-btn" style="display:none;" onclick="window.open(_pdfPreviewUrl,'_blank')">↗️ Open</button>
       <button class="btn btn-primary" onclick="downloadPreviewedPdf()">⬇️ Download</button>
     </div>
+    <style>@media (max-width:820px){ #modal-pdf-preview .modal-footer{display:flex;flex-wrap:nowrap;gap:8px;} #modal-pdf-preview .modal-footer .btn{flex:1;padding-left:6px;padding-right:6px;justify-content:center;white-space:nowrap;} }</style>
   </div>
 </div>
 
@@ -4262,7 +4267,7 @@ async function loadAll(){
     // These lists don't depend on each other — load them all at the same time (was one after another)
     const lr=await Promise.allSettled([loadClaims(),loadLeaveRecords(),loadAttendance(),loadRefCheckoutRequests(),loadExtensionRequests(),
       loadStickerData(),loadAbnormalReports(),loadQuotations(),loadSalesTracker(),loadPurchasingTracker(),loadExternalPartners(),
-      loadQuotationsV2(),loadInvoices(),loadPurchaseOrders(),loadNcrs(),loadTestCheckins(),loadHolidayFeed(),loadOsrs()]);
+      loadQuotationsV2(),loadInvoices(),loadPurchaseOrders(),loadNcrs(),loadTestCheckins(),loadHolidayFeed(),loadOsrs(),loadPrs()]);
     lr.forEach(r=>{ if(r.status==='rejected') console.warn('A list failed to load:',r.reason); });
     await healOrphanedQuotationLinks();
     await backfillEnquiryNumbers();
@@ -4313,6 +4318,8 @@ function showToast(msg, type='info', duration=2500, action=null){
     t=document.createElement('div');
     t.id='wl-toast';
     t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:1000010;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+    // phones: messages at the top, so they never cover the buttons at the bottom of a window
+    if(window.matchMedia('(max-width: 820px)').matches) t.style.cssText='position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;right:10px;z-index:1000010;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
     document.body.appendChild(t);
   }
   const item=document.createElement('div');
@@ -4935,7 +4942,7 @@ function showView(name){
   }
   if(name==='dashboard') renderDashboard();
   if(name==='ref-eq') renderRefEqTable();
-  if(name==='my-requests') renderMyRequests();
+  if(name==='my-requests'){ renderMyRequests(); renderPrSections(); }
   if(name==='stickers') renderStickerPage();
   if(name==='quotations') renderQuotationsPage();
   if(name==='sales-tracker') renderSalesTrackerPage();
@@ -9916,8 +9923,10 @@ function setWholePrice(it,on){
 function toggleWholePrice(kind,idx,on){ const it=_paramArr(kind)[idx]; if(!it) return; setWholePrice(it,on); paramRefresh(kind,idx); if(kind!=='sales'&&typeof updateQtv2GrandTotal==='function') updateQtv2GrandTotal(); }
 // Multi-parameter: the price box only summarises (each parameter's price is entered in its own section)
 function priceSummaryBox(it,firstPrice,kind,idx){
-  if(it.wholePrice) return `<div class="ppn" style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:7px 9px;font-size:12.5px;color:#4c1d95;">Whole instrument${it.outsourceVendorId?' (outsourced)':''}: <b>RM ${(parseFloat(firstPrice)||0).toFixed(2)}</b> per unit — all parameters included</div>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Change it in Parameter 1's price box. ${kind?`<a href="javascript:void(0)" onclick="toggleWholePrice('${kind}',${idx},false)">Price per parameter instead</a>`:''}</div>`;
+  if(it.wholePrice){ // one price for the whole instrument — typed right here
+    const onIn=kind==='sales'?`updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});`:`updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0);`;
+    return `<input class="form-control" type="number" min="0" step="0.01" placeholder="0.00" value="${(parseFloat(firstPrice)||'')}" oninput="${onIn}"/>
+      <div style="font-size:11px;color:#4c1d95;margin-top:3px;">All parameters included${it.outsourceVendorId?' (outsourced)':''}${kind?` · <a href="javascript:void(0)" onclick="toggleWholePrice('${kind}',${idx},false)">price per parameter</a>`:''}</div>`; }
   return `<div class="ppn" style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:7px 9px;font-size:12.5px;color:#4c1d95;">${priceParamNoteInner(it,firstPrice)}</div>
     <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Each parameter's price is entered in its own section above.${kind?` <a href="javascript:void(0)" onclick="toggleWholePrice('${kind}',${idx},true)">One price for the whole instrument</a>`:''}</div>`;
 }
@@ -9935,7 +9944,8 @@ function firstParamNameHtml(kind,idx,it){
                               :`updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0);refreshPriceParamNotes('qt')`;
   return `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 10px;margin-bottom:8px;">
     <div style="flex:1 1 180px;"><label class="form-label" style="margin-bottom:2px;">Parameter 1</label><input class="form-control" placeholder="e.g. Temperature" value="${escapeHtml(it.paramName||'')}" oninput="paramUpdate('${kind}',${idx},-1,'name',this.value);refreshPriceParamNotes('${kind}')"/></div>
-    <div style="flex:0 1 150px;"><label class="form-label" style="margin-bottom:2px;">${it.wholePrice?'Whole instrument price (RM)':'Price / unit (RM)'}</label><input class="form-control p1-price" type="number" min="0" step="0.01" placeholder="0.00" value="${pr||''}" oninput="${onPrice}"/></div>
+    ${it.wholePrice?`<div style="flex:0 1 170px;font-size:11.5px;color:#4c1d95;padding-bottom:8px;">Priced as a whole instrument — see <b>Unit price</b></div>`
+      :`<div style="flex:0 1 150px;"><label class="form-label" style="margin-bottom:2px;">Price / unit (RM)</label><input class="form-control p1-price" type="number" min="0" step="0.01" placeholder="0.00" value="${pr||''}" oninput="${onPrice}"/></div>`}
   </div>`;
 }
 function paramBlockHtml(kind,idx,it){
@@ -10161,10 +10171,16 @@ function qtAccLabel(acc){ return acc==='SAMM-Accredited'?'Accredited':(acc==='No
 function qtServiceTag(it){ const acc=qtAccLabel(it.accreditationRequested||it.accreditation); return `[${acc?acc+' ':''}${it.calType==='Onsite'?'Site':'Lab'} Calibration]`; }
 // ── Standard items with automatic item codes (WLC-001, WLC-002 …) ──
 // A code stands for equipment + accreditation + lab/site, since those are priced differently.
-async function nextItemCode(){
-  const d=await apiFetch('/api/seq-next',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'item_code_seq'})});
-  return 'WLC-'+String(d.val).padStart(3,'0');
-}
+// New codes take the LOWEST free number. A deleted code is reused only if it never appeared on a quotation or job
+// (otherwise old documents would point to a different item); those numbers stay retired.
+function itemCodesInUse(list){ const used=new Set((list||_settings.priceReference||[]).map(p=>p.itemCode).filter(Boolean));
+  (_quotationsV2||[]).forEach(q=>(q.items||[]).forEach(it=>{ if(it.itemCode) used.add(it.itemCode); }));
+  (_jobs||[]).forEach(j=>(j.items||[]).forEach(it=>{ if(it.itemCode) used.add(it.itemCode); }));
+  return used; }
+function lowestFreeItemCode(list){ const used=itemCodesInUse(list); for(let n=1;n<100000;n++){ const c='WLC-'+String(n).padStart(3,'0'); if(!used.has(c)) return c; } return 'WLC-'+Date.now(); }
+async function nextItemCode(){ return lowestFreeItemCode(); }
+// Checked again inside the save, against the latest list, so two people can never get the same number
+function uniqueItemCodeIn(st,code){ const list=st.priceReference||[]; return code&&!list.some(p=>p.itemCode===code)?code:lowestFreeItemCode(list); }
 // Matches the equipment name to a standard item by its name OR any of its "also known as" names
 // (ignoring capitals and extra spaces), for the same accreditation and Lab / On-site service.
 function qtNameKey(v){ return String(v||'').trim().replace(/\s+/g,' ').toLowerCase(); }
@@ -10179,6 +10195,16 @@ function qtSuggestStdName(name){
   n=n.replace(/[\s,;:\-–—(\[]+$/,'').trim();
   return n||String(name||'').trim();
 }
+// Codes for the same equipment in other services (same standard name) — "also known as" names are shared with them
+function stdFamily(p,list){ const k=qtNameKey(p.eqName); return (list||_settings.priceReference||[]).filter(o=>o.id!==p.id&&o.itemCode&&qtNameKey(o.eqName)===k); }
+function famAddAlias(st,p,alias){ // inside patchSettings: add a name to this code and its family (skipping any clash)
+  const key=qtNameKey(alias); const list=st.priceReference||[]; const me=list.find(x=>x.id===p.id);
+  [me,...stdFamily(me||p,list)].filter(Boolean).forEach(o=>{ if(qtStdNames(o).includes(key)) return;
+    const clash=list.some(x=>x.id!==o.id&&(x.accreditation||'')===(o.accreditation||'')&&(x.calType||'Lab')===(o.calType||'Lab')&&qtStdNames(x).includes(key));
+    if(!clash) o.aliases=[...(o.aliases||[]),alias]; });
+}
+function stdCodeUsed(code){ if(!code) return 0;
+  return (_quotationsV2||[]).filter(q=>(q.items||[]).some(it=>it.itemCode===code)).length+(_jobs||[]).filter(j=>(j.items||[]).some(it=>it.itemCode===code)).length; }
 function qtStdByCode(code){ return (_settings.priceReference||[]).find(p=>p.itemCode===code)||null; }
 // Suggestions while typing an equipment name (standard names + their other names). Free typing is
 // still allowed — the customer's own wording is kept.
@@ -10192,11 +10218,18 @@ function refreshStdNameSuggestions(){
 // name; if it's a new wording it's remembered as another name for that standard item.
 async function qtLinkStandard(idx,prId){
   const it=_qtv2DraftItems[idx]; const p=(_settings.priceReference||[]).find(x=>x.id===prId); if(!it||!p) return;
+  // a code belongs to one service (accreditation + Lab/On-site): the item takes the code's service
+  const pAcc=p.accreditation||'', pCal=p.calType||'Lab';
+  if(pAcc!==(it.accreditationRequested||'')||pCal!==(it.calType||'Lab')){
+    const label=[qtAccLabel(pAcc)||'no accreditation',pCal==='Onsite'?'On-site':'Lab'].join(' · ');
+    if(it.accreditationRequested&&!confirm(`${p.itemCode} is for ${label}.\n\nSwitch this item to ${label}?`)){ renderQtv2ItemsList(); return; }
+    it.accreditationRequested=pAcc; it.calType=pCal;
+  }
   it.itemCode=p.itemCode||''; if(!it.stdDescription) it.stdDescription=p.description||'';
   const key=qtNameKey(it.eqName);
   if(key&&!qtStdNames(p).includes(key)){
     const alias=String(it.eqName).trim().replace(/\s+/g,' ');
-    try{ await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===p.id); if(e){ e.aliases=[...(e.aliases||[]),alias]; } });
+    try{ await patchSettings(st=>{ famAddAlias(st,p,alias); });
       showToast(`🏷️ Linked to ${p.itemCode}. “${alias}” is now remembered as another name for ${p.eqName}.`,'success',5000); }
     catch(e){ showToast('Linked, but the other name could not be saved: '+e.message,'warn',5000); }
     refreshStdNameSuggestions();
@@ -10212,7 +10245,7 @@ async function ensurePriceRefCodes(){
   try{
     for(const m of missing){
       const code=await nextItemCode();
-      await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===m.id); if(e&&!e.itemCode) e.itemCode=code; },{silent:true});
+      await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===m.id); if(e&&!e.itemCode) e.itemCode=uniqueItemCodeIn(st,code); },{silent:true});
     }
   }catch(e){ console.warn('Could not assign item codes yet:',e); }
   finally{ _ensuringItemCodes=false; }
@@ -10243,9 +10276,9 @@ async function saveQtv2LineAsStandardItem(idx){
     const code=await nextItemCode();
     const entry={id:'PR-'+Date.now(),itemCode:code,eqName:stdName,aliases:qtNameKey(wording)!==qtNameKey(stdName)?[wording]:[],standardPrice:parseFloat(it.unitPrice)||0,
       accreditation:it.accreditationRequested||'',calType:it.calType||'Lab',description:it.stdDescription||''};
-    await patchSettings(st=>{ if(!st.priceReference) st.priceReference=[]; st.priceReference.push(entry); });
-    it.itemCode=code; delete it._noAutoCode; renderQtv2ItemsList(); refreshStdNameSuggestions();
-    showToast(`💾 Saved to the Standard Price List as ${code}`,'success',3500);
+    await patchSettings(st=>{ if(!st.priceReference) st.priceReference=[]; entry.itemCode=uniqueItemCodeIn(st,entry.itemCode); st.priceReference.push(entry); });
+    it.itemCode=entry.itemCode; delete it._noAutoCode; renderQtv2ItemsList(); refreshStdNameSuggestions();
+    showToast(`💾 Saved to the Standard Price List as ${entry.itemCode}`,'success',3500);
   }catch(e){ showToast('❌ Could not save standard item: '+e.message,'error',5000); }
 }
 function updateQtv2UnitField(idx,ui,field,val){ const it=_qtv2DraftItems[idx]; if(!it) return; qtEnsureUnits(it); if(it.units[ui]) it.units[ui][field]=val; }
@@ -10584,6 +10617,7 @@ async function addPriceReferenceEntry(){
   const priceEntry={id:'PR-'+Date.now(),itemCode,eqName:name,aliases,standardPrice:price,accreditation:acc,calType,description:el('pr-new-desc')?.value.trim()||''}; // built once so the saved copy and local copy match
   await patchSettings(st=>{
     if(!st.priceReference) st.priceReference=[];
+    if(priceEntry.itemCode) priceEntry.itemCode=uniqueItemCodeIn(st,priceEntry.itemCode);
     st.priceReference.push(priceEntry);
   });
   el('pr-new-name').value=''; el('pr-new-price').value=''; if(el('pr-new-desc')) el('pr-new-desc').value=''; if(el('pr-new-aliases')) el('pr-new-aliases').value='';
@@ -10756,10 +10790,17 @@ function openPriceRefEditor(id){
       <button onclick="document.getElementById('pr-edit-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
     </div>
     <div style="padding:14px 18px;">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Service: <b>${v(qtServiceTag(p).replace(/[\[\]]/g,''))}</b>. The code number stays the same — earlier quotations and jobs refer to it. For a different service, create a new item.</div>
+      ${(()=>{ const used=stdCodeUsed(p.itemCode); const fam=stdFamily(p);
+        return (used?`<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Service: <b>${v(qtServiceTag(p).replace(/[\[\]]/g,''))}</b> — fixed, because ${used} quotation${used>1?'s / jobs':' / job'} already use${used>1?'':'s'} ${v(p.itemCode)}. For another service, create a new item.</div>`
+          :`<div class="form-row" style="margin-bottom:4px;"><div class="form-group"><label class="form-label">Accreditation</label><select class="form-control" id="pr-edit-acc">${[['SAMM-Accredited','Accredited'],['Non-Accredited','Non-accredited']].map(([k,l])=>`<option value="${k}" ${(p.accreditation||'')===k?'selected':''}>${l}</option>`).join('')}</select></div>
+             <div class="form-group"><label class="form-label">Lab / On-site</label><select class="form-control" id="pr-edit-cal">${[['Lab','Lab'],['Onsite','On-site']].map(([k,l])=>`<option value="${k}" ${(p.calType||'Lab')===k?'selected':''}>${l}</option>`).join('')}</select></div></div>
+           <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">Not used on any quotation or job yet, so the service can still be corrected.</div>`)
+          +(fam.length?`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">Same equipment, other services: ${fam.map(o=>`<b>${v(o.itemCode)}</b> ${v(qtServiceTag(o).replace(/[\[\]]/g,''))}`).join(' · ')}</div>`:''); })()}
       <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="pr-edit-name" value="${v(p.eqName)}"/></div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:-4px 0 10px;cursor:pointer;"><input type="checkbox" id="pr-edit-keep-old" checked/> Keep the old name “${v(p.eqName)}” as another name (so items typed that way still match)</label>
-      <div class="form-group"><label class="form-label">Also known as <span style="font-weight:normal;color:var(--text-muted);">(comma-separated)</span></label><input class="form-control" id="pr-edit-aliases" value="${v((p.aliases||[]).join(', '))}"/></div>
+      <div class="form-group"><label class="form-label">Also known as <span style="font-weight:normal;color:var(--text-muted);">(comma-separated)</span></label><textarea class="form-control" id="pr-edit-aliases" rows="2" >${v((p.aliases||[]).join(', '))}</textarea></div>
+      ${stdFamily(p).length?`<label style="display:flex;align-items:flex-start;gap:6px;font-size:12px;font-weight:normal;margin:-6px 0 12px;cursor:pointer;"><input type="checkbox" id="pr-edit-share" checked style="margin-top:2px;"/> Also add new “also known as” names to ${stdFamily(p).map(o=>v(o.itemCode)).join(', ')}</label>`:''}
+
       <div class="form-row">
         <div class="form-group"><label class="form-label">Standard price (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-price" value="${v(p.standardPrice||0)}"/></div>
         <div class="form-group"><label class="form-label">Adjustment price (RM)</label><input class="form-control" type="number" min="0" step="0.01" id="pr-edit-adjust" value="${v(p.adjustmentPrice||'')}" placeholder="0.00"/>
@@ -10782,11 +10823,16 @@ async function savePriceRefEdit(id){
   let aliases=el('pr-edit-aliases').value.split(',').map(x=>x.trim().replace(/\s+/g,' ')).filter(Boolean);
   if(el('pr-edit-keep-old').checked&&qtNameKey(p.eqName)!==qtNameKey(name)) aliases.push(p.eqName);
   const seen=new Set([qtNameKey(name)]); aliases=aliases.filter(a=>{ const k=qtNameKey(a); if(seen.has(k)) return false; seen.add(k); return true; });
+  // service: only if the code was never used (and no other code already has that name + service)
+  const newAcc=el('pr-edit-acc')?el('pr-edit-acc').value:(p.accreditation||''), newCal=el('pr-edit-cal')?el('pr-edit-cal').value:(p.calType||'Lab');
+  if((newAcc!==(p.accreditation||'')||newCal!==(p.calType||'Lab'))&&stdCodeUsed(p.itemCode)){ alert(`${p.itemCode} is already used, so its service can't change. Create a new item for the other service.`); return; }
   // no two standard items of the same service may answer to the same name
-  const clash=(_settings.priceReference||[]).find(o=>o.id!==id&&(o.accreditation||'')===(p.accreditation||'')&&(o.calType||'Lab')===(p.calType||'Lab')&&qtStdNames(o).some(k=>seen.has(k)));
+  const clash=(_settings.priceReference||[]).find(o=>o.id!==id&&(o.accreditation||'')===newAcc&&(o.calType||'Lab')===newCal&&qtStdNames(o).some(k=>seen.has(k)));
   if(clash){ alert(`“${[...seen].find(k=>qtStdNames(clash).includes(k))}” is already used by ${clash.itemCode} ${clash.eqName} for the same service. Remove it from one of them first.`); return; }
   const price=parseFloat(el('pr-edit-price').value)||0, desc=el('pr-edit-desc').value.trim(), extra=Math.max(0,parseFloat(el('pr-edit-extra')?.value)||0);
-  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e){ e.eqName=name; e.aliases=aliases; e.standardPrice=price; e.extraPointPrice=extra; e.adjustmentPrice=Math.max(0,parseFloat(el('pr-edit-adjust')?.value)||0); e.description=desc; } });
+  const added=aliases.filter(a=>!qtStdNames(p).includes(qtNameKey(a))); const share=!!el('pr-edit-share')?.checked;
+  await patchSettings(st=>{ const e=(st.priceReference||[]).find(x=>x.id===id); if(e){ e.eqName=name; e.aliases=aliases; e.standardPrice=price; e.extraPointPrice=extra; e.adjustmentPrice=Math.max(0,parseFloat(el('pr-edit-adjust')?.value)||0); e.description=desc; e.accreditation=newAcc; e.calType=newCal;
+    if(share) added.forEach(a=>famAddAlias(st,{...p},a)); } });
   document.getElementById('pr-edit-overlay').style.display='none';
   renderPriceReferenceTable(); refreshStdNameSuggestions();
   showToast(`✅ ${p.itemCode} updated`,'success',2500);
@@ -11296,13 +11342,16 @@ function renderQtv2ItemsList(){
       <div id="qtv2-item-diff-${idx}"></div>
       ${(()=>{ if(it.itemCode){ const p=qtStdByCode(it.itemCode);
           return `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">🏷️ Item code <b style="color:#3730a3;">${escapeHtml(it.itemCode)}</b>${p&&qtNameKey(p.eqName)!==qtNameKey(it.eqName)?` — standard item “${escapeHtml(p.eqName)}”`:''} · <a href="javascript:void(0)" onclick="qtUnlinkStandard(${idx})">change</a></div>`; }
-        const same=(_settings.priceReference||[]).filter(p=>p.itemCode&&(p.accreditation||'')===(it.accreditationRequested||'')&&(p.calType||'Lab')===(it.calType||'Lab'))
-          .sort((a,b)=>String(a.itemCode).localeCompare(String(b.itemCode)));
+        const coded=(_settings.priceReference||[]).filter(p=>p.itemCode).sort((a,b)=>String(a.itemCode).localeCompare(String(b.itemCode)));
+        const fits=p=>(p.accreditation||'')===(it.accreditationRequested||'')&&(p.calType||'Lab')===(it.calType||'Lab');
+        const same=coded.filter(fits), other=coded.filter(p=>!fits(p));
+        const opt=p=>`<option value="${p.id}">${escapeHtml(p.itemCode+' — '+p.eqName+((p.aliases||[]).length?' (also: '+p.aliases.join(', ')+')':''))}${fits(p)?'':` [${escapeHtml([qtAccLabel(p.accreditation)||'no accreditation',(p.calType||'Lab')==='Onsite'?'On-site':'Lab'].join(' · '))}]`}</option>`;
         return `<div class="qt-note info" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span>🏷️ <b>No item code yet.</b></span>
-          ${same.length?`<select class="form-control" style="width:auto;max-width:330px;padding:5px 8px;font-size:12px;" onchange="if(this.value) qtLinkStandard(${idx},this.value)">
-            <option value="">Link to an existing standard item…</option>
-            ${same.map(p=>`<option value="${p.id}">${escapeHtml(p.itemCode+' — '+p.eqName+((p.aliases||[]).length?' (also: '+p.aliases.join(', ')+')':''))}</option>`).join('')}</select><span>or</span>`:''}
+          ${coded.length?`<select class="form-control" style="width:100%;max-width:420px;padding:6px 8px;font-size:12.5px;" onchange="if(this.value) qtLinkStandard(${idx},this.value)">
+            <option value="">Link to an existing item code…</option>
+            ${same.length?`<optgroup label="Same service">${same.map(opt).join('')}</optgroup>`:''}
+            ${other.length?`<optgroup label="Other services (the item switches to that service)">${other.map(opt).join('')}</optgroup>`:''}</select><span>or</span>`:''}
           <button type="button" class="btn btn-outline btn-sm" onclick="saveQtv2LineAsStandardItem(${idx})">➕ Create new code</button>
         </div>`; })()}
       <div class="qt-grid" style="grid-template-columns:2fr 1fr 1fr;">
@@ -11321,7 +11370,7 @@ function renderQtv2ItemsList(){
       </div>
       <div class="qt-price">
         <div>${L('Qty')}<input class="form-control" type="number" min="1" value="${qty}" oninput="updateQtv2ItemField(${idx},'quantity',this.value)" onchange="renderQtv2ItemsList()"/></div>
-        <div>${itemExtraParams(it).length?`${L('Unit price')}${priceSummaryBox(it,it.unitPrice,'qt',idx)}`
+        <div>${itemExtraParams(it).length?`${L(it.wholePrice?'Unit price (RM) — whole instrument':'Unit price')}${priceSummaryBox(it,it.unitPrice,'qt',idx)}`
           :`${L('Unit price (RM)')}<input class="form-control" type="number" min="0" step="0.01" value="${it.unitPrice||''}" oninput="updateQtv2ItemField(${idx},'unitPrice',parseFloat(this.value)||0)"/>`}</div>
         <div>${L('Discount','10% or RM')}<input class="form-control" placeholder="none" value="${escapeHtml(it.discount||'')}" oninput="updateQtv2ItemField(${idx},'discount',this.value)"/></div>
         <div style="text-align:right;">${L('Line total')}<div id="qtv2-item-total-${idx}" style="font-size:17px;font-weight:800;padding-top:6px;">RM ${c.total.toFixed(2)}</div></div>
@@ -12042,7 +12091,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
     <div style="border-top:1.3px solid #000;margin:10px 0 12px;"></div>`;
   const dateStr=new Date(q.createdAt||Date.now()).toLocaleDateString('en-GB');
   const custBlock=(pageNo,pageCount)=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-      <div style="position:relative;width:62%;padding:4px 12px 6px;line-height:1.35;">
+      <div style="position:relative;width:59%;padding:4px 12px 6px;line-height:1.35;">
         <div style="position:absolute;left:0;top:0;bottom:0;border-left:1px solid #000;"></div>
         <div style="position:absolute;left:0;top:0;width:22px;border-top:1px solid #000;"></div>
         <div style="position:absolute;left:0;bottom:0;width:22px;border-bottom:1px solid #000;"></div>
@@ -12053,8 +12102,8 @@ async function exportQuotationV2Pdf(quotationId,opts){
         <div>Attn : ${esc(q.attention||'')}</div>
         <div style="display:flex;"><span style="width:58%;">TEL : ${esc(q.tel||q.mobile||'')}</span><span>FAX : ${esc(q.fax||'')}</span></div>
       </div>
-      <div style="width:33%;">
-        <div style="font-weight:bold;font-size:16.5px;margin-bottom:6px;white-space:nowrap;">QUOTATION : ${esc(q.quotationNo)}</div>
+      <div style="width:37%;">
+        <div style="font-weight:bold;font-size:${Math.min(16.5,Math.floor(10*244/(('QUOTATION : '+String(q.quotationNo||'')).length*0.66))/10)}px;margin-bottom:6px;white-space:nowrap;">QUOTATION : ${esc(q.quotationNo)}</div>
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
           ${[['Your Ref.',q.yourRef||''],['Our Ref.',q.ourRef||(_salesTracker.find(e=>e.id===q.linkedSalesTrackerId)?.enquiryNo||'')],['Sales Person',creatorName],...(q.revision?[['Revision',`R${q.revision}`]]:[]),['Date',dateStr],['Page',`${pageNo} of ${pageCount}`]].map(([k,v])=>`<tr><td style="width:92px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
         </table>
@@ -12382,7 +12431,292 @@ function populateTrackerFilters(type){
 }
 
 function renderSalesTrackerPage(){ renderTrackerPage('sales'); }
-function renderPurchasingTrackerPage(){ renderTrackerPage('purchasing'); }
+// ═══ PURCHASE REQUESTS (WPR) ═══ request → MD approval → supplier quotes (PDF required) → compare & choose →
+// PO (pre-filled) → receive & check before use (ISO/IEC 17025 6.6.2 c) → invoice & payment. Old Purchasing Tracker
+// entries stay as read-only history.
+const PR_KEY='wl_pr'; let _prs=[];
+const PR_PURPOSES=['Consumable','Equipment','Reference standard calibration','Service','Other'];
+const PR_VERIFY=['Equipment','Reference standard calibration']; // must be checked before use
+async function loadPrs(){ try{ const r=await SB.get('wl_settings',PR_KEY); _prs=Array.isArray(r)?r:[]; }catch(e){ _prs=[]; } }
+async function savePrs(){ await SB.upsert('wl_settings',PR_KEY,_prs); }
+const isMD=()=>getUserRole(currentUser)==='Managing Director';
+const canBuy=()=>canUsePurchasingTracker(currentUser);
+const rm2=v=>'RM '+(parseFloat(v)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+function prStatus(r){
+  if(r.status==='Cancelled'||r.status==='Rejected') return r.status;
+  if((r.receipts||[]).length&&PR_VERIFY.includes(r.purpose)&&!r.verified) return 'Received — check before use'; // safety first
+  if(r.paidAt) return 'Paid';
+  if(r.invoice) return 'Invoice received';
+  if((r.receipts||[]).length){ const need=PR_VERIFY.includes(r.purpose)&&!r.verified; return need?'Received — check before use':'Received'; }
+  if(r.poNumber){ const po=prPo(r); if(!po||po.status==='Draft') return 'PO draft — submit for MD approval'; if(po.status==='Pending Approval') return 'PO waiting for MD approval'; if(po.status==='Rejected') return 'PO rejected — revise';
+    return 'PO approved'; }
+  if(r.selected) return 'Supplier chosen — create PO';
+  if((r.suppliers||[]).length){ const q=r.suppliers.filter(s=>s.status==='Quoted').length, d=r.suppliers.filter(s=>s.status!=='Requested').length; return d===r.suppliers.length?(q?'Ready to compare':'All declined'):`Waiting for quotes (${q}/${r.suppliers.length})`; }
+  return 'New — get quotes';
+}
+function prPo(r){ return (_purchaseOrders||[]).find(p=>p.poNumber===r.poNumber)||null; }
+const prBadge=st=>/waiting for MD|check before use|overdue|draft/i.test(st)?'badge-amber':/Paid|Received$|PO approved/.test(st)?'badge-green':/Rejected|rejected|Cancelled/.test(st)?'badge-red':'badge-blue';
+function prTotal(r){ const s=r.selected&&(r.suppliers||[]).find(x=>x.partnerId===r.selected.partnerId); return (r.items||[]).reduce((a,it)=>a+(parseFloat(s?s.prices[it.key]:it.estPrice)||0)*(parseFloat(it.qty)||1),0); }
+function prOverlay(id,w){ let ov=document.getElementById(id); if(!ov){ ov=document.createElement('div'); ov.id=id; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 10px;overflow-y:auto;'; document.body.appendChild(ov); } ov.dataset.w=w; return ov; }
+function prHead(title,closeId){ return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:15px;">${title}</span><button onclick="document.getElementById('${closeId}').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);flex-shrink:0;">✕</button></div>`; }
+// ── 1. new request (anyone) ──
+let _prDraftItems=[];
+function openNewPr(){
+  _prDraftItems=[{key:'i'+Date.now(),desc:'',qty:1,unit:'pcs',estPrice:''}];
+  const ov=prOverlay('prnew-overlay',560);
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:600px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">${prHead('🛒 New purchase request','prnew-overlay')}
+    <div style="padding:14px 16px;font-size:13px;">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Purpose <span class="req">*</span></label><select class="form-control" id="prn-purpose">${PR_PURPOSES.map(p=>`<option>${p}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Needed by</label><input class="form-control" type="date" id="prn-needed"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Items <span class="req">*</span></label><div id="prn-items"></div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="_prDraftItems.push({key:'i'+Date.now(),desc:'',qty:1,unit:'pcs',estPrice:''});prRenderDraftItems()">+ Add item</button></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">For job no. <span style="font-weight:normal;color:var(--text-muted);">(optional)</span></label><input class="form-control" id="prn-job" placeholder="e.g. WL26-00012"/></div>
+        <div class="form-group"><label class="form-label">For equipment <span style="font-weight:normal;color:var(--text-muted);">(optional)</span></label><input class="form-control" id="prn-eq" placeholder="e.g. E2 weight set WL-RS-003"/></div>
+      </div>
+      <div class="form-group"><label class="form-label">Why is it needed? <span class="req">*</span></label><textarea class="form-control" id="prn-why" rows="2" placeholder="e.g. 500 g reference weight due for recalibration"></textarea></div>
+      <div id="prn-total" style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('prnew-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="submitNewPr()">Submit request</button></div>
+    </div></div>`;
+  ov.style.display='flex'; prRenderDraftItems();
+}
+function prRenderDraftItems(){
+  el('prn-items').innerHTML=_prDraftItems.map((it,i)=>`<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;">
+    <div style="display:flex;gap:6px;align-items:center;"><input class="form-control" placeholder="Item / service description" value="${escapeHtml(it.desc)}" oninput="_prDraftItems[${i}].desc=this.value" style="flex:1;min-width:0;"/>
+      ${_prDraftItems.length>1?`<button type="button" class="btn btn-outline btn-sm" style="color:var(--red);flex-shrink:0;" onclick="_prDraftItems.splice(${i},1);prRenderDraftItems()">✕</button>`:''}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:6px;">
+      <div><label class="form-label" style="margin-bottom:2px;">Qty</label><input class="form-control" type="number" min="1" value="${it.qty}" oninput="_prDraftItems[${i}].qty=this.value;prDraftTotal()"/></div>
+      <div><label class="form-label" style="margin-bottom:2px;">Unit</label><input class="form-control" value="${escapeHtml(it.unit)}" oninput="_prDraftItems[${i}].unit=this.value"/></div>
+      <div><label class="form-label" style="margin-bottom:2px;">Est. price / unit</label><input class="form-control" type="number" min="0" step="0.01" value="${it.estPrice}" placeholder="RM" oninput="_prDraftItems[${i}].estPrice=this.value;prDraftTotal()"/></div>
+    </div></div>`).join(''); prDraftTotal();
+}
+function prDraftTotal(){ const t=_prDraftItems.reduce((a,it)=>a+(parseFloat(it.estPrice)||0)*(parseFloat(it.qty)||1),0); el('prn-total').textContent=t?`Estimated total: ${rm2(t)}`:''; }
+async function submitNewPr(){
+  const items=_prDraftItems.filter(it=>String(it.desc).trim()).map(it=>({...it,desc:it.desc.trim(),qty:parseFloat(it.qty)||1}));
+  if(!items.length){ alert('Add at least one item.'); return; }
+  const why=el('prn-why').value.trim(); if(!why){ alert('Please say why it is needed.'); return; }
+  let no; try{ no=await getNextDocNumber('WPR'); }catch(e){ alert('Could not get a request number — please try again.'); return; }
+  const r={id:'PR-'+Date.now(),no,createdAt:new Date().toISOString(),createdBy:currentUser,purpose:el('prn-purpose').value,neededBy:el('prn-needed').value||'',
+    jobNo:el('prn-job').value.trim(),equipment:el('prn-eq').value.trim(),why,items,status:'Open',suppliers:[],receipts:[]};
+  _prs.push(r); await savePrs(); document.getElementById('prnew-overlay').style.display='none';
+  addAudit('🛒',`Purchase request ${no} raised — ${escapeHtml(items.map(i=>i.desc).join(', '))}`);
+  showToast(`🛒 ${no} submitted — purchasing will get supplier quotes`,'success',3500); renderPrSections();
+}
+// ── the request window ──
+function openPr(id){
+  const r=_prs.find(x=>x.id===id); if(!r) return; const st=prStatus(r); const phone=isPhoneLike(); const today=toLocalDateStr(new Date());
+  const ov=prOverlay('pr-overlay',960);
+  const quoted=(r.suppliers||[]).filter(s=>s.status==='Quoted'); const tot=s=>(r.items||[]).reduce((a,it)=>a+(parseFloat(s.prices[it.key])||0)*(parseFloat(it.qty)||1),0);
+  const cheapest=quoted.length?Math.min(...quoted.map(tot)):null, fastest=quoted.length?Math.min(...quoted.map(s=>parseFloat(s.leadDays)||999)):null;
+  const row=(k,v)=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:2px 0;"><span style="color:var(--text-muted);min-width:0;">${k}</span><span style="text-align:right;white-space:nowrap;flex-shrink:0;">${v}</span></div>`;
+  const supCard=(s,si)=>{ const t=tot(s); const isSel=r.selected&&r.selected.partnerId===s.partnerId; const cheap=s.status==='Quoted'&&t===cheapest&&quoted.length>1, fast=s.status==='Quoted'&&(parseFloat(s.leadDays)||999)===fastest&&quoted.length>1; const expired=s.validUntil&&s.validUntil<today;
+    return `<div style="border:1px solid ${isSel?'#86efac':'var(--border)'};background:${isSel?'#ecfdf5':'#fff'};border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+      <div style="font-weight:700;">${escapeHtml(s.name)} ${isSel?'<span class="badge badge-green" style="font-size:10px;">chosen</span>':''}</div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:4px;">${s.status==='Quoted'?`quoted ${fmtDateShort(s.quotedAt)}${s.quoteRef?' · ref '+escapeHtml(s.quoteRef):''}${s.quoteFileUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(s.quoteFileUrl)}')">quotation PDF</a>`:''}`:(s.status==='Declined'?'declined':'waiting for quote')}</div>
+      ${s.status==='Quoted'?`${r.items.map(it=>row(`${escapeHtml(it.desc)} × ${it.qty}`,`${rm2(s.prices[it.key])} /${escapeHtml(it.unit||'unit')}`)).join('')}
+        ${row('<b>Total</b>',`<b style="${cheap?'color:#15803d;':''}">${rm2(t)}${cheap?' 💰':''}</b>`)}${row('Delivery',`<span style="${fast?'color:#15803d;font-weight:700;':''}">${s.leadDays||'—'} days${fast?' ⚡':''}</span>`)}
+        ${row('Valid until',s.validUntil?`<span style="${expired?'color:var(--red);':''}">${fmtDateShort(s.validUntil)}${expired?' (expired)':''}</span>`:'—')}${s.notes?row('Notes',escapeHtml(s.notes)):''}`:''}
+      ${canBuy()&&!r.selected&&r.status!=='Cancelled'?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+        <button class="btn btn-outline btn-sm" onclick="prEmail('${r.id}',${si})">✉️ Email</button><button class="btn btn-outline btn-sm" onclick="prCopy('${r.id}',${si})">📋 Copy</button>
+        <button class="btn btn-outline btn-sm" onclick="openPrQuote('${r.id}',${si})">${s.status==='Quoted'?'Edit quote':'Record quote'}</button>
+        ${s.status==='Requested'?`<button class="btn btn-outline btn-sm" onclick="prDecline('${r.id}',${si})">Declined</button>`:''}
+        ${s.status==='Quoted'?`<button class="btn btn-primary btn-sm" onclick="prChoose('${r.id}',${si})">Choose</button>`:''}</div>`:''}</div>`; };
+  const rec=(r.receipts||[]);
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:${phone?'100%':'760px'};max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">${prHead(`🛒 ${escapeHtml(r.no)} <span class="badge ${prBadge(st)}" style="font-size:11px;">${escapeHtml(st)}</span>`,'pr-overlay')}
+    <div style="padding:12px 16px;font-size:13px;">
+      <div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:12px;">
+        <div style="font-size:11.5px;color:var(--text-muted);">${escapeHtml(r.purpose)} · requested by ${escapeHtml(USERS[r.createdBy]?.name||r.createdBy)}, ${fmtDateShort(r.createdAt)}${r.neededBy?` · <span style="color:#b45309;">needed by ${fmtDateShort(r.neededBy)}</span>`:''}${r.jobNo?' · job '+escapeHtml(r.jobNo):''}${r.equipment?' · '+escapeHtml(r.equipment):''}</div>
+        ${r.items.map(it=>`<div style="padding:3px 0;border-top:1px solid var(--border);"><b>${escapeHtml(it.desc)}</b> × ${it.qty} ${escapeHtml(it.unit||'')}${parseFloat(it.estPrice)?`<span style="color:var(--text-muted);font-size:11.5px;"> · est. ${rm2(it.estPrice)}/unit</span>`:''}</div>`).join('')}
+        <div style="font-size:12px;margin-top:4px;">Why: ${escapeHtml(r.why)}</div></div>
+      ${r.status!=='Cancelled'?`<div style="font-weight:700;margin:6px 0;">Supplier quotes</div>
+        ${(r.suppliers||[]).length?r.suppliers.map(supCard).join(''):`<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:6px;">No suppliers asked yet.</div>`}
+        ${canBuy()&&!r.selected&&r.status!=='Cancelled'?`<button class="btn btn-outline btn-sm" onclick="prAskSuppliers('${r.id}')">+ Ask supplier(s) for a quote</button> <span style="font-size:11.5px;color:var(--text-muted);">💰 cheapest · ⚡ fastest · quotation PDF required</span>`:''}`:''}
+      ${r.selected?`<div class="qt-note info" style="margin-top:10px;">✅ <b>${escapeHtml(r.selected.name)}</b> chosen — ${escapeHtml(r.selected.reason)} · ${rm2(prTotal(r))}
+        ${r.poNumber?(()=>{ const po=prPo(r); const st=po?po.status:'Draft';
+            return `<div style="margin-top:4px;">PO: <b>${escapeHtml(r.poNumber)}</b> — ${st==='Pending Approval'?'⏳ waiting for MD approval':st==='Approved'||!['Draft','Rejected','Pending Approval'].includes(st)?`✅ approved${po?.approvedBy?' by '+escapeHtml(USERS[po.approvedBy]?.name||po.approvedBy):''} — send it to the supplier`:st==='Rejected'?`❌ rejected${po?.rejectReason?' — '+escapeHtml(po.rejectReason):''}. Revise and resubmit it in Purchase Orders.`:'draft — open it in Purchase Orders and submit it for MD approval'}</div>`; })()
+          :(canBuy()?`<div style="margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="prCreatePo('${r.id}')">🧾 Create PO (for MD approval)</button></div>`:'')}</div>`:''}
+      ${r.poNumber?`<div style="font-weight:700;margin:12px 0 6px;">📦 Receiving</div>
+        ${rec.map(x=>`<div style="font-size:12.5px;padding:4px 0;border-top:1px solid var(--border);">${fmtDateShort(x.date)} — ${r.items.map(it=>`${escapeHtml(it.desc)}: ${x.lines[it.key]?.qty??0} ${escapeHtml(x.lines[it.key]?.condition||'')}`).join(' · ')}${x.notes?' · '+escapeHtml(x.notes):''} <span style="color:var(--text-muted);">(${escapeHtml(USERS[x.by]?.name||x.by)})</span></div>`).join('')}
+        ${canBuy()&&!prFullyReceived(r)?(['Approved','Sent','Partially Delivered','Delivered','Closed'].includes(prPo(r)?.status)||(prPo(r)&&!['Draft','Pending Approval','Rejected'].includes(prPo(r).status))?`<button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openPrReceive('${r.id}')">📥 Record delivery</button>`:'<div style="font-size:12px;color:var(--text-muted);">Deliveries can be recorded once the MD has approved the PO.</div>'):''}
+        ${rec.length&&PR_VERIFY.includes(r.purpose)?(r.verified?`<div class="qt-note info" style="margin-top:8px;">✔️ Checked before use by ${escapeHtml(USERS[r.verified.by]?.name||r.verified.by)}, ${fmtDateShort(r.verified.at)} — ${escapeHtml(r.verified.note)}${r.verified.certUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(r.verified.certUrl)}')">certificate</a>`:''}</div>`
+          :(canBuy()?`<div class="qt-note warn" style="margin-top:8px;">This ${r.purpose==='Equipment'?'equipment':'reference standard'} must be <b>checked before use</b> (ISO/IEC 17025 6.6.2 c).<div style="margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="openPrVerify('${r.id}')">✔️ Record check</button></div></div>`:'')):''}`:''}
+      ${rec.length?`<div style="font-weight:700;margin:12px 0 6px;">🧾 Invoice &amp; payment</div>
+        ${r.invoice?`<div style="font-size:12.5px;">Invoice <b>${escapeHtml(r.invoice.no)}</b> · ${rm2(r.invoice.amount)} · dated ${fmtDateShort(r.invoice.date)} · due <b style="${!r.paidAt&&r.invoice.dueDate<today?'color:var(--red);':''}">${fmtDateShort(r.invoice.dueDate)}</b>${r.invoice.fileUrl?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(r.invoice.fileUrl)}')">invoice</a>`:''}</div>
+          ${r.paidAt?`<div style="font-size:12.5px;color:#15803d;margin-top:3px;">💵 Paid ${fmtDateShort(r.paidAt)}${r.paidRef?' · '+escapeHtml(r.paidRef):''}</div>`:(isMD()||isAdmin(currentUser)?`<button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="prMarkPaid('${r.id}')">💵 Mark paid</button>`:'')}`
+          :(canBuy()?`<button class="btn btn-outline btn-sm" onclick="openPrInvoice('${r.id}')">🧾 Record supplier invoice</button>`:'')}`:''}
+      ${canBuy()&&!r.paidAt&&!['Cancelled','Rejected'].includes(r.status)&&!r.poNumber?`<div style="text-align:right;margin-top:12px;"><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="prCancel('${r.id}')">Cancel request</button></div>`:''}
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function prApprove(id,ok){
+  if(!isMD()){ alert('Only the Managing Director can approve purchase requests.'); return; }
+  const r=_prs.find(x=>x.id===id); if(!r) return;
+  if(ok){ const note=prompt('Approve — note (optional):',''); if(note===null) return; r.approval={by:currentUser,at:new Date().toISOString(),note:note.trim()}; }
+  else { const why=prompt('Reject — reason:'); if(!why||!why.trim()) return; r.status='Rejected'; r.rejectedBy=currentUser; r.rejectReason=why.trim(); }
+  await savePrs(); addAudit(ok?'✅':'❌',`Purchase request ${r.no} ${ok?'approved':'rejected'}`); openPr(id); renderPrSections(); if(typeof renderDashboard==='function') renderDashboard();
+}
+async function prCancel(id){ const r=_prs.find(x=>x.id===id); const why=prompt('Cancel this request — reason:'); if(!why||!why.trim()) return; r.status='Cancelled'; r.cancelReason=why.trim(); await savePrs(); openPr(id); renderPrSections(); }
+function prAskSuppliers(id){
+  const r=_prs.find(x=>x.id===id); const have=new Set((r.suppliers||[]).map(s=>s.partnerId));
+  const list=_externalPartners.filter(p=>!have.has(p.id)).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  const ov=prOverlay('prask-overlay',520);
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:520px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">${prHead('Ask suppliers for a quote','prask-overlay')}
+    <div style="padding:12px 16px;font-size:13px;">
+      <input class="form-control" placeholder="Search suppliers…" oninput="[...document.querySelectorAll('.prask-row')].forEach(x=>x.style.display=x.textContent.toLowerCase().includes(this.value.toLowerCase())?'':'none')" style="margin-bottom:8px;"/>
+      <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 10px;">${list.length?list.map(p=>`<label class="prask-row" style="display:flex;gap:10px;align-items:flex-start;font-weight:normal;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+        <input type="checkbox" class="prask-v" value="${p.id}" style="width:18px;height:18px;margin-top:2px;flex-shrink:0;"/><span style="min-width:0;flex:1;"><span style="font-weight:600;">${escapeHtml(p.name)}</span> <span class="badge badge-slate" style="font-size:10px;">${escapeHtml(supplierTypeOf(p))}</span>
+        ${p.email?`<div style="color:var(--text-muted);font-size:11.5px;overflow-wrap:anywhere;">${escapeHtml(p.email)}</div>`:''}</span></label>`).join(''):'<div style="padding:8px;color:var(--text-muted);">No suppliers yet — add them in External Partners.</div>'}</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;"><button class="btn btn-outline" onclick="document.getElementById('prask-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="prAddSuppliers('${r.id}')">Add</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function prAddSuppliers(id){ const r=_prs.find(x=>x.id===id); const ids=[...document.querySelectorAll('.prask-v:checked')].map(c=>c.value); if(!ids.length){ alert('Tick at least one supplier.'); return; }
+  ids.forEach(pid=>{ const p=_externalPartners.find(x=>x.id===pid); r.suppliers.push({partnerId:pid,name:p?.name||'',email:p?.email||'',status:'Requested',requestedAt:new Date().toISOString(),prices:{}}); });
+  await savePrs(); document.getElementById('prask-overlay').style.display='none'; openPr(id); renderPrSections(); }
+function prRequestText(r,s){ return `Dear ${s.name},\n\nWestlab (M) Sdn. Bhd. would like your quotation for the following (our ref: ${r.no}):\n\n${r.items.map((it,i)=>`${i+1}. ${it.desc} — ${it.qty} ${it.unit||''}`).join('\n')}\n\nPlease include the unit price, delivery time and validity${r.neededBy?`; we need it by ${fmtDateShort(r.neededBy)}`:''}.\n\nThank you.\n${USERS[currentUser]?.name||''}\n${_settings.labName||'Westlab (M) Sdn. Bhd.'}`; }
+function prEmail(id,si){ const r=_prs.find(x=>x.id===id); const s=r.suppliers[si]; const p=_externalPartners.find(x=>x.id===s.partnerId);
+  window.location.href=`mailto:${encodeURIComponent(p?.email||s.email||'')}?subject=${encodeURIComponent(`Request for quotation (${r.no})`)}&body=${encodeURIComponent(prRequestText(r,s))}`; }
+async function prCopy(id,si){ const r=_prs.find(x=>x.id===id); const t=prRequestText(r,r.suppliers[si]); try{ await navigator.clipboard.writeText(t); showToast('📋 Request copied','success',2000); }catch(e){ prompt('Copy this request:',t); } }
+async function prDecline(id,si){ const r=_prs.find(x=>x.id===id); if(!confirm(`Mark ${r.suppliers[si].name} as declined?`)) return; r.suppliers[si].status='Declined'; await savePrs(); openPr(id); }
+async function prUpload(file,folder){ try{ const path=`${folder}/${Date.now()}_${sanitizeFilenameForPath(file.name)}`;
+  const res=await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'POST',headers:{'X-File-Path':path,'Content-Type':file.type||'application/octet-stream'},body:file});
+  if(res.ok) return (await res.json()).url||''; }catch(e){} return ''; }
+function openPrQuote(id,si){
+  const r=_prs.find(x=>x.id===id); const s=r.suppliers[si]; const ov=prOverlay('prq-overlay',520);
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:520px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">${prHead(`💬 ${escapeHtml(s.name)}'s quotation`,'prq-overlay')}
+    <div style="padding:12px 16px;font-size:13px;">
+      ${r.items.map(it=>`<div class="form-group"><label class="form-label">${escapeHtml(it.desc)} × ${it.qty} — price per ${escapeHtml(it.unit||'unit')} (RM)</label><input class="form-control prq-price" data-k="${it.key}" type="number" min="0" step="0.01" value="${s.prices[it.key]??''}"/></div>`).join('')}
+      <div class="form-row"><div class="form-group"><label class="form-label">Delivery (working days)</label><input class="form-control" id="prq-lead" type="number" min="0" value="${escapeHtml(s.leadDays||'')}"/></div>
+        <div class="form-group"><label class="form-label">Valid until</label><input class="form-control" id="prq-valid" type="date" value="${escapeHtml(s.validUntil||'')}"/></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Their quotation no.</label><input class="form-control" id="prq-ref" value="${escapeHtml(s.quoteRef||'')}"/></div>
+        <div class="form-group"><label class="form-label">Notes</label><input class="form-control" id="prq-notes" value="${escapeHtml(s.notes||'')}" placeholder="e.g. incl. delivery"/></div></div>
+      <div class="form-group"><label class="form-label">Their quotation (PDF or photo) <span class="req">*</span></label><input class="form-control" type="file" id="prq-file" accept=".pdf,image/*"/>${s.quoteFileUrl?`<div style="font-size:11.5px;margin-top:3px;">Already attached — choose a file only to replace it</div>`:''}</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('prq-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="savePrQuote('${r.id}',${si})">Save quote</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function savePrQuote(id,si){
+  const r=_prs.find(x=>x.id===id); const s=r.suppliers[si]; const prices={};
+  for(const i of document.querySelectorAll('.prq-price')){ const n=parseFloat(i.value); if(!(n>=0)){ alert('Enter the price for every item.'); return; } prices[i.dataset.k]=n; }
+  const f=el('prq-file').files&&el('prq-file').files[0]; if(!f&&!s.quoteFileUrl){ alert("Please attach the supplier's quotation — it's required."); return; }
+  let url=s.quoteFileUrl||''; if(f){ url=await prUpload(f,`purchasing/${r.no}`); if(!url){ alert("The quotation file couldn't be uploaded — nothing was saved."); return; } }
+  Object.assign(s,{status:'Quoted',prices,leadDays:el('prq-lead').value,validUntil:el('prq-valid').value,quoteRef:el('prq-ref').value.trim(),notes:el('prq-notes').value.trim(),quoteFileUrl:url,quotedAt:new Date().toISOString()});
+  await savePrs(); for(const it of r.items) await recordPartnerPrice(s.partnerId,it.desc,r.purpose,prices[it.key],`${r.no}${s.quoteRef?' / '+s.quoteRef:''}`);
+  document.getElementById('prq-overlay').style.display='none'; openPr(id); renderPrSections();
+}
+async function prChoose(id,si){
+  const r=_prs.find(x=>x.id===id); const s=r.suppliers[si];
+  if(s.validUntil&&s.validUntil<toLocalDateStr(new Date())&&!confirm(`${s.name}'s quote expired on ${fmtDateShort(s.validUntil)}. Choose anyway (ask them to confirm the price)?`)) return;
+  const why=prompt(`Why ${s.name}? (e.g. cheapest, fastest, preferred supplier)`); if(!why||!why.trim()) return;
+  r.selected={partnerId:s.partnerId,name:s.name,reason:why.trim(),at:new Date().toISOString(),by:currentUser};
+  await savePrs(); addAudit('✅',`${r.no}: ${escapeHtml(s.name)} chosen — ${escapeHtml(why.trim())}`); openPr(id); renderPrSections();
+}
+function prCreatePo(id){
+  const r=_prs.find(x=>x.id===id); if(!r||!r.selected) return; const s=r.suppliers.find(x=>x.partnerId===r.selected.partnerId);
+  window._prPoCtx={id}; openPurchaseOrderModal(null,{supplierId:r.selected.partnerId,fromPr:true});
+  setTimeout(()=>{ _poLines=r.items.map(it=>({description:it.desc,serial:'',qty:parseFloat(it.qty)||1,unitPrice:parseFloat(s?.prices[it.key])||0})); if(typeof renderPoLines==='function') renderPoLines();
+    if(el('po-your-ref')) el('po-your-ref').value=s?.quoteRef||''; if(el('po-req-no')) el('po-req-no').value=r.no;
+    const rm=el('po-remarks'); if(rm&&!rm.value) rm.value=r.jobNo?`Job ${r.jobNo}.`:''; },150);
+}
+// ── receiving + check before use ──
+function prReceivedQty(r,key){ return (r.receipts||[]).reduce((a,x)=>a+(parseFloat(x.lines[key]?.qty)||0),0); }
+function prFullyReceived(r){ return (r.receipts||[]).length&&r.items.every(it=>prReceivedQty(r,it.key)>=(parseFloat(it.qty)||1)); }
+function openPrReceive(id){
+  const r=_prs.find(x=>x.id===id); const ov=prOverlay('prrec-overlay',520);
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:520px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">${prHead(`📥 Delivery — ${escapeHtml(r.no)}`,'prrec-overlay')}
+    <div style="padding:12px 16px;font-size:13px;">
+      <div class="form-group"><label class="form-label">Received on</label><input class="form-control" type="date" id="prr-date" value="${toLocalDateStr(new Date())}"/></div>
+      ${r.items.map(it=>{ const left=Math.max(0,(parseFloat(it.qty)||1)-prReceivedQty(r,it.key)); return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;"><b>${escapeHtml(it.desc)}</b> <span style="color:var(--text-muted);font-size:12px;">ordered ${it.qty}, still to come ${left}</span>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px;"><div><label class="form-label" style="margin-bottom:2px;">Qty received</label><input class="form-control prr-qty" data-k="${it.key}" type="number" min="0" value="${left}"/></div>
+        <div><label class="form-label" style="margin-bottom:2px;">Condition</label><select class="form-control prr-cond" data-k="${it.key}"><option>OK</option><option>Damaged</option><option>Wrong item</option></select></div></div></div>`; }).join('')}
+      <div class="form-group"><label class="form-label">Delivery order / notes</label><input class="form-control" id="prr-notes" placeholder="e.g. DO 12345"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('prrec-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="savePrReceive('${r.id}')">Save delivery</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function savePrReceive(id){
+  const r=_prs.find(x=>x.id===id); const lines={};
+  document.querySelectorAll('.prr-qty').forEach(i=>{ lines[i.dataset.k]={qty:Math.max(0,parseFloat(i.value)||0),condition:document.querySelector(`.prr-cond[data-k="${i.dataset.k}"]`).value}; });
+  if(!Object.values(lines).some(l=>l.qty>0)){ alert('Enter the quantity received.'); return; }
+  const bad=Object.values(lines).some(l=>l.qty>0&&l.condition!=='OK');
+  (r.receipts=r.receipts||[]).push({date:el('prr-date').value||toLocalDateStr(new Date()),by:currentUser,lines,notes:el('prr-notes').value.trim()});
+  await savePrs(); addAudit('📥',`${r.no}: delivery recorded${bad?' — problem noted':''}`);
+  if(bad) alert('A delivery problem was recorded. Contact the supplier — and if it affects calibration work, raise an NC.');
+  document.getElementById('prrec-overlay').style.display='none'; openPr(id); renderPrSections();
+}
+function openPrVerify(id){
+  const r=_prs.find(x=>x.id===id); const ov=prOverlay('prver-overlay',520); const isRef=r.purpose==='Reference standard calibration';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:520px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">${prHead('✔️ Check before use','prver-overlay')}
+    <div style="padding:12px 16px;font-size:13px;">
+      <div class="qt-note info" style="margin-bottom:10px;">${isRef?'Check the calibration certificate: right item and serial, traceability, results and uncertainty fit our needs, and any adjustment noted.':'Check the equipment meets the specification needed before it is used (ISO/IEC 17025 6.4.4).'}</div>
+      <div class="form-group"><label class="form-label">What was checked / result <span class="req">*</span></label><textarea class="form-control" id="prv-note" rows="3" placeholder="${isRef?'e.g. Cert C-12345 checked: serial matches, SIRIM traceable, U within limit':'e.g. Specs checked against requirement, functional test OK'}"></textarea></div>
+      ${isRef?`<div class="form-group"><label class="form-label">Calibration certificate <span class="req">*</span></label><input class="form-control" type="file" id="prv-file" accept=".pdf,image/*"/></div>`:''}
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">Remember to update the Master List of Equipment (new certificate / next due date).</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('prver-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="savePrVerify('${r.id}')">Save check</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function savePrVerify(id){
+  const r=_prs.find(x=>x.id===id); const note=el('prv-note').value.trim(); if(!note){ alert('Describe what was checked.'); return; }
+  let certUrl=''; if(r.purpose==='Reference standard calibration'){ const f=el('prv-file').files&&el('prv-file').files[0]; if(!f){ alert('Attach the calibration certificate.'); return; } certUrl=await prUpload(f,`purchasing/${r.no}`); if(!certUrl){ alert("The certificate couldn't be uploaded — nothing was saved."); return; } }
+  r.verified={by:currentUser,at:new Date().toISOString(),note,certUrl}; await savePrs(); addAudit('✔️',`${r.no}: checked before use`);
+  document.getElementById('prver-overlay').style.display='none'; openPr(id); renderPrSections();
+}
+// ── invoice & payment ──
+function openPrInvoice(id){
+  const r=_prs.find(x=>x.id===id); const ov=prOverlay('prinv-overlay',480); const d=new Date(); d.setDate(d.getDate()+30);
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:480px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">${prHead(`🧾 Supplier invoice — ${escapeHtml(r.no)}`,'prinv-overlay')}
+    <div style="padding:12px 16px;font-size:13px;">
+      <div class="form-row"><div class="form-group"><label class="form-label">Invoice no. <span class="req">*</span></label><input class="form-control" id="pri-no"/></div>
+        <div class="form-group"><label class="form-label">Amount (RM) <span class="req">*</span></label><input class="form-control" id="pri-amt" type="number" min="0" step="0.01" value="${prTotal(r).toFixed(2)}"/></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Invoice date</label><input class="form-control" id="pri-date" type="date" value="${toLocalDateStr(new Date())}"/></div>
+        <div class="form-group"><label class="form-label">Payment due</label><input class="form-control" id="pri-due" type="date" value="${toLocalDateStr(d)}"/></div></div>
+      <div class="form-group"><label class="form-label">Invoice file</label><input class="form-control" type="file" id="pri-file" accept=".pdf,image/*"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="document.getElementById('prinv-overlay').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="savePrInvoice('${r.id}')">Save invoice</button></div>
+    </div></div>`;
+  ov.style.display='flex';
+}
+async function savePrInvoice(id){
+  const r=_prs.find(x=>x.id===id); const no=el('pri-no').value.trim(), amt=parseFloat(el('pri-amt').value);
+  if(!no||!(amt>=0)){ alert('Enter the invoice number and amount.'); return; }
+  const diff=Math.abs(amt-prTotal(r)); if(diff>0.01&&!confirm(`The invoice (${rm2(amt)}) differs from the PO (${rm2(prTotal(r))}) by ${rm2(diff)}. Save anyway?`)) return;
+  const f=el('pri-file').files&&el('pri-file').files[0]; let url=''; if(f){ url=await prUpload(f,`purchasing/${r.no}`); }
+  r.invoice={no,amount:amt,date:el('pri-date').value,dueDate:el('pri-due').value,fileUrl:url,by:currentUser}; await savePrs();
+  addAudit('🧾',`${r.no}: supplier invoice ${escapeHtml(no)} recorded (${rm2(amt)})`); document.getElementById('prinv-overlay').style.display='none'; openPr(id); renderPrSections();
+}
+async function prMarkPaid(id){ const r=_prs.find(x=>x.id===id); const ref=prompt('Payment reference (e.g. bank transfer ref):',''); if(ref===null) return;
+  r.paidAt=new Date().toISOString(); r.paidRef=ref.trim(); r.paidBy=currentUser; await savePrs(); addAudit('💵',`${r.no}: paid ${rm2(r.invoice?.amount)}`); openPr(id); renderPrSections(); }
+// ── page sections: spend summary + requests (Purchasing page) and "my requests" (My Requests page) ──
+function renderPrSections(){
+  const box=el('pr-section'); const mine=el('my-pr-section');
+  const row=r=>{ const st=prStatus(r); return `<div class="card" style="padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div style="min-width:0;flex:1 1 260px;"><b>${escapeHtml(r.no)}</b> · ${escapeHtml(r.purpose)}${r.selected?' · '+escapeHtml(r.selected.name):''}
+      <div style="font-size:12px;color:var(--text-muted);overflow-wrap:anywhere;">${escapeHtml(r.items.map(i=>`${i.desc} × ${i.qty}`).join(', '))} · <span style="white-space:nowrap;">${rm2(prTotal(r))}</span></div></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:auto;"><span class="badge ${prBadge(st)}">${escapeHtml(st)}</span><button class="btn btn-outline btn-sm" onclick="openPr('${r.id}')">Open</button></div></div>`; };
+  if(mine){ const my=_prs.filter(r=>r.createdBy===currentUser).slice().reverse();
+    mine.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:16px 0 8px;flex-wrap:wrap;"><div style="font-weight:700;font-size:15px;">🛒 My purchase requests</div><button class="btn btn-primary btn-sm" onclick="openNewPr()">🛒 Request a purchase</button></div>
+      ${my.length?my.slice(0,10).map(row).join(''):'<div style="color:var(--text-muted);font-size:13px;">None yet.</div>'}`; }
+  if(!box) return;
+  const now=new Date(), ym=toLocalDateStr(now).slice(0,7), today=toLocalDateStr(now);
+  const live=_prs.filter(r=>!['Cancelled','Rejected'].includes(r.status));
+  const spentMonth=live.filter(r=>r.invoice&&String(r.invoice.date).slice(0,7)===ym).reduce((a,r)=>a+(parseFloat(r.invoice.amount)||0),0);
+  const openPos=live.filter(r=>r.poNumber&&!prFullyReceived(r)), owed=live.filter(r=>r.invoice&&!r.paidAt);
+  const bySup={}; live.filter(r=>r.invoice&&String(r.invoice.date).slice(0,4)===ym.slice(0,4)).forEach(r=>{ const n=r.selected?.name||'—'; bySup[n]=(bySup[n]||0)+(parseFloat(r.invoice.amount)||0); });
+  const top=Object.entries(bySup).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const filt=(el('pr-filter')?.value)||'open';
+  const list=_prs.filter(r=>filt==='all'||(filt==='open'?!['Paid','Cancelled','Rejected'].includes(prStatus(r)):prStatus(r)===filt)).slice().reverse();
+  const card=(k,v,sub)=>`<div class="card" style="padding:10px 12px;flex:1 1 150px;min-width:0;"><div style="font-size:11.5px;color:var(--text-muted);">${k}</div><div style="font-size:18px;font-weight:700;">${v}</div>${sub?`<div style="font-size:11.5px;color:var(--text-muted);">${sub}</div>`:''}</div>`;
+  box.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      ${card('Spent this month (invoiced)',rm2(spentMonth))}${card('Open POs (not fully received)',openPos.length)}${card('Invoices to pay',owed.length,owed.length?rm2(owed.reduce((a,r)=>a+(parseFloat(r.invoice.amount)||0),0))+(owed.some(r=>r.invoice.dueDate<today)?' · some overdue':''):'')}${card('POs waiting for MD approval',(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length)}</div>
+    ${top.length?`<div class="card" style="padding:10px 12px;margin-bottom:12px;font-size:12.5px;"><b>Spend by supplier (${ym.slice(0,4)})</b>${top.map(([n,v])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-top:1px solid var(--border);"><span style="min-width:0;overflow-wrap:anywhere;">${escapeHtml(n)}</span><b style="white-space:nowrap;">${rm2(v)}</b></div>`).join('')}</div>`:''}
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;"><div style="font-weight:700;font-size:15px;">Purchase requests</div>
+      <select class="form-control" id="pr-filter" style="width:auto;" onchange="renderPrSections()">${[['open','Open'],['PO waiting for MD approval','PO waiting for MD approval'],['Invoice received','Invoices to pay'],['Paid','Paid'],['all','All']].map(([v,l])=>`<option value="${v}" ${filt===v?'selected':''}>${l}</option>`).join('')}</select></div>
+    ${list.length?list.map(row).join(''):'<div style="color:var(--text-muted);font-size:13px;margin-bottom:8px;">Nothing here.</div>'}
+    <div style="font-weight:700;font-size:15px;margin:18px 0 4px;">History (earlier purchasing entries — read only)</div>`;
+}
+function renderPurchasingTrackerPage(){ renderPrSections(); renderTrackerPage('purchasing'); }
 // Maps the internal stored verdict value to a professional display label — the stored
 // value itself ('Can Do'/'Cannot Do'/'Can Do (External)') never changes, so existing data
 // and all comparisons keep working; only what's shown on screen/exports changes.
@@ -13186,6 +13520,7 @@ function renderSalesTrackerList(readOnly){
 }
 
 function openTrackerEntryModal(type,entryId){
+  if(type==='purchasing'){ alert('Earlier purchasing entries are kept as read-only history. Use "+ New purchase request" for new purchases.'); return; }
   window._tkEditId=entryId||null; _itemTab.sales=0; { const b=el('sales-item-tabs'); if(b) b.remove(); }
   if(type==='sales') refreshStdNameSuggestions();
   if(!trackerCanUse(type)){alert('You do not have access to this tracker.');return;}
@@ -13413,15 +13748,45 @@ function updateSalesItemSpec(idx,input){
 // so the input never loses focus or gets interrupted mid-keystroke.
 // The pricing box of one enquiry item (item code, price, discount, suggestions). It's refreshed on its
 // own when the name / accreditation / Lab-On-site changes, so fields being typed in are never redrawn.
+// Enquiry: link an item to an existing code (same grouped list as the quotation). Linking remembers the name for
+// that code, so the item is matched automatically from now on (also on the quotation).
+function salesCodeLinkHtml(it,idx){
+  const coded=(_settings.priceReference||[]).filter(p=>p.itemCode).sort((a,b)=>String(a.itemCode).localeCompare(String(b.itemCode)));
+  if(!coded.length||!String(it.eqName||'').trim()) return '<span style="color:var(--text-muted);">No item code yet — it can be created at the quotation</span>';
+  const fits=p=>(p.accreditation||'')===(it.accreditationRequested||'')&&(p.calType||'Lab')===(it.calType||'Lab');
+  const same=coded.filter(fits), other=coded.filter(p=>!fits(p));
+  const opt=p=>`<option value="${p.id}">${escapeHtml(p.itemCode+' — '+p.eqName)}${fits(p)?'':` [${escapeHtml([qtAccLabel(p.accreditation)||'no accreditation',(p.calType||'Lab')==='Onsite'?'On-site':'Lab'].join(' · '))}]`}</option>`;
+  return `<span style="color:var(--text-muted);">No item code yet.</span>
+    <select class="form-control" style="width:100%;margin-top:4px;padding:6px 8px;font-size:12.5px;" onchange="if(this.value) salesLinkStandard(${idx},this.value)">
+      <option value="">Link to an existing item code…</option>
+      ${same.length?`<optgroup label="Same service">${same.map(opt).join('')}</optgroup>`:''}
+      ${other.length?`<optgroup label="Other services (the item switches to that service)">${other.map(opt).join('')}</optgroup>`:''}</select>`;
+}
+async function salesLinkStandard(idx,prId){
+  const it=_salesDraftItems[idx]; const p=(_settings.priceReference||[]).find(x=>x.id===prId); if(!it||!p) return;
+  const pAcc=p.accreditation||'', pCal=p.calType||'Lab';
+  if(pAcc!==(it.accreditationRequested||'')||pCal!==(it.calType||'Lab')){
+    const label=[qtAccLabel(pAcc)||'no accreditation',pCal==='Onsite'?'On-site':'Lab'].join(' · ');
+    if(it.accreditationRequested&&!confirm(`${p.itemCode} is for ${label}.\n\nSwitch this item to ${label}?`)){ renderSalesItemsList(); return; }
+    it.accreditationRequested=pAcc; it.calType=pCal;
+  }
+  const key=qtNameKey(it.eqName);
+  if(key&&!qtStdNames(p).includes(key)){ const alias=String(it.eqName).trim().replace(/\s+/g,' ');
+    try{ await patchSettings(st=>{ famAddAlias(st,p,alias); }); showToast(`🏷️ Linked to ${p.itemCode}. “${alias}” is now remembered as another name for ${p.eqName}.`,'success',4500); }
+    catch(e){ showToast('Could not save the link: '+e.message,'warn',5000); }
+    refreshStdNameSuggestions();
+  } else showToast(`🏷️ Linked to ${p.itemCode}`,'success',2500);
+  renderSalesItemsList();
+}
 function salesItemPriceBoxHtml(it,idx){
         const std=qtFindStandard(it.eqName,it.accreditationRequested,it.calType);
         const sg=priceSuggestions({custId:el('tk-cust-id')?.value||'',eqName:it.eqName,acc:it.accreditationRequested,calType:it.calType,dealerTicked:!!el('tk-type-dealer')?.checked});
         qtApplyExtraAuto(it);
         const c=qtLineCalc({...it,unitPrice:it.price});
   return `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
-          <div style="font-size:11.5px;margin-bottom:6px;">🏷️ ${std?.itemCode?`Item code <b style="color:#3730a3;">${escapeHtml(std.itemCode)}</b>${qtNameKey(std.eqName)!==qtNameKey(it.eqName)?` — standard item “${escapeHtml(std.eqName)}”`:''}`:'<span style="color:var(--text-muted);">No item code yet — it can be linked or created at the quotation</span>'}</div>
-          <div class="form-row" style="margin-bottom:0;">
-            <div class="form-group" style="margin-bottom:0;">${itemExtraParams(it).length?`<label class="form-label">Unit price</label>${priceSummaryBox(it,it.price,'sales',idx)}`
+          <div style="font-size:11.5px;margin-bottom:6px;">🏷️ ${std?.itemCode?`Item code <b style="color:#3730a3;">${escapeHtml(std.itemCode)}</b>${qtNameKey(std.eqName)!==qtNameKey(it.eqName)?` — standard item “${escapeHtml(std.eqName)}”`:''}`:salesCodeLinkHtml(it,idx)}</div>
+          <div class="form-row" style="margin-bottom:0;align-items:end;">
+            <div class="form-group" style="margin-bottom:0;">${itemExtraParams(it).length?`<label class="form-label">${it.wholePrice?'Unit price (RM) — whole instrument':'Unit price'}</label>${priceSummaryBox(it,it.price,'sales',idx)}`
       :`<label class="form-label">Unit Price (RM)</label><input class="form-control" type="number" min="0" step="0.01" placeholder="0.00" value="${it.price||''}" oninput="updateSalesItemField(${idx},'price',parseFloat(this.value)||0);updateSalesItemTotal(${idx});"/>`}</div>
             <div class="form-group" style="margin-bottom:0;"><label class="form-label">Discount <span style="font-weight:normal;color:var(--text-muted);">(10% or RM)</span></label><input class="form-control" placeholder="none" value="${escapeHtml(it.discount||'')}" oninput="updateSalesItemField(${idx},'discount',this.value);updateSalesItemTotal(${idx});"/></div>
           </div>
@@ -13818,42 +14183,55 @@ function openAvailabilityCalendar(startId,endId,excludeId,onDone,daysId){
 function renderAvailabilityCalendar(){
   const c=_avCal; if(!c) return;
   let ov=document.getElementById('avcal-overlay');
-  if(!ov){ ov=document.createElement('div'); ov.id='avcal-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000001;display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow-y:auto;'; document.body.appendChild(ov); }
+  if(!ov){ ov=document.createElement('div'); ov.id='avcal-overlay'; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000001;display:flex;align-items:flex-start;justify-content:center;padding:24px 10px;overflow-y:auto;'; document.body.appendChild(ov); }
+  const phone=isPhoneLike();
   const first=new Date(c.y,c.m,1), days=new Date(c.y,c.m+1,0).getDate(), lead=first.getDay(); const today=toLocalDateStr(new Date());
   const cells=[]; for(let i=0;i<lead;i++) cells.push(null); for(let d=1;d<=days;d++) cells.push(toLocalDateStr(new Date(c.y,c.m,d)));
   const inSel=ds=>c.days.has(ds);
-  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:700px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
-      <button class="btn btn-outline btn-sm" onclick="_avCal.m--;if(_avCal.m<0){_avCal.m=11;_avCal.y--;}renderAvailabilityCalendar()">‹</button>
-      <b>📅 ${first.toLocaleDateString('en-MY',{month:'long',year:'numeric'})} — on-site availability</b>
-      <span><button class="btn btn-outline btn-sm" onclick="_avCal.m++;if(_avCal.m>11){_avCal.m=0;_avCal.y++;}renderAvailabilityCalendar()">›</button>
-      <button onclick="document.getElementById('avcal-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);margin-left:6px;">✕</button></span></div>
-    <div style="padding:10px 14px;">
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:11px;">
-        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div style="text-align:center;font-weight:700;color:var(--text-muted);">${d}</div>`).join('')}
-        ${cells.map(ds=>{ if(!ds) return '<div></div>'; const a=dayAvailability(ds,c.excludeId); const sel=inSel(ds); const past=ds<today;
-          const tip=[a.holiday,...a.jobs.map(j=>`Job ${j.no} ${j.name}${j.area?' ('+j.area+')':''}${j.eng.length?' — '+j.eng.join(', '):''}`),...a.holds.map(h=>`Tentative ${h.no} ${h.name}${h.area?' ('+h.area+')':''}`),a.leave.length?'On leave: '+a.leave.join(', '):''].filter(Boolean).join('\n');
-          const busy=a.jobs.length||a.holds.length;
-          return `<div onclick="${past?'':`avCalPick('${ds}')`}" title="${escapeHtml(tip)}" style="min-height:62px;border:1px solid ${sel?'#2563eb':'var(--border)'};border-radius:6px;padding:3px 4px;cursor:${past?'default':'pointer'};
-            background:${sel?'#dbeafe':(a.holiday||a.weekend?'#f3f4f6':(busy?'#fff7ed':'#fff'))};opacity:${past?.45:1};">
-            <div style="font-weight:700;font-size:12px;">${+ds.slice(8)}</div>
-            ${a.holiday?`<div style="color:#7c3aed;">🎉 ${escapeHtml(a.holiday.slice(0,14))}</div>`:''}
-            ${a.jobs.length?`<div style="color:#0d9488;">📍 ${a.jobs.length} job${a.jobs.length>1?'s':''}${a.jobs[0].area?' · '+escapeHtml(a.jobs[0].area.slice(0,10)):''}</div>`:''}
-            ${a.holds.length?`<div style="color:#b45309;">🕓 ${a.holds.length} tentative</div>`:''}
-            ${a.leave.length?`<div style="color:#64748b;">🌴 ${a.leave.length} on leave</div>`:''}
-            ${a.returning.length?`<div style="color:#0369a1;">🚗 ${a.returning.length} late start</div>`:''}</div>`; }).join('')}
+  // what's on each day this month — listed under the calendar (works on phones, where there's no hover)
+  const monthNotes=[];
+  const cellHtml=ds=>{ if(!ds) return '<div></div>'; const a=dayAvailability(ds,c.excludeId); const sel=inSel(ds); const past=ds<today;
+    const bits=[]; if(a.holiday) bits.push(`🎉 ${escapeHtml(a.holiday)}`);
+    a.jobs.forEach(j=>bits.push(`📍 ${escapeHtml(j.no)} ${escapeHtml(j.name)}${j.area?' ('+escapeHtml(j.area)+')':''}${j.eng.length?' — '+escapeHtml(j.eng.join(', ')):''}`));
+    a.holds.forEach(h=>bits.push(`🕓 tentative ${escapeHtml(h.no)} ${escapeHtml(h.name)}${h.area?' ('+escapeHtml(h.area)+')':''}`));
+    if(a.leave.length) bits.push(`🌴 on leave: ${escapeHtml(a.leave.join(', '))}`); if(a.returning.length) bits.push(`🚗 late start: ${escapeHtml(a.returning.join(', '))}`);
+    if(bits.length) monthNotes.push(`<div style="padding:3px 0;border-top:1px solid var(--border);"><b>${+ds.slice(8)} ${first.toLocaleDateString('en-MY',{month:'short'})}</b> · ${bits.join(' · ')}</div>`);
+    const busy=a.jobs.length||a.holds.length;
+    const marks=phone
+      ? [a.holiday?'🎉':'',a.jobs.length?`📍${a.jobs.length}`:'',a.holds.length?`🕓${a.holds.length}`:'',a.leave.length?`🌴${a.leave.length}`:'',a.returning.length?`🚗${a.returning.length}`:''].filter(Boolean).map(m=>`<div style="line-height:1.25;">${m}</div>`).join('')
+      : `${a.holiday?`<div style="color:#7c3aed;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🎉 ${escapeHtml(a.holiday)}</div>`:''}
+         ${a.jobs.length?`<div style="color:#0d9488;">📍 ${a.jobs.length} job${a.jobs.length>1?'s':''}</div>`:''}
+         ${a.holds.length?`<div style="color:#b45309;">🕓 ${a.holds.length} tentative</div>`:''}
+         ${a.leave.length?`<div style="color:#64748b;">🌴 ${a.leave.length} on leave</div>`:''}
+         ${a.returning.length?`<div style="color:#0369a1;">🚗 ${a.returning.length} late start</div>`:''}`;
+    return `<div onclick="${past?'':`avCalPick('${ds}')`}" title="${escapeHtml(bits.join('\n').replace(/<[^>]+>/g,''))}" style="min-width:0;min-height:${phone?54:62}px;border:${sel?2:1}px solid ${sel?'#2563eb':'var(--border)'};border-radius:6px;padding:3px 4px;cursor:${past?'default':'pointer'};overflow:hidden;
+      background:${sel?'#dbeafe':(a.holiday||a.weekend?'#f3f4f6':(busy?'#fff7ed':'#fff'))};opacity:${past?.45:1};font-size:${phone?11:11}px;">
+      <div style="font-weight:700;font-size:12px;">${+ds.slice(8)}</div>${marks}</div>`; };
+  const grid=cells.map(cellHtml).join('');
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:720px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);">
+      <button class="btn btn-outline btn-sm" style="flex-shrink:0;" onclick="_avCal.m--;if(_avCal.m<0){_avCal.m=11;_avCal.y--;}renderAvailabilityCalendar()">‹</button>
+      <b style="flex:1;text-align:center;font-size:${phone?14:15}px;">📅 ${first.toLocaleDateString('en-MY',{month:'long',year:'numeric'})}</b>
+      <button class="btn btn-outline btn-sm" style="flex-shrink:0;" onclick="_avCal.m++;if(_avCal.m>11){_avCal.m=0;_avCal.y++;}renderAvailabilityCalendar()">›</button>
+      <button onclick="document.getElementById('avcal-overlay').style.display='none'" style="flex-shrink:0;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);margin-left:4px;">✕</button></div>
+    <div style="padding:10px ${phone?8:14}px;">
+      <div style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:6px;">On-site availability</div>
+      <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:${phone?3:4}px;font-size:11px;">
+        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div style="text-align:center;font-weight:700;color:var(--text-muted);">${phone?d.slice(0,2):d}</div>`).join('')}
+        ${grid}
       </div>
-      <div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">📍 confirmed on-site job · 🕓 tentative (other enquiries) · 🌴 staff on leave · 🎉 public holiday — hover a day for details. Click the first day, then the last day.</div>
-      <div style="display:flex;gap:6px;margin-top:10px;font-size:12px;">
-        <button class="btn btn-sm ${c.mode==='days'?'btn-primary':'btn-outline'}" onclick="_avCal.mode='days';renderAvailabilityCalendar()">Pick days</button>
-        <button class="btn btn-sm ${c.mode==='range'?'btn-primary':'btn-outline'}" onclick="_avCal.mode='range';_avCal.picking='start';renderAvailabilityCalendar()">Select a range</button></div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;line-height:1.5;">🎉 public holiday · 📍 confirmed on-site job · 🕓 tentative (other enquiries) · 🌴 staff on leave · 🚗 late start after a site return</div>
+      ${monthNotes.length?`<div style="margin-top:8px;font-size:12px;border:1px solid var(--border);border-radius:8px;padding:6px 10px;max-height:150px;overflow-y:auto;"><div style="font-weight:700;margin-bottom:2px;">This month</div>${monthNotes.join('')}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button class="btn btn-sm ${c.mode==='days'?'btn-primary':'btn-outline'}" style="flex:1;justify-content:center;text-align:center;" onclick="_avCal.mode='days';renderAvailabilityCalendar()">Pick days</button>
+        <button class="btn btn-sm ${c.mode==='range'?'btn-primary':'btn-outline'}" style="flex:1;justify-content:center;text-align:center;" onclick="_avCal.mode='range';_avCal.picking='start';renderAvailabilityCalendar()">Select a range</button></div>
       <div style="margin-top:6px;padding:7px 10px;border-radius:6px;font-size:12.5px;background:${c.mode==='range'&&c.picking==='end'?'#fef3c7':'#eef2ff'};">
-        ${c.mode==='days'?`Click <b>each visit day</b> (click again to remove) — days don't have to be next to each other, e.g. Tue–Thu this week and Mon–Tue next week.`
-          :(c.picking==='end'?`② Now click the <b>last day</b> of the range.`:`① Click the <b>first day</b> of the range (adds the days in between).`)}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;">
-        <span style="font-size:13px;">Selected: <b>${c.days.size?fmtDayBlocks([...c.days]):'—'}</b></span>
-        <span><button class="btn btn-outline" onclick="_avCal.days=new Set();_avCal.picking='start';renderAvailabilityCalendar()">Clear</button>
-        <button class="btn btn-primary" onclick="avCalUse()">Use these dates</button></span></div>
+        ${c.mode==='days'?`Tap <b>each visit day</b> (tap again to remove) — days don't have to be next to each other, e.g. Tue–Thu this week and Mon–Tue next week.`
+          :(c.picking==='end'?`② Now tap the <b>last day</b> of the range.`:`① Tap the <b>first day</b> of the range (adds the days in between).`)}</div>
+      <div style="margin-top:10px;font-size:13px;">Selected: <b>${c.days.size?fmtDayBlocks([...c.days]):'—'}</b></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-outline" style="flex:1;justify-content:center;text-align:center;" onclick="_avCal.days=new Set();_avCal.picking='start';renderAvailabilityCalendar()">Clear</button>
+        <button class="btn btn-primary" style="flex:2;justify-content:center;text-align:center;" onclick="avCalUse()">Use these dates</button></div>
     </div></div>`;
   ov.style.display='flex';
 }
@@ -14722,7 +15100,40 @@ function outsourceCostHtml(it,price){
 }
 // ── 4. after the customer accepts: PO to the vendor ──
 function qtOutsourceGroups(q){ const g=new Map(); (q.items||[]).forEach((it,i)=>{ if(!it||!it.outsourceVendorId||it.poAccepted===false) return; if(!g.has(it.outsourceVendorId)) g.set(it.outsourceVendorId,{vendorId:it.outsourceVendorId,name:it.outsourcedTo||'',items:[]}); g.get(it.outsourceVendorId).items.push({it,i}); }); return [...g.values()]; }
-function qtOutsourcePoPending(q){ return q&&q.status==='Accepted'?qtOutsourceGroups(q).filter(g=>!(q.outsourcePos||{})[g.vendorId]):[]; }
+function qtOutsourcePoPending(q){ if(!q||q.status!=='Accepted') return [];
+  // a vendor whose PO was cancelled (or deleted) needs a new PO
+  return qtOutsourceGroups(q).filter(g=>{ const no=(q.outsourcePos||{})[g.vendorId]; if(!no) return true; const po=(_purchaseOrders||[]).find(p=>p.poNumber===no); return !po||po.status==='Cancelled'; }); }
+// A vendor PO line built from the sales entry / quotation item: what it is and what the customer requires.
+// (The customer's name is NOT sent to the vendor — ISO/IEC 17025 4.2 confidentiality.)
+function osrPoDescription(it){
+  // Same pattern as the quotation's item description (identity, measurement, cal points, requirements)
+  const units=(typeof qtUnitDetails==='function')?qtUnitDetails(it):[]; const sameCal=it.sameCal!==false;
+  const join=a=>a.filter(([,v])=>String(v||'').trim()).map(([k,v])=>`${k}${k?' ':''}${String(v).trim()}`).join(' · ');
+  const svc=String(it.outsourceService||'Calibration');
+  const tag=svc==='Calibration'?qtServiceTag(it):`[${svc}]`;
+  const L=[`${String(it.eqName||'').trim()} ${tag}`];
+  String(it.stdDescription||'').split('\n').map(x=>x.trim()).filter(Boolean).forEach(x=>L.push(x));
+  const serials=units.map(u=>u.serial).filter(Boolean), tags=units.map(u=>u.tagNo).filter(Boolean);
+  const idLine=join([['',[it.brand,it.model].filter(Boolean).join(' / ')],['S/N',serials.join(', ')],['Tag',tags.join(', ')]]); if(idLine) L.push(idLine);
+  const xp=itemExtraParams(it);
+  if(xp.length){
+    L.push(`${it.paramName||'Parameter 1'}: `+join([['Range',it.range],['Resolution',units[0]?.resolution||it.resolution],['Cal points',units[0]?.calPoints||it.calPoints],['Spec',it.spec]]));
+    xp.forEach(p=>L.push(`${p.name||'Parameter'}: `+join([['Range',p.range],['Resolution',p.resolution],['Cal points',p.calPoints],['Spec',p.spec]])));
+  } else if(sameCal||units.length<2){
+    const m=join([['Range',it.range],['Resolution',units[0]?.resolution||it.resolution],['Spec',it.spec]]); if(m) L.push(m);
+    const cp=units[0]?.calPoints||it.calPoints; if(String(cp||'').trim()) L.push('Cal points '+cp);
+  } else {
+    const m=join([['Range',it.range],['Spec',it.spec]]); if(m) L.push(m);
+    units.forEach((u,ui)=>L.push(`Unit ${ui+1}${u.serial?' (S/N '+u.serial+')':''}: Resolution ${u.resolution||'—'} · Cal points ${u.calPoints||'—'}`));
+  }
+  // requirements, worded for the vendor
+  const A=qtAdjust(it);
+  const adj=!A.can||A.req==='No'?'not required':(A.req==='Yes'?'please adjust if out of tolerance':'please consult us before any adjustment');
+  L.push(`Adjustment: ${adj}`); L.push(`Results reported: ${A.results}`);
+  if(it.socRequested&&typeof qtSocText==='function'){ const t=qtSocText(it); if(t) L.push(`Statement of conformity: ${t}`); }
+  if(String(it.remark||'').trim()) L.push(`Requirement: ${String(it.remark).trim()}`);
+  return L.join('\n');
+}
 function createOutsourcePo(qid){
   const q=_quotationsV2.find(x=>x.id===qid); if(!q) return; if(q.status!=='Accepted'){ alert('The PO to the vendor is raised only after the customer has accepted the quotation.'); return; }
   const pend=qtOutsourcePoPending(q); if(!pend.length){ alert('POs for the outsourced items have already been raised.'); return; }
@@ -14733,10 +15144,11 @@ function createOutsourcePo(qid){
   window._osPoCtx={qid,vendorId:g.vendorId};
   openPurchaseOrderModal(null,{supplierId:g.vendorId,fromOsr:true});
   setTimeout(()=>{ const pu=el('po-purpose'); if(pu){ pu.value='outsource'; pu.dispatchEvent(new Event('change',{bubbles:true})); }
-    _poLines=g.items.map(({it})=>{ const qty=parseInt(it.poQty)||parseFloat(it.quantity)||1; return {description:`${it.outsourceService||'Calibration'} — ${it.eqName}${it.brand||it.model?' ('+[it.brand,it.model].filter(Boolean).join(' / ')+')':''}${it.range?', '+it.range:''} — for ${q.custName}, ${q.quotationNo}`,serial:(it.units||[]).map(u=>u.serial).filter(Boolean).join(', '),qty,unitPrice:parseFloat(it.outsourceCost)||0}; });
+    _poLines=g.items.map(({it})=>{ const qty=parseInt(it.poQty)||parseFloat(it.quantity)||1; return {description:osrPoDescription(it),serial:(it.units||[]).map(u=>u.serial).filter(Boolean).join(', '),qty,unitPrice:parseFloat(it.outsourceCost)||0}; });
     if(typeof renderPoLines==='function') renderPoLines();
     const refs=[...new Set(g.items.map(({it})=>it.outsourceQuoteRef).filter(Boolean))], osrs=[...new Set(g.items.map(({it})=>(_osrs.find(o=>o.id===it.outsourceOsrId)||{}).no).filter(Boolean))];
-    const rm=el('po-remarks'); if(rm&&!rm.value) rm.value=`As per your quotation${refs.length?' '+refs.join(', '):''}${osrs.length?' (our ref '+osrs.join(', ')+')':''}. Customer: ${q.custName}, ${q.quotationNo}.`;
+    if(el('po-your-ref')) el('po-your-ref').value=refs.join(', '); if(el('po-req-no')) el('po-req-no').value=osrs.join(', ');
+    const rm=el('po-remarks'); if(rm&&!rm.value) rm.value='';
   },150);
 }
 function getOutsourceQueueRows(){
@@ -18326,6 +18738,14 @@ function renderNeedsAttention(){
     hs.forEach(e=>items.push({icon:'🕓',level:e.holdUntil<today?'high':'',text:`On-site hold for ${escapeHtml(e.name||'')} on ${fmtDateShort(e.onsiteStart)} ${e.holdUntil<today?'has expired':(e.holdUntil===today?'expires today':'expires tomorrow')} — confirm with the customer, extend or release it`,onclick:`openTrackerEntryModal('sales','${escapeForJsAttr(e.id)}')`})); }
   { const due=(_quotationsV2||[]).filter(q=>qtNeedsFollowUp(q)&&(q.createdBy===currentUser||isAdmin(currentUser)));
     if(due.length) items.push({icon:'📞',text:`${due.length} quotation${due.length>1?'s':''} waiting for a reply — follow up (${due.map(q=>q.quotationNo).slice(0,3).join(', ')}${due.length>3?'…':''})`,onclick:`openFollowUp('${escapeForJsAttr(due[0].id)}')`}); }
+  { const live=(_prs||[]).filter(r=>!['Cancelled','Rejected'].includes(r.status)); const today=toLocalDateStr(new Date()), soon=toLocalDateStr(new Date(Date.now()+7*864e5));
+    if(canApprovePO(currentUser)){ const w=(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval'); if(w.length) items.push({icon:'🧾',level:'high',text:`${w.length} purchase order${w.length>1?'s':''} waiting for your approval (${w.slice(0,3).map(p=>`${escapeHtml(p.poNumber)} ${escapeHtml(p.supplierName||'')} RM ${poTotals(p).total.toFixed(2)}`).join('; ')})`,onclick:`showView('purchase-orders')`}); }
+    if(canUsePurchasingTracker(currentUser)){
+      const rc=live.filter(r=>prStatus(r)==='Ready to compare'); if(rc.length) items.push({icon:'💬',text:`${rc.length} purchase request${rc.length>1?'s':''} ready — compare supplier quotes and choose`,onclick:`openPr('${escapeForJsAttr(rc[0].id)}')`});
+      const ap=live.filter(r=>prStatus(r)==='New — get quotes'); if(ap.length) items.push({icon:'🛒',text:`${ap.length} new purchase request${ap.length>1?'s':''} — ask suppliers for quotes`,onclick:`openPr('${escapeForJsAttr(ap[0].id)}')`});
+      const dr=live.filter(r=>/^PO draft|^PO rejected/.test(prStatus(r))); if(dr.length) items.push({icon:'🧾',text:`${dr.length} purchase request PO${dr.length>1?'s need':' needs'} submitting for MD approval (${dr.map(r=>r.poNumber).slice(0,3).join(', ')})`,onclick:`showView('purchase-orders')`});
+      const ck=live.filter(r=>prStatus(r)==='Received — check before use'); if(ck.length) items.push({icon:'✔️',level:'high',text:`${ck.length} received item${ck.length>1?'s':''} must be checked before use (${ck.map(r=>r.no).slice(0,3).join(', ')})`,onclick:`openPr('${escapeForJsAttr(ck[0].id)}')`}); }
+    if(isAdmin(currentUser)){ const due=live.filter(r=>r.invoice&&!r.paidAt&&r.invoice.dueDate<=soon); if(due.length) items.push({icon:'💵',level:due.some(r=>r.invoice.dueDate<today)?'high':'',text:`${due.length} supplier invoice${due.length>1?'s':''} due${due.some(r=>r.invoice.dueDate<today)?' (some overdue)':' within 7 days'} — ${due.slice(0,2).map(r=>`${escapeHtml(r.selected?.name||'')} ${rm2(r.invoice.amount)}`).join(', ')}`,onclick:`openPr('${escapeForJsAttr(due[0].id)}')`}); } }
   if(typeof canUseOutsourcingQueue==='function'&&canUseOutsourcingQueue(currentUser)){
     const ready=(_osrs||[]).filter(o=>osrStatusOf(o)==='Ready to compare');
     if(ready.length) items.push({icon:'📨',text:`${ready.length} outsourcing request${ready.length>1?'s':''} ready — compare the vendor quotes and choose (${ready.map(o=>o.no).slice(0,3).join(', ')})`,onclick:`openOsr('${escapeForJsAttr(ready[0].id)}')`});
@@ -25082,15 +25502,16 @@ async function pdfLoadImages(urls){
 // Lays a table out across as many real A4 pages as it needs, under the Westlab letterhead, repeating
 // the top block (title, addresses, page x of y) and column headings on every page and putting the
 // footer block (totals / signatures) straight after the last row.
-async function pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename,label,count}){
-  const PAGE_W=794,PAGE_H=1123,PX=72,TOP=158,BOTTOM=100;
+async function pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename,label,count,letterhead,pinFooter,margins}){
+  // letterhead: own header (quotation style) instead of the blue letterhead + footer; pinFooter: totals/signature at the page bottom
+  const PAGE_W=794,PAGE_H=1123,PX=letterhead?(margins?.x??38):72,TOP=letterhead?(margins?.top??30):158,BOTTOM=letterhead?(margins?.bottom??40):100;
   const FONT="Tahoma,Verdana,'DejaVu Sans',Arial,sans-serif";
   const contentW=PAGE_W-2*PX;
   const pageStyle=`width:${PAGE_W}px;height:${PAGE_H}px;box-sizing:border-box;padding:${TOP}px ${PX}px ${BOTTOM}px;font-family:${FONT};font-size:12px;color:#000;background:#fff;position:relative;overflow:hidden;`;
   const meas=document.createElement('div'); meas.style.cssText=`position:fixed;left:-20000px;top:0;width:${PAGE_W}px;`; document.body.appendChild(meas);
   let headH,footH,rowHs;
   try{
-    meas.innerHTML=`<div class="pdf-doc" style="width:${contentW}px;font-family:${FONT};font-size:12px;">${topBlock(1,1)}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${colsHtml}${headRow}</table></div>`;
+    meas.innerHTML=`<div class="pdf-doc" style="width:${contentW}px;font-family:${FONT};font-size:12px;">${letterhead||''}${topBlock(1,1)}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${colsHtml}${headRow}</table></div>`;
     await new Promise(r=>setTimeout(r,60));
     headH=meas.firstElementChild.getBoundingClientRect().height;
     meas.innerHTML=`<div class="pdf-doc" style="width:${contentW}px;font-family:${FONT};font-size:12px;">${footerBlock}</div>`;
@@ -25103,7 +25524,8 @@ async function pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filena
   rows.forEach((row,i)=>{ if(used>0&&used+rowHs[i]>avail){ pages.push([]); used=0; } pages[pages.length-1].push(row); used+=rowHs[i]; });
   if(used+footH+14>avail) pages.push([]);
   const n=pages.length;
-  const html=pages.map((rs,pi)=>`<div class="pdf-doc" style="${pageStyle}">${westlabLetterheadHeader()}${topBlock(pi+1,n)}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${colsHtml}${headRow}${rs.join('')}</table>${pi===n-1?`<div style="margin-top:14px;">${footerBlock}</div>`:''}${westlabLetterheadFooter()}</div>`);
+  const foot=pi=>pi!==n-1?'':(pinFooter?`<div style="position:absolute;left:${PX}px;right:${PX}px;bottom:${BOTTOM}px;">${footerBlock}</div>`:`<div style="margin-top:14px;">${footerBlock}</div>`);
+  const html=pages.map((rs,pi)=>`<div class="pdf-doc" style="${pageStyle}">${letterhead||westlabLetterheadHeader()}${topBlock(pi+1,n)}<table style="width:100%;border-collapse:collapse;table-layout:fixed;">${colsHtml}${headRow}${rs.join('')}</table>${foot(pi)}${letterhead?'':westlabLetterheadFooter()}</div>`);
   await exportPagedPdf(html,filename,label,count,true);
 }
 const PDF_TH='padding:5px 4px;font-weight:bold;text-align:left;background:#eef2f7;border-top:1px solid #000;border-bottom:1px solid #000;';
@@ -25141,9 +25563,37 @@ function patchPurchaseOrders(mutator){
 function canApprovePO(u){ return isAdmin(u||currentUser); } // Admin and the Managing Director
 function poPurposeLabel(p){ return p==='outsource'?'Outsourced calibration / service':'Goods & other purchases'; }
 function poTotals(po){
-  const subtotal=(po.items||[]).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0),0);
-  const sst=po.sstApplied?subtotal*0.08:0;
-  return {subtotal,sst,total:subtotal+sst};
+  const subtotal=(po.items||[]).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)-(parseFloat(l.discount)||0),0);
+  const sst=po.sstApplied?Math.round(subtotal*0.08*100)/100:0;
+  const exact=Math.round((subtotal+sst)*100)/100;
+  const total=Math.round(exact*20)/20; // Malaysian rounding to the nearest 5 sen
+  return {subtotal,sst,rounding:Math.round((total-exact)*100)/100,total};
+}
+// "TWO THOUSAND SIXTEEN AND CENTS THIRTY FIVE ONLY"
+function amountInWordsMYR(n){
+  const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
+  const tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+  const w3=x=>{ let r=[]; if(x>=100){ r.push(ones[Math.floor(x/100)]+' HUNDRED'); x%=100; } if(x>=20){ r.push(tens[Math.floor(x/10)]+(x%10?' '+ones[x%10]:'')); } else if(x>0) r.push(ones[x]); return r.join(' '); };
+  const words=x=>{ if(!x) return 'ZERO'; const parts=[]; [[1e9,'BILLION'],[1e6,'MILLION'],[1e3,'THOUSAND'],[1,'']].forEach(([d,l])=>{ const c=Math.floor(x/d); if(c){ parts.push(w3(c)+(l?' '+l:'')); x%=d; } }); return parts.join(' '); };
+  const v=Math.round((parseFloat(n)||0)*100); const rm=Math.floor(v/100), sen=v%100;
+  return `${words(rm)}${sen?` AND CENTS ${words(sen)}`:''} ONLY`;
+}
+// The quotation-style letterhead (logo, company name + reg. no., address, phone / email, TIN, rule)
+async function westlabQtLetterhead(){
+  const s=_settings; const esc=v=>escapeHtml(v==null?'':String(v)); const logo=await pdfLogoDataUrl();
+  const labName=(s.labName||'Westlab (M) Sdn Bhd').replace(/\./g,'').toUpperCase();
+  const regNo=[s.regNo,s.regNoSecondary].filter(Boolean).join(' ')||'202601005304 (1667402-A)';
+  const addressHtml=s.address?addressLines(s.address).map(esc).join('<br/>'):'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh,<br/>47000 Sungai Buloh, Selangor.';
+  const phone=s.phone||'0162589602', email=s.salesEmail||'sales@westlab.com.my', tin=s.tinNo||'C60571616010';
+  return `<div style="display:flex;align-items:center;">
+      <img src="${logo}" crossorigin="anonymous" style="width:88px;height:auto;margin-left:18px;"/>
+      <div style="flex:1;text-align:center;margin-right:106px;font-family:'Times New Roman',Times,serif;font-size:15px;line-height:1.3;">
+        <div><span style="font-size:23px;font-weight:bold;">${esc(labName)}</span> <span style="font-size:10px;">(${esc(regNo)})</span></div>
+        <div style="white-space:nowrap;">${addressHtml}</div>
+        <div>Phone: ${esc(phone)}&nbsp;&nbsp;&nbsp;email: ${esc(email)}</div>
+        <div>(TIN No: ${esc(tin)})</div>
+      </div></div>
+    <div style="border-top:1.3px solid #000;margin:10px 0 12px;"></div>`;
 }
 function poBadgeClass(st){ return {Draft:'badge-slate','Pending Approval':'badge-amber',Approved:'badge-green',Sent:'badge-blue',Received:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate'}[st]||'badge-slate'; }
 function updatePoBadge(){
@@ -25171,6 +25621,7 @@ function renderPurchaseOrdersPage(){
         ['Draft','Rejected'].includes(p.status)?btn('✏️ Edit',`openPurchaseOrderModal('${p.id}')`)+btn('📨 Submit',`poSubmit('${p.id}')`):'',
         (approver&&['Draft','Pending Approval'].includes(p.status))?btn('✅ Approve',`poApprove('${p.id}')`,'color:var(--green);')+(p.status==='Pending Approval'?btn('❌ Reject',`poReject('${p.id}')`,'color:var(--red);'):''):'',
         (!approver&&p.status==='Pending Approval')?'<span style="font-size:11px;color:var(--text-muted);">waiting for MD</span>':'',
+        p.status==='Pending Approval'?btn('↩️ Back to draft',`poBackToDraft('${p.id}')`):'',
         p.status==='Approved'?btn('📤 Mark Sent',`poMarkSent('${p.id}')`):'',
         p.status==='Sent'?btn('📥 Mark Received',`poMarkReceived('${p.id}')`):'',
         canDo?btn(`🚚 Delivery Order${dos.length?' ('+dos.length+')':''}`,`openPoDoModal('${p.id}')`):'',
@@ -25197,7 +25648,7 @@ function renderPurchaseOrdersPage(){
 let _poLines=[]; let _poEditingId=null;
 function openPurchaseOrderModal(poId,opts){
   if(!canUsePurchasingTracker(currentUser)){ alert('You do not have access to this.'); return; }
-  opts=opts||{}; if(!opts.fromOsr) window._osPoCtx=null;
+  opts=opts||{}; if(!opts.fromOsr) window._osPoCtx=null; if(!opts.fromPr) window._prPoCtx=null;
   const ex=poId?(_purchaseOrders||[]).find(p=>p.id===poId):null;
   if(ex&&!['Draft','Rejected'].includes(ex.status)){ alert(`This purchase order is ${ex.status} and can no longer be edited.`); return; }
   _poEditingId=ex?ex.id:null;
@@ -25239,15 +25690,21 @@ function openPurchaseOrderModal(poId,opts){
           ${jobs.map(j=>`<option value="${v(j.jobNo)}">${v(j.jobNo)} — ${v(j.custName||'')}</option>`).join('')}</select>
         <div id="po-job-items" style="margin-top:8px;"></div>
       </div>
-      <div style="font-size:12px;font-weight:700;margin:6px 0;">Order lines</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0;"><span style="font-size:12px;font-weight:700;">Order lines</span>
+        ${ex&&poSourceQuotation(ex)?`<button type="button" class="btn btn-outline btn-sm" onclick="poRefreshFromQuotation()">↻ Refresh item details from the quotation</button>`:''}</div>
       <div id="po-lines"></div>
       <button type="button" class="btn btn-outline btn-sm" style="margin:6px 0 12px;" onclick="poAddLine()">+ Add line</button>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Your Ref. <span style="font-weight:normal;color:var(--text-muted);">(supplier's quotation no.)</span></label><input class="form-control" id="po-your-ref" value="${v(ex?.yourRef||'')}"/></div>
+        <div class="form-group"><label class="form-label">Requisition No</label><input class="form-control" id="po-req-no" value="${v(ex?.requisitionNo||'')}" placeholder="e.g. WPR-2610-0001"/></div>
+      </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Required by</label><input class="form-control" type="date" id="po-required-date" value="${v(ex?.requiredDate||'')}"/></div>
         <div class="form-group"><label class="form-label">Payment terms</label><input class="form-control" id="po-payment-terms" placeholder="e.g. Net 30 days" value="${v(ex?.paymentTerms||sup?.paymentTerms||'')}"/></div>
         <div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="po-sst" ${ex?.sstApplied?'checked':''} onchange="poRecalc()"/> Supplier charges SST (8%)</label></div>
       </div>
       <div class="form-group"><label class="form-label">Deliver to</label><textarea class="form-control" id="po-deliver-to" rows="2">${v(deliverDefault)}</textarea></div>
+      <div class="form-group"><label class="form-label">Certificate to <span style="font-weight:normal;color:var(--text-muted);">(calibration POs — printed under REMARK; leave empty for Westlab)</span></label><textarea class="form-control" id="po-cert-to" rows="2" placeholder="Westlab (M) Sdn. Bhd. and our address">${v(ex?.certTo||'')}</textarea></div>
       <div class="form-group"><label class="form-label">Remarks / special instructions</label><textarea class="form-control" id="po-remarks" rows="2">${v(ex?.remarks||'')}</textarea></div>
       <div id="po-totals" style="text-align:right;font-size:13px;margin-bottom:12px;"></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
@@ -25320,21 +25777,26 @@ function poUpdateLine(i,f,val){
 }
 function poRecalc(){
   const t=poTotals({items:_poLines,sstApplied:!!el('po-sst')?.checked});
-  const box=el('po-totals'); if(box) box.innerHTML=`Subtotal: <b>RM ${t.subtotal.toFixed(2)}</b>${t.sst?` &nbsp; SST 8%: <b>RM ${t.sst.toFixed(2)}</b>`:''} &nbsp; Total: <b style="font-size:15px;">RM ${t.total.toFixed(2)}</b>`;
-  _poLines.forEach((l,i)=>{ const a=el('po-line-amt-'+i); if(a) a.textContent=((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)).toFixed(2); });
+  const box=el('po-totals'); if(box) box.innerHTML=`Subtotal: <b>RM ${t.subtotal.toFixed(2)}</b>${t.sst?` &nbsp; SST 8%: <b>RM ${t.sst.toFixed(2)}</b>`:''}${t.rounding?` &nbsp; Rounding: <b>${t.rounding<0?'−':'+'}RM ${Math.abs(t.rounding).toFixed(2)}</b>`:''} &nbsp; Total: <b style="font-size:15px;">RM ${t.total.toFixed(2)}</b>`;
+  _poLines.forEach((l,i)=>{ const a=el('po-line-amt-'+i); if(a) a.textContent=((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)-(parseFloat(l.discount)||0)).toFixed(2); });
 }
 function renderPoLines(){
   const box=el('po-lines'); if(!box) return;
   const outsource=el('po-purpose')?.value==='outsource';
-  const cols=outsource?'1fr 130px 60px 96px 84px 24px':'1fr 60px 96px 84px 24px';
-  box.innerHTML=`<div style="display:grid;grid-template-columns:${cols};gap:6px;font-size:11px;color:var(--text-muted);margin-bottom:2px;"><span>Description</span>${outsource?'<span>Serial No.</span>':''}<span>Qty</span><span>Unit price (RM)</span><span style="text-align:right;">Amount</span><span></span></div>`
-  +_poLines.map((l,i)=>`<div style="display:grid;grid-template-columns:${cols};gap:6px;margin-bottom:5px;align-items:center;">
-    <input class="form-control" placeholder="Description" value="${escapeHtml(l.description||'')}" oninput="poUpdateLine(${i},'description',this.value)"/>
-    ${outsource?`<input class="form-control" placeholder="S/N" value="${escapeHtml(l.serial||'')}" oninput="poUpdateLine(${i},'serial',this.value)"/>`:''}
-    <input class="form-control" type="number" min="0" step="any" value="${l.qty??1}" oninput="poUpdateLine(${i},'qty',this.value)"/>
-    <input class="form-control" type="number" min="0" step="0.01" value="${l.unitPrice||''}" oninput="poUpdateLine(${i},'unitPrice',this.value)"/>
-    <span id="po-line-amt-${i}" style="text-align:right;font-size:12.5px;"></span>
-    <button type="button" onclick="poRemoveLine(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;">✕</button></div>`).join('');
+  const F=(label,inner,basis)=>`<div style="flex:1 1 ${basis}px;min-width:${Math.min(basis,90)}px;"><label class="form-label" style="margin-bottom:2px;font-size:11px;">${label}</label>${inner}</div>`;
+  box.innerHTML=_poLines.map((l,i)=>`<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+    <div style="display:flex;gap:8px;align-items:flex-start;">
+      <span style="font-weight:700;font-size:12px;padding-top:8px;min-width:16px;">${i+1}</span>
+      <textarea class="form-control po-desc" rows="${Math.min(8,Math.max(2,String(l.description||'').split('\n').length+1))}" placeholder="Description — first line is the main description; lines below print smaller (e.g. Class: E2, Range: 1 mg ~ 500 g)" oninput="poUpdateLine(${i},'description',this.value);this.style.height='auto';this.style.height=(this.scrollHeight+2)+'px';" style="flex:1;min-width:0;resize:vertical;">${escapeHtml(l.description||'')}</textarea>
+      <button type="button" onclick="poRemoveLine(${i})" title="Remove line" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding-top:6px;">✕</button></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:6px;padding-left:24px;align-items:flex-end;">
+      ${F('Item code',`<input class="form-control" placeholder="if vendor gives" value="${escapeHtml(l.itemCode||'')}" oninput="poUpdateLine(${i},'itemCode',this.value)"/>`,110)}
+      ${outsource?F('S/N',`<input class="form-control" value="${escapeHtml(l.serial||'')}" oninput="poUpdateLine(${i},'serial',this.value)"/>`,110):''}
+      ${F('Qty',`<input class="form-control" type="number" min="0" step="any" value="${l.qty??1}" oninput="poUpdateLine(${i},'qty',this.value)"/>`,60)}
+      ${F('Unit price (RM)',`<input class="form-control" type="number" min="0" step="0.01" value="${l.unitPrice||''}" oninput="poUpdateLine(${i},'unitPrice',this.value)"/>`,90)}
+      ${F('Disc. (RM)',`<input class="form-control" type="number" min="0" step="0.01" placeholder="—" value="${l.discount||''}" oninput="poUpdateLine(${i},'discount',this.value)"/>`,80)}
+      <div style="flex:1 1 80px;min-width:80px;text-align:right;"><label class="form-label" style="margin-bottom:2px;font-size:11px;">Amount</label><div id="po-line-amt-${i}" style="font-weight:700;padding:8px 0;"></div></div>
+    </div></div>`).join('');
   poRecalc();
 }
 function poAfterRestore(){ poPurposeChanged(); poShowSupplierSummary(); }
@@ -25349,9 +25811,11 @@ async function savePurchaseOrder(submit){
     supplierContact:[sup.contactPerson,sup.designation?'('+sup.designation+')':''].filter(Boolean).join(' '),
     supplierPhone:sup.phone||sup.mobile||'',supplierEmail:sup.email||'',purpose,
     linkedPurchasingEntryId:el('po-entry-id').value||null,
-    items:lines.map(l=>({description:String(l.description).trim(),serial:purpose==='outsource'?String(l.serial||'').trim():'',qty:parseFloat(l.qty)||0,unitPrice:parseFloat(l.unitPrice)||0,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined})),
+    items:lines.map(l=>({description:String(l.description).trim(),serial:purpose==='outsource'?String(l.serial||'').trim():'',qty:parseFloat(l.qty)||0,unitPrice:parseFloat(l.unitPrice)||0,
+      itemCode:String(l.itemCode||'').trim()||undefined,discount:parseFloat(l.discount)||undefined,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined})),
     sstApplied:!!el('po-sst').checked,deliverTo:el('po-deliver-to').value.trim(),requiredDate:el('po-required-date').value||'',
-    paymentTerms:el('po-payment-terms').value.trim(),remarks:el('po-remarks').value.trim()};
+    paymentTerms:el('po-payment-terms').value.trim(),remarks:el('po-remarks').value.trim(),
+    yourRef:(el('po-your-ref')?.value||'').trim(),requisitionNo:(el('po-req-no')?.value||'').trim(),certTo:(el('po-cert-to')?.value||'').trim(),supplierFax:sup.fax||''};
   let saved=null, newNumber=null;
   try{
     if(_poEditingId){
@@ -25371,6 +25835,7 @@ async function savePurchaseOrder(submit){
       }catch(e){ await tryRollbackSequence('WPO_'+docYymm(),parseInt(newNumber.split('-')[2],10)); throw e; } // don't burn a number on a failed save
     }
   }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  if(window._prPoCtx&&saved){ const pr=_prs.find(x=>x.id===window._prPoCtx.id); window._prPoCtx=null; if(pr){ pr.poNumber=saved.poNumber; await savePrs(); addAudit('🧾',`${pr.no}: PO ${saved.poNumber} raised`); } }
   if(window._osPoCtx&&saved){ const cx=window._osPoCtx; window._osPoCtx=null; // link the vendor PO back to the quotation + request
     const q=_quotationsV2.find(x=>x.id===cx.qid); if(q){ q.outsourcePos={...(q.outsourcePos||{}),[cx.vendorId]:saved.poNumber}; await saveQuotationsV2();
       const osrIds=[...new Set((q.items||[]).filter(it=>it.outsourceVendorId===cx.vendorId).map(it=>it.outsourceOsrId).filter(Boolean))];
@@ -25429,6 +25894,21 @@ async function poMarkReceived(id){
   if(!confirm(`Mark ${po.poNumber} as received (goods or service delivered)?`)) return;
   const r=await poChange(id,['Sent','Approved'],p=>{ p.status='Received'; p.receivedAt=new Date().toISOString(); p.receivedBy=currentUser; },`📥 ${po.poNumber} marked as received`,`Purchase Order ${po.poNumber} received`);
   if(r) await poAdvanceEntry(r,'Item/Service Delivered',`PO ${r.poNumber} received`);
+}
+// Pull a PO waiting for approval back to Draft, so it can be corrected and resubmitted
+async function poBackToDraft(id){
+  const po=(_purchaseOrders||[]).find(p=>p.id===id); if(!po) return;
+  if(!confirm(`Take ${po.poNumber} back to Draft so it can be edited?\n\nIt will need to be submitted for MD approval again.`)) return;
+  return poChange(id,['Pending Approval'],p=>{ p.status='Draft'; p.backToDraftBy=currentUser; p.backToDraftAt=new Date().toISOString(); },`↩️ ${po.poNumber} is back to Draft`,`Purchase Order ${po.poNumber} taken back to Draft for editing`);
+}
+// The quotation this outsourcing PO came from (if any), and the quotation items for this vendor (in PO line order)
+function poSourceQuotation(po){ const q=(_quotationsV2||[]).find(x=>Object.values(x.outsourcePos||{}).includes(po.poNumber)); if(!q) return null;
+  const vid=Object.entries(q.outsourcePos||{}).find(([,n])=>n===po.poNumber)?.[0];
+  return {q,items:(q.items||[]).filter(it=>it&&it.outsourceVendorId===vid&&it.poAccepted!==false)}; }
+function poRefreshFromQuotation(){
+  const po=(_purchaseOrders||[]).find(p=>p.id===_poEditingId); const src=po&&poSourceQuotation(po); if(!src){ alert('This PO was not created from a quotation.'); return; }
+  let n=0; src.items.forEach((it,i)=>{ const l=_poLines[i]; if(!l) return; l.description=osrPoDescription(it); if(!l.serial) l.serial=(it.units||[]).map(u=>u.serial).filter(Boolean).join(', '); n++; });
+  renderPoLines(); showToast(`↻ ${n} line${n===1?'':'s'} updated from the quotation — quantities and prices unchanged. Save to keep.`,'success',4000);
 }
 async function poCancel(id){
   if(!isAdmin(currentUser)) return;
@@ -25493,7 +25973,7 @@ async function createPoDeliveryOrder(poId){
   try{
     doNumber=await getNextDocNumber('WDO');
     const rec={doNumber,createdAt:now,createdBy:currentUser,date:el('po-do-date').value||toLocalDateStr(new Date()),deliveredBy:el('po-do-by').value.trim(),remarks:el('po-do-remarks').value.trim(),returnedAt:null,
-      items:picked.map(i=>{ const l=po.items[i]; return {lineKey:`${i}:${l.description}:${l.serial||''}`,description:l.description,serial:l.serial||'',qty:l.qty,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined}; })};
+      items:picked.map(i=>{ const l=po.items[i]; return {lineKey:`${i}:${l.description}:${l.serial||''}`,description:l.description,serial:l.serial||'',itemCode:l.itemCode||undefined,qty:l.qty,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined}; })};
     try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); if(!p) throw new Error('This purchase order no longer exists.'); (p.deliveryOrders=p.deliveryOrders||[]).push(rec); }); }
     catch(e){ await tryRollbackSequence('WDO_'+docYymm(),parseInt(doNumber.split('-')[2],10)); throw e; }
     for(const it of rec.items){ if(it.jobNo){ try{ await updateJob(it.jobNo,j=>{ j.history.push({action:`📤 Item ${it.itemNo||''} (${escapeHtml(it.description)}) sent to supplier ${escapeHtml(po.supplierName)} — Delivery Order ${doNumber} (PO ${po.poNumber})`,by:currentUser,time:now}); }); }catch(e){ console.warn('Could not add job history:',e); } } }
@@ -25532,68 +26012,113 @@ async function poDoDelete(poId,doNumber){
 async function exportPurchaseOrderPdf(poId){
   const po=(_purchaseOrders||[]).find(p=>p.id===poId); if(!po) return;
   const esc=v=>escapeHtml(v==null?'':String(v));
-  const money=n=>Number(n||0).toFixed(2);
+  const money=n=>Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const signed=n=>n<0?`(${money(-n)})`:money(n);
   const t=poTotals(po); const outsource=po.purpose==='outsource';
-  const approved=['Approved','Sent','Received'].includes(po.status);
-  const prepSig=(await pdfStaffSignature(po.createdBy)).data;
-  const apprSig=approved?(await pdfStaffSignature(po.approvedBy)).data:'';
-  const sigs=null;
-  const ref=(()=>{ const e=po.linkedPurchasingEntryId?(_purchasingTracker||[]).find(x=>x.id===po.linkedPurchasingEntryId):null; const jobs=[...new Set((po.items||[]).map(i=>i.jobNo).filter(Boolean))]; return [...jobs.map(j=>'Job '+j),e?e.name:''].filter(Boolean).join(', '); })();
+  const approved=['Approved','Sent','Received','Partially Delivered','Delivered','Closed'].includes(po.status);
+  const apprSigRes=approved?await pdfStaffSignature(po.approvedBy):{data:''};
+  const sup=(_externalPartners||[]).find(x=>x.id===po.supplierId)||{};
+  const letterhead=await westlabQtLetterhead();
+  const s=_settings; const ourName=(s.labName||'Westlab (M) Sdn. Bhd.').toUpperCase();
+  const ourAddr=s.address?addressLines(s.address):['Lot 497, Jalan Perusahaan 3,','Bandar Baru Sungai Buloh,','47000 Sungai Buloh, Selangor,','Malaysia'];
+  const reqNo=po.requisitionNo||'';
+  const title=`PURCHASE ORDER : ${po.poNumber}`;
   const topBlock=(pageNo,pageCount)=>`
-    <div style="text-align:center;font-size:19px;font-weight:bold;letter-spacing:.5px;margin:0 0 6px;">PURCHASE ORDER</div>
     ${approved?'':`<div style="text-align:center;color:#b91c1c;font-weight:bold;border:1.5px solid #b91c1c;padding:3px;margin-bottom:8px;">${po.status==='Cancelled'?'CANCELLED':'NOT APPROVED — DO NOT SEND TO SUPPLIER'}</div>`}
-    <div style="display:flex;justify-content:space-between;gap:14px;margin-bottom:8px;">
-      <div style="width:56%;line-height:1.4;"><div style="font-size:10px;color:#666;letter-spacing:.4px;">TO (SUPPLIER)</div>
-        <div style="font-weight:bold;">${esc(po.supplierName)}</div>
-        ${po.supplierAddress?`<div style="white-space:pre-line;">${esc(po.supplierAddress)}</div>`:''}
-        ${po.supplierContact?`<div>Attn: ${esc(po.supplierContact)}</div>`:''}
-        <div>${[po.supplierPhone?'Tel: '+esc(po.supplierPhone):'',po.supplierEmail?esc(po.supplierEmail):''].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div></div>
-      <div style="width:40%;"><table style="border-collapse:collapse;line-height:1.55;">
-        ${[['PO No.',po.poNumber],['Date',fmtDateShort(po.approvedAt||po.createdAt)],['Page',`${pageNo} of ${pageCount}`],['Required by',po.requiredDate?fmtDateShort(po.requiredDate):''],['Payment',po.paymentTerms||''],['Our ref.',ref]].map(([k,v])=>`<tr><td style="width:74px;color:#555;vertical-align:top;">${k}</td><td style="width:10px;vertical-align:top;">:</td><td style="${k==='PO No.'?'font-weight:bold;':''}">${esc(v)}</td></tr>`).join('')}
-      </table></div>
+    <div style="padding-left:57%;white-space:nowrap;font-weight:bold;font-size:${Math.min(16.5,Math.floor(10*284/(title.length*0.64))/10)}px;margin-bottom:4px;">${esc(title)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+      <div style="width:55%;">
+        <div style="position:relative;padding:4px 12px 6px;line-height:1.35;">
+          <div style="position:absolute;left:0;top:0;bottom:0;border-left:1px solid #000;"></div>
+          <div style="position:absolute;left:0;top:0;width:22px;border-top:1px solid #000;"></div>
+          <div style="position:absolute;left:0;bottom:0;width:22px;border-bottom:1px solid #000;"></div>
+          <div style="position:absolute;right:0;top:0;width:38px;height:22px;border-top:1px solid #000;border-right:1px solid #000;"></div>
+          <div style="position:absolute;right:0;bottom:0;width:38px;height:22px;border-bottom:1px solid #000;border-right:1px solid #000;"></div>
+          <div>${esc(po.supplierName)}</div>
+          ${po.supplierAddress?`<div style="white-space:pre-line;">${esc(po.supplierAddress)}</div>`:''}
+          <div>Attn : ${esc(po.supplierContact||'')}</div>
+          <div style="display:flex;"><span style="width:58%;">TEL : ${esc(po.supplierPhone||'')}</span><span>FAX : ${esc(po.supplierFax||sup.fax||'')}</span></div>
+        </div></div>
+      <div style="width:43%;padding-left:1%;">
+        <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
+          ${[['Your Ref.',po.yourRef||''],['Requisition No',reqNo],['Terms',po.paymentTerms||''],['Date',new Date(po.approvedAt||po.createdAt||Date.now()).toLocaleDateString('en-GB')],...(po.requiredDate?[['Required by',new Date(po.requiredDate).toLocaleDateString('en-GB')]]:[]),['Page',`${pageNo} of ${pageCount}`]]
+            .map(([k,v])=>`<tr><td style="width:100px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
+        </table></div>
     </div>
-    <div style="margin-bottom:8px;line-height:1.35;"><span style="font-size:10px;color:#666;letter-spacing:.4px;">DELIVER TO</span><div style="white-space:pre-line;">${esc(po.deliverTo||'')}</div></div>`;
-  const colsHtml=outsource?'<colgroup><col style="width:34px"><col><col style="width:110px"><col style="width:44px"><col style="width:84px"><col style="width:88px"></colgroup>':'<colgroup><col style="width:34px"><col><col style="width:50px"><col style="width:92px"><col style="width:92px"></colgroup>';
-  const headRow=`<tr><th style="${PDF_TH}">No.</th><th style="${PDF_TH}">Description</th>${outsource?`<th style="${PDF_TH}">Serial No.</th>`:''}<th style="${PDF_TH}text-align:center;">Qty</th><th style="${PDF_TH}text-align:right;">Unit Price</th><th style="${PDF_TH}text-align:right;">Amount</th></tr>`;
-  const rows=(po.items||[]).map((l,i)=>`<tr><td style="${PDF_TD}">${i+1}</td><td style="${PDF_TD}">${esc(l.description)}</td>${outsource?`<td style="${PDF_TD}">${esc(l.serial||'')}</td>`:''}<td style="${PDF_TD}text-align:center;">${esc(l.qty)}</td><td style="${PDF_TD}text-align:right;">${money(l.unitPrice)}</td><td style="${PDF_TD}text-align:right;">${money((parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0))}</td></tr>`);
-  const footerBlock=`<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><table style="border-collapse:collapse;min-width:230px;">
-      <tr><td style="padding:2px 8px;">Subtotal (MYR)</td><td style="padding:2px 6px;text-align:right;">${money(t.subtotal)}</td></tr>
-      ${po.sstApplied?`<tr><td style="padding:2px 8px;">SST (8%)</td><td style="padding:2px 6px;text-align:right;">${money(t.sst)}</td></tr>`:''}
-      <tr><td style="padding:2px 8px;font-weight:bold;">Total (MYR)</td><td style="padding:2px 6px;text-align:right;font-weight:bold;border:1px solid #000;">${money(t.total)}</td></tr></table></div>
-    ${po.remarks?`<div style="margin-bottom:8px;"><b>Remarks:</b> <span style="white-space:pre-line;">${esc(po.remarks)}</span></div>`:''}
-    <div style="font-size:11px;color:#555;margin-bottom:12px;">Please quote this PO number on all delivery orders, invoices and correspondence.${outsource?' Please return the item(s) with the calibration certificate.':''}</div>
-    <div style="display:flex;justify-content:space-between;">
-      ${pdfSigBlock('Prepared by',staffNameOf(po.createdBy),prepSig,fmtDateShort(po.createdAt),sigs)}
-      ${pdfSigBlock('Approved by',approved?staffNameOf(po.approvedBy):'',apprSig,approved&&po.approvedAt?fmtDateShort(po.approvedAt):'',sigs)}
-    </div>`;
-  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${po.poNumber}.pdf`,label:'Purchase Order',count:(po.items||[]).length});
+    ${po.deliverTo?`<div style="display:flex;gap:6px;margin:0 0 8px;line-height:1.35;"><b style="white-space:nowrap;">Deliver To :</b><span style="white-space:pre-line;">${esc(po.deliverTo)}</span></div>`:''}`;
+  const TH='padding:4px 3px;font-weight:normal;text-align:left;border-top:1px solid #000;border-bottom:1px solid #000;';
+  const TD='padding:3px 3px 6px;vertical-align:top;';
+  const colsHtml='<colgroup><col style="width:34px"><col style="width:84px"><col><col style="width:52px"><col style="width:78px"><col style="width:64px"><col style="width:84px"></colgroup>';
+  const headRow=`<tr><th style="${TH}">No</th><th style="${TH}">Item Code</th><th style="${TH}">Description</th><th style="${TH}text-align:right;">Qty</th><th style="${TH}text-align:right;">Price/Unit</th><th style="${TH}text-align:right;">Discount</th><th style="${TH}text-align:right;">Amount</th></tr>`;
+  const line=(no,code,descHtml,qty,price,disc,amount)=>`<tr><td style="${TD}">${no}</td><td style="${TD}">${esc(code||'')}</td><td style="${TD}">${descHtml}</td><td style="${TD}text-align:right;">${qty}</td><td style="${TD}text-align:right;">${price}</td><td style="${TD}text-align:right;">${disc}</td><td style="${TD}text-align:right;">${amount}</td></tr>`;
+  const desc=(text,serial)=>{ const ls=String(text||'').split('\n').map(x=>x.trim()).filter(Boolean); if(serial&&/S\/N/.test(String(text))) serial=''; return `<div>${esc(ls[0]||'')}</div>${[...ls.slice(1),...(serial?['S/N: '+serial]:[])].map(x=>`<div style="font-size:11px;padding-left:4px;">${esc(x)}</div>`).join('')}`; };
+  let n=0; const rows=(po.items||[]).map(l=>{ const q=parseFloat(l.qty)||0, pr=parseFloat(l.unitPrice)||0, d=parseFloat(l.discount)||0; n++;
+    return line(n,l.itemCode,desc(l.description,l.serial),q.toFixed(2),money(pr),d?money(d):'',money(q*pr-d)); });
+  if(po.sstApplied){ n++; rows.push(line(n,'','<div>SST</div>','1.00',money(t.sst),'',money(t.sst))); }
+  if(t.rounding){ n++; rows.push(line(n,'','<div>ROUNDING ADJUSTMENT</div>','1.00',t.rounding.toFixed(2),'',signed(t.rounding))); }
+  const remarkLines=String(po.remarks||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  const certTo=outsource?(po.certTo&&po.certTo.trim()?po.certTo.trim().split('\n'):[ourName,...ourAddr]):null;
+  if(certTo||remarkLines.length){ n++;
+    rows.push(line(n,'',`<div>REMARK</div><div style="font-size:11px;padding-left:4px;line-height:1.45;">
+      ${certTo?`<div style="font-weight:bold;">Cert To:</div><div style="font-weight:bold;">${esc(certTo[0])}</div>${certTo.slice(1).map(x=>`<div>${esc(x)}</div>`).join('')}<div style="height:8px;"></div>`:''}
+      ${remarkLines.map(x=>`<div style="font-weight:bold;">${esc(x)}</div>`).join('')}</div>`,'','','','')); }
+  const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;display:flex;justify-content:space-between;align-items:center;gap:14px;">
+      <div style="font-size:11px;">Malaysian Ringgit : ${esc(amountInWordsMYR(t.total))}</div>
+      <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;"><b>Total (MYR)</b><span style="border:1px solid #000;min-width:100px;padding:2px 6px;text-align:right;font-weight:bold;">${money(t.total)}</span></div></div>
+    <div style="font-size:10.5px;color:#444;margin-top:10px;">Please quote this PO number on all delivery orders, invoices and correspondence.</div>
+    <div style="margin-top:46px;width:200px;">
+      <div style="height:44px;display:flex;align-items:flex-end;">${apprSigRes.data?`<img src="${apprSigRes.data}" style="max-height:42px;max-width:180px;"/>`:''}</div>
+      <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;text-align:center;">Authorised Signature</div>
+      ${approved?`<div style="font-size:10.5px;text-align:center;">${esc(staffNameOf(po.approvedBy))}${po.approvedAt?' · '+fmtDateShort(po.approvedAt):''}</div>`:''}</div>`;
+  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${po.poNumber}.pdf`,label:'Purchase Order',count:(po.items||[]).length,letterhead,pinFooter:true});
 }
 async function exportSupplierDoPdf(poId,doNumber){
   const po=(_purchaseOrders||[]).find(p=>p.id===poId); const d=(po?.deliveryOrders||[]).find(x=>x.doNumber===doNumber); if(!po||!d) return;
   const esc=v=>escapeHtml(v==null?'':String(v));
+  const sup=(_externalPartners||[]).find(x=>x.id===po.supplierId)||{};
+  const letterhead=await westlabQtLetterhead();
+  const title=`D/ORDER : ${d.doNumber}`;
   const topBlock=(pageNo,pageCount)=>`
-    <div style="text-align:center;font-size:19px;font-weight:bold;letter-spacing:.5px;margin:0 0 8px;">DELIVERY ORDER</div>
-    <div style="display:flex;justify-content:space-between;gap:14px;margin-bottom:10px;">
-      <div style="width:56%;line-height:1.4;"><div style="font-size:10px;color:#666;letter-spacing:.4px;">DELIVER TO</div>
-        <div style="font-weight:bold;">${esc(po.supplierName)}</div>
+    <div style="padding-left:57%;white-space:nowrap;font-weight:bold;font-size:${Math.min(16.5,Math.floor(10*284/(title.length*0.64))/10)}px;margin-bottom:4px;">${esc(title)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+      <div style="width:55%;"><div style="position:relative;padding:4px 12px 6px;line-height:1.35;">
+        <div style="position:absolute;left:0;top:0;bottom:0;border-left:1px solid #000;"></div>
+        <div style="position:absolute;left:0;top:0;width:22px;border-top:1px solid #000;"></div>
+        <div style="position:absolute;left:0;bottom:0;width:22px;border-bottom:1px solid #000;"></div>
+        <div style="position:absolute;right:0;top:0;width:38px;height:22px;border-top:1px solid #000;border-right:1px solid #000;"></div>
+        <div style="position:absolute;right:0;bottom:0;width:38px;height:22px;border-bottom:1px solid #000;border-right:1px solid #000;"></div>
+        <div>${esc(po.supplierName)}</div>
         ${po.supplierAddress?`<div style="white-space:pre-line;">${esc(po.supplierAddress)}</div>`:''}
-        ${po.supplierContact?`<div>Attn: ${esc(po.supplierContact)}</div>`:''}
-        ${po.supplierPhone?`<div>Tel: ${esc(po.supplierPhone)}</div>`:''}</div>
-      <div style="width:40%;"><table style="border-collapse:collapse;line-height:1.55;">
-        ${[['DO No.',d.doNumber],['Date',fmtDateShort(d.date||d.createdAt)],['Page',`${pageNo} of ${pageCount}`],['Our PO No.',po.poNumber],['Purpose','Calibration / service']].map(([k,v])=>`<tr><td style="width:78px;color:#555;">${k}</td><td style="width:10px;">:</td><td style="${k==='DO No.'?'font-weight:bold;':''}">${esc(v)}</td></tr>`).join('')}
+        <div>Attn : ${esc(po.supplierContact||'')}</div>
+        <div style="display:flex;"><span style="width:58%;">TEL : ${esc(po.supplierPhone||'')}</span><span>FAX : ${esc(po.supplierFax||sup.fax||'')}</span></div>
+      </div></div>
+      <div style="width:43%;padding-left:1%;"><table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
+        ${[['Your Ref.',po.poNumber],['From Doc No',po.requisitionNo||''],['Terms',po.paymentTerms||''],['Date',new Date(d.date||d.createdAt||Date.now()).toLocaleDateString('en-GB')],['Page',`${pageNo} of ${pageCount}`]]
+          .map(([k,v])=>`<tr><td style="width:100px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
       </table></div>
-    </div>
-    <div style="margin-bottom:8px;">Please receive the following item(s) for the service stated on the purchase order above:</div>`;
-  const colsHtml='<colgroup><col style="width:34px"><col><col style="width:120px"><col style="width:44px"><col style="width:150px"></colgroup>';
-  const headRow=`<tr><th style="${PDF_TH}">No.</th><th style="${PDF_TH}">Description</th><th style="${PDF_TH}">Serial No.</th><th style="${PDF_TH}text-align:center;">Qty</th><th style="${PDF_TH}">Remarks</th></tr>`;
-  const rows=(d.items||[]).map((l,i)=>`<tr><td style="${PDF_TD}">${i+1}</td><td style="${PDF_TD}">${esc(l.description)}</td><td style="${PDF_TD}">${esc(l.serial||'N/A')}</td><td style="${PDF_TD}text-align:center;">${esc(l.qty)}</td><td style="${PDF_TD}">${i===0?esc(d.remarks||''):''}</td></tr>`);
-  const footerBlock=`<div style="font-size:11px;color:#555;margin-bottom:14px;">Please sign and return a copy to acknowledge receipt. Please return the item(s) with the calibration certificate.</div>
-    <div style="display:flex;justify-content:space-between;">
-      <div style="width:47%;"><div style="font-size:11px;color:#555;">Delivered by (Westlab)</div><div style="height:56px;"></div><div style="border-top:1px solid #000;padding-top:3px;"><b>${esc(d.deliveredBy||'')}</b>&nbsp;<div style="font-size:11px;color:#444;">Date: ${fmtDateShort(d.date||d.createdAt)}</div></div></div>
-      <div style="width:47%;"><div style="font-size:11px;color:#555;">Received by (supplier — name, signature, chop)</div><div style="height:56px;"></div><div style="border-top:1px solid #000;padding-top:3px;">&nbsp;<div style="font-size:11px;color:#444;">Date:</div></div></div>
     </div>`;
-  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${d.doNumber}.pdf`,label:'Delivery Order',count:(d.items||[]).length});
+  const TH='padding:4px 3px;font-weight:normal;text-align:left;border-top:1px solid #000;border-bottom:1px solid #000;';
+  const TD='padding:3px 3px 5px;vertical-align:top;';
+  const colsHtml='<colgroup><col style="width:34px"><col style="width:84px"><col><col style="width:80px"><col style="width:130px"></colgroup>';
+  const headRow=`<tr><th style="${TH}">No</th><th style="${TH}">Item Code</th><th style="${TH}">Description</th><th style="${TH}text-align:center;">Qty</th><th style="${TH}"></th></tr>`;
+  const items=d.items||[];
+  const rows=items.map((l,i)=>{ const ls=String(l.description||'').split('\n').map(x=>x.trim()).filter(Boolean); const subs=[...ls.slice(1),...(l.serial&&!/S\/N/.test(String(l.description||''))?['S/N: '+l.serial]:[]),...(l.remarks?['Remarks: '+l.remarks]:[])];
+    return `<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(l.itemCode||'')}</td><td style="${TD}"><div>${esc(ls[0]||'')}</div>${subs.map(x=>`<div style="font-size:11px;padding-left:4px;">${esc(x)}</div>`).join('')}</td><td style="${TD}text-align:center;">${(parseFloat(l.qty)||0).toFixed(2)}</td><td style="${TD}"></td></tr>`; });
+  const totalQty=items.reduce((a,l)=>a+(parseFloat(l.qty)||0),0);
+  const issSig=d.createdBy?(await pdfStaffSignature(d.createdBy)).data:'';
+  const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;display:flex;justify-content:space-between;gap:12px;">
+      <div style="font-size:11px;max-width:52%;">${d.deliveredBy?`Delivered by : ${esc(d.deliveredBy)}`:''}${d.remarks?`<div style="margin-top:3px;">Remarks : ${esc(d.remarks)}</div>`:''}</div>
+      <div style="width:43%;"><div>Total : &nbsp; ${totalQty.toFixed(2)}</div>
+      <div style="margin-top:14px;">Goods Received in Good Condition and Order</div></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:46px;">
+      <div style="width:200px;"><div style="height:44px;display:flex;align-items:flex-end;">${issSig?`<img src="${issSig}" style="max-height:42px;max-width:180px;"/>`:''}</div>
+        <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;text-align:center;">Authorised Signature</div>
+        ${d.createdBy?`<div style="font-size:10.5px;text-align:center;">${esc(staffNameOf(d.createdBy))}</div>`:''}</div>
+      <div style="width:200px;"><div style="height:44px;"></div><div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;">Received By :</div></div>
+    </div>`;
+  await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${d.doNumber}.pdf`,label:'Delivery Order',count:items.length,letterhead,pinFooter:true});
 }
+
 </script>
 
 <script>
