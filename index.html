@@ -4955,6 +4955,7 @@ function showView(name){
   if(name==='receiving-log') renderReceivingLogPage();
   if(name==='sticker-log') renderStickerLogPage();
   if(name==='my-drafts') renderMyDrafts();
+  setTimeout(()=>renderPageDrafts(name),0);
   if(name==='purchase-orders') renderPurchaseOrdersPage();
 }
 
@@ -25671,7 +25672,7 @@ function renderPurchaseOrdersPage(){
           <span>${btn('📄 PDF',`exportSupplierDoPdf('${p.id}','${d.doNumber}')`)}${!d.returnedAt?btn('↩️ Mark returned',`poDoMarkReturned('${p.id}','${d.doNumber}')`):''}${(admin&&!d.returnedAt)?btn('🗑️',`poDoDelete('${p.id}','${d.doNumber}')`,'color:var(--red);'):''}</span></div>`).join('')}</td></tr>`:'';
       return `<tr>
         <td style="font-weight:600;white-space:nowrap;">${escapeHtml(p.poNumber||'')}</td>
-        <td style="white-space:nowrap;">${fmtDateShort(p.createdAt)}</td>
+        <td style="white-space:nowrap;">${fmtDateShort(p.poDate||p.createdAt)}</td>
         <td>${escapeHtml(p.supplierName||'')}</td>
         <td style="font-size:12px;">${poPurposeLabel(p.purpose)}</td>
         <td style="text-align:right;">${t.total.toFixed(2)}</td>
@@ -25731,11 +25732,14 @@ function openPurchaseOrderModal(poId,opts){
       <div id="po-lines"></div>
       <button type="button" class="btn btn-outline btn-sm" style="margin:6px 0 12px;" onclick="poAddLine()">+ Add line</button>
       <div class="form-row">
+        <div class="form-group"><label class="form-label">PO date <span style="font-weight:normal;color:var(--text-muted);">(today unless changed)</span></label><input class="form-control" type="date" id="po-date" value="${v(ex?.poDate||(ex?toLocalDateStr(new Date(ex.approvedAt||ex.createdAt||Date.now())):toLocalDateStr(new Date())))}"/></div>
+        <div class="form-group"><label class="form-label">Required by</label><input class="form-control" type="date" id="po-required-date" value="${v(ex?.requiredDate||'')}"/></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label class="form-label">Your Ref. <span style="font-weight:normal;color:var(--text-muted);">(supplier's quotation no.)</span></label><input class="form-control" id="po-your-ref" value="${v(ex?.yourRef||'')}"/></div>
         <div class="form-group"><label class="form-label">Requisition No</label><input class="form-control" id="po-req-no" value="${v(ex?.requisitionNo||'')}" placeholder="e.g. WPR-2610-0001"/></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Required by</label><input class="form-control" type="date" id="po-required-date" value="${v(ex?.requiredDate||'')}"/></div>
         <div class="form-group"><label class="form-label">Payment terms</label><input class="form-control" id="po-payment-terms" placeholder="e.g. Net 30 days" value="${v(ex?.paymentTerms||sup?.paymentTerms||'')}"/></div>
         <div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;align-items:center;gap:6px;font-weight:normal;cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="po-sst" ${ex?.sstApplied?'checked':''} onchange="poRecalc()"/> Supplier charges SST (8%)</label></div>
       </div>
@@ -25851,7 +25855,7 @@ async function savePurchaseOrder(submit){
       itemCode:String(l.itemCode||'').trim()||undefined,discount:parseFloat(l.discount)||undefined,jobNo:l.jobNo||undefined,itemNo:l.itemNo||undefined})),
     sstApplied:!!el('po-sst').checked,deliverTo:el('po-deliver-to').value.trim(),requiredDate:el('po-required-date').value||'',
     paymentTerms:el('po-payment-terms').value.trim(),remarks:el('po-remarks').value.trim(),
-    yourRef:(el('po-your-ref')?.value||'').trim(),requisitionNo:(el('po-req-no')?.value||'').trim(),certTo:(el('po-cert-to')?.value||'').trim(),supplierFax:sup.fax||''};
+    poDate:el('po-date')?.value||toLocalDateStr(new Date()),yourRef:(el('po-your-ref')?.value||'').trim(),requisitionNo:(el('po-req-no')?.value||'').trim(),certTo:(el('po-cert-to')?.value||'').trim(),supplierFax:sup.fax||''};
   let saved=null, newNumber=null;
   try{
     if(_poEditingId){
@@ -26082,7 +26086,7 @@ async function exportPurchaseOrderPdf(poId){
         </div></div>
       <div style="width:43%;padding-left:1%;">
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
-          ${[['Your Ref.',po.yourRef||''],['Requisition No',reqNo],['Terms',po.paymentTerms||''],['Date',new Date(po.approvedAt||po.createdAt||Date.now()).toLocaleDateString('en-GB')],...(po.requiredDate?[['Required by',new Date(po.requiredDate).toLocaleDateString('en-GB')]]:[]),['Page',`${pageNo} of ${pageCount}`]]
+          ${[['Your Ref.',po.yourRef||''],['Requisition No',reqNo],['Terms',po.paymentTerms||''],['Date',new Date(po.poDate?po.poDate+'T00:00:00':(po.approvedAt||po.createdAt||Date.now())).toLocaleDateString('en-GB')],...(po.requiredDate?[['Required by',new Date(po.requiredDate).toLocaleDateString('en-GB')]]:[]),['Page',`${pageNo} of ${pageCount}`]]
             .map(([k,v])=>`<tr><td style="width:100px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}
         </table></div>
     </div>
@@ -26222,6 +26226,7 @@ async function draftDelete(formId,recordKey){
   const all=await loadDrafts(true);
   if(!all[key]) return;
   await writeDrafts(a=>{ delete a[key]; });
+  setTimeout(()=>renderPageDrafts(),300);
 }
 async function draftUploadBlob(blob,name,type){
   const path=`drafts/${currentUser}/${Date.now()}_${sanitizeFilenameForPath(name||'file')}`;
@@ -26458,6 +26463,7 @@ async function draftSaveAndClose(formId){
     showToast('❌ Draft not saved: '+e.message,'error',6000);
     if(btn){ btn.disabled=false; btn.textContent='💾 Save Draft & Close'; }
   }
+  setTimeout(()=>renderPageDrafts(),400);
 }
 function draftCloseForm(formId){
   const def=DRAFT_FORMS[formId]; const c=draftContainer(formId);
@@ -26605,8 +26611,30 @@ async function draftResume(key){
 }
 async function draftDiscardByKey(key){
   if(!confirm('Discard this draft? This cannot be undone.')) return;
-  try{ await writeDrafts(a=>{ delete a[key]; }); showToast('Draft discarded','success',2500); renderMyDrafts(); }
+  try{ await writeDrafts(a=>{ delete a[key]; }); showToast('Draft discarded','success',2500); renderMyDrafts(); renderPageDrafts(); }
   catch(e){ showToast('❌ '+e.message,'error',5000); }
+}
+// Drafts also show on the page they belong to (My Drafts still lists them all)
+const DRAFT_PAGES={quotation:['quotations-v2'],po:['purchase-orders','purchasing-tracker'],tracker:['sales-tracker'],capability:['capability-review','sales-tracker'],
+  job:['equipment'],editJob:['equipment','completed'],cal:['my-jobs'],cannotCal:['my-jobs'],condition:['my-jobs'],abnormal:['my-jobs'],
+  customer:['customers'],refEq:['ref-eq'],partner:['external-partners'],claim:['claims','my-requests'],travel:['claims','my-requests']};
+async function renderPageDrafts(viewName){
+  const view=viewName?document.getElementById('view-'+viewName):document.querySelector('.view.active'); if(!view||!currentUser) return;
+  const name=view.id.replace('view-','');
+  let box=document.getElementById('pgdraft-'+name);
+  const forms=Object.keys(DRAFT_PAGES).filter(f=>DRAFT_PAGES[f].includes(name));
+  if(!forms.length){ if(box) box.remove(); return; }
+  let all={}; try{ all=await loadDrafts(); }catch(e){ return; }
+  const list=Object.entries(all||{}).map(([k,d])=>({k,...d})).filter(d=>forms.includes(d.formId)&&DRAFT_FORMS[d.formId]).sort((a,b)=>(b.savedAt||'').localeCompare(a.savedAt||''));
+  if(!list.length){ if(box) box.remove(); return; }
+  if(!box){ box=document.createElement('div'); box.id='pgdraft-'+name; const head=view.querySelector(':scope > .page-header'); if(head) head.after(box); else view.prepend(box); }
+  box.innerHTML=`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;margin-bottom:14px;">
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px;">📝 You have ${list.length} unfinished draft${list.length>1?'s':''} here</div>
+    ${list.slice(0,5).map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid #fde68a;">
+      <div style="font-size:13px;min-width:0;flex:1 1 220px;"><b>${escapeHtml(d.title||'Draft')}</b>${d.label?' — '+escapeHtml(d.label):''}<div style="font-size:11px;color:var(--text-muted);">Last saved ${draftWhen(d.savedAt)}</div></div>
+      <div style="display:flex;gap:6px;flex-shrink:0;"><button class="btn btn-primary btn-sm" onclick="draftResume('${escapeForJsAttr(d.k)}')">Continue</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="draftDiscardByKey('${escapeForJsAttr(d.k)}')">Discard</button></div></div>`).join('')}
+    ${list.length>5?`<div style="font-size:12px;padding-top:4px;"><a href="javascript:void(0)" onclick="showView('my-drafts')">See all in My Drafts →</a></div>`:''}</div>`;
 }
 (function(){
   const origSet=window.setCurrentUser;
