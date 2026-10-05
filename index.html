@@ -1163,13 +1163,19 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <div class="page-header">
         <div>
           <div class="page-title">🛒 Purchasing</div>
-          <div class="page-sub">Request → supplier quotes → PO (MD approval) → receive &amp; check → invoice &amp; payment</div>
+          <div class="page-sub">Request → quotes → PO → receive → pay</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="openNewPr()">+ New purchase request</button>
         </div>
       </div>
       <div id="pr-section"></div>
+      <div id="pt-history-wrap" style="display:none;margin-top:18px;">
+        <button type="button" onclick="const b=el('pt-history-body');b.style.display=b.style.display==='none'?'':'none';this.querySelector('.pt-h-arrow').textContent=b.style.display==='none'?'Show ▾':'Hide ▴';"
+          style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;text-align:left;">
+          <span style="font-size:13px;min-width:0;"><b>📜 History</b> — <span id="pt-history-count"></span> <span style="color:var(--text-muted);">(read only)</span></span>
+          <span class="pt-h-arrow" style="font-size:12.5px;font-weight:600;color:var(--primary,#2563eb);white-space:nowrap;">Show ▾</span></button>
+        <div id="pt-history-body" style="display:none;margin-top:10px;">
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="exportTrackerExcel('purchasing')">📊 History Excel</button>
           <button class="btn btn-outline btn-sm" onclick="exportTrackerPdf('purchasing')">📄 History PDF</button>
@@ -1184,6 +1190,8 @@ textarea.form-control{resize:vertical;min-height:70px;}
         <input class="form-control" id="pt-search" placeholder="Search vendor…" oninput="renderPurchasingTrackerPage()" style="width:200px;"/>
       </div>
       <div id="purchasing-tracker-list"></div>
+        </div>
+      </div>
     </div>
 
     <!-- ════ OUTSOURCING QUEUE ════ -->
@@ -12454,6 +12462,12 @@ function prStatus(r){
   if((r.suppliers||[]).length){ const q=r.suppliers.filter(s=>s.status==='Quoted').length, d=r.suppliers.filter(s=>s.status!=='Requested').length; return d===r.suppliers.length?(q?'Ready to compare':'All declined'):`Waiting for quotes (${q}/${r.suppliers.length})`; }
   return 'New — get quotes';
 }
+// The request's status said as the next action to take
+function prNextText(st){
+  const m=[[/^New/,'ask suppliers for quotes'],[/^Waiting for quotes/,()=>st.replace('Waiting for quotes','waiting for quotes')],[/^Ready to compare/,'compare quotes and choose'],[/^All declined/,'all suppliers declined — ask others'],
+    [/^Supplier chosen/,'create the PO'],[/^PO draft/,'submit the PO for MD approval'],[/^PO waiting for MD/,'MD to approve the PO'],[/^PO rejected/,'revise the PO (rejected)'],
+    [/^PO approved/,'receive the items'],[/check before use/,'check before use'],[/^Received$/,'record the supplier invoice'],[/^Invoice received/,'pay the invoice']];
+  for(const [re,t] of m) if(re.test(st)) return typeof t==='function'?t():t; return st; }
 function prPo(r){ return (_purchaseOrders||[]).find(p=>p.poNumber===r.poNumber)||null; }
 // The request's PO only counts if it still exists and isn't cancelled — otherwise a new PO can be raised
 // A PO that is gone takes its delivery / invoice / payment records with it (kept in the request's history)
@@ -12717,10 +12731,28 @@ async function prMarkPaid(id){ const r=_prs.find(x=>x.id===id); const ref=prompt
 // ── page sections: spend summary + requests (Purchasing page) and "my requests" (My Requests page) ──
 function renderPrSections(){
   const box=el('pr-section'); const mine=el('my-pr-section');
-  const row=r=>{ const st=prStatus(r); return `<div class="card" style="padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-    <div style="min-width:0;flex:1 1 260px;"><b>${escapeHtml(r.no)}</b> · ${escapeHtml(r.purpose)}${r.selected?' · '+escapeHtml(r.selected.name):''}
-      <div style="font-size:12px;color:var(--text-muted);overflow-wrap:anywhere;">${escapeHtml(r.items.map(i=>`${i.desc} × ${i.qty}`).join(', '))} · <span style="white-space:nowrap;">${rm2(prTotal(r))}</span></div></div>
-    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:auto;"><span class="badge ${prBadge(st)}">${escapeHtml(st)}</span><button class="btn btn-outline btn-sm" onclick="openPr('${r.id}')">Open</button></div></div>`; };
+  const row=r=>{ const st=prStatus(r); const today=toLocalDateStr(new Date());
+    const po=prLivePo(r); const poOk=po&&!['Draft','Pending Approval','Rejected'].includes(po.status);
+    const quoting=(r.suppliers||[]).length>0;
+    const steps=[['Request',r.createdAt],['Quotes',r.selected?(r.selected.at||r.createdAt):null],['PO',poOk?(po.approvedAt||po.createdAt):null],['Received',prFullyReceived(r)&&(!PR_VERIFY.includes(r.purpose)||r.verified)?((r.receipts||[]).slice(-1)[0]?.date):null],['Paid',r.paidAt]];
+    const cur=['Cancelled','Rejected'].includes(r.status)?-1:steps.findIndex(x=>!x[1]);
+    const chip=([lab,at],i)=>{ const done=!!at, now=i===cur; const col=done?'#15803d':(now?'#b45309':'#94a3b8');
+      return `<div style="background:${done?'#ecfdf5':(now?'#fffbeb':'#f8fafc')};border:1px solid ${done?'#bbf7d0':(now?'#fde68a':'#e2e8f0')};border-radius:6px;padding:3px 2px;text-align:center;min-width:0;">
+        <div style="font-size:11px;line-height:1.1;color:${col};">${done?'✓':(now?'⏳':'○')}</div>
+        <div style="font-size:10px;font-weight:700;color:${col};white-space:nowrap;">${lab}</div></div>`; };
+    const first=r.items[0]||{}; const more=r.items.length>1?` +${r.items.length-1} more`:'';
+    const chosenTotal=r.selected?prTotal(r):0; const est=r.items.reduce((a,it)=>a+(parseFloat(it.estPrice)||0)*(parseFloat(it.qty)||1),0);
+    const money=r.selected&&chosenTotal?rm2(chosenTotal):(est?'est. '+rm2(est):'no estimate');
+    const nb=r.neededBy?`<span style="${r.neededBy<today&&!r.paidAt&&!prFullyReceived(r)?'color:#b91c1c;font-weight:600;':''}">needed by ${fmtDateShort(r.neededBy)}</span>`:'';
+    return `<div class="card" role="button" tabindex="0" onclick="openPr('${r.id}')" onkeydown="if(event.key==='Enter')openPr('${r.id}')" style="padding:10px 14px;margin-bottom:8px;cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+        <div style="min-width:0;flex:1;"><b style="white-space:nowrap;">${escapeHtml(r.no)}</b> · ${escapeHtml(first.desc||'')}${first.qty?` × ${first.qty}`:''}${more}</div>
+        <b style="white-space:nowrap;font-size:13px;${money==='no estimate'?'font-weight:normal;color:var(--text-muted);':''}">${money}</b></div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:1px;">${[escapeHtml(r.purpose),escapeHtml(USERS[r.createdBy]?.name||r.createdBy||''),fmtDateShort(r.createdAt),nb,r.selected?escapeHtml(r.selected.name):''].filter(Boolean).join(' · ')}</div>
+      ${cur===-1?`<div style="margin-top:6px;"><span class="badge badge-red">${escapeHtml(st)}</span></div>`
+        :`<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;margin-top:7px;">${steps.map(chip).join('')}</div>
+          <div style="font-size:11.5px;margin-top:4px;color:${/check before use|overdue/i.test(st)?'#b45309':'var(--text-muted)'};">${st==='Paid'?'✅ Completed':'Next: '+escapeHtml(prNextText(st))}</div>`}
+    </div>`; };
   if(mine){ const my=_prs.filter(r=>r.createdBy===currentUser).slice().reverse();
     mine.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:16px 0 8px;flex-wrap:wrap;"><div style="font-weight:700;font-size:15px;">🛒 My purchase requests</div><button class="btn btn-primary btn-sm" onclick="openNewPr()">🛒 Request a purchase</button></div>
       ${my.length?my.slice(0,10).map(row).join(''):'<div style="color:var(--text-muted);font-size:13px;">None yet.</div>'}`; }
@@ -12754,17 +12786,25 @@ function renderPrSections(){
   const filt=window._prTab||'open';
   const list=_prs.filter(r=>prTab(r,filt)).slice().reverse();
   const PR_TABS=[['open','Open'],['approval','Waiting PO approval'],['pay','To pay'],['done','Completed'],['cancelled','Cancelled'],['all','All']];
-  const card=(k,v,sub)=>`<div class="card" style="padding:10px 12px;flex:1 1 150px;min-width:0;"><div style="font-size:11.5px;color:var(--text-muted);">${k}</div><div style="font-size:18px;font-weight:700;">${v}</div>${sub?`<div style="font-size:11.5px;color:var(--text-muted);">${sub}</div>`:''}</div>`;
-  box.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      ${card('Spent this month (invoiced)',rm2(spentMonth),spend.some(x=>String(x.date).slice(0,7)===ym)?'<a href="javascript:void(0)" onclick="openSpendDetail(\'month\')">see what →</a>':'')}${card('Open POs (not fully received)',openPos.length)}${card('Invoices to pay',owed.length,owed.length?rm2(owed.reduce((a,r)=>a+(parseFloat(r.invoice.amount)||0),0))+(owed.some(r=>r.invoice.dueDate<today)?' · some overdue':''):'')}${card('POs waiting for MD approval',(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length)}</div>
+  const card=(k,v,sub,go,warn)=>`<div class="card" role="button" tabindex="0" onclick="${go}" style="padding:10px 12px;min-width:0;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:74px;${warn?'border-color:#fecaca;':''}">
+      <div style="display:flex;justify-content:space-between;gap:6px;font-size:11.5px;color:var(--text-muted);"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${k}</span><span style="color:var(--primary,#2563eb);font-weight:700;">›</span></div>
+      <div style="font-size:18px;font-weight:700;white-space:nowrap;">${v}</div><div style="font-size:11px;color:${warn?'#b91c1c':'var(--text-muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:14px;">${sub||''}</div></div>`;
+  const owedOver=owed.some(r=>r.invoice.dueDate<today);
+  box.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;">
+      ${card('Spent this month',rm2(spentMonth),'invoiced',"openSpendDetail('month')")}
+      ${card('To receive',openPos.length,openPos.some(p=>poOverdue(p))?'some overdue':'POs not received yet',"_poTab='receive';showView('purchase-orders')",openPos.some(p=>poOverdue(p)))}
+      ${card('To pay',owed.length,owed.length?rm2(owed.reduce((a,r)=>a+(parseFloat(r.invoice.amount)||0),0))+(owedOver?' · overdue':''):'nothing owed',"_poTab='pay';showView('purchase-orders')",owedOver)}
+      ${card('Waiting MD',(_purchaseOrders||[]).filter(p=>p.status==='Pending Approval').length,'POs to approve',"_poTab='approval';showView('purchase-orders')")}</div>
     ${top.length?`<div class="card" style="padding:10px 12px;margin-bottom:12px;font-size:12.5px;"><b>Spend by supplier (${ym.slice(0,4)})</b>${top.map(([n,v])=>`<div onclick="openSpendDetail('sup',${escapeHtml(JSON.stringify(n))})" style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--border);cursor:pointer;"><span style="min-width:0;overflow-wrap:anywhere;color:var(--primary,#2563eb);">${escapeHtml(n)} ›</span><b style="white-space:nowrap;">${rm2(v)}</b></div>`).join('')}</div>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;"><div style="font-weight:700;font-size:15px;">Purchase requests</div>
       </div>
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;-webkit-overflow-scrolling:touch;">${PR_TABS.map(([k,l])=>`<button class="btn btn-sm ${filt===k?'btn-primary':'btn-outline'}" style="white-space:nowrap;" onclick="window._prTab='${k}';renderPrSections()">${l} <span style="opacity:.8;">(${_prs.filter(r=>prTab(r,k)).length})</span></button>`).join('')}</div>
     ${list.length?list.map(row).join(''):'<div style="color:var(--text-muted);font-size:13px;margin-bottom:8px;">Nothing here.</div>'}
-    <div style="font-weight:700;font-size:15px;margin:18px 0 4px;">History (earlier purchasing entries — read only)</div>`;
+`;
 }
-function renderPurchasingTrackerPage(){ renderPrSections(); renderTrackerPage('purchasing'); }
+function renderPurchasingTrackerPage(){ renderPrSections(); renderTrackerPage('purchasing');
+  const n=(trackerArr('purchasing')||[]).length; const w=el('pt-history-wrap'); if(w) w.style.display=n?'':'none';
+  const c=el('pt-history-count'); if(c) c.textContent=`${n} earlier entr${n===1?'y':'ies'}`; }
 // What makes up a spend figure: each invoice with its PO / request, and a way to open them
 function openSpendDetail(kind,sup){
   const ym=toLocalDateStr(new Date()).slice(0,7);
@@ -13343,7 +13383,7 @@ async function migrateQuotationsToSalesTracker(){
 
 function renderTrackerPage(type){
   if(!trackerCanUse(type)){ el(`${type}-tracker-list`).innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
-  const readOnly=type==='sales'&&!canUseSalesTracker(currentUser); // Quality Manager: can see, not edit
+  const readOnly=(type==='sales'&&!canUseSalesTracker(currentUser))||type==='purchasing'; // QM can see sales, not edit; old purchasing entries are history
   if(type==='sales'){
     const banner=el('sales-readonly-banner'); if(banner) banner.style.display=readOnly?'block':'none';
     const newBtn=el('sales-new-entry-btn'); if(newBtn) newBtn.style.display=readOnly?'none':'inline-block';
@@ -13392,13 +13432,13 @@ function renderTrackerPage(type){
         <td><strong>${e.name}</strong></td>
         ${type==='sales'?`<td style="font-size:12px;">${USERS[e.salesPersonnel]?.name||e.salesPersonnel||'—'}</td>
         <td style="font-size:11px;">${items.map(it=>`${escapeHtml(it.eqName)}${it.capabilityVerdict?` <span style="color:${it.capabilityVerdict==='Cannot Do'?'var(--red)':'var(--green)'};">(${capabilityVerdictLabel(it.capabilityVerdict)})</span>`:' <span style="color:var(--text-muted);">(pending review)</span>'}${it.outcome&&it.outcome!=='Pending'?` <span style="font-weight:700;color:${it.outcome==='Won'?'var(--green)':'var(--red)'};">· ${it.outcome}</span>`:''}`).join('<br/>')}${totalPrice?`<div style="margin-top:3px;font-weight:700;">RM ${totalPrice.toFixed(2)}</div>`:''}</td>`:''}
-        <td>
+        <td>${type==='purchasing'?`<span class="badge badge-slate">${escapeHtml(e.status||'')}</span>`:`
           <select class="form-control" style="font-size:11px;padding:4px 8px;" onchange="updateTrackerStatus('${type}','${e.id}',this.value)" ${readOnly?'disabled':''}>
             ${stages.map((s,i)=>{
               const isGated=type==='sales'&&s==='Quotation Generated'&&!anyCleared;
               return `<option value="${s}" ${s===e.status?'selected':''} ${isGated?'disabled':''}>${i+1}. ${s}${isGated?' 🔒':''}</option>`;
             }).join('')}
-          </select>
+          </select>`}
         </td>
         <td style="max-width:220px;font-size:12px;">${escapeHtml(e.remark||'—')}</td>
         <td style="font-size:12px;">${linkedHtml}</td>
@@ -13407,7 +13447,7 @@ function renderTrackerPage(type){
           ${type==='sales'&&anyCleared?(e.linkedQuotationId?`<div style="margin-bottom:4px;"><span style="font-size:11px;color:var(--green);font-weight:600;">✅ ${(_quotationsV2.find(q=>q.id===e.linkedQuotationId)||{}).quotationNo||'Quotation linked'}</span> <a href="#" onclick="event.preventDefault();showView('quotations-v2');openQuotationV2Modal('${e.linkedQuotationId}')" style="font-size:10px;">(view)</a></div>`:`<div style="margin-bottom:4px;"><button class="btn btn-primary btn-sm" onclick="openQuotationV2Modal(null,'${e.id}')">📄 Create Quotation</button></div>`):''}
           ${type==='sales'&&items.some(it=>it.capabilityVerdict)?`<button class="btn btn-outline btn-sm" onclick="exportEntryCapabilityReviewPdf('${e.id}')" title="Export capability review for this entry">📄</button>`:''}
           ${type==='purchasing'&&e.poNumber?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" title="PO issued with the older, no-approval method" onclick="exportLegacyTrackerPoPdf('${e.id}')">📄 ${e.poNumber}</button>`:''}
-          ${(!readOnly&&type==='purchasing')?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" title="Raise a Purchase Order for this" onclick="openPurchaseOrderModal(null,{entryId:'${e.id}'})">🧾 PO${(_purchaseOrders||[]).some(po=>po.linkedPurchasingEntryId===e.id&&po.status!=='Cancelled')?' ✓':''}</button>`:''}${readOnly?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
+          ${(!readOnly&&type==='purchasing')?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" title="Raise a Purchase Order for this" onclick="openPurchaseOrderModal(null,{entryId:'${e.id}'})">🧾 PO${(_purchaseOrders||[]).some(po=>po.linkedPurchasingEntryId===e.id&&po.status!=='Cancelled')?' ✓':''}</button>`:''}${type==='purchasing'&&isAdmin(currentUser)?`<button type="button" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;font-weight:600;margin-left:6px;" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑 Delete</button>`:''}${readOnly?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openTrackerEntryModal('${type}','${e.id}')">✏️</button>
           ${type==='sales'&&!isAdmin(currentUser)?'':`<button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--red);" onclick="deleteTrackerEntry('${type}','${e.id}')">🗑</button>`}`}
         </td>
       </tr>`;
