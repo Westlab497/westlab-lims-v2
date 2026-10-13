@@ -692,7 +692,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="nav-section-label" id="nav-admin-section">Administration</div>
     <button class="nav-item" id="nav-personnel" onclick="showView('personnel')" data-label="Personnel"><span class="nav-icon"><i class="ti ti-users"></i></span><span class="nav-label">Personnel</span></button>
     <button class="nav-item hidden-nav" id="nav-payroll" onclick="showView('payroll')" data-label="Payroll"><span class="nav-icon"><i class="ti ti-cash-banknote"></i></span><span class="nav-label">Payroll</span></button>
-    <button class="nav-item" id="nav-deleted" onclick="showView('deleted')" data-label="Deleted Jobs"><span class="nav-icon"><i class="ti ti-trash"></i></span><span class="nav-label">Deleted Jobs</span></button>
+    <button class="nav-item" id="nav-deleted" onclick="showView('deleted')" data-label="Disposal Log"><span class="nav-icon"><i class="ti ti-trash"></i></span><span class="nav-label">Disposal Log</span></button>
     <button class="nav-item" id="nav-reports" onclick="showView('reports')" data-label="Reports &amp; Audit Logs"><span class="nav-icon"><i class="ti ti-chart-bar"></i></span><span class="nav-label">Reports &amp; Audit Logs</span></button>
     <button class="nav-item" id="nav-settings" onclick="showView('settings')" data-label="Settings"><span class="nav-icon"><i class="ti ti-settings"></i></span><span class="nav-label">Settings</span></button>
     <button class="nav-item" onclick="doLogout()" style="margin-top:8px;color:rgba(255,100,100,.8);" data-label="Logout"><span class="nav-icon"><i class="ti ti-logout"></i></span><span class="nav-label">Logout</span></button>
@@ -1911,23 +1911,11 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <!-- ════ DELETED JOBS ════ -->
     <div class="view" id="view-deleted">
       <div class="page-header">
-        <div><div class="page-title">🗑️ Deleted Jobs</div>
-        <div class="page-sub">Deleted jobs stay here for 90 days (recoverable), then are removed for good automatically</div></div>
+        <div><div class="page-title">🗑️ Record Disposal Log</div>
+        <div class="page-sub">Deleting a job removes it for good. Every removal is recorded here — what, why, by whom (LQP 8.4)</div></div>
+        <input id="deleted-search" class="filter-select" placeholder="Search…" style="width:200px;" oninput="renderDeletedJobs()"/>
       </div>
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Deleted Job Register</span>
-          <input id="deleted-search" class="filter-select" placeholder="Search…" style="width:200px;" oninput="renderDeletedJobs()"/>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>Job / Item</th><th>Customer / Equipment</th><th>Reason</th><th>Status when deleted</th><th>Deleted by</th><th>Deleted</th><th></th>
-            </tr></thead>
-            <tbody id="deleted-tbody"></tbody>
-          </table>
-        </div>
-      </div>
+      <div id="disposal-body"></div>
     </div>
 
     <!-- ════ SETTINGS ════ -->
@@ -5226,7 +5214,7 @@ function toLocalDateStr(d){
 
 // ── NAV ──
 const TITLES={dashboard:'Dashboard',equipment:'Job Management',completed:'Job Management',
-  customers:'Customer Database',deleted:'Deleted Jobs',
+  customers:'Customer Database',deleted:'Record Disposal Log',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
   documents:'Document Control',forms:'Forms',fmea:'Risk Register (FMEA)',f027:'Confidential Information Release',f026:'Visitor Log',scope:'Accreditation & Scope',datamgmt:'LIMS & Data',qobj:'Quality Policy & Objectives',docs:'Documents (F020)',meetings:'Meetings (F021)',notices:'Notice Board',competence:'Competence & Authorisation',env:'Environmental Records',capa:'Nonconformance & CAPA','ref-eq':'Masterlist of Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
   personnel:'Personnel',reception:'Reception',trips:'Transport',payroll:'Payroll',payslips:'My Payslips',reports:'Reports & Audit Logs',settings:'Settings',launcher:'Modules','price-reference':'Price Reference',
@@ -10061,7 +10049,7 @@ function eqJobMenu(ev,jobNo){
     if((j.items||[]).some(it=>it.calType!=='Onsite')) h+=stMenuItem('🏷️ Reprint receiving labels',`reprintReceivingLabels('${escapeForJsAttr(jobNo)}')`);
   }
   if(role==='Admin'||role==='Managing Director')
-    h+='<hr/>'+(j.status!=='Completed'?stMenuItem('🗑 Delete job',`deleteJob('${escapeForJsAttr(jobNo)}')`,{danger:true}):stMenuItem('🗑️ Permanent deletion…',`openRequestPermanentDeletionModal('${escapeForJsAttr(jobNo)}')`,{danger:true}));
+    h+='<hr/>'+(j.status!=='Completed'?stMenuItem('🗑 Delete job…',`deleteJob('${escapeForJsAttr(jobNo)}')`,{danger:true}):stMenuItem('🗑️ Delete job (permanent)…',`openRequestPermanentDeletionModal('${escapeForJsAttr(jobNo)}')`,{danger:true}));
   stShowMenu(ev.currentTarget,h);
 }
 let _eqShowN=100;
@@ -20199,7 +20187,8 @@ const LIMS_RELEASES=[
     'Accreditation: status incl. suspension, scope print, approved signatories (AP 4), use of the symbol (AP 1).',
     'Data management: this page — releases, calculation sheets, failure log, backup record, user manual per role (7.11); the approved signatory confirms the check of calculations and data transfer before approving (7.11 6.6).',
     'Management system: Quality Policy acknowledgement and Quality Objectives tracker (8.2); IT providers evaluated on F010 (6.6, 7.11 6.4).',
-    'Documents: F020 master list of internal and external documents with review / edition checks, F014 per document, MD approval of new issues, obsolete marking, controlled hard copies approved by QM and MD (8.3); F021 meeting minutes with action items (8.2).'],
+    'Documents: F020 master list of internal and external documents with review / edition checks, F014 per document, MD approval of new issues, obsolete marking, controlled hard copies approved by QM and MD (8.3); F021 meeting minutes with action items (8.2).',
+    'Records (8.4): deleting a job removes it for good (no recycle bin); every removal — test record, created in error, or after the 5-year retention with MD approval — is kept in the Record Disposal Log.'],
    tests:[
     'Automated end-to-end tests run in a browser against the real server rules, for every module changed in this release, plus the full regression set (attention items, signatures, visitors, equipment, competence, F027, quotations).',
     'Calculations compared with hand calculation: En = |x_lab − x_ref| / √(U_lab² + U_ref²) and z = |x − X| / σ (7.7); U against the scope CMC and 2 significant digits (7.6); recalibration due dates; environmental limits; statement of conformity verdicts.',
@@ -20347,6 +20336,7 @@ const LIMS_MANUAL=[
   ['Validity of results and PT (7.7)','quality',`<p><b>Quality System → Validity of Results</b>: yearly plan per method (replicate calibration, retained item, review of reported results, PT / ILC). Enter results as En or z — a fail raises an NC and the activity is repeated. The PT participation plan covers each field (one satisfactory PT before accreditation, then every 3 years).</p>`],
   ['Accreditation and scope','quality',`<p><b>Quality System → Accreditation &amp; Scope</b>: status (MD), scope lines with CMC (max. 2 significant digits) and signatories, approved signatory list (AP 4), use of the accreditation symbol (QM and MD approve each material), suspension notices with the customers to inform, scope print.</p>`],
   ['LIMS &amp; Data (7.11)','quality',`<p>This page: <b>LIMS releases</b> — every new LIMS version comes with a release record and is authorised by the TM or MD before use; <b>Calculation sheets</b> — every Excel sheet issue / revision is validated (hand calculation, identical results, protected cells) before it can be selected in a calibration; <b>System failures</b>; <b>Backup record</b> — the monthly copy to the external hard disk.</p>`],
+  ['Deleting records (8.4)','quality',`<p><b>⋯ → Delete job</b> (Admin / MD) removes the job, its certificates and files <b>for good</b>. Choose why: <i>test / dummy record</i> or <i>created in error</i> (Admin or MD), or <i>retention period ended</i> / <i>other</i> (MD only — a real record is disposed of only after 5 years, LQP 8.4 6.2 g–h). Certificate numbers already submitted go to the void log; used stickers are recorded as wasted. <b>Disposal Log</b> shows every removal and prints it. Before go-live the MD can clear the test entries.</p>`],
   ['Staff, leave and payroll','all',`<p><b>My Workspace</b>: clock in / out, leave, overtime and claims requests, payslips. HR and the MD approve; payroll is run monthly by HR / MD.</p>`]];
 // which manual sections a role gets — staff see only what they use (QM / TM / MD / Admin see all)
 const DM_MAN_ROLES={all:null,sales:['Sales','Coordinator'],reception:['Receptionist','Coordinator','Sales'],engineer:['Engineer'],signatory:['_signatory'],quality:[]};
@@ -20491,27 +20481,36 @@ function docList(){ return (typeof _docStore!=='undefined'&&_docStore.data)||[];
 function docDocs(){ return docList().filter(x=>x.type==='doc'); }
 function docGet(id){ return docList().find(x=>x.id===id)||null; }
 function canDocEdit(u){ return isQmOrMd(u||currentUser); }
-function docReviewDue(d){ if(d.status==='Obsolete') return ''; const base=d.lastReview?.date||(d.kind==='E'?String(d.at||'').slice(0,10):d.effective||String(d.at||'').slice(0,10)); if(!base) return ''; return addMonthsClamp(base,d.kind==='E'?12:24); }
-const DOC_SEED=()=>{ const I=(no,title,eff)=>({no,title,level:no.startsWith('LQM')?'LQM':no.startsWith('LQI')?'LQI':'LQP',kind:'I',issue:'01',rev:'00',effective:eff||''});
+function docReviewDue(d){ if(d.status==='Obsolete') return ''; const base=d.lastReview?.date||(d.kind==='E'?String(d.at||'').slice(0,10):d.effective||String(d.at||'').slice(0,10)); if(!base) return ''; return addMonthsClamp(base,+d.reviewMonths||(d.kind==='E'?12:24)); }
+const DOC_SEED=()=>{ const I=(no,title,eff,rm)=>({no,title,level:no.startsWith('LQM')?'LQM':/LQI/.test(no)?'LQI':'LQP',kind:'I',issue:'01',rev:'00',effective:eff||'',...(rm?{reviewMonths:rm}:{})});
   const E=(no,title,ed,eff)=>({no,title,level:'External',kind:'E',issue:ed,rev:'',effective:eff||''});
-  return [I('LQM','Laboratory Quality Manual','2026-09-30'),I('LQP 4.1','Impartiality','2026-02-27'),I('LQP 4.2','Confidentiality'),I('LQP 6.2','Personnel'),I('LQP 6.3','Facilities and Environmental Conditions'),I('LQP 6.4','Equipment'),I('LQP 6.5','Metrological Traceability'),I('LQP 6.6','Externally Provided Products and Services'),
-    I('LQP 7.1','Review of Requests, Tenders and Contracts'),I('LQP 7.2','Selection, Verification and Validation of Methods'),I('LQP 7.4','Handling of Test or Calibration Items'),I('LQP 7.5','Technical Records'),I('LQP 7.6','Evaluation of Measurement Uncertainty'),I('LQP 7.7','Ensuring the Validity of Results'),I('LQP 7.8','Reporting of Results'),I('LQP 7.9','Complaints'),I('LQP 7.10','Nonconforming Work','2026-03-31'),I('LQP 7.11','Control of Data and Information Management'),
-    I('LQP 8.2','Management System Documentation'),I('LQP 8.3','Control of Management System Documents'),I('LQP 8.4','Control of Records'),I('LQP 8.5','Actions to Address Risks and Opportunities'),I('LQP 8.6','Improvement'),I('LQP 8.7','Corrective Actions'),I('LQP 8.8','Internal Audits'),I('LQP 8.9','Management Reviews'),
-    E('ISO/IEC 17025','General requirements for the competence of testing and calibration laboratories','2017'),
+  return [I('LQM','Laboratory Quality Manual','2026-09-30'),I('LQP 4.1','Impartiality','2026-02-27'),I('LQP 4.2','Confidentiality','2026-02-27'),I('LQP 5','Structural Requirements','2026-02-27'),I('LQP 6.2','Personnel','2026-03-08'),I('LQP 6.3','Facilities and Environmental Conditions','2026-03-08'),I('LQP 6.4','Equipment','2026-03-08'),I('LQP 6.5','Metrological Traceability','2026-03-16'),I('LQP 6.6','Externally Provided Products and Services','2026-03-16'),
+    I('LQP 7.1','Review of Requests, Tenders and Contracts','2026-03-19'),I('LQP 7.2','Selection, Verification and Validation of Methods','2026-03-20'),I('LQP 7.4','Handling of Test or Calibration Items','2026-03-20'),I('LQP 7.5','Technical Records','2026-03-26'),I('LQP 7.6','Evaluation of Measurement Uncertainty','2026-03-27'),I('LQP 7.7','Ensuring the Validity of Results','2026-03-27'),I('LQP 7.8','Reporting of Results','2026-03-28'),I('LQP 7.9','Complaints','2026-03-31'),I('LQP 7.10','Nonconforming Work','2026-03-31'),I('LQP 7.11','Control of Data and Information Management','2026-03-31'),
+    I('LQP 8.2','Management System Documentation','2026-04-01'),I('LQP 8.3','Control of Management System Documents','2026-04-01'),I('LQP 8.4','Control of Records','2026-04-01'),I('LQP 8.5','Actions to Address Risks and Opportunities','2026-04-02'),I('LQP 8.6','Improvement','2026-04-08'),I('LQP 8.7','Corrective Actions','2026-04-09'),I('LQP 8.8','Internal Audits','2026-04-09'),I('LQP 8.9','Management Reviews','2026-04-13'),
+    I('CLQI 015','Calibration of Weighing Balance','2026-04-28',12),
+    E('ISO/IEC 17025','General requirements for the competence of testing and calibration laboratories','2017 (Third edition)','2017-11-01'),
     E('AP 1','Policy on the Use of Accreditation Symbol and Reference to Accreditation','Issue 2','2023-08-29'),E('AP 2','Terms and Conditions Governing JSM Accreditation Schemes','Issue 1 Amd 1','2024-09-03'),E('AP 3','Policy for the Accreditation of Branches or Sites of CABs','Issue 2','2023-08-29'),
     E('AP 4','Policy on the Requirements for Key Personnel of CABs','Issue 2','2023-08-29'),E('AP 6','Policy for Participation in Proficiency Testing Activities','Issue 2','2023-08-29'),E('AP 7','Policy on Grading of Assessment Findings','Issue 2','2023-08-29'),
     E('SAMM Policy 2','Policy on the Metrological Traceability of Measurement Results','Issue 5','2022-02-10'),E('SAMM Policy 5','Measurement Uncertainty Requirements for SAMM Testing Laboratories','Issue 2 Amd 2','2019-02-13'),
-    E('CAB 1','Confidentiality','Issue 3'),E('CAB 2','Complaints','Issue 4 Amd 1'),E('CAB 3','Appeals','Issue 5','2022-04-28'),E('CAB 4','Suspension and Withdrawal of Accreditation',''),
+    E('CAB 1','Confidentiality','Issue 3 Amd 2','2021-10-21'),E('CAB 2','Complaints','Issue 4 Amd 1','2024-01-30'),E('CAB 3','Appeals','Issue 5','2022-04-28'),E('CAB 4','Suspension and Withdrawal of Accreditation','Issue 5','2020-09-28'),
     E('Accreditation Circular 1/2019','Guidelines for the Determination of Assessment Man-Days','','2019-10-02'),E('Accreditation Circular 1/2021','Policy on Preparation of Assessments','','2021-01-04'),E('Accreditation Circular 3/2021','Accreditation Agreement (non-governmental CABs)','','2021-04-01'),
-    E('Accreditation Circular 1/2022','Change of Accreditation Cycle',''),E('Accreditation Circular 2/2023','Implementation of New Accreditation Policies','','2023-09-06'),E('Accreditation Circular 3/2023','Implementation of AP 2','','2023-11-14'),
+    E('Accreditation Circular 1/2022','Change of Accreditation Cycle','','2022-12-07'),E('Accreditation Circular 2/2023','Implementation of New Accreditation Policies','','2023-09-06'),E('Accreditation Circular 3/2023','Implementation of AP 2','','2023-11-14'),
     E('Accreditation Circular 1/2024','Implementation of e-Accreditation 2.0','','2024-12-17'),E('Accreditation Circular 1/2025','Requirements for Accreditation Fees Payment','','2025-02-28'),
-    E('SAMM Circular 2/2016','SAMM Scope of Accreditation (softcopy)',''),E('SAMM Circular 3/2021','Supplementary Requirements for Accreditation of Calibration Laboratories','','2021-09-15'),E('SAMM Circular 3/2023','Schedule of Accreditation following AP 4','','2023-07-04'),
+    E('SAMM Circular 2/2016','SAMM Scope of Accreditation (softcopy)','','2016-06-01'),E('SAMM Circular 3/2021','Supplementary Requirements for Accreditation of Calibration Laboratories','','2021-09-15'),E('SAMM Circular 3/2023','Schedule of Accreditation following AP 4','','2023-07-04'),
     E('SAMM Circular 4/2023','Management of SAMM Accreditation Scope for Testing Laboratories','','2023-07-04'),E('SAMM Circular 1/2024','Management of Laboratory Assessments by Region','','2024-07-01'),
-    E('EURAMET cg-18','Guidelines on the Calibration of Non-Automatic Weighing Instruments','Version 4.0 (11/2015)')]; };
+    E('EURAMET cg-18','Guidelines on the Calibration of Non-Automatic Weighing Instruments','Version 4.0 (11/2015)','2015-11-01')]; };
 async function docSeed(){ if(!_docStore.loaded||docDocs().length||!canDocEdit()) return; const now=new Date().toISOString();
   try{ await _docStore.patch(arr=>{ if(arr.some(x=>x.type==='doc')) return; DOC_SEED().forEach((d,i)=>arr.push({id:'DOC-'+(i+1),type:'doc',...d,location:'Microsoft Cloud (SharePoint)',retention:DOC_RETENTION,status:'Current',history:[{rev:`${d.issue}${d.rev?'/'+d.rev:''}`,clause:'All',desc:'Registered in the LIMS (F020) — dates to be checked',date:toLocalDateStr(new Date()),revisedBy:staffNameOf(currentUser),by:currentUser,at:now}],by:currentUser,at:now})); }); }catch(e){ console.warn('doc seed',e); } }
 let _docTab='list';
-async function renderDocs(){ const box=el('docs-body'); if(!box) return; await docSeed(); const ed=canDocEdit(); const today=toLocalDateStr(new Date());
+// Seed v2 (13 Oct 2026): effective dates taken from each LQP header, LQP 5 and CLQI 015 added. Runs once on a list seeded earlier:
+// adds the documents not yet on it and fills only EMPTY dates — never overwrites anything already entered.
+async function docSeedFill(){ if(!_docStore.loaded||!docDocs().length||!canDocEdit()) return; if(docList().some(x=>x.type==='meta'&&x.id==='DOC-SEEDVER'&&x.ver>=2)) return; const now=new Date().toISOString(); let added=0,filled=0;
+  try{ await _docStore.patch(arr=>{ if(arr.some(x=>x.type==='meta'&&x.id==='DOC-SEEDVER'&&x.ver>=2)) return; const docs=arr.filter(x=>x.type==='doc');
+    DOC_SEED().forEach(d=>{ const x=docs.find(y=>String(y.no).toLowerCase()===d.no.toLowerCase());
+      if(!x){ arr.push({id:'DOC-'+Date.now()+'-'+(++added),type:'doc',...d,location:'Microsoft Cloud (SharePoint)',retention:DOC_RETENTION,status:'Current',history:[{rev:`${d.issue}${d.rev?'/'+d.rev:''}`,clause:'All',desc:'Registered in the LIMS (F020)',date:d.effective||toLocalDateStr(new Date()),revisedBy:staffNameOf(currentUser),by:currentUser,at:now}],by:currentUser,at:now}); return; }
+      if(!x.effective&&d.effective){ x.effective=d.effective; filled++; } if(d.kind==='E'&&d.issue&&x.issue!==d.issue&&(x.history||[]).length<=1&&!(x.obsolete||[]).length) x.issue=d.issue; if(d.reviewMonths&&!x.reviewMonths) x.reviewMonths=d.reviewMonths; if(d.level==='LQI'&&x.level!=='LQI'&&(x.history||[]).length<=1) x.level='LQI'; });
+    arr.push({id:'DOC-SEEDVER',type:'meta',ver:2,by:currentUser,at:now}); }); if(added||filled) addAudit('📚',`F020 updated from the document headers: ${added} added, ${filled} effective date(s) filled`); }catch(e){ console.warn('doc seed fill',e); } }
+async function renderDocs(){ const box=el('docs-body'); if(!box) return; await docSeed(); await docSeedFill(); const ed=canDocEdit(); const today=toLocalDateStr(new Date());
   const tabs=[['list','📚 F020 Master List'],['copies','📄 Controlled hard copies'],['obs','🗄 Obsolete']];
   let h=`<div class="st-tabs" style="margin-bottom:10px;">${tabs.map(([k,l])=>`<button class="st-tab${_docTab===k?' active':''}" onclick="_docTab='${k}';renderDocs()">${l}</button>`).join('')}</div>`;
   if(_docTab==='list'){ const L=docDocs().filter(d=>d.status!=='Obsolete'); const M=(typeof methList==='function'?methList():[]).filter(m=>!m.withdrawn);
@@ -20535,18 +20534,18 @@ function openDoc(id){ const d=id?docGet(id):{kind:'I',level:'LQP',issue:'01',rev
   cOv(new_?'+ Document (F020)':`📚 ${v(d.no)} — ${v(d.title)}`,`${new_?`<div class="form-row"><div class="form-group"><label class="form-label">Type</label><select class="form-control" id="dc-k" onchange="el('dc-lv').value=this.value==='E'?'External':'LQP'"><option value="I">Internal</option><option value="E">External</option></select></div><div class="form-group"><label class="form-label">Level</label><select class="form-control" id="dc-lv">${DOC_LEVELS.map(l=>`<option ${d.level===l?'selected':''}>${l}</option>`).join('')}</select></div></div>`:''}
     <div class="form-row"><div class="form-group"><label class="form-label">Doc. No.</label><input class="form-control" id="dc-no" value="${v(d.no)}" ${new_?'':'disabled'}/></div><div class="form-group" style="flex:2;"><label class="form-label">Description</label><input class="form-control" id="dc-t" value="${v(d.title)}" ${ed?'':'disabled'}/></div></div>
     <div class="form-row"><div class="form-group"><label class="form-label">${d.kind==='E'?'Edition':'Issue'}</label><input class="form-control" id="dc-i" value="${v(d.issue)}" ${new_?'':'disabled'}/></div>${d.kind==='E'?'':`<div class="form-group"><label class="form-label">Revision</label><input class="form-control" id="dc-r" value="${v(d.rev)}" ${new_?'':'disabled'}/></div>`}<div class="form-group"><label class="form-label">Effective / last update</label><input class="form-control" type="date" id="dc-e" value="${v(d.effective)}" ${ed&&(new_||!d.effective)?'':'disabled'}/></div></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Location</label><input class="form-control" id="dc-l" value="${v(d.location)}" ${ed?'':'disabled'}/></div><div class="form-group"><label class="form-label">Link (SharePoint / website)</label><input class="form-control" id="dc-u" value="${v(d.link)}" ${ed?'':'disabled'}/></div><div class="form-group"><label class="form-label">Retention time</label><input class="form-control" id="dc-rt" value="${v(d.retention)}" ${ed?'':'disabled'}/></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">Location</label><input class="form-control" id="dc-l" value="${v(d.location)}" ${ed?'':'disabled'}/></div><div class="form-group"><label class="form-label">Link (SharePoint / website)</label><input class="form-control" id="dc-u" value="${v(d.link)}" ${ed?'':'disabled'}/></div><div class="form-group"><label class="form-label">Retention time</label><input class="form-control" id="dc-rt" value="${v(d.retention)}" ${ed?'':'disabled'}/></div><div class="form-group" style="max-width:130px;"><label class="form-label">Review every (months)</label><input class="form-control" type="number" min="1" id="dc-rm" value="${v(d.reviewMonths||(d.kind==='E'?12:24))}" ${ed?'':'disabled'}/></div></div>
     ${id?`<div style="font-size:12.5px;margin-bottom:8px;">${d.kind==='E'?'Edition check':'Review'} due: <b>${due?fmtDateShort(due):'—'}</b>${d.lastReview?` · last ${d.kind==='E'?'checked':'reviewed'} ${fmtDateShort(d.lastReview.date)} by ${v(staffNameOf(d.lastReview.by))}${d.lastReview.note?' — '+v(d.lastReview.note):''}`:''}</div>
     ${d.pending?`<div class="qt-note warn">New ${d.kind==='E'?'edition':'issue / revision'} <b>${v(d.pending.issue)}${d.pending.rev?'/'+v(d.pending.rev):''}</b> effective ${fmtDateShort(d.pending.effective)} — ${v(d.pending.desc)} (by ${v(staffNameOf(d.pending.by))}). ${isMd?`<button class="btn btn-primary btn-sm" onclick="docApprove('${id}')">✅ Approve — issue it</button> <button class="btn btn-outline btn-sm" onclick="docReject('${id}')">Return</button>`:'Waiting for the MD to approve.'}</div>`:''}
     <details style="margin:8px 0;"><summary style="cursor:pointer;font-weight:700;font-size:12.5px;">F014 Amendment &amp; Revision Log (${(d.history||[]).length})</summary>${(d.history||[]).map(x=>`<div style="font-size:12px;border-top:1px solid var(--border);padding:3px 0;">${v(x.rev)} · ${v(x.clause||'')} · ${v(x.desc)} · ${fmtDateShort(x.date)} · ${v(x.revisedBy||staffNameOf(x.by))}</div>`).join('')}</details>`:''}
     <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">${id&&ed&&!d.pending?`<button class="btn btn-outline" style="margin-right:auto;" onclick="docWithdraw('${id}')">Obsolete (no longer used)</button><button class="btn btn-outline" onclick="docReview('${id}')">✔ ${d.kind==='E'?'Checked — still current':'Reviewed — no change'}</button><button class="btn btn-outline" onclick="openDocRevise('${id}')">${d.kind==='E'?'New edition':'New issue / revision'}</button>`:''}${id?`<button class="btn btn-outline" onclick="docF014Pdf('${id}')">📄 F014</button>`:''}<button class="btn btn-outline" onclick="f027Close()">Close</button>${ed?`<button class="btn btn-primary" onclick="saveDoc(${id?`'${id}'`:'null'})">Save</button>`:''}</div>`,760); }
 async function saveDoc(id){ const v=k=>(el(k)?.value||'').trim(); const now=new Date().toISOString();
-  if(!id){ const rec={type:'doc',kind:v('dc-k'),level:v('dc-lv'),no:v('dc-no'),title:v('dc-t'),issue:v('dc-i'),rev:v('dc-r'),effective:v('dc-e'),location:v('dc-l'),link:v('dc-u'),retention:v('dc-rt'),status:'Current'};
+  if(!id){ const rec={type:'doc',kind:v('dc-k'),level:v('dc-lv'),no:v('dc-no'),title:v('dc-t'),issue:v('dc-i'),rev:v('dc-r'),effective:v('dc-e'),location:v('dc-l'),link:v('dc-u'),retention:v('dc-rt'),status:'Current',...(+v('dc-rm')?{reviewMonths:+v('dc-rm')}:{})};
     if(!rec.no||!rec.title){ alert('Enter the document number and description.'); return; } if(docDocs().some(d=>d.no.toLowerCase()===rec.no.toLowerCase()&&d.status!=='Obsolete')){ alert(rec.no+' is already on the list.'); return; }
     if(rec.kind==='I'&&!isAdmin(currentUser)){ alert('A new internal document is registered by the MD (approved before issue — LQP 8.3 6.2 a). Ask the MD, or register it as a new issue of an existing document.'); return; }
     rec.history=[{rev:`${rec.issue}${rec.rev?'/'+rec.rev:''}`,clause:'All',desc:rec.kind==='I'?'New release':'Registered',date:rec.effective||toLocalDateStr(new Date()),revisedBy:staffNameOf(currentUser),by:currentUser,at:now}]; if(rec.kind==='I') rec.approved={by:currentUser,at:now};
     try{ await _docStore.patch(arr=>{ arr.push({id:'DOC-'+Date.now(),...rec,by:currentUser,at:now}); }); }catch(e){ alert(e.message||e); return; } }
-  else { const upd={title:v('dc-t'),location:v('dc-l'),link:v('dc-u'),retention:v('dc-rt')}; const e=v('dc-e'); const d0=docGet(id); if(e&&!d0.effective) upd.effective=e;
+  else { const upd={title:v('dc-t'),location:v('dc-l'),link:v('dc-u'),retention:v('dc-rt'),...(+v('dc-rm')?{reviewMonths:+v('dc-rm')}:{})}; const e=v('dc-e'); const d0=docGet(id); if(e&&!d0.effective) upd.effective=e;
     try{ await _docStore.patch(arr=>{ const x=arr.find(y=>y.id===id); if(x) Object.assign(x,upd); }); }catch(err){ alert(err.message||err); return; } }
   f027Close(); renderDocs(); }
 async function docReview(id){ const d=docGet(id); const note=(prompt(d.kind==='E'?`${d.no}: checked that ${d.issue} is still the current edition — where did you check (e.g. JSM website, EURAMET website)?`:`${d.no} Issue ${d.issue} Rev ${d.rev} reviewed — still suitable, no change needed. Note:`)||'').trim(); if(!note) return; const now=new Date().toISOString();
@@ -20658,6 +20657,110 @@ function mtAttentionItems(){ const out=[]; const u=currentUser; const today=toLo
   mtList().filter(m=>m.status==='Approved').forEach(m=>(m.actions||[]).forEach((a,i)=>{ if(!a.done&&a.owner===u) out.push({icon:'🗓️',level:a.due&&a.due<today?'high':'',text:`Meeting ${escapeHtml(m.ref)} action: ${escapeHtml(a.desc)} (due ${fmtDateShort(a.due)}) — tap when done`,onclick:`mtActDone('${m.id}',${i})`}); }));
   if(isAdmin(u)){ const s=mtList().filter(m=>m.status==='Submitted'); if(s.length) out.push({icon:'🗓️',text:`${s.length} meeting minute${s.length>1?'s':''} to approve`,view:'meetings'}); }
   return out; }
+
+// ══════════════════════════════════════════════════
+// ISO/IEC 17025 8.4 — CONTROL OF RECORDS: deleting a job removes it for good, and every removal is written to the
+// Record Disposal Log (LQP 8.4 6.2 h). Test / dummy records can be removed at once; a real record is disposed of only
+// after its 5-year retention period (LQP 8.4 6.1.2 / 6.2 g), with the MD's approval.
+// ══════════════════════════════════════════════════
+const DISP_CATS=[['test','Test / dummy record'],['error','Created in error / duplicate'],['retention','Retention period ended (5 years) — MD approval'],['other','Other — MD approval']];
+const DISP_RETENTION_YEARS=5;
+function dispCatLabel(k){ return (DISP_CATS.find(c=>c[0]===k)||[k,k])[1]; }
+function dispLog(){ return (_settings&&_settings.recordDisposals)||[]; }
+// When the job's record was last added to — the retention period counts from here
+function jobRecordDate(j){ const d=[j.receiveDate,j.completedAt,j.collectedAt,...(j.items||[]).map(i=>i.approvedAt)].filter(Boolean).map(x=>String(x).slice(0,10)).sort(); return d[d.length-1]||''; }
+function jobRetentionEnds(j){ const d=jobRecordDate(j); return d?addMonthsClamp(d,DISP_RETENTION_YEARS*12):''; }
+function jobIssuedItems(j){ return (j?.items||[]).filter(i=>['Completed','Pending Approval'].includes(i.status)||i.calData?.stickerNumber); }
+
+function deleteJob(jobNo){ openJobDisposal(jobNo); }
+function openRequestPermanentDeletionModal(jobNo){ openJobDisposal(jobNo); }
+function openJobDisposal(jobNo){
+  if(!isAdmin(currentUser)){ alert('Only Admin or the MD can delete a job.'); return; }
+  const j=getJob(jobNo); if(!j) return; const q=escapeForJsAttr(jobNo);
+  const issued=jobIssuedItems(j); const inv=(typeof jobInvoices==='function'?jobInvoices(jobNo):[]); const ends=jobRetentionEnds(j); const today=toLocalDateStr(new Date());
+  cOv(`🗑️ Delete job ${escapeHtml(jobNo)} — permanent`,`<div class="qt-note warn" style="margin-bottom:10px;">The job, its ${(j.items||[]).length} item(s), certificates and uploaded files are <b>removed for good</b> — there is no recycle bin. What was removed, by whom and why is kept in the <b>Record Disposal Log</b> (LQP 8.4).</div>
+    <div style="font-size:12.5px;margin-bottom:10px;line-height:1.6;"><b>${escapeHtml(j.custName||'—')}</b> · status ${escapeHtml(j.status||'—')}<br>Record date ${jobRecordDate(j)?fmtDateShort(jobRecordDate(j)):'—'} · 5-year retention ends <b>${ends?fmtDateShort(ends):'—'}</b>${ends&&ends<=today?' <span class="badge badge-green">ended</span>':''}
+      ${issued.length?`<br><span style="color:var(--red);">⚠️ ${issued.length} item(s) with a submitted / approved certificate (${issued.map(i=>escapeHtml(i.certNo||i.eqName)).join(', ')}) — the certificate numbers go to the void log and the stickers are recorded as wasted.</span>`:''}
+      ${inv.length?`<br><span style="color:var(--red);">⚠️ Invoice ${inv.map(v=>escapeHtml(v.invoiceNo||v.id)).join(', ')} is linked to this job — cancel or delete it separately.</span>`:''}</div>
+    <div class="form-group"><label class="form-label">Why is it removed? <span class="req">*</span></label><select class="form-control" id="jd-cat">${DISP_CATS.map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Details <span class="req">*</span></label><input class="form-control" id="jd-reason" placeholder="e.g. created to test the LIMS / duplicate of WL26-00012"/></div>
+    ${issued.length||j.status==='Completed'?`<div class="form-group"><label class="form-label">Type the job number to confirm <span class="req">*</span></label><input class="form-control" id="jd-typed" placeholder="${escapeHtml(jobNo)}"/></div>`:''}
+    <label style="display:flex;gap:8px;font-size:12.5px;margin-bottom:12px;cursor:pointer;"><input type="checkbox" id="jd-ok" style="width:16px;height:16px;flex-shrink:0;"/><span>I understand this cannot be undone.</span></label>
+    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-danger" onclick="doJobDisposal('${q}')">🗑️ Delete permanently</button></div>`,560); }
+
+async function doJobDisposal(jobNo){
+  if(!isAdmin(currentUser)){ alert('Only Admin or the MD can delete a job.'); return; }
+  const j=getJob(jobNo); if(!j) return; const cat=el('jd-cat')?.value||'other'; const reason=(el('jd-reason')?.value||'').trim();
+  const issued=jobIssuedItems(j); const today=toLocalDateStr(new Date());
+  if(!reason){ alert('Give the details of why the job is removed.'); return; }
+  if((issued.length||j.status==='Completed')&&String(el('jd-typed')?.value||'').trim().toUpperCase()!==String(jobNo).toUpperCase()){ alert('The job number did not match — nothing was deleted.'); return; }
+  if(!el('jd-ok')?.checked){ alert('Tick the box to confirm.'); return; }
+  if(['retention','other'].includes(cat)&&getUserRole(currentUser)!=='Managing Director'){ alert('Disposal of a record needs the MD\'s approval (LQP 8.4 6.2 h). Ask the MD to delete it.'); return; }
+  if(cat==='retention'){ const ends=jobRetentionEnds(j); if(!ends||ends>today){ alert(`The 5-year retention period of ${jobNo} ends on ${ends?fmtDateShort(ends):'—'}. It cannot be disposed of before then (LQP 8.4 6.2 g).`); return; } }
+  const now=new Date().toISOString(); const full=`${dispCatLabel(cat)} — ${reason}`;
+  try{
+    // 1. Stickers already used: recorded as wasted (a sticker number is never reused)
+    let stickerChanged=false;
+    issued.forEach(i=>{ const cd=i.calData||{}; if(!cd.stickerNumber) return; const rec=(_stickerRecords||[]).find(r=>r.number===cd.stickerNumber&&(r.type===cd.stickerType||!cd.stickerType)&&r.status==='Used'&&r.usedJobNo===jobNo);
+      if(rec){ rec.status='Wasted'; rec.wastedReason=`Job ${jobNo} deleted — ${full}`; rec.wastedAt=now; stickerChanged=true; } });
+    if(stickerChanged) try{ await saveStickerRecords(); }catch(e){ console.warn('sticker save',e); }
+    // 2. Numbers: the job number and the certificate numbers never submitted are freed for reuse when they are the latest;
+    //    every other certificate number goes to the void log so it is never issued twice
+    const jm=/^WL(\d{2})-(\d{5})$/.exec(jobNo);
+    if(jm){ const n=parseInt(jm[2],10); if(!_jobs.some(o=>o.jobNo!==jobNo&&(m=>m&&parseInt(m[2],10)>n)(/^WL(\d{2})-(\d{5})$/.exec(o.jobNo||'')))) await tryRollbackSequence('job_seq',n); }
+    const unused=(j.items||[]).filter(i=>i.certNo&&!issued.includes(i)&&!(_settings.certVoidLog||[]).some(v=>v.certNo===i.certNo)); const freed=new Set();
+    const byYear={}; unused.forEach(i=>{ const m=/^WLCS(\d{2})\d{2}(\d{4})$/.exec(i.certNo); if(m) (byYear[m[1]]=byYear[m[1]]||[]).push({n:parseInt(m[2],10),certNo:i.certNo}); });
+    for(const yk of Object.keys(byYear)){ for(const c of byYear[yk].sort((a,b)=>b.n-a.n)){
+      const higher=_jobs.some(o=>(o.items||[]).some(it=>{ if(o.jobNo===jobNo&&!issued.includes(it)) return false; const m=/^WLCS(\d{2})\d{2}(\d{4})$/.exec(it.certNo||''); return m&&m[1]===yk&&parseInt(m[2],10)>c.n; }));
+      if(higher) break; if((await tryRollbackSequence(`cert_seq_${yk}`,c.n))==='freed') freed.add(c.certNo); else break; } }
+    const voids=[...issued.filter(i=>i.certNo).map(i=>({certNo:i.certNo,jobNo,eqName:i.eqName||'',statusWas:i.status,reason:full,by:currentUser,at:now})),
+      ...issued.flatMap(i=>(i.socParameters||[]).filter(p=>p.socNo&&p.status==='Approved'||p.pendingPrev).map(p=>({certNo:(p.socNo||'')+(p.rev?'-R'+p.rev:''),kind:'SoC',jobNo,eqName:i.eqName||'',statusWas:'Approved',reason:'SoC void with its certificate — '+full,by:currentUser,at:now}))),
+      ...unused.filter(i=>!freed.has(i.certNo)).map(i=>({certNo:i.certNo,jobNo,eqName:i.eqName||'',statusWas:i.status||'',reason:`Job deleted before calibration — ${full}`,by:currentUser,at:now}))];
+    // 3. Uploaded files
+    const paths=[]; const addP=u=>{ const p=extractR2Path(u&&u.url||u); if(p) paths.push(p); };
+    (j.items||[]).forEach(it=>{ if(it.excelFile) addP(it.excelFile); (it.photos||[]).forEach(addP); }); if(j.excelFile) addP(j.excelFile);
+    if(paths.length) try{ await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json',...authHeader()},body:JSON.stringify(paths)}); }catch(e){ console.warn('R2 delete failed (continuing):',e); }
+    // 4. The record itself
+    await SB.delete('wl_jobs',jobNo); _jobs=_jobs.filter(x=>x.jobNo!==jobNo); delete _jobsCache[jobNo]; await unlinkJobFromQuotations(jobNo);
+    // 5. Disposal log (+ void log)
+    const entry={id:'DSP-'+Date.now(),kind:'Job',ref:jobNo,customer:j.custName||'',items:(j.items||[]).map(i=>[i.eqName,i.certNo].filter(Boolean).join(' · ')).slice(0,40),statusWas:j.status||'',recordDate:jobRecordDate(j),
+      category:cat,reason,files:paths.length,voided:voids.map(v=>v.certNo),freed:[...freed],by:currentUser,at:now};
+    await patchSettings(st=>{ st.recordDisposals=[...(st.recordDisposals||[]),entry]; if(voids.length) st.certVoidLog=[...(st.certVoidLog||[]),...voids]; });
+    f027Close(); if(typeof renderEquipmentTable==='function') renderEquipmentTable(); if(typeof renderCompletedJobs==='function') renderCompletedJobs(); renderDashboard(); refreshAllBadges(); renderDeletedJobs();
+    showToast(`🗑️ Job ${jobNo} removed for good — recorded in the Record Disposal Log`,'success',4500);
+    addAudit('🗑️',`Job <strong>${escapeHtml(jobNo)}</strong> (${escapeHtml(j.custName||'')}) <strong>permanently deleted</strong> — ${escapeHtml(full)}. ${paths.length} file(s) removed${voids.length?`; void: ${voids.map(v=>escapeHtml(v.certNo)).join(', ')}`:''}`);
+  }catch(e){ console.error('doJobDisposal',e); showToast('❌ '+(e.message||e),'error',6000); }
+}
+// Jobs deleted before this change (old "Deleted Jobs" bin): purge now also logs
+async function permanentlyDeleteJob(jobNo){ const j=getJob(jobNo); if(!j) return; if(!isAdmin(currentUser)){ alert('Only Admin or the MD can delete a job.'); return; }
+  if(!confirm(`Remove ${jobNo} for good? It is recorded in the Record Disposal Log.`)) return; const now=new Date().toISOString();
+  try{ await SB.delete('wl_jobs',jobNo); _jobs=_jobs.filter(x=>x.jobNo!==jobNo); delete _jobsCache[jobNo]; await unlinkJobFromQuotations(jobNo);
+    await patchSettings(st=>{ st.recordDisposals=[...(st.recordDisposals||[]),{id:'DSP-'+Date.now(),kind:'Job',ref:jobNo,customer:j.custName||'',items:(j.items||[]).map(i=>[i.eqName,i.certNo].filter(Boolean).join(' · ')).slice(0,40),statusWas:j.statusAtDeletion||'',recordDate:jobRecordDate(j),category:'other',reason:j.deleteReason||'Purged from the old Deleted Jobs list',files:0,voided:[],freed:[],by:currentUser,at:now}]; });
+    renderDeletedJobs(); renderDashboard(); refreshAllBadges(); addAudit('🗑️',`Job <strong>${escapeHtml(jobNo)}</strong> purged from the old Deleted Jobs list`); }catch(e){ alert(e.message||e); } }
+
+// ── Record Disposal Log view (replaces Deleted Jobs) ──
+function renderDeletedJobs(){ const box=el('disposal-body'); if(!box) return;
+  const qs=(el('deleted-search')?.value||'').toLowerCase(); const md=getUserRole(currentUser)==='Managing Director';
+  const log=dispLog().slice().reverse().filter(e=>!qs||[e.ref,e.customer,e.reason,dispCatLabel(e.category),...(e.items||[])].join(' ').toLowerCase().includes(qs));
+  const legacy=(_jobs||[]).filter(j=>j.status==='Deleted'); const tests=dispLog().filter(e=>e.category==='test').length;
+  const td='padding:6px 9px;font-size:12px;vertical-align:top;border-top:1px solid var(--border);';
+  box.innerHTML=`${legacy.length?`<div class="card" style="margin-bottom:14px;"><div class="card-header"><span class="card-title">Left in the old Deleted Jobs bin (${legacy.length})</span></div><div class="table-wrap"><table><tbody>
+      ${legacy.map(j=>`<tr><td style="${td}font-weight:700;">${escapeHtml(j.jobNo)}</td><td style="${td}">${escapeHtml(j.custName||'')}</td><td style="${td}">${escapeHtml(j.deleteReason||'')}</td><td style="${td}">${j.deletedAt?fmtDateShort(j.deletedAt):''}</td><td style="${td}text-align:right;white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="recoverJob('${escapeForJsAttr(j.jobNo)}')">↩️ Recover</button> <button class="btn btn-danger btn-sm" onclick="permanentlyDeleteJob('${escapeForJsAttr(j.jobNo)}')">🗑 Remove for good</button></td></tr>`).join('')}</tbody></table></div></div>`:''}
+    <div class="card"><div class="card-header"><span class="card-title">Record Disposal Log (${dispLog().length})</span><span style="display:flex;gap:6px;flex-wrap:wrap;">${md&&tests?`<button class="btn btn-outline btn-sm" onclick="dispClearTests()" title="Before go-live: remove the log lines of test / dummy records">🧹 Clear ${tests} test entr${tests>1?'ies':'y'}</button>`:''}<button class="btn btn-outline btn-sm" onclick="dispPrint()">🖨️ Print</button></span></div>
+    <div class="table-wrap"><table><thead><tr>${['Date','Record','Customer / items','Why','Disposed by','Files / numbers'].map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>
+    ${log.length?log.map(e=>`<tr><td style="${td}white-space:nowrap;">${fmtDateShort(e.at)}</td><td style="${td}font-weight:700;">${escapeHtml(e.kind)} ${escapeHtml(e.ref)}<div style="font-weight:400;color:var(--text-muted);font-size:11px;">was ${escapeHtml(e.statusWas||'—')}${e.recordDate?' · record '+fmtDateShort(e.recordDate):''}</div></td>
+      <td style="${td}">${escapeHtml(e.customer||'')}<div style="font-size:11px;color:var(--text-muted);">${(e.items||[]).map(escapeHtml).join('<br>')}</div></td><td style="${td}"><span class="badge ${e.category==='test'?'badge-slate':e.category==='retention'?'badge-green':'badge-amber'}">${escapeHtml(dispCatLabel(e.category))}</span><div>${escapeHtml(e.reason||'')}</div></td>
+      <td style="${td}white-space:nowrap;">${escapeHtml(staffNameOf(e.by))}</td><td style="${td}font-size:11px;">${e.files||0} file(s) removed${(e.voided||[]).length?`<br>void: ${e.voided.map(escapeHtml).join(', ')}`:''}${(e.freed||[]).length?`<br>freed for reuse: ${e.freed.map(escapeHtml).join(', ')}`:''}</td></tr>`).join('')
+      :`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🗑️</div><p>${dispLog().length?'No matching entries.':'Nothing disposed of yet.'}</p></div></td></tr>`}</tbody></table></div></div>`; }
+async function dispClearTests(){ if(getUserRole(currentUser)!=='Managing Director') return; const n=dispLog().filter(e=>e.category==='test').length;
+  if(!confirm(`Remove the ${n} log line(s) of test / dummy records? Do this once, before the LIMS goes live. Real disposals stay.`)) return;
+  try{ await patchSettings(st=>{ st.recordDisposals=(st.recordDisposals||[]).filter(e=>e.category!=='test'); }); addAudit('🧹',`${n} test-record line(s) cleared from the Record Disposal Log`); renderDeletedJobs(); }catch(e){ alert(e.message||e); } }
+async function dispPrint(){ const td='border:1px solid #cbd5e1;padding:4px 6px;font-size:10px;vertical-align:top;text-align:left;';
+  const html=`<div style="width:1050px;padding:26px;font-family:Arial,sans-serif;background:#fff;">${valHead('Record Disposal Log')}
+    <table style="border-collapse:collapse;width:100%;"><tr>${['No.','Date','Record','Customer / items','Reason','Disposed by','Files / numbers'].map(h=>`<th style="${td}background:#f1f5f9;">${h}</th>`).join('')}</tr>
+    ${dispLog().map((e,i)=>`<tr>${[i+1,qfDmy(String(e.at).slice(0,10)),`${e.kind} ${e.ref} (was ${e.statusWas||'—'})`,[e.customer,...(e.items||[])].filter(Boolean).join('\n'),`${dispCatLabel(e.category)} — ${e.reason||''}`,staffNameOf(e.by),`${e.files||0} file(s)${(e.voided||[]).length?'; void '+e.voided.join(', '):''}`].map(v=>`<td style="${td}white-space:pre-line;">${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}</table>
+    <div style="font-size:10px;color:#64748b;margin-top:8px;">LQP 8.4 6.2 g–h: records are kept at least five (5) years; disposal after that needs the MD's approval. Printed by ${escapeHtml(staffNameOf(currentUser))} on ${qfDmy(toLocalDateStr(new Date()))}.</div></div>`;
+  await exportHtmlAsPdf(html,`Record_Disposal_Log_${toLocalDateStr(new Date())}.pdf`,'Record disposal log',1); }
 
 // ── LEAVE MANAGEMENT SYSTEM ──
 const LEAVE_KEY='wl_leave_records';
@@ -23233,178 +23336,8 @@ async function viewJobDetail(jobNo){
   }
 }
 
-// ══════════════════════════════════════════════════
-// PERMANENT DELETION OF A COMPLETED JOB — Admin only, deliberate override
-// Separate from the normal deleteJob() above, which still hard-blocks Completed jobs.
-// ══════════════════════════════════════════════════
-function openRequestPermanentDeletionModal(jobNo){
-  if(!isAdmin(currentUser)){alert('Only Admin can permanently delete a completed job.');return;}
-  const j=getJob(jobNo); if(!j)return;
-  let ov=document.getElementById('perm-delete-overlay');
-  if(!ov){
-    ov=document.createElement('div');
-    ov.id='perm-delete-overlay';
-    ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:30px 20px;overflow-y:auto;';
-    document.body.appendChild(ov);
-  }
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:460px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);background:#fef2f2;border-radius:16px 16px 0 0;">
-      <span style="font-weight:700;font-size:15px;color:#991b1b;">🗑️ Request Permanent Deletion</span>
-      <button onclick="document.getElementById('perm-delete-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
-    </div>
-    <div style="padding:16px 20px;">
-      <div style="background:#fef2f2;border-radius:8px;padding:10px 14px;font-size:12px;color:#991b1b;margin-bottom:14px;">
-        ⚠️ <strong>${jobNo}</strong> (${escapeHtml(j.custName)}) is a Completed job with issued certificate(s). This is an official accredited record. Deleting it permanently removes the job, all certificates, and all uploaded files — this cannot be undone.
-      </div>
-      <div class="form-group">
-        <label class="form-label">Reason for deletion <span class="req">*</span></label>
-        <textarea class="form-control" id="perm-delete-reason" placeholder="e.g. Duplicate job created by mistake, customer never actually sent this equipment"></textarea>
-      </div>
-      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:normal;font-size:12px;margin-bottom:14px;">
-        <input type="checkbox" id="perm-delete-confirm-cb" onchange="el('perm-delete-confirm-btn').disabled=!(this.checked&&el('perm-delete-reason').value.trim())" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;"/>
-        <span>I understand this permanently deletes the certificate and all associated files, and cannot be undone.</span>
-      </label>
-      <div style="display:flex;justify-content:flex-end;gap:8px;">
-        <button class="btn btn-outline" onclick="document.getElementById('perm-delete-overlay').style.display='none'">Cancel</button>
-        <button class="btn btn-danger" id="perm-delete-confirm-btn" disabled onclick="confirmPermanentDeletionOfCompletedJob('${jobNo}')">Confirm Permanent Deletion</button>
-      </div>
-    </div>
-  </div>`;
-  ov.style.display='flex';
-  el('perm-delete-reason').addEventListener('input',function(){
-    el('perm-delete-confirm-btn').disabled=!(el('perm-delete-confirm-cb').checked&&this.value.trim());
-  });
-}
 
-async function confirmPermanentDeletionOfCompletedJob(jobNo){
-  if(!isAdmin(currentUser)){alert('Only Admin can permanently delete a completed job.');return;}
-  const j=getJob(jobNo); if(!j)return;
-  const reason=el('perm-delete-reason')?.value.trim();
-  if(!reason){alert('Please enter a reason.');return;}
-  try{
-    // Collect and remove all R2 files (same pattern as normal deleteJob)
-    const pathsToDelete=[];
-    (j.items||[]).forEach(item=>{
-      if(item.excelFile&&item.excelFile.url){
-        const path=extractR2Path(item.excelFile.url);
-        if(path) pathsToDelete.push(path);
-      }
-      if(item.photos&&item.photos.length){
-        item.photos.forEach(p=>{
-          const path=extractR2Path(p.url||p);
-          if(path) pathsToDelete.push(path);
-        });
-      }
-    });
-    if(pathsToDelete.length){
-      try{
-        await fetch('https://westlab-upload.sales-2fb.workers.dev',{
-          method:'DELETE', headers:{'Content-Type':'application/json',...authHeader()},
-          body:JSON.stringify(pathsToDelete)
-        });
-      }catch(e){console.warn('R2 delete failed (continuing with job delete):',e);}
-    }
-    // Hard delete from Supabase — this job is gone completely, not soft-deleted/recoverable
-    await SB.delete('wl_jobs',jobNo);
-    _jobs=_jobs.filter(x=>x.jobNo!==jobNo); await unlinkJobFromQuotations(jobNo);
-    delete _jobsCache[jobNo];
-    document.getElementById('perm-delete-overlay').style.display='none';
-    renderEquipmentTable(); renderCompletedJobs(); renderDashboard(); refreshAllBadges();
-    showToast(`🗑️ Job ${jobNo} permanently deleted`,'success',4000);
-    // Permanent audit trail entry — stays in the Audit Log forever, even though the job itself is gone
-    addAudit('🗑️',`<strong>PERMANENT DELETION</strong> of Completed job <strong>${jobNo}</strong> (${escapeHtml(j.custName)}) by ${USERS[currentUser]?.name||currentUser}. Reason: "${reason}". ${pathsToDelete.length} file(s) removed from storage.`);
-  }catch(_err){
-    console.error("confirmPermanentDeletionOfCompletedJob error:",_err);
-    showToast("❌ Error: "+_err.message,"error",5000);
-  }
-}
 
-async function deleteJob(jobNo){
-  try{
-  if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete a job.','error',4000);return;}
-  const j=getJob(jobNo);
-  if(j&&j.status==='Completed'){
-    alert(`Job ${jobNo} is Completed with issued certificate(s) and cannot be deleted.\n\nCompleted jobs are official accredited records and must be retained.`);
-    return;
-  }
-  const itemCount=j?.items?.length||1;
-  const reason=prompt(`Delete job ${jobNo} (${itemCount} item${itemCount>1?'s':''}) for ${j?.custName||''}?\n\nAll its uploaded files are removed now. The job goes to Deleted Jobs, where it can be recovered for 90 days before it is removed for good.\n\nReason for deleting (required):`,'');
-  if(reason===null) return;
-  if(!reason.trim()){ alert('Please give a reason for deleting the job.'); return; }
-  // Items with an issued / submitted certificate: extra confirmation; their certificate numbers go to the void log and
-  // their stickers are recorded as wasted (a sticker number is never reused)
-  const issued=(j?.items||[]).filter(i=>['Completed','Pending Approval'].includes(i.status)||i.calData?.stickerNumber);
-  const unusedNos=(j?.items||[]).filter(i=>i.certNo&&!issued.includes(i)&&!(_settings.certVoidLog||[]).some(v=>v.certNo===i.certNo));
-  if(issued.length){
-    const t=prompt(`⚠️ ${issued.length} item${issued.length>1?'s have':' has'} a submitted or approved certificate (${issued.map(i=>i.certNo||i.eqName).join(', ')}).\n\nDeleting voids ${issued.length>1?'these certificate numbers':'this certificate number'} and records ${issued.length>1?'their stickers':'its sticker'} as wasted.\n\nType the job number ${jobNo} to confirm:`,'');
-    if(t===null) return; if(t.trim().toUpperCase()!==String(jobNo).toUpperCase()){ alert('The job number did not match — nothing was deleted.'); return; }
-    const now=new Date().toISOString(); let stickerChanged=false;
-    issued.forEach(i=>{ const cd=i.calData||{};
-      if(cd.stickerNumber){ const rec=(_stickerRecords||[]).find(r=>r.number===cd.stickerNumber&&(r.type===cd.stickerType||!cd.stickerType)&&r.status==='Used'&&r.usedJobNo===jobNo);
-        if(rec){ rec.status='Wasted'; rec.wastedReason=`Job ${jobNo} deleted — ${reason.trim()}`; rec.wastedAt=now; stickerChanged=true; } } });
-    if(stickerChanged) try{ await saveStickerRecords(); }catch(e){ console.warn('sticker save',e); }
-    try{ await patchSettings(st=>{ st.certVoidLog=[...(st.certVoidLog||[]),...issued.filter(i=>i.certNo).map(i=>({certNo:i.certNo,jobNo,eqName:i.eqName||'',statusWas:i.status,reason:reason.trim(),by:currentUser,at:now})),
-      // Statements of Conformity already issued on those certificates are void with them
-      ...issued.flatMap(i=>(i.socParameters||[]).filter(p=>p.socNo&&p.status==='Approved'||p.pendingPrev).map(p=>({certNo:(p.socNo||'')+(p.rev?'-R'+p.rev:''),kind:'SoC',jobNo,eqName:i.eqName||'',statusWas:'Approved',reason:'SoC void with its certificate — '+reason.trim(),by:currentUser,at:now})))]; }); }catch(e){ console.warn('void log',e); }
-    addAudit('🚫',`Certificate number${issued.length>1?'s':''} voided by deleting job ${escapeHtml(jobNo)}: ${issued.map(i=>escapeHtml(i.certNo||i.eqName)).join(', ')}`);
-  }
-
-  if(unusedNos.length) try{ await patchSettings(st=>{ st.certVoidLog=[...(st.certVoidLog||[]),...unusedNos.map(i=>({certNo:i.certNo,jobNo,eqName:i.eqName||'',statusWas:i.status||'',reason:`Job deleted before calibration — ${reason.trim()}`,by:currentUser,at:new Date().toISOString()}))]; }); }catch(e){ console.warn('void log',e); }
-  // Collect all R2 file paths to delete
-  const pathsToDelete=[];
-  if(j&&j.items){
-    j.items.forEach(item=>{
-      // Cal data PDF
-      if(item.excelFile&&item.excelFile.url){
-        const path=extractR2Path(item.excelFile.url);
-        if(path) pathsToDelete.push(path);
-      }
-      // Photos
-      if(item.photos&&item.photos.length){
-        item.photos.forEach(p=>{
-          const path=extractR2Path(p.url||p);
-          if(path) pathsToDelete.push(path);
-        });
-      }
-    });
-    // Job-level file (legacy)
-    if(j.excelFile&&j.excelFile.url){
-      const path=extractR2Path(j.excelFile.url);
-      if(path) pathsToDelete.push(path);
-    }
-  }
-
-  // Delete from R2
-  if(pathsToDelete.length){
-    try{
-      await fetch('https://westlab-upload.sales-2fb.workers.dev',{
-        method:'DELETE',
-        headers:{'Content-Type':'application/json',...authHeader()},
-        body:JSON.stringify(pathsToDelete)
-      });
-      console.log(`Deleted ${pathsToDelete.length} files from R2 for job ${jobNo}`);
-    }catch(e){
-      console.warn('R2 delete failed (continuing with job delete):',e);
-    }
-  }
-
-  // Mark job as deleted in Supabase
-  await updateJob(jobNo,j=>{
-    j.statusAtDeletion=j.status; j.deleteReason=reason.trim();
-    j.status='Deleted';
-    j.deletedAt=new Date().toISOString();
-    j.deletedBy=currentUser;
-    if(j.items) j.items.forEach(i=>i.status='Deleted');
-    j.history.push({action:'🗑 Deleted by admin',by:currentUser,time:new Date().toISOString()});
-  });
-  renderEquipmentTable(); renderCompletedJobs(); renderDashboard(); refreshAllBadges();
-  showToast(`🗑 Job ${jobNo} deleted — ${pathsToDelete.length} file(s) removed from storage`,'success',4000);
-  addAudit('🗑',`Job <strong>${jobNo}</strong> deleted — ${pathsToDelete.length} R2 file(s) removed`);
-  }catch(_err){
-    console.error("deleteJob error:",_err);
-    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
-  }
-}
 
 // Extract R2 path from full public URL
 function extractR2Path(url){
@@ -30217,32 +30150,6 @@ ${lab}`;
   }
 }
 // ── DELETED JOBS ──
-function renderDeletedJobs(){
-  try{
-  const list=_jobs.filter(j=>j.status==='Deleted');
-  const q=(el('deleted-search')?.value||'').toLowerCase();
-  const tbody=el('deleted-tbody'); if(!tbody)return;
-  const filtered=list.filter(j=>!q||j.jobNo.toLowerCase().includes(q)||(j.custName||'').toLowerCase().includes(q)||String(j.deleteReason||'').toLowerCase().includes(q)||(j.items||[]).some(i=>(i.eqName||'').toLowerCase().includes(q)))
-    .sort((a,b)=>new Date(b.deletedAt||0)-new Date(a.deletedAt||0));
-  if(!filtered.length){ tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🗑️</div><p>${list.length?'No matching records.':'No deleted jobs.'}</p></div></td></tr>`; return; }
-  const rows=[];
-  filtered.forEach(j=>{
-    const days=j.deletedAt?Math.floor((Date.now()-new Date(j.deletedAt))/864e5):null; const left=days==null?null:Math.max(0,90-days);
-    rows.push(`<tr style="background:#f6f7f9;border-top:2px solid #e2e8f0;">
-      <td style="padding:7px 10px;font-weight:800;color:var(--navy);text-decoration:line-through;white-space:nowrap;">${escapeHtml(j.jobNo)}</td>
-      <td style="padding:7px 10px;font-weight:600;">${escapeHtml(j.custName||'—')}</td>
-      <td style="padding:7px 10px;font-size:12px;">${j.deleteReason?escapeHtml(j.deleteReason):'<span style="color:var(--text-muted);">— not recorded</span>'}</td>
-      <td style="padding:7px 10px;">${j.statusAtDeletion?`<span class="badge ${STATUS_BADGE[j.statusAtDeletion]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">${escapeHtml(j.statusAtDeletion)}</span>`:'<span style="color:var(--text-muted);font-size:12px;">—</span>'}</td>
-      <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${escapeHtml(USERS[j.deletedBy]?.name||j.deletedBy||'Admin')}</td>
-      <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${j.deletedAt?fmtDateShort(j.deletedAt):'—'}${days!=null?`<div style="font-size:11px;color:${left<=7?'var(--red)':'var(--text-muted)'};">${days} day${days===1?'':'s'} ago · removed for good in ${left} day${left===1?'':'s'}</div>`:''}</td>
-      <td style="padding:7px 10px;white-space:nowrap;text-align:right;"><button class="btn btn-outline btn-sm" onclick="recoverJob('${escapeForJsAttr(j.jobNo)}')">↩️ Recover</button>
-        <button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="permanentlyDeleteJob('${escapeForJsAttr(j.jobNo)}')">🗑 Purge now</button></td></tr>`);
-    (j.items||[]).forEach(item=>rows.push(`<tr style="opacity:.8;"><td style="padding:4px 10px 4px 22px;font-size:11.5px;color:var(--text-muted);">Item ${item.itemNo||''}${item.certNo?' · '+escapeHtml(item.certNo):''}</td>
-      <td style="padding:4px 10px;font-size:11.5px;">${escapeHtml(item.eqName||'—')}${item.serial?` <span style="color:var(--text-muted);">S/N ${escapeHtml(item.serial)}</span>`:''}</td><td colspan="5"></td></tr>`));
-  });
-  tbody.innerHTML=rows.join('');
-  }catch(_e){ console.error("renderDeletedJobs error:",_e); }
-}
 async function recoverJob(jobNo){
   if(!isAdmin(currentUser)){alert('Only Admin can recover deleted jobs.');return;}
   const j=getJob(jobNo); if(!j)return;
@@ -30281,66 +30188,6 @@ async function unlinkJobFromQuotations(jobNo){
   if(ch) try{ await saveQuotationsV2(); }catch(e){ console.warn('unlink job from quotation',e); }
   let ce=false; (_salesTracker||[]).forEach(e=>{ if((e.jobNos||[]).includes(jobNo)){ e.jobNos=e.jobNos.filter(n=>n!==jobNo); ce=true; } if(e.jobNo===jobNo){ e.jobNo=(e.jobNos||[])[0]||''; ce=true; } });
   if(ce) try{ await saveSalesTracker(); }catch(e){ console.warn('unlink job from enquiry',e); }
-}
-async function permanentlyDeleteJob(jobNo){
-  try{
-  if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can permanently delete a job.','error',4000);return;}
-  const j=getJob(jobNo); if(!j)return;
-  if(!confirm(`⚠️ PERMANENTLY delete job ${jobNo} for ${j.custName}?\n\nThis removes the record completely from the database. If this was the most recently issued job number (and certificate numbers), they'll be safely reused by the next one — otherwise the gap is simply left as-is.\n\nThis cannot be undone.`))return;
-  // Job number: WLYY-NNNNN, one single continuous sequence (job_seq) — reuse only if this
-  // was the highest-numbered job that still exists.
-  const jobMatch=/^WL(\d{2})-(\d{5})$/.exec(jobNo);
-  if(jobMatch){
-    const seqNum=parseInt(jobMatch[2],10);
-    const isHighest=!_jobs.some(other=>{
-      if(other.jobNo===jobNo)return false;
-      const m2=/^WL(\d{2})-(\d{5})$/.exec(other.jobNo||'');
-      return m2&&parseInt(m2[2],10)>seqNum;
-    });
-    if(isHighest) await tryRollbackSequence('job_seq',seqNum);
-  }
-  // Certificate numbers: WLCS + YY + MM + NNNN, one sequence per year (cert_seq_YY) — the
-  // month is just for display, the counter itself doesn't reset monthly. A job can have
-  // several items, each with its own certificate number — often consecutive, since they're
-  // all issued together at job creation. All of them are disappearing together here, so when
-  // deciding whether any one of them is "the highest still in existence", every item on THIS
-  // job must be excluded from that comparison, not just the one currently being checked.
-  // Processing must also go highest-to-lowest within each year: each rollback only succeeds
-  // if the sequence is still exactly where it expects it, so a lower number only becomes
-  // safely reusable once the one above it has already been rolled back.
-  const certsByYear={};
-  for(const it of (j.items||[])){
-    const certMatch=/^WLCS(\d{2})\d{2}(\d{4})$/.exec(it.certNo||'');
-    if(!certMatch)continue;
-    const yk=certMatch[1], seqNum=parseInt(certMatch[2],10);
-    (certsByYear[yk]=certsByYear[yk]||[]).push(seqNum);
-  }
-  for(const yk of Object.keys(certsByYear)){
-    const seqNums=certsByYear[yk].sort((a,b)=>b-a); // highest first
-    for(const seqNum of seqNums){
-      const isHighest=!_jobs.some(otherJob=>{
-        if(otherJob.jobNo===jobNo)return false; // every item on the job being deleted is excluded
-        return (otherJob.items||[]).some(otherIt=>{
-          const m2=/^WLCS(\d{2})\d{2}(\d{4})$/.exec(otherIt.certNo||'');
-          return m2&&m2[1]===yk&&parseInt(m2[2],10)>seqNum;
-        });
-      });
-      if(isHighest) await tryRollbackSequence(`cert_seq_${yk}`,seqNum);
-      else break; // once one in this year fails the "highest" check, none lower can pass either
-    }
-  }
-  // Hard delete from Supabase
-  await SB.delete('wl_jobs',jobNo);
-  // Remove from in-memory cache
-  _jobs=_jobs.filter(x=>x.jobNo!==jobNo); await unlinkJobFromQuotations(jobNo);
-  delete _jobsCache[jobNo];
-  renderDeletedJobs(); renderDashboard(); refreshAllBadges();
-  showToast(`🗑 Job ${jobNo} permanently deleted`,'success',3000);
-  addAudit('🗑',`Job <strong>${jobNo}</strong> permanently purged by admin`);
-  }catch(_err){
-    console.error("permanentlyDeleteJob error:",_err);
-    if(typeof showToast==="function") showToast("❌ Error: "+_err.message,"error",5000);
-  }
 }
 
 // ── PERSONNEL MANAGEMENT ──
@@ -31618,7 +31465,7 @@ const NAV_CATEGORIES=[
     ['nav-notices','Quality and operations notices'],['nav-my-drafts','Forms you saved to finish later'],['nav-claims','Expense claims'],['nav-leave','Apply for and track leave'],
     ['nav-attendance','Clock in, clock out and records'],['nav-payslips','Your monthly payslips'],['nav-my-requests','Status of your requests'],['nav-datamgmt','LIMS user manual, report a system failure (7.11)']]},
   {id:'admin',label:'Administration',icon:'ti-settings',color:'#475569',sub:'People, records and system settings',items:[
-    ['nav-personnel','Staff accounts, roles and signatures'],['nav-payroll','Monthly payroll, payslips and statutory contributions'],['nav-deleted','Deleted jobs (restore or purge)'],
+    ['nav-personnel','Staff accounts, roles and signatures'],['nav-payroll','Monthly payroll, payslips and statutory contributions'],['nav-deleted','Record disposal log — jobs removed for good (LQP 8.4)'],
     ['nav-reports','Reports and the audit trail'],['nav-settings','Company details, numbering and options']]},
 ];
 let _navActiveCat='dashboard', _launcherCat=null;
