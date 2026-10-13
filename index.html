@@ -672,6 +672,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item hidden-nav" id="nav-env" onclick="showView('env')" data-label="Environmental Records"><span class="nav-icon"><i class="ti ti-temperature"></i></span><span class="nav-label">Environmental Records <span class="nav-badge" id="env-badge" style="display:none;">0</span></span></button>
  <button class="nav-item hidden-nav" id="nav-docs" onclick="showView('docs')" data-label="Documents (F020)"><span class="nav-icon"><i class="ti ti-books"></i></span><span class="nav-label">Documents (F020)</span></button>
     <button class="nav-item hidden-nav" id="nav-meetings" onclick="showView('meetings')" data-label="Meetings (F021)"><span class="nav-icon"><i class="ti ti-calendar-event"></i></span><span class="nav-label">Meetings (F021)</span></button>
+    <button class="nav-item" id="nav-improve" onclick="showView('improve')" data-label="Improvements"><span class="nav-icon"><i class="ti ti-bulb"></i></span><span class="nav-label">Improvements</span></button>
     <button class="nav-item hidden-nav" id="nav-qobj" onclick="showView('qobj')" data-label="Quality Objectives"><span class="nav-icon"><i class="ti ti-target"></i></span><span class="nav-label">Quality Objectives</span></button>
     <button class="nav-item hidden-nav" id="nav-validity" onclick="showView('validity')" data-label="Validity of Results"><span class="nav-icon"><i class="ti ti-chart-dots"></i></span><span class="nav-label">Validity of Results</span></button>
     <button class="nav-item" id="nav-methods" onclick="showView('methods')" data-label="Methods (CLQI)"><span class="nav-icon"><i class="ti ti-book"></i></span><span class="nav-label">Methods (CLQI)</span></button>
@@ -914,6 +915,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <div class="view" id="view-docs">
       <div class="page-header"><div><div class="page-title">📚 Documents (F020)</div><div class="page-sub">ISO/IEC 17025 8.3 · LQP 8.3 — master list of internal and external documents, F014, controlled hard copies, obsolete documents</div></div></div>
       <div id="docs-body"></div>
+    </div>
+    <div class="view" id="view-improve">
+      <div class="page-header"><div><div class="page-title">💡 Improvement Register</div><div class="page-sub">ISO/IEC 17025 8.6 · LQP 8.6 — suggestions, the MD's selection, actions and their effectiveness</div></div></div>
+      <div id="imp-body"></div>
     </div>
     <div class="view" id="view-meetings">
       <div class="page-header"><div><div class="page-title">🗓️ Meetings (F021)</div><div class="page-sub">LQP 8.2 7.3 — laboratory management meetings: minutes, action items</div></div></div>
@@ -5216,7 +5221,7 @@ function toLocalDateStr(d){
 const TITLES={dashboard:'Dashboard',equipment:'Job Management',completed:'Job Management',
   customers:'Customer Database',deleted:'Record Disposal Log',
   'my-jobs':'My Jobs',approval:'Approval Queue',tests:'Test Requests & Results',
-  documents:'Document Control',forms:'Forms',fmea:'Risk Register (FMEA)',f027:'Confidential Information Release',f026:'Visitor Log',scope:'Accreditation & Scope',datamgmt:'LIMS & Data',qobj:'Quality Policy & Objectives',docs:'Documents (F020)',meetings:'Meetings (F021)',notices:'Notice Board',competence:'Competence & Authorisation',env:'Environmental Records',capa:'Nonconformance & CAPA','ref-eq':'Masterlist of Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
+  documents:'Document Control',forms:'Forms',fmea:'Risk Register (FMEA)',f027:'Confidential Information Release',f026:'Visitor Log',scope:'Accreditation & Scope',datamgmt:'LIMS & Data',qobj:'Quality Policy & Objectives',docs:'Documents (F020)',improve:'Improvement Register',meetings:'Meetings (F021)',notices:'Notice Board',competence:'Competence & Authorisation',env:'Environmental Records',capa:'Nonconformance & CAPA','ref-eq':'Masterlist of Equipment','my-requests':'My Requests',stickers:'Calibration Stickers',quotations:'Quotations',
   personnel:'Personnel',reception:'Reception',trips:'Transport',payroll:'Payroll',payslips:'My Payslips',reports:'Reports & Audit Logs',settings:'Settings',launcher:'Modules','price-reference':'Price Reference',
   'my-drafts':'My Drafts','purchase-orders':'Purchase Orders','delivery-orders':'Delivery Orders','feedback':'Customer Feedback','external-partners':'Supplier Database'};
 
@@ -19622,7 +19627,7 @@ async function saveF013(act){ const r=_f013Draft; const now=new Date().toISOStri
   else { r.status='Approved'; r.approved={by:currentUser,at:now}; r.auto=f013Auto(r.from,r.to); }
   try{ if(!r.refNo){ const y=String(new Date().getFullYear()).slice(2); const n=h79Fb().filter(x=>x.type==='f013'&&String(x.refNo||'').startsWith(`F013-${y}-`)).length+1; r.refNo=`F013-${y}-${String(n).padStart(3,'0')}`; }
     await _fbStore2.patch(arr=>{ const i=arr.findIndex(x=>x.id===r.id); const c=JSON.parse(JSON.stringify(r)); if(i>=0) arr[i]=c; else arr.push(c); });
-    addAudit('📊',`F013 ${escapeHtml(r.refNo)} ${act==='approve'?'approved':act==='submit'?'submitted':'saved'}`); f027Close(); if(document.getElementById('view-feedback')?.classList.contains('active')) renderFeedbackRegister(); if(typeof renderNeedsAttention==='function') renderNeedsAttention();
+    addAudit('📊',`F013 ${escapeHtml(r.refNo)} ${act==='approve'?'approved':act==='submit'?'submitted':'saved'}`); if(act==='approve'&&typeof impFromF013==='function') await impFromF013(r); f027Close(); if(document.getElementById('view-feedback')?.classList.contains('active')) renderFeedbackRegister(); if(typeof renderNeedsAttention==='function') renderNeedsAttention();
   }catch(e){ alert(e.message||e); } }
 async function f013Pdf(id){ const r=h79Fb().find(x=>x.id===id); if(!r) return; const a=r.auto||f013Auto(r.from,r.to); const T=QFT_F013; const B=qftBoxes(T); const ov=[0,1,2,3].map(()=>({html:''})); const add=(p,h)=>{ ov[p].html+=h; };
   const bx=(pg,i)=>B.filter(b=>b[0]===pg)[i]; const tick=(pg,i)=>{ const b=bx(pg,i); if(b) add(pg,qftTick(b[1],b[2],10)); }; const bl=T.blanks; const BL=(k,s)=>{ const b=bl[k]; if(b) add(b[0],h79T(b[1]+2,b[2]-1.5,s,{w:Math.max(30,b[3]),size:9.5})); };
@@ -19750,7 +19755,7 @@ async function saveValReview(Y){ const rows=VAL_REVIEW_ROWS.map((issue,i)=>{ con
   const done=!!el('vrv-done').checked; if(done&&rows.some(r=>!r.evaluation||!r.conclusion)){ alert('Fill in the evaluation and conclusion for every issue before completing the review.'); return; } const now=new Date().toISOString(); const counts=valReviewCounts(Y);
   try{ await _valStore.patch(arr=>{ let r=arr.find(x=>x.type==='review'&&+x.year===+Y); if(!r){ r={type:'review',id:'VRV-'+Date.now(),year:Y}; arr.push(r); } Object.assign(r,{rows,outcome:(el('vrv-out')?.value||'').trim(),done,counts,by:currentUser,at:now}); }); }catch(e){ alert(e.message||e); return; } f027Close(); renderValidity(); }
 // printouts (Westlab header, no form number — kept in the LIMS)
-function valHead(t){ return `<div style="text-align:center;margin-bottom:14px;"><div style="font-size:15px;font-weight:800;color:#0f1f3d;">${escapeHtml(_settings.labName||'Westlab (M) Sdn. Bhd.')}</div><div style="font-size:13px;font-weight:700;margin-top:6px;">${t}</div><div style="font-size:10.5px;color:#64748b;">ISO/IEC 17025 Clause 7.7 · LQP 7.7 · record kept in the LIMS</div></div>`; }
+function valHead(t,ref){ return `<div style="text-align:center;margin-bottom:14px;"><div style="font-size:15px;font-weight:800;color:#0f1f3d;">${escapeHtml(_settings.labName||'Westlab (M) Sdn. Bhd.')}</div><div style="font-size:13px;font-weight:700;margin-top:6px;">${t}</div><div style="font-size:10.5px;color:#64748b;">${ref||'ISO/IEC 17025 Clause 7.7 · LQP 7.7'} · record kept in the LIMS</div></div>`; }
 const valTd='padding:4px 6px;border:1px solid #cbd5e1;font-size:11px;';
 async function valPrintResult(id){ const r=valList().find(x=>x.id===id); if(!r) return; const m=methGet(r.methodId);
   const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead('Monitoring of Validity of Results — '+escapeHtml(VAL_ACTS[r.act]))}
@@ -20067,7 +20072,7 @@ function sigRegisterHtml(){ const y=new Date().getFullYear(); const S=sigSignato
       <td style="font-size:12px;">${lines.map(l=>escapeHtml(`${l.instrument} ≤ ${l.max} ${l.unit}`)).join('<br/>')||'—'}</td><td style="font-size:12px;">${pr.length?pr.map(x=>`<div style="color:#b91c1c;">⚠️ ${escapeHtml(x)}</div>`).join(''):'<span style="color:#15803d;">✔ AP 4 4.11</span>'}</td></tr>`; }).join('')||'<tr><td colspan="7" style="color:var(--text-muted);">No approved signatory — set the flag in Personnel.</td></tr>'}</tbody></table></div>
   <div style="padding:8px 14px;font-size:11.5px;color:var(--text-muted);">Westlab keeps this list itself — JSM no longer approves signatories (SAMM Circular 3/2023). Resident / non-resident and qualification are set in the competence file. A signatory who leaves is dropped from every scope line.</div></div>`; }
 async function sigPrint(){ const y=new Date().getFullYear(); const S=sigSignatories(); const L=scopeLines();
-  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead(`List of Approved Signatories — ${qfDmy(toLocalDateStr(new Date()))}`)}
+  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead(`List of Approved Signatories — ${qfDmy(toLocalDateStr(new Date()))}`,'ISO/IEC 17025 Clause 6.2 · AP 4')}
     <table style="border-collapse:collapse;width:100%;"><tr>${['No.','Name','Resident / non-resident','Qualification','Experience','Joined','CPD '+y,'Scope of signatory'].map(h=>`<th style="${valTd}background:#f1f5f9;">${h}</th>`).join('')}</tr>
     ${S.map((s,i)=>{ const p=persOf(s.username); return `<tr>${[i+1,s.name,sigResident(s.username)?'Resident':'Non-resident',p.qualification||'',p.experience?p.experience+' yrs':'',s.joinDate?qfDmy(s.joinDate):'',(typeof cpdHours==='function'?cpdHours(s.username,y):0)+' h',L.filter(l=>sigEffective(l).includes(s.username)).map(l=>`${l.field}: ${l.instrument} up to ${l.max} ${l.unit} (${l.location})`).join('; ')].map(x=>`<td style="${valTd}">${escapeHtml(String(x))}</td>`).join('')}</tr>`; }).join('')}</table>
     <div style="font-size:10.5px;color:#64748b;margin-top:8px;">AP 4 — Policy on the Requirements for Key Personnel of CABs. Printed by ${escapeHtml(staffNameOf(currentUser))}.</div></div>`;
@@ -20108,7 +20113,7 @@ function accEventsHtml(){ const E=accrList().filter(x=>x.type==='event').sort((a
 
 // ── scope print — SAMM Circular 3/2021 §6, Table 1 ──
 async function scopePrint(){ const a=accStatus(); const L=scopeLines().filter(l=>(l.status||'Applied for')!=='Withdrawn'); const fields=[...new Set(L.map(l=>l.field||'Other'))];
-  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead('Scope of Accreditation — Calibration')}
+  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead('Scope of Accreditation — Calibration','ISO/IEC 17025 Clause 5.3 · LQM Appendix I')}
     <div style="font-size:11px;margin-bottom:8px;">${escapeHtml(accSamNo()||'(not yet accredited — scope applied for)')}${a.expiry?` · valid until ${qfDmy(a.expiry)}`:''}</div>
     ${fields.map(f=>['Laboratory','On site','Laboratory and on site'].map(loc=>{ const R=L.filter(l=>(l.field||'Other')===f&&(l.location||'Laboratory')===loc); if(!R.length) return '';
       return `<div style="font-weight:700;font-size:12px;margin:10px 0 4px;">SCOPE OF CALIBRATION: ${escapeHtml(String(f).toUpperCase())} — ${loc==='Laboratory'?'PERMANENT LABORATORY':loc==='On site'?'SITE':'PERMANENT LABORATORY AND SITE'}</div>
@@ -20189,7 +20194,8 @@ const LIMS_RELEASES=[
     'Management system: Quality Policy acknowledgement and Quality Objectives tracker (8.2); IT providers evaluated on F010 (6.6, 7.11 6.4).',
     'Documents: F020 master list of internal and external documents with review / edition checks, F014 per document, MD approval of new issues, obsolete marking, controlled hard copies approved by QM and MD (8.3); F021 meeting minutes with action items (8.2).',
     'Records (8.4): deleting a job removes it for good (no recycle bin); every removal — test record, created in error, or after the 5-year retention with MD approval — is kept in the Record Disposal Log.',
-    'Risks and opportunities (8.5): severity 9 or 10 is HIGH whatever the RPN; an FMEA action closes only when the QM / MD confirms it was effective (not effective → re-analyse by revising the worksheet); complaints, significant NCs, audit findings, new reference equipment and new staff prompt a check of the risk register.'],
+    'Risks and opportunities (8.5): severity 9 or 10 is HIGH whatever the RPN; an FMEA action closes only when the QM / MD confirms it was effective (not effective → re-analyse by revising the worksheet); complaints, significant NCs, audit findings, new reference equipment and new staff prompt a check of the risk register.',
+    'Improvement (8.6): Improvement Register — anyone suggests (OFI-YY-NNN); the MD selects and assigns or does not select; the owner records what was done; the MD judges effectiveness; approved F013 priority actions are added automatically; yearly summary for the Management Review.'],
    tests:[
     'Automated end-to-end tests run in a browser against the real server rules, for every module changed in this release, plus the full regression set (attention items, signatures, visitors, equipment, competence, F027, quotations).',
     'Calculations compared with hand calculation: En = |x_lab − x_ref| / √(U_lab² + U_ref²) and z = |x − X| / σ (7.7); U against the scope CMC and 2 significant digits (7.6); recalibration due dates; environmental limits; statement of conformity verdicts.',
@@ -20267,7 +20273,7 @@ async function saveSheet(id,validate){ shRead(); const v=k=>(el(k)?.value||'').t
 async function sheetSupersede(id){ if(!confirm('Mark this sheet superseded? It can no longer be used — validate the new issue / revision first.')) return; const now=new Date().toISOString();
   try{ await _swStore.patch(arr=>{ const x=arr.find(y=>y.id===id); if(x&&x.status==='Validated'){ x.status='Superseded'; x.superseded={by:currentUser,at:now}; } }); }catch(e){ alert(e.message||e); return; } f027Close(); renderDataMgmt(); }
 async function sheetPrint(id){ const x=swList().find(y=>y.id===id); if(!x) return;
-  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead('Validation of Calculation Sheet (LQP 7.11 6.2)')}
+  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead('Validation of Calculation Sheet (LQP 7.11 6.2)','ISO/IEC 17025 Clause 7.11 · LQP 7.11')}
     <table style="border-collapse:collapse;width:100%;margin-bottom:10px;">${[['Method',x.methodCode],['Sheet',swSheetLabel(x)],['File',x.fileRef||''],['Calculates',x.calculates||''],['Cells protected',x.protected?'Yes':'No']].map(([a,b])=>`<tr><td style="${valTd}width:160px;background:#f1f5f9;">${a}</td><td style="${valTd}">${escapeHtml(b)}</td></tr>`).join('')}</table>
     <table style="border-collapse:collapse;width:100%;"><tr>${['No.','Inputs','Hand calculation','Sheet result','Identical'].map(h=>`<th style="${valTd}background:#f1f5f9;">${h}</th>`).join('')}</tr>${(x.tests||[]).map((t,i)=>`<tr>${[i+1,t.input,t.manual,t.sheet,t.same?'Yes':'No'].map(v=>`<td style="${valTd}">${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}</table>
     <div style="font-size:11.5px;margin-top:8px;">Conclusion: ${escapeHtml(x.conclusion||'')}</div>
@@ -20337,6 +20343,7 @@ const LIMS_MANUAL=[
   ['Validity of results and PT (7.7)','quality',`<p><b>Quality System → Validity of Results</b>: yearly plan per method (replicate calibration, retained item, review of reported results, PT / ILC). Enter results as En or z — a fail raises an NC and the activity is repeated. The PT participation plan covers each field (one satisfactory PT before accreditation, then every 3 years).</p>`],
   ['Accreditation and scope','quality',`<p><b>Quality System → Accreditation &amp; Scope</b>: status (MD), scope lines with CMC (max. 2 significant digits) and signatories, approved signatory list (AP 4), use of the accreditation symbol (QM and MD approve each material), suspension notices with the customers to inform, scope print.</p>`],
   ['LIMS &amp; Data (7.11)','quality',`<p>This page: <b>LIMS releases</b> — every new LIMS version comes with a release record and is authorised by the TM or MD before use; <b>Calculation sheets</b> — every Excel sheet issue / revision is validated (hand calculation, identical results, protected cells) before it can be selected in a calibration; <b>System failures</b>; <b>Backup record</b> — the monthly copy to the external hard disk.</p>`],
+  ['Improvements (8.6)','all',`<p><b>Improvements</b> (sidebar): anyone can <b>suggest an improvement</b>. The <b>MD</b> selects it (action, owner, due date, how we will know it worked) or not. If one is assigned to you it shows on Needs Attention — record what was done; the MD then judges whether it was effective. You see your own suggestions and the ones assigned to you; the QM, TM and MD see all and print the yearly summary for the Management Review.</p>`],
   ['Risks and opportunities (8.5)','quality',`<p><b>Quality System → Risk Register (FMEA)</b>: F032 worksheets and the F031 log. HIGH = RPN ≥ 125 or severity 9–10. The owner records the action taken and completion date; the <b>QM / MD</b> then checks it against the effectiveness criteria: <b>Effective</b> closes the action, <b>Not effective</b> keeps it open and the worksheet is revised to re-analyse the cause and set a new action. <b>Review triggers</b> (complaint, Major / Critical or High-risk NC, audit finding, new reference equipment, new staff) appear on the register and on Needs Attention — decide: no change needed, revise a worksheet, or start a new one. Worksheets are reviewed at least yearly.</p>`],
   ['Deleting records (8.4)','quality',`<p><b>⋯ → Delete job</b> (Admin / MD) removes the job, its certificates and files <b>for good</b>. Choose why: <i>test / dummy record</i> or <i>created in error</i> (Admin or MD), or <i>retention period ended</i> / <i>other</i> (MD only — a real record is disposed of only after 5 years, LQP 8.4 6.2 g–h). Certificate numbers already submitted go to the void log; used stickers are recorded as wasted. <b>Disposal Log</b> shows every removal and prints it. Before go-live the MD can clear the test entries.</p>`],
   ['Staff, leave and payroll','all',`<p><b>My Workspace</b>: clock in / out, leave, overtime and claims requests, payslips. HR and the MD approve; payroll is run monthly by HR / MD.</p>`]];
@@ -20348,7 +20355,7 @@ function dmManualHtml(){ const R=swRelease(LIMS_VERSION);
   return `<div style="display:flex;gap:8px;margin-bottom:10px;"><button class="btn btn-outline btn-sm" onclick="dmManualPrint()">🖨️ Print manual</button><span style="font-size:12px;color:var(--text-muted);align-self:center;">Manual for LIMS version ${LIMS_VERSION}${R?.authorised?` — authorised ${fmtDateShort(R.authorised.at)}`:''}. Updated with every release.${canSeeQms(currentUser)?' You see every section; each role sees only its own.':''}</span></div>
   ${dmManualFor().map(([t,,b])=>`<details style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:8px;background:#fff;"><summary style="cursor:pointer;font-weight:700;">${t}</summary><div style="font-size:13px;line-height:1.55;margin-top:6px;">${b}</div></details>`).join('')}`; }
 async function dmManualPrint(){ const R=swRelease(LIMS_VERSION);
-  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead(`LIMS User Manual — version ${LIMS_VERSION}`)}
+  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead(`LIMS User Manual — version ${LIMS_VERSION}`,'ISO/IEC 17025 Clause 7.11 · LQP 7.11')}
     <div style="font-size:11px;margin-bottom:10px;">${R?.authorised?`Authorised for use by ${escapeHtml(staffNameOf(R.authorised.by))} on ${qfDmy(String(R.authorised.at).slice(0,10))}`:'Release not authorised yet'} · LQP 7.11 6.5</div>
     ${dmManualFor().map(([t,,b],i)=>`<div style="font-weight:700;font-size:13px;margin:12px 0 4px;">${i+1}. ${t}</div><div style="font-size:11.5px;line-height:1.5;">${b}</div>`).join('')}</div>`;
   await exportHtmlAsPdf(html,`LIMS_User_Manual_v${LIMS_VERSION}.pdf`,'LIMS user manual',2); }
@@ -20387,7 +20394,7 @@ function openQpolNotice(){ if(!isAdmin(currentUser)) return; openNoticeNew(); wi
   const set=(k,v)=>{ const e=el(k); if(e) e.value=v; }; set('nt-title',QPOL_TITLE); set('nt-body',QPOL_TEXT); set('nt-cat','Quality'); if(el('nt-ack')) el('nt-ack').checked=true; if(el('nt-pin')) el('nt-pin').checked=true;
   const t=el('nt-body'); if(t) t.rows=14; }
 async function qpolAckPdf(id){ const n=noticeList().find(x=>x.id===id); if(!n) return; const users=noticeAudienceUsers(n);
-  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead('Acknowledgement of the Quality Policy and Quality Objectives')}
+  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead('Acknowledgement of the Quality Policy and Quality Objectives','ISO/IEC 17025 Clause 8.2 · LQP 8.2')}
     <div style="font-size:11px;margin-bottom:8px;">Published ${qfDmy(String(n.publishedAt||n.at).slice(0,10))} by ${escapeHtml(staffNameOf(n.approvedBy||n.by))} · LQP 8.2 7.1</div>
     <div style="font-size:10px;white-space:pre-wrap;border:1px solid #cbd5e1;padding:8px;margin-bottom:10px;">${escapeHtml(n.body)}</div>
     <table style="border-collapse:collapse;width:100%;"><tr>${['No.','Name','Position','Acknowledged on'].map(h=>`<th style="${valTd}background:#f1f5f9;">${h}</th>`).join('')}</tr>
@@ -20440,7 +20447,7 @@ function renderScopeQo(){ const b=el('qo-body'); if(b) b.innerHTML=qoHtml(); }
 async function qoTag(key,cause){ if(!isQmOrMd(currentUser)) return; const note=(prompt(cause==='internal'?'Internal difficulty — what caused the delay? (e.g. engineer on leave, reference equipment away)':'Customer / external — what caused the delay? (e.g. customer late with accessories)')||'').trim(); if(!note) return;
   try{ await _qoStore.patch(arr=>{ if(!arr.some(x=>x.type==='late'&&x.key===key)) arr.push({id:'QL-'+Date.now(),type:'late',key,cause,note,by:currentUser,at:new Date().toISOString()}); }); }catch(e){ alert(e.message||e); return; } renderScopeQo(); }
 async function qoPrint(Y){ const E=qoEval(Y);
-  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead(`Quality Objectives — ${Y}`)}
+  const html=`<div style="width:780px;padding:30px;font-family:Arial,sans-serif;background:#fff;">${valHead(`Quality Objectives — ${Y}`,'ISO/IEC 17025 Clause 8.2 · LQP 8.2')}
     <table style="border-collapse:collapse;width:100%;"><tr>${['No.','Objective','Target','Actual','Status'].map(h=>`<th style="${valTd}background:#f1f5f9;">${h}</th>`).join('')}</tr>
     ${E.map((o,i)=>`<tr>${[i+1,o.obj,o.target,o.actual,o.met===true?'Met':o.met===false?'Not met':'—'].map(v=>`<td style="${valTd}">${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}</table>
     <div style="font-size:10.5px;color:#64748b;margin-top:8px;">LQM Quality Objective Statement · for the Management Review (LQP 8.9). Printed by ${escapeHtml(staffNameOf(currentUser))} on ${qfDmy(toLocalDateStr(new Date()))}.</div></div>`;
@@ -20758,7 +20765,7 @@ async function dispClearTests(){ if(getUserRole(currentUser)!=='Managing Directo
   if(!confirm(`Remove the ${n} log line(s) of test / dummy records? Do this once, before the LIMS goes live. Real disposals stay.`)) return;
   try{ await patchSettings(st=>{ st.recordDisposals=(st.recordDisposals||[]).filter(e=>e.category!=='test'); }); addAudit('🧹',`${n} test-record line(s) cleared from the Record Disposal Log`); renderDeletedJobs(); }catch(e){ alert(e.message||e); } }
 async function dispPrint(){ const td='border:1px solid #cbd5e1;padding:4px 6px;font-size:10px;vertical-align:top;text-align:left;';
-  const html=`<div style="width:1050px;padding:26px;font-family:Arial,sans-serif;background:#fff;">${valHead('Record Disposal Log')}
+  const html=`<div style="width:1050px;padding:26px;font-family:Arial,sans-serif;background:#fff;">${valHead('Record Disposal Log','ISO/IEC 17025 Clause 8.4 · LQP 8.4')}
     <table style="border-collapse:collapse;width:100%;"><tr>${['No.','Date','Record','Customer / items','Reason','Disposed by','Files / numbers'].map(h=>`<th style="${td}background:#f1f5f9;">${h}</th>`).join('')}</tr>
     ${dispLog().map((e,i)=>`<tr>${[i+1,qfDmy(String(e.at).slice(0,10)),`${e.kind} ${e.ref} (was ${e.statusWas||'—'})`,[e.customer,...(e.items||[])].filter(Boolean).join('\n'),`${dispCatLabel(e.category)} — ${e.reason||''}`,staffNameOf(e.by),`${e.files||0} file(s)${(e.voided||[]).length?'; void '+e.voided.join(', '):''}`].map(v=>`<td style="${td}white-space:pre-line;">${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}</table>
     <div style="font-size:10px;color:#64748b;margin-top:8px;">LQP 8.4 6.2 g–h: records are kept at least five (5) years; disposal after that needs the MD's approval. Printed by ${escapeHtml(staffNameOf(currentUser))} on ${qfDmy(toLocalDateStr(new Date()))}.</div></div>`;
@@ -20832,6 +20839,104 @@ async function fmeaTrigSave(key){ const t=fmeaTrigPending().find(x=>x.key===key)
   else if(dec==='new'){ openFmea(null); _fmeaDraft.trigger=FMEA_TRIGGERS.includes(t.kind)?t.kind:'Other'; fmeaRenderEditor(); } }
 function fmeaTrigAttention(items){ if(!canSeeQms(currentUser)) return; const P=fmeaTrigPending(); if(!P.length) return;
   items.push({icon:'⚡',level:P.some(t=>t.date<=toLocalDateStr(new Date(Date.now()-14*864e5)))?'high':'',text:`${P.length} event${P.length>1?'s':''} to consider for the risk register (${P.slice(0,2).map(t=>escapeHtml(t.kind+': '+t.text.slice(0,50))).join('; ')}) — no change, revise or new worksheet`,view:'fmea'}); }
+
+// ══════════════════════════════════════════════════
+// ISO/IEC 17025 8.6 — IMPROVEMENT (LQP 8.6): Improvement Register OFI-YY-NNN
+// anyone suggests → the MD selects (owner, due date) or rejects → the owner records what was done → the MD judges effectiveness;
+// approved F013 "Priority Improvement Actions" come in automatically; yearly summary for the Management Review (6.3.2)
+// ══════════════════════════════════════════════════
+
+const IMP_SRC=[['a','Review of LQM / LQP / LQI'],['b','Policies and objectives'],['c','Audit results'],['d','Corrective actions'],['e','Management review'],['f','Risk assessment (FMEA)'],['g','Inter- / intra-laboratory comparisons'],['h','Customer complaints and feedback'],['o','Staff suggestion / other']];
+const IMP_ST={Proposed:'badge-slate',Accepted:'badge-blue',Done:'badge-amber',Closed:'badge-green',Rejected:'badge-red'};
+function impList(){ return (_impStore.data||[]).filter(x=>x&&x.type!=='meta'); }
+function impGet(id){ return impList().find(x=>x.id===id)||null; }
+function impSrc(k){ return (IMP_SRC.find(s=>s[0]===k)||[k,k])[1]; }
+function impIsMd(u){ return isAdmin(u||currentUser); }
+function impCanDo(x,u){ u=u||currentUser; return x.owner===u||canSeeQms(u); }
+let _impTab='open', _impYear=new Date().getFullYear();
+function renderImprove(){ const box=el('imp-body'); if(!box) return; const md=impIsMd(), q=canSeeQms(currentUser); const today=toLocalDateStr(new Date());
+  const L=impList().filter(x=>_impTab==='all'||(_impTab==='open'?['Proposed','Accepted','Done'].includes(x.status):['Closed','Rejected'].includes(x.status))).sort((a,b)=>String(b.no).localeCompare(String(a.no),undefined,{numeric:true}));
+  const cnt=s=>impList().filter(x=>x.status===s).length;
+  box.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;"><div class="st-tabs">${[['open','Open'],['done','Closed / rejected'],['all','All']].map(([k,l])=>`<button class="st-tab${_impTab===k?' active':''}" onclick="_impTab='${k}';renderImprove()">${l}</button>`).join('')}</div>
+      <span style="font-size:12px;color:var(--text-muted);">${cnt('Proposed')} to decide · ${cnt('Accepted')} in progress · ${cnt('Done')} to check</span><span style="flex:1;"></span>
+      ${q?`<select class="filter-select" onchange="_impYear=+this.value">${[0,1,2].map(i=>new Date().getFullYear()-i).map(y=>`<option ${y===_impYear?'selected':''}>${y}</option>`).join('')}</select><button class="btn btn-outline" onclick="impPrint(_impYear)">🖨️ Summary for Management Review</button>`:''}
+      <button class="btn btn-primary" onclick="openImp(null)">+ Suggest an improvement</button></div>
+    <div class="card"><div class="table-wrap"><table class="m-cards"><thead><tr><th>No.</th><th>Improvement</th><th>Source</th><th>Status</th><th>Owner</th><th>Due</th><th></th></tr></thead><tbody>
+    ${L.map(x=>`<tr><td style="font-weight:700;white-space:nowrap;">${escapeHtml(x.no||'')}</td><td>${escapeHtml(x.title)}<div style="font-size:11px;color:var(--text-muted);">by ${escapeHtml(staffNameOf(x.by))} · ${qmsDate(x.at)}</div></td><td style="font-size:12px;">${escapeHtml(impSrc(x.source))}${x.srcRef?' — '+escapeHtml(x.srcRef):''}</td>
+      <td><span class="badge ${IMP_ST[x.status]||'badge-slate'}">${escapeHtml(x.status==='Done'?'Done — check effect':x.status)}</span></td><td>${x.owner?escapeHtml(staffNameOf(x.owner)):'—'}</td>
+      <td style="white-space:nowrap;${x.due&&x.due<today&&x.status==='Accepted'?'color:#b42318;font-weight:700;':''}">${x.due?qmsDate(x.due):'—'}</td><td><button class="btn btn-outline btn-sm" onclick="openImp('${x.id}')">Open</button></td></tr>`).join('')||`<tr><td colspan="7" style="color:var(--text-muted);padding:14px;">${impList().length?'Nothing here.':'No improvements yet — anyone can suggest one.'}</td></tr>`}</tbody></table></div></div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">LQP 8.6: the MD selects the improvements and implements them; their effectiveness is reported at the Management Review. ${md?'':'You see your own suggestions and the improvements assigned to you.'}</div>`; }
+function openImp(id){ const x=id?impGet(id):null; const md=impIsMd(); const v=s=>escapeHtml(s==null?'':String(s)); const today=toLocalDateStr(new Date());
+  const staffOpts=sel=>`<option value="">—</option>${(_staff||[]).filter(s=>s.active!==false).map(s=>`<option value="${v(s.username)}" ${sel===s.username?'selected':''}>${v(s.name||s.username)}</option>`).join('')}`;
+  if(!x){ cOv('💡 Suggest an improvement',`<div class="form-group"><label class="form-label">Improvement <span class="req">*</span></label><input class="form-control" id="im-t" placeholder="e.g. Add a second balance for site jobs"/></div>
+      <div class="form-group"><label class="form-label">Details / why</label><textarea class="form-control" id="im-d" rows="3"></textarea></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Comes from (LQP 8.6 6.1.1)</label><select class="form-control" id="im-s">${IMP_SRC.map(s=>`<option value="${s[0]}" ${s[0]==='o'?'selected':''}>${s[0]==='o'?'':s[0]+') '}${s[1]}</option>`).join('')}</select></div><div class="form-group"><label class="form-label">Reference (optional)</label><input class="form-control" id="im-r" placeholder="e.g. WNC-26-004, FMEA-002, IA-2026"/></div></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" onclick="saveImpNew()">Submit to the MD</button></div>`,580); return; }
+  const H=(x.history||[]).map(h=>`<div style="font-size:11.5px;color:var(--text-muted);">${qmsDate(h.at)} · ${v(staffNameOf(h.by))}: ${v(h.action)}</div>`).join('');
+  let act='';
+  if(x.status==='Proposed'&&md) act=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;"><b>MD decision</b>
+      <div class="form-group" style="margin-top:6px;"><label class="form-label">Action to take</label><textarea class="form-control" id="im-plan" rows="2">${v(x.plan||x.desc||'')}</textarea></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Owner</label><select class="form-control" id="im-own">${staffOpts(x.owner)}</select></div><div class="form-group"><label class="form-label">Due date</label><input class="form-control" type="date" id="im-due" value="${v(x.due||toLocalDateStr(new Date(Date.now()+60*864e5)))}"/></div></div>
+      <div class="form-group"><label class="form-label">Effectiveness criteria (how we will know it worked)</label><input class="form-control" id="im-crit" value="${v(x.criteria||'')}" placeholder="e.g. site turnaround ≤ 5 days for 3 months"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" style="color:var(--red);" onclick="impDecide('${x.id}',false)">✕ Not selected</button><button class="btn btn-success" onclick="impDecide('${x.id}',true)">✅ Select &amp; assign</button></div></div>`;
+  else if(x.status==='Accepted'&&impCanDo(x)) act=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;"><b>Record what was done</b>
+      <div class="form-group" style="margin-top:6px;"><label class="form-label">What was done <span class="req">*</span></label><textarea class="form-control" id="im-done" rows="2"></textarea></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Completed on</label><input class="form-control" type="date" id="im-dd" value="${today}"/></div><div class="form-group"><label class="form-label">Evidence (record / file / link)</label><input class="form-control" id="im-ev"/></div></div>
+      <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" onclick="impDone('${x.id}')">Done — send to the MD</button></div></div>`;
+  else if(x.status==='Done'&&md) act=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;"><b>Effectiveness (LQP 8.6 6.3.2)</b>${x.criteria?`<div style="font-size:12.5px;">Criteria: ${v(x.criteria)}</div>`:''}
+      <div class="form-group" style="margin-top:6px;"><label class="form-label">Result / evidence <span class="req">*</span></label><input class="form-control" id="im-eff"/></div>
+      <div class="form-group" id="im-nd-g"><label class="form-label">If not effective — new due date</label><input class="form-control" type="date" id="im-nd" value="${toLocalDateStr(new Date(Date.now()+30*864e5))}"/></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" style="color:var(--red);" onclick="impEff('${x.id}',false)">❌ Not effective — continue</button><button class="btn btn-success" onclick="impEff('${x.id}',true)">✅ Effective — close</button></div></div>`;
+  cOv(`💡 ${v(x.no)} — ${v(x.title)}`,`<div style="font-size:13px;line-height:1.6;"><span class="badge ${IMP_ST[x.status]||'badge-slate'}">${v(x.status)}</span> · ${v(impSrc(x.source))}${x.srcRef?' — '+v(x.srcRef):''}<br>
+      ${x.desc?`<div style="white-space:pre-line;margin-top:4px;">${v(x.desc)}</div>`:''}
+      ${x.plan&&x.status!=='Proposed'?`<div><b>Action:</b> ${v(x.plan)}</div>`:''}${x.owner?`<div><b>Owner:</b> ${v(staffNameOf(x.owner))}${x.due?' · due '+qmsDate(x.due):''}</div>`:''}
+      ${x.criteria&&x.status!=='Proposed'?`<div><b>Effectiveness criteria:</b> ${v(x.criteria)}</div>`:''}${x.done?`<div><b>Done:</b> ${v(x.done.note)} (${qmsDate(x.done.date)})${x.done.evidence?' — '+v(x.done.evidence):''}</div>`:''}
+      ${(x.effChecks||[]).map(e=>`<div>${e.result==='Effective'?'✅':'❌'} <b>${v(e.result)}</b> — ${v(e.note)} (${v(staffNameOf(e.by))}, ${qmsDate(e.at)})</div>`).join('')}
+      ${x.decision&&!x.decision.ok?`<div><b>Not selected:</b> ${v(x.decision.note)}</div>`:''}</div>${act}
+    <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12px;">History</summary>${H}</details>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px;"><button class="btn btn-outline" onclick="f027Close()">Close</button></div>`,640); }
+async function impPatch(id,fn,audit){ try{ await _impStore.patch(arr=>{ const x=arr.find(y=>y.id===id); if(x) fn(x,new Date().toISOString()); }); }catch(e){ alert(e.message||e); return false; }
+  if(audit) addAudit('💡',audit); f027Close(); renderImprove(); if(typeof refreshAllBadges==='function') refreshAllBadges(); return true; }
+function impNextNo(arr){ const y=String(new Date().getFullYear()).slice(2); const n=Math.max(0,...arr.filter(x=>String(x.no||'').startsWith(`OFI-${y}-`)).map(x=>parseInt(String(x.no).slice(7),10)||0))+1; return `OFI-${y}-${String(n).padStart(3,'0')}`; }
+async function saveImpNew(){ const t=(el('im-t').value||'').trim(); if(!t){ alert('Describe the improvement.'); return; } const now=new Date().toISOString(); let no='';
+  const rec={id:'OFI-'+Date.now(),type:'ofi',title:t,desc:(el('im-d').value||'').trim(),source:el('im-s').value,srcRef:(el('im-r').value||'').trim(),status:'Proposed',by:currentUser,at:now,history:[{at:now,by:currentUser,action:'Suggested'}]};
+  try{ await _impStore.patch(arr=>{ rec.no=impNextNo(arr); no=rec.no; arr.push(rec); }); }catch(e){ alert(e.message||e); return; }
+  addAudit('💡',`Improvement ${escapeHtml(no)} suggested — ${escapeHtml(t)}`); f027Close(); showToast(`💡 ${no} sent to the MD`,'success',2500); renderImprove(); }
+async function impDecide(id,ok){ if(!impIsMd()) return; const plan=(el('im-plan')?.value||'').trim(), owner=el('im-own')?.value||'', due=el('im-due')?.value||'', crit=(el('im-crit')?.value||'').trim(); let note='';
+  if(ok){ if(!plan||!owner||!due){ alert('Give the action, the owner and the due date.'); return; } }
+  else { note=prompt('Why is it not selected?',''); if(!note||!note.trim()) return; }
+  const x0=impGet(id); await impPatch(id,(x,now)=>{ x.decision={ok,by:currentUser,at:now,note:note.trim?note.trim():''}; if(ok){ Object.assign(x,{status:'Accepted',plan,owner,due,criteria:crit}); } else x.status='Rejected';
+    (x.history=x.history||[]).push({at:now,by:currentUser,action:ok?`Selected — owner ${staffNameOf(owner)}, due ${due}`:`Not selected — ${note.trim()}`}); },`Improvement ${escapeHtml(x0.no)} ${ok?'selected — owner '+escapeHtml(staffNameOf(owner)):'not selected'}`); }
+async function impDone(id){ const n=(el('im-done')?.value||'').trim(); if(!n){ alert('Say what was done.'); return; } const d=el('im-dd').value||toLocalDateStr(new Date()), ev=(el('im-ev')?.value||'').trim(); const x0=impGet(id);
+  await impPatch(id,(x,now)=>{ x.status='Done'; x.done={note:n,date:d,evidence:ev,by:currentUser,at:now}; (x.history=x.history||[]).push({at:now,by:currentUser,action:'Done — '+n}); },`Improvement ${escapeHtml(x0.no)} done — ${escapeHtml(n)}`); }
+async function impEff(id,ok){ if(!impIsMd()) return; const n=(el('im-eff')?.value||'').trim(); if(!n){ alert('Give the result / evidence.'); return; } const nd=el('im-nd')?.value||''; if(!ok&&!nd){ alert('Set a new due date.'); return; } const x0=impGet(id);
+  await impPatch(id,(x,now)=>{ x.effChecks=[...(x.effChecks||[]),{result:ok?'Effective':'Not effective',note:n,by:currentUser,at:now}];
+    if(ok){ x.status='Closed'; x.closedAt=now; } else { x.prevDone=[...(x.prevDone||[]),x.done]; delete x.done; x.status='Accepted'; x.due=nd; }
+    (x.history=x.history||[]).push({at:now,by:currentUser,action:ok?'Effective — closed':'Not effective — continue, due '+nd}); },`Improvement ${escapeHtml(x0.no)} ${ok?'effective — closed':'not effective — continued'}`); }
+// approved F013 → its "Priority Improvement Actions" become register entries for the MD to assign
+async function impFromF013(r){ if(!r||r.status!=='Approved') return; const lines=String(r.D?.actions||'').split(/\n+/).map(s=>s.replace(/^\s*(?:[-•*]|\d+[.)])\s*/,'').trim()).filter(s=>s.length>2); if(!lines.length) return;
+  const now=new Date().toISOString(); let added=[];
+  try{ await _impStore.patch(arr=>{ lines.forEach((t,i)=>{ if(arr.some(x=>x.srcRef===r.refNo&&x.title===t)) return; const no=impNextNo(arr);
+      arr.push({id:'OFI-'+Date.now()+'-'+i,type:'ofi',no,title:t,desc:r.D?.persons?`Persons responsible / target (F013): ${r.D.persons}`:'',source:'h',srcRef:r.refNo,status:'Proposed',by:currentUser,at:now,history:[{at:now,by:currentUser,action:`From the approved ${r.refNo} — Priority Improvement Actions`}]}); added.push(no); }); }); }
+  catch(e){ console.warn('F013 → improvement register',e); return; }
+  if(added.length){ addAudit('💡',`${added.length} improvement${added.length>1?'s':''} added from ${escapeHtml(r.refNo)}: ${added.join(', ')}`); showToast(`💡 ${added.length} improvement action(s) from ${r.refNo} added to the Improvement Register — assign owners`,'success',4000); } }
+function impAttentionItems(){ const out=[]; const u=currentUser; if(!u) return out; const today=toLocalDateStr(new Date()); const L=impList();
+  if(impIsMd(u)){ const p=L.filter(x=>x.status==='Proposed'); if(p.length) out.push({icon:'💡',level:'high',text:`${p.length} improvement${p.length>1?'s':''} to decide — select and assign, or not (${p.slice(0,3).map(x=>escapeHtml(x.no)).join(', ')})`,view:'improve'});
+    const d=L.filter(x=>x.status==='Done'); if(d.length) out.push({icon:'🔎',level:'high',text:`${d.length} improvement${d.length>1?'s':''} done — judge effectiveness (${d.slice(0,3).map(x=>escapeHtml(x.no)).join(', ')})`,view:'improve'}); }
+  const mine=L.filter(x=>x.status==='Accepted'&&x.owner===u); if(mine.length) out.push({icon:'💡',level:mine.some(x=>x.due&&x.due<today)?'high':'',text:`${mine.length} improvement${mine.length>1?'s':''} assigned to you — ${escapeHtml(mine[0].title.slice(0,60))}${mine[0].due?' (due '+fmtDateShort(mine[0].due)+')':''}`,view:'improve'});
+  if(!impIsMd(u)&&canSeeQms(u)){ const ov=L.filter(x=>x.status==='Accepted'&&x.due&&x.due<today&&x.owner!==u); if(ov.length) out.push({icon:'⏰',text:`${ov.length} improvement${ov.length>1?'s':''} past the due date`,view:'improve'}); }
+  return out; }
+// yearly summary for the Management Review (LQP 8.6 6.3.2 / 8.9)
+async function impPrint(Y){ const y=String(Y); const inY=x=>String(x.at).slice(0,4)===y||String(x.closedAt||'').slice(0,4)===y||(['Proposed','Accepted','Done'].includes(x.status)&&String(x.at).slice(0,4)<=y);
+  const L=impList().filter(inY).sort((a,b)=>String(a.no).localeCompare(String(b.no),undefined,{numeric:true})); const td='border:1px solid #cbd5e1;padding:4px 6px;font-size:10px;vertical-align:top;text-align:left;';
+  const c=s=>L.filter(x=>x.status===s).length; const eff=L.filter(x=>x.status==='Closed').length, ne=L.filter(x=>(x.effChecks||[]).some(e=>e.result==='Not effective')).length;
+  const bySrc=IMP_SRC.map(([k,l])=>[l,L.filter(x=>x.source===k).length]).filter(r=>r[1]);
+  const html=`<div style="width:1000px;padding:26px;font-family:Arial,sans-serif;background:#fff;">${valHead(`Improvement Register — ${y}`,'ISO/IEC 17025 Clause 8.6 · LQP 8.6')}
+    <div style="font-size:11.5px;margin-bottom:8px;">${L.length} improvement(s): ${c('Proposed')} to decide · ${c('Accepted')} in progress · ${c('Done')} done, effectiveness to judge · ${eff} closed as effective · ${c('Rejected')} not selected${ne?` · ${ne} needed a further attempt`:''}.<br>By source: ${bySrc.map(r=>`${r[0]} ${r[1]}`).join(' · ')||'—'}</div>
+    <table style="border-collapse:collapse;width:100%;"><tr>${['No.','Improvement','Source','Action / owner','Status','Done','Effectiveness'].map(h=>`<th style="${td}background:#f1f5f9;">${h}</th>`).join('')}</tr>
+    ${L.map(x=>`<tr>${[x.no,x.title,impSrc(x.source)+(x.srcRef?'\n'+x.srcRef:''),[x.plan,x.owner?staffNameOf(x.owner)+(x.due?' — due '+qfDmy(x.due):''):''].filter(Boolean).join('\n'),x.status,x.done?`${x.done.note} (${qfDmy(x.done.date)})`:'',(x.effChecks||[]).map(e=>`${e.result}: ${e.note}`).join('\n')].map(v=>`<td style="${td}white-space:pre-line;">${escapeHtml(String(v||''))}</td>`).join('')}</tr>`).join('')}</table>
+    <div style="font-size:10px;color:#64748b;margin-top:8px;">LQP 8.6 6.3.2 — effectiveness of the improvement programme, for the Management Review (LQP 8.9). Printed by ${escapeHtml(staffNameOf(currentUser))} on ${qfDmy(toLocalDateStr(new Date()))}.</div></div>`;
+  await exportHtmlAsPdf(html,`Improvement_Register_${y}.pdf`,'Improvement register',1); }
 
 // ── LEAVE MANAGEMENT SYSTEM ──
 const LEAVE_KEY='wl_leave_records';
@@ -23956,7 +24061,7 @@ function renderNeedsAttention(){
   if(typeof f010AttentionItems==='function') try{ items.push(...f010AttentionItems()); }catch(e){ console.warn('F010 attention',e); }
   if(typeof c71AttentionItems==='function') try{ items.push(...c71AttentionItems()); }catch(e){ console.warn('7.1 attention',e); }
   if(typeof valAttentionItems==='function') try{ items.push(...valAttentionItems()); }catch(e){ console.warn('7.7 attention',e); }
-  if(typeof docAttentionItems==='function') try{ items.push(...docAttentionItems(),...mtAttentionItems()); }catch(e){ console.warn('8.3 attention',e); }
+  if(typeof docAttentionItems==='function') try{ items.push(...docAttentionItems(),...mtAttentionItems(),...impAttentionItems()); }catch(e){ console.warn('8.3 attention',e); }
   if(typeof qoAttentionItems==='function') try{ items.push(...qoAttentionItems()); }catch(e){ console.warn('8.2 attention',e); }
   if(typeof dmAttentionItems==='function') try{ items.push(...dmAttentionItems()); }catch(e){ console.warn('7.11 attention',e); }
   if(typeof accAttentionItems==='function') try{ items.push(...accAttentionItems()); }catch(e){ console.warn('accreditation attention',e); }
@@ -31531,7 +31636,7 @@ const NAV_CATEGORIES=[
   {id:'equipment',label:'Equipment & Stickers',icon:'ti-tag',color:'#7c3aed',sub:'Our reference equipment and calibration labels',items:[
     ['nav-ref-eq','Master list of our own equipment'],['nav-stickers','Request and track calibration stickers'],['nav-sticker-log','Every sticker used or wasted']]},
   {id:'quality',label:'Quality System',icon:'ti-shield-check',color:'#be123c',sub:'ISO/IEC 17025 records',items:[
-    ['nav-forms','Form templates, issues and revisions (F022)'],['nav-fmea','Risks incl. impartiality — FMEA (F031 / F032)'],['nav-f027','Releasing customer information — needs MD approval (F027)'],['nav-f026','Visitors sign in and out (F026)'],['nav-docs','Master list of documents, controlled copies (F020, 8.3)'],['nav-meetings','Management meeting minutes (F021)'],['nav-qobj','Quality Policy acknowledgement and quality objectives (8.2)'],['nav-validity','Monitoring the validity of results — plan, En / z results, PT / ILC (7.7)'],['nav-methods','Calibration methods — verification (F011), revisions (F014), yearly review (7.2)'],['nav-scope','Accreditation status and scope (Appendix I)'],['nav-competence','Staff competence, training and authorisation (F017 / F018 / F025 / F034)'],['nav-env','Lab environment records, facility review, limits (6.3)'],['nav-capa','Nonconformances and corrective actions'],['nav-feedback','Customer feedback and complaints']]},
+    ['nav-forms','Form templates, issues and revisions (F022)'],['nav-fmea','Risks incl. impartiality — FMEA (F031 / F032)'],['nav-improve','Improvement suggestions and actions (LQP 8.6)'],['nav-f027','Releasing customer information — needs MD approval (F027)'],['nav-f026','Visitors sign in and out (F026)'],['nav-docs','Master list of documents, controlled copies (F020, 8.3)'],['nav-meetings','Management meeting minutes (F021)'],['nav-qobj','Quality Policy acknowledgement and quality objectives (8.2)'],['nav-validity','Monitoring the validity of results — plan, En / z results, PT / ILC (7.7)'],['nav-methods','Calibration methods — verification (F011), revisions (F014), yearly review (7.2)'],['nav-scope','Accreditation status and scope (Appendix I)'],['nav-competence','Staff competence, training and authorisation (F017 / F018 / F025 / F034)'],['nav-env','Lab environment records, facility review, limits (6.3)'],['nav-capa','Nonconformances and corrective actions'],['nav-feedback','Customer feedback and complaints']]},
   {id:'workspace',label:'My Workspace',icon:'ti-user-circle',color:'#0369a1',sub:'Your own drafts, requests and time',items:[
     ['nav-notices','Quality and operations notices'],['nav-my-drafts','Forms you saved to finish later'],['nav-claims','Expense claims'],['nav-leave','Apply for and track leave'],
     ['nav-attendance','Clock in, clock out and records'],['nav-payslips','Your monthly payslips'],['nav-my-requests','Status of your requests'],['nav-datamgmt','LIMS user manual, report a system failure (7.11)']]},
@@ -31628,6 +31733,7 @@ function renderQuickAccess(){
     if(name==='validity'){ if(!canSeeQms(currentUser)){ return orig.call(this,'dashboard'); } renderValidity(); }
     if(name==='datamgmt') renderDataMgmt();
     if(name==='docs'){ if(!canSeeQms(currentUser)){ return orig.call(this,'dashboard'); } renderDocs(); }
+    if(name==='improve') renderImprove();
     if(name==='meetings'){ if(!canSeeQms(currentUser)){ return orig.call(this,'dashboard'); } renderMeetings(); }
     if(name==='qobj'){ if(!canSeeQms(currentUser)){ return orig.call(this,'dashboard'); } renderScopeQo(); }
     if(name==='notices') renderNotices();
@@ -32249,7 +32355,7 @@ function qmsStore(key){
   return s;
 }
 const _formsStore=qmsStore('wl_forms'), _f016Store=qmsStore('wl_f016'), _fmeaStore=qmsStore('wl_fmea');
-async function loadQmsStores(){ await Promise.allSettled([_formsStore.load(),_f016Store.load(),_fmeaStore.load(),_f027Store.load(),_custSrcStore.load(),_accessRevStore.load(),_f026Store.load(),_scopeStore.load(),_accrStore.load(),_swStore.load(),_qoStore.load(),_docStore.load(),_meetStore.load(),_methStore.load(),_fbStore2.load(),_valStore.load(),_noticeStore.load(),_authStore.load(),_actStore.load(),_envStore.load(),_f030Store.load(),...(canSeeQms(currentUser)?[_persStore.load(),_trainStore.load(),_assessStore.load(),_monStore.load()]:[])]); if(!canSeeQms(currentUser)) [_persStore,_trainStore,_assessStore,_monStore].forEach(s=>{ s.data=[]; s.loaded=false; }); try{ await eqFormsRegisterFix(); }catch(e){} }
+async function loadQmsStores(){ await Promise.allSettled([_formsStore.load(),_f016Store.load(),_fmeaStore.load(),_f027Store.load(),_custSrcStore.load(),_accessRevStore.load(),_f026Store.load(),_scopeStore.load(),_accrStore.load(),_swStore.load(),_qoStore.load(),_docStore.load(),_meetStore.load(),_impStore.load(),_methStore.load(),_fbStore2.load(),_valStore.load(),_noticeStore.load(),_authStore.load(),_actStore.load(),_envStore.load(),_f030Store.load(),...(canSeeQms(currentUser)?[_persStore.load(),_trainStore.load(),_assessStore.load(),_monStore.load()]:[])]); if(!canSeeQms(currentUser)) [_persStore,_trainStore,_assessStore,_monStore].forEach(s=>{ s.data=[]; s.loaded=false; }); try{ await eqFormsRegisterFix(); }catch(e){} }
 async function qmsUploadBlob(blob,name,folder){ return await prUpload(new File([blob],name,{type:blob.type||'application/pdf'}),folder); }
 async function qmsUploadDataUrl(dataUrl,name,folder){ const blob=await (await fetch(dataUrl)).blob(); return await prUpload(new File([blob],name,{type:blob.type||'image/png'}),folder); }
 
@@ -33248,7 +33354,7 @@ async function exportF026Pdf(){
 // ═══ ISO/IEC 17025 5.3 — ACCREDITATION STATUS & SCOPE (LQM Appendix I) ═══
 // Not yet accredited → every in-house calibration is non-accredited (no SAMM statement, no accredited sticker, no accredited quotation).
 // Once the MD records the accreditation, accredited work must fall inside a scope line and be approved by a signatory on that line.
-const _scopeStore=qmsStore('wl_scope');
+const _scopeStore=qmsStore('wl_scope'); const _impStore=qmsStore('wl_improve'); // 8.6 improvement register
 const _accrStore=qmsStore('wl_accr');
 const _swStore=qmsStore('wl_software');
 const _qoStore=qmsStore('wl_qobj');
