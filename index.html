@@ -20188,7 +20188,8 @@ const LIMS_RELEASES=[
     'Data management: this page — releases, calculation sheets, failure log, backup record, user manual per role (7.11); the approved signatory confirms the check of calculations and data transfer before approving (7.11 6.6).',
     'Management system: Quality Policy acknowledgement and Quality Objectives tracker (8.2); IT providers evaluated on F010 (6.6, 7.11 6.4).',
     'Documents: F020 master list of internal and external documents with review / edition checks, F014 per document, MD approval of new issues, obsolete marking, controlled hard copies approved by QM and MD (8.3); F021 meeting minutes with action items (8.2).',
-    'Records (8.4): deleting a job removes it for good (no recycle bin); every removal — test record, created in error, or after the 5-year retention with MD approval — is kept in the Record Disposal Log.'],
+    'Records (8.4): deleting a job removes it for good (no recycle bin); every removal — test record, created in error, or after the 5-year retention with MD approval — is kept in the Record Disposal Log.',
+    'Risks and opportunities (8.5): severity 9 or 10 is HIGH whatever the RPN; an FMEA action closes only when the QM / MD confirms it was effective (not effective → re-analyse by revising the worksheet); complaints, significant NCs, audit findings, new reference equipment and new staff prompt a check of the risk register.'],
    tests:[
     'Automated end-to-end tests run in a browser against the real server rules, for every module changed in this release, plus the full regression set (attention items, signatures, visitors, equipment, competence, F027, quotations).',
     'Calculations compared with hand calculation: En = |x_lab − x_ref| / √(U_lab² + U_ref²) and z = |x − X| / σ (7.7); U against the scope CMC and 2 significant digits (7.6); recalibration due dates; environmental limits; statement of conformity verdicts.',
@@ -20336,6 +20337,7 @@ const LIMS_MANUAL=[
   ['Validity of results and PT (7.7)','quality',`<p><b>Quality System → Validity of Results</b>: yearly plan per method (replicate calibration, retained item, review of reported results, PT / ILC). Enter results as En or z — a fail raises an NC and the activity is repeated. The PT participation plan covers each field (one satisfactory PT before accreditation, then every 3 years).</p>`],
   ['Accreditation and scope','quality',`<p><b>Quality System → Accreditation &amp; Scope</b>: status (MD), scope lines with CMC (max. 2 significant digits) and signatories, approved signatory list (AP 4), use of the accreditation symbol (QM and MD approve each material), suspension notices with the customers to inform, scope print.</p>`],
   ['LIMS &amp; Data (7.11)','quality',`<p>This page: <b>LIMS releases</b> — every new LIMS version comes with a release record and is authorised by the TM or MD before use; <b>Calculation sheets</b> — every Excel sheet issue / revision is validated (hand calculation, identical results, protected cells) before it can be selected in a calibration; <b>System failures</b>; <b>Backup record</b> — the monthly copy to the external hard disk.</p>`],
+  ['Risks and opportunities (8.5)','quality',`<p><b>Quality System → Risk Register (FMEA)</b>: F032 worksheets and the F031 log. HIGH = RPN ≥ 125 or severity 9–10. The owner records the action taken and completion date; the <b>QM / MD</b> then checks it against the effectiveness criteria: <b>Effective</b> closes the action, <b>Not effective</b> keeps it open and the worksheet is revised to re-analyse the cause and set a new action. <b>Review triggers</b> (complaint, Major / Critical or High-risk NC, audit finding, new reference equipment, new staff) appear on the register and on Needs Attention — decide: no change needed, revise a worksheet, or start a new one. Worksheets are reviewed at least yearly.</p>`],
   ['Deleting records (8.4)','quality',`<p><b>⋯ → Delete job</b> (Admin / MD) removes the job, its certificates and files <b>for good</b>. Choose why: <i>test / dummy record</i> or <i>created in error</i> (Admin or MD), or <i>retention period ended</i> / <i>other</i> (MD only — a real record is disposed of only after 5 years, LQP 8.4 6.2 g–h). Certificate numbers already submitted go to the void log; used stickers are recorded as wasted. <b>Disposal Log</b> shows every removal and prints it. Before go-live the MD can clear the test entries.</p>`],
   ['Staff, leave and payroll','all',`<p><b>My Workspace</b>: clock in / out, leave, overtime and claims requests, payslips. HR and the MD approve; payroll is run monthly by HR / MD.</p>`]];
 // which manual sections a role gets — staff see only what they use (QM / TM / MD / Admin see all)
@@ -20761,6 +20763,75 @@ async function dispPrint(){ const td='border:1px solid #cbd5e1;padding:4px 6px;f
     ${dispLog().map((e,i)=>`<tr>${[i+1,qfDmy(String(e.at).slice(0,10)),`${e.kind} ${e.ref} (was ${e.statusWas||'—'})`,[e.customer,...(e.items||[])].filter(Boolean).join('\n'),`${dispCatLabel(e.category)} — ${e.reason||''}`,staffNameOf(e.by),`${e.files||0} file(s)${(e.voided||[]).length?'; void '+e.voided.join(', '):''}`].map(v=>`<td style="${td}white-space:pre-line;">${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}</table>
     <div style="font-size:10px;color:#64748b;margin-top:8px;">LQP 8.4 6.2 g–h: records are kept at least five (5) years; disposal after that needs the MD's approval. Printed by ${escapeHtml(staffNameOf(currentUser))} on ${qfDmy(toLocalDateStr(new Date()))}.</div></div>`;
   await exportHtmlAsPdf(html,`Record_Disposal_Log_${toLocalDateStr(new Date())}.pdf`,'Record disposal log',1); }
+
+// ══════════════════════════════════════════════════
+// ISO/IEC 17025 8.5 — ACTIONS TO ADDRESS RISKS AND OPPORTUNITIES (LQP 8.5 Appendix 1)
+//  · effectiveness check of each FMEA action (Step 6, items 20–22): the QM / MD confirms; not effective → re-analyse by revising
+//  · review triggers (Step 7, item 24): complaint, significant NC, audit finding, new reference equipment, new staff
+// ══════════════════════════════════════════════════
+function fmeaEffLast(r){ const a=r&&r.effChecks; return a&&a.length?a[a.length-1]:null; }
+function fmeaEffDue(r){ return !!(r&&r.action&&r.taken&&r.completed&&r.actStatus!=='Closed'); }
+function fmeaEffHtml(w,r,i){
+  const hist=(r.effChecks||[]).map(e=>`<div style="font-size:12px;margin-top:3px;">${e.result==='Confirmed'?'✅':'❌'} <b>${e.result==='Confirmed'?'Effective':'Not effective'}</b> — ${qmsDate(e.at)}, ${escapeHtml(staffNameOf(e.by))}${e.note?': '+escapeHtml(e.note):''}</div>`).join('');
+  const prev=(r.prevActions||[]).map(p=>`<div style="font-size:11.5px;color:var(--text-muted);">Earlier action (not effective): ${escapeHtml(p.action||'')}${p.taken?' — done: '+escapeHtml(p.taken):''}${p.completed?' ('+qmsDate(p.completed)+')':''}</div>`).join('');
+  let btn='';
+  if(w.status==='Approved'&&fmeaEffDue(r)) btn=canApproveFmea(currentUser)
+    ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center;"><span style="font-size:12px;">Check against the effectiveness criteria${r.review?' (review date '+qmsDate(r.review)+')':''}:</span><button class="btn btn-success btn-sm" onclick="fmeaEffAct('${w.id}','${r.id}',true)">✅ Effective — close</button><button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="fmeaEffAct('${w.id}','${r.id}',false)">❌ Not effective</button></div>`
+    : `<div style="font-size:12px;color:#b45309;margin-top:6px;">Action done — waiting for the QM / MD to confirm it was effective.</div>`;
+  else if(w.status==='Approved'&&r.action&&r.actStatus!=='Closed'&&!(r.taken&&r.completed)) btn=`<div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">Record the action taken and the completion date, then save — the QM / MD checks effectiveness before it closes.</div>`;
+  return (hist||prev||btn)?`<div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:6px;"><div style="font-size:12px;font-weight:600;">Effectiveness check (LQP 8.5 App. 1, Step 6)</div>${prev}${hist}${btn}</div>`:''; }
+async function fmeaEffAct(wid,rowId,ok){
+  if(!canApproveFmea(currentUser)){ alert('Effectiveness is confirmed by the QM or the MD.'); return; }
+  if(_fmeaDraft&&_fmeaDraft.id===wid){ await fmeaSave(false); }
+  const w0=fmeaList().find(x=>x.id===wid); const r0=w0&&(w0.rows||[]).find(x=>x.id===rowId); if(!r0||!fmeaEffDue(r0)){ alert('Record the action taken and the completion date first.'); return; }
+  const note=prompt(ok?`How was it confirmed effective?${r0.criteria?'\nCriteria: '+r0.criteria:''}\n(e.g. criterion met — zero recurrence in 3 months; revised RPN 40)`:'Why was it not effective? (the cause is re-analysed and a new action set)','');
+  if(note===null) return; if(!note.trim()){ alert('Give a short note.'); return; } const now=new Date().toISOString(), today=toLocalDateStr(new Date());
+  try{ await _fmeaStore.patch(arr=>{ const x=arr.find(y=>y.id===wid); const r=x&&(x.rows||[]).find(y=>y.id===rowId); if(!r) return;
+      r.effChecks=[...(r.effChecks||[]),{result:ok?'Confirmed':'Not confirmed',note:note.trim(),by:currentUser,at:now}];
+      if(ok){ r.actStatus='Closed'; if(!r.review) r.review=today; }
+      else { r.prevActions=[...(r.prevActions||[]),{action:r.action,taken:r.taken,completed:r.completed,evidence:r.evidence,at:now}]; r.taken=''; r.completed=''; r.evidence=''; r.actStatus='Open'; r.remarks='Not effective — re-analyse the cause and set a new action (worksheet revision)'; } }); }
+  catch(e){ alert(e.message||e); return; }
+  const w=fmeaList().find(x=>x.id===wid); addAudit(ok?'✅':'❌',`FMEA ${escapeHtml(w.ref)}: action ${ok?'confirmed effective and closed':'NOT effective — escalated for re-analysis'} — ${escapeHtml(note.trim())}`);
+  _fmeaDraft=JSON.parse(JSON.stringify(w)); fmeaRenderEditor(); renderFmea(); refreshAllBadges();
+  if(!ok&&w.status==='Approved'&&confirm(`Revise ${w.ref} now to re-analyse the cause and set a new action?`)) await fmeaRevise(`Action not effective — re-analysis (${note.trim().slice(0,80)})`); }
+function fmeaEffAttention(items){ if(!canApproveFmea(currentUser)) return; const today=toLocalDateStr(new Date());
+  const L=fmeaList().filter(w=>w.status==='Approved').flatMap(w=>(w.rows||[]).filter(fmeaEffDue).map(r=>({w,r})));
+  if(L.length) items.push({icon:'🔎',level:L.some(x=>!x.r.review||x.r.review<=today)?'high':'',text:`${L.length} FMEA action${L.length>1?'s':''} done — check ${L.length>1?'their':'its'} effectiveness and close (${L.slice(0,3).map(x=>escapeHtml(x.w.ref)).join(', ')})`,view:'fmea'}); }
+
+// ── review triggers ──
+function fmeaTrigRecs(){ return (_fmeaStore.data||[]).filter(x=>x&&x.type==='trigger'); }
+function fmeaTrigBaseDate(){ return (fmeaTrigRecs().find(x=>x.key==='base')||{}).base||''; }
+async function fmeaTrigBase(){ if(!_fmeaStore.loaded||!canSeeQms(currentUser)||fmeaTrigBaseDate()) return; const now=new Date().toISOString();
+  try{ await _fmeaStore.patch(arr=>{ if(arr.some(x=>x&&x.type==='trigger'&&x.key==='base')) return; arr.push({id:'FMEA-TRIGBASE',type:'trigger',key:'base',base:toLocalDateStr(new Date()),by:currentUser,at:now}); }); }catch(e){ console.warn('fmea trigger base',e); } }
+// events since the trigger log started that may change the risk picture
+function fmeaTriggers(){ const base=fmeaTrigBaseDate(); if(!base) return []; const out=[]; const d=x=>String(x||'').slice(0,10);
+  (_ncrs||[]).forEach(n=>{ if(!n||d(n.raisedAt)<base) return; const c=n.kind==='Customer complaint', a=n.kind==='Audit finding', sig=['Major','Critical'].includes(n.severity)||n.riskLevel==='High';
+    if(c||a||sig) out.push({key:'ncr:'+n.id,kind:c?'Complaint':a?'Audit':'NCR',date:d(n.raisedAt),text:`${n.ncNo||''} ${c?'customer complaint':a?'audit finding':'significant NC ('+(n.riskLevel==='High'?'High risk':n.severity)+')'}: ${String(n.description||'').slice(0,90)}`}); });
+  (typeof _refEq!=='undefined'?_refEq:[]).forEach(r=>{ const c=r&&r.commission; if(c&&c.status==='Approved'&&d(c.authorizedAt)>=base) out.push({key:'eq:'+r.id,kind:'Change',date:d(c.authorizedAt),text:`New reference equipment commissioned: ${r.name||r.id}${r.brand?' ('+r.brand+')':''}`}); });
+  (_staff||[]).forEach(s=>{ if(s&&s.active!==false&&s.joinDate&&d(s.joinDate)>=base) out.push({key:'staff:'+s.username,kind:'Change',date:d(s.joinDate),text:`New staff: ${s.name||s.username}${s.designation?' — '+s.designation:''}`}); });
+  return out.sort((a,b)=>a.date.localeCompare(b.date)); }
+function fmeaTrigPending(){ const done=new Set(fmeaTrigRecs().map(x=>x.key)); return fmeaTriggers().filter(t=>!done.has(t.key)); }
+function fmeaTrigCard(){ if(!canSeeQms(currentUser)) return ''; const P=fmeaTrigPending(); const D=fmeaTrigRecs().filter(x=>x.key!=='base').slice(-10).reverse(); if(!P.length&&!D.length) return '';
+  const DEC={none:'No change needed',revise:'Worksheet revised',new:'New worksheet'};
+  return `<div class="card" style="margin-bottom:10px;padding:12px 14px;"><div style="font-weight:700;margin-bottom:6px;">⚡ Review triggers ${P.length?`<span class="badge badge-amber">${P.length} to decide</span>`:''} <span style="font-weight:400;font-size:11.5px;color:var(--text-muted);">— LQP 8.5 App. 1 item 24: does the risk register need updating?</span></div>
+    ${P.map(t=>`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--border);font-size:12.5px;"><span class="badge badge-slate">${escapeHtml(t.kind)}</span><span style="flex:1;min-width:200px;">${escapeHtml(t.text)} <span style="color:var(--text-muted);">· ${qmsDate(t.date)}</span></span><button class="btn btn-outline btn-sm" onclick="fmeaTrigOpen('${escapeForJsAttr(t.key)}')">Decide…</button></div>`).join('')}
+    ${D.length?`<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted);">Decided (${fmeaTrigRecs().filter(x=>x.key!=='base').length})</summary>${D.map(x=>`<div style="font-size:12px;padding:3px 0;">${qmsDate(x.at)} · ${escapeHtml(x.text)} → <b>${escapeHtml(DEC[x.decision]||x.decision)}${x.ws?' '+escapeHtml(x.ws):''}</b>${x.note?' — '+escapeHtml(x.note):''} (${escapeHtml(staffNameOf(x.by))})</div>`).join('')}</details>`:''}</div>`; }
+function fmeaTrigOpen(key){ const t=fmeaTrigPending().find(x=>x.key===key); if(!t) return; const W=fmeaList();
+  cOv('⚡ Risk register — review trigger',`<div style="font-size:13px;margin-bottom:10px;"><span class="badge badge-slate">${escapeHtml(t.kind)}</span> ${escapeHtml(t.text)}</div>
+    <div class="form-group"><label class="form-label">Decision</label><select class="form-control" id="tg-d" onchange="el('tg-wsg').style.display=this.value==='revise'?'':'none'"><option value="none">No change needed — risks already covered</option><option value="revise">Revise an existing worksheet</option><option value="new">Start a new worksheet</option></select></div>
+    <div class="form-group" id="tg-wsg" style="display:none;"><label class="form-label">Worksheet</label><select class="form-control" id="tg-ws">${W.map(w=>`<option value="${w.id}">${escapeHtml(w.ref)} — ${escapeHtml(w.process||'')} (${escapeHtml(w.status)})</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Note <span class="req">*</span></label><input class="form-control" id="tg-n" placeholder="e.g. covered by FMEA-002 row 3 / new failure mode added"/></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" onclick="fmeaTrigSave('${escapeForJsAttr(key)}')">Save</button></div>`,560); }
+async function fmeaTrigSave(key){ const t=fmeaTrigPending().find(x=>x.key===key); if(!t) return f027Close();
+  const dec=el('tg-d').value, note=(el('tg-n').value||'').trim(), wid=dec==='revise'?el('tg-ws').value:''; const w=wid?fmeaList().find(x=>x.id===wid):null;
+  if(!note){ alert('Add a short note.'); return; } if(dec==='revise'&&!w){ alert('Choose the worksheet.'); return; } const now=new Date().toISOString();
+  try{ await _fmeaStore.patch(arr=>{ if(arr.some(x=>x&&x.type==='trigger'&&x.key===key)) return; arr.push({id:'TRG-'+Date.now(),type:'trigger',key,kind:t.kind,date:t.date,text:t.text,decision:dec,ws:w?w.ref:'',note,by:currentUser,at:now}); }); }catch(e){ alert(e.message||e); return; }
+  addAudit('⚡',`Risk register trigger (${escapeHtml(t.kind)}): ${escapeHtml(t.text)} → ${dec==='none'?'no change needed':dec==='revise'?'revise '+escapeHtml(w.ref):'new worksheet'} — ${escapeHtml(note)}`);
+  f027Close(); renderFmea(); refreshAllBadges();
+  if(dec==='revise'){ openFmea(w.id); if(w.status==='Approved') await fmeaRevise(`${t.kind}: ${t.text}`.slice(0,140)); }
+  else if(dec==='new'){ openFmea(null); _fmeaDraft.trigger=FMEA_TRIGGERS.includes(t.kind)?t.kind:'Other'; fmeaRenderEditor(); } }
+function fmeaTrigAttention(items){ if(!canSeeQms(currentUser)) return; const P=fmeaTrigPending(); if(!P.length) return;
+  items.push({icon:'⚡',level:P.some(t=>t.date<=toLocalDateStr(new Date(Date.now()-14*864e5)))?'high':'',text:`${P.length} event${P.length>1?'s':''} to consider for the risk register (${P.slice(0,2).map(t=>escapeHtml(t.kind+': '+t.text.slice(0,50))).join('; ')}) — no change, revise or new worksheet`,view:'fmea'}); }
 
 // ── LEAVE MANAGEMENT SYSTEM ──
 const LEAVE_KEY='wl_leave_records';
@@ -32510,12 +32581,14 @@ function f016RegisterHtml(){
 }
 
 // ═══ FMEA RISK REGISTER — F032 worksheet (one number per worksheet) and F031 register log ═══
-const FMEA_TRIGGERS=['Annual','NCR','Audit','Change','Impartiality','Other'];
+const FMEA_TRIGGERS=['Annual','NCR','Complaint','Audit','Change','Impartiality','Other'];
 function fmeaRpn(s,o,d){ s=+s||0; o=+o||0; d=+d||0; return s&&o&&d?s*o*d:0; }
-function fmeaLevel(r){ return !r?'':r>=125?'HIGH':r>=50?'MEDIUM':'LOW'; }
-function fmeaLevelBadge(r){ const l=fmeaLevel(r); return l?`<span class="badge ${l==='HIGH'?'badge-red':l==='MEDIUM'?'badge-amber':'badge-green'}" style="font-size:10px;">${r} ${l}</span>`:'<span style="color:var(--text-muted);">—</span>'; }
-function fmeaDefaultTarget(rpn,ws){ const l=fmeaLevel(rpn); return l==='HIGH'?qmsAddDays(null,30):l==='MEDIUM'?qmsAddDays(null,90):(ws?.nextReview||qmsAddDays(null,365)); }
-function fmeaList(){ return _fmeaStore.data||[]; }
+function fmeaLevel(r,s){ return !r?'':(r>=125||(+s||0)>=9)?'HIGH':r>=50?'MEDIUM':'LOW'; } // LQP 8.5 App. 1 item 12: severity ≥ 9 is HIGH regardless of RPN
+function fmeaRowLevel(r){ return fmeaLevel(fmeaRpn(r.s,r.o,r.d),r.s); }
+function fmeaTop(rows){ const rk={HIGH:3,MEDIUM:2,LOW:1,'':0}; let b=null; (rows||[]).forEach(r=>{ const x={rpn:fmeaRpn(r.s,r.o,r.d),s:r.s}; if(!b||rk[fmeaLevel(x.rpn,x.s)]>rk[fmeaLevel(b.rpn,b.s)]||(rk[fmeaLevel(x.rpn,x.s)]===rk[fmeaLevel(b.rpn,b.s)]&&x.rpn>b.rpn)) b=x; }); return b||{rpn:0,s:0}; }
+function fmeaLevelBadge(r,s){ const l=fmeaLevel(r,s); return l?`<span class="badge ${l==='HIGH'?'badge-red':l==='MEDIUM'?'badge-amber':'badge-green'}" style="font-size:10px;" ${l==='HIGH'&&r<125?'title="Severity ≥ 9 — HIGH regardless of RPN"':''}>${r} ${l}${l==='HIGH'&&r<125?' (S≥9)':''}</span>`:'<span style="color:var(--text-muted);">—</span>'; }
+function fmeaDefaultTarget(rpn,ws,s){ const l=fmeaLevel(rpn,s); return l==='HIGH'?qmsAddDays(null,30):l==='MEDIUM'?qmsAddDays(null,90):(ws?.nextReview||qmsAddDays(null,365)); }
+function fmeaList(){ return (_fmeaStore.data||[]).filter(w=>w&&w.type!=='trigger'); }
 function fmeaRowOpen(r){ return r.action&&r.actStatus!=='Closed'; }
 function fmeaSeedImpartiality(){ const t=toLocalDateStr(new Date());
   const steps=['Contract review & quotation','Calibration performance','Review & approval of results','Reporting & Statement of Conformity','Billing & customer relations','Personnel & organisation'];
@@ -32531,24 +32604,26 @@ let _fmeaFilter='all';
 async function renderFmea(){
   const box=el('fmea-body'); if(!box) return;
   if(!canSeeQms(currentUser)){ box.innerHTML='<div class="empty-state"><p>The risk register is kept by the MD, Quality Manager and Technical Manager.</p></div>'; return; }
-  if(!fmeaList().length&&_fmeaStore.loaded){ try{ await _fmeaStore.patch(arr=>{ if(!arr.length) arr.push(fmeaSeedImpartiality()); }); }catch(e){ console.warn('fmea seed',e); } }
+  if(!fmeaList().length&&_fmeaStore.loaded){ try{ await _fmeaStore.patch(arr=>{ if(!arr.filter(w=>w.type!=='trigger').length) arr.push(fmeaSeedImpartiality()); }); }catch(e){ console.warn('fmea seed',e); } }
+  await fmeaTrigBase();
   const today=toLocalDateStr(new Date()); const L=fmeaList();
   const rowsAll=L.flatMap(w=>(w.rows||[]).map(r=>({w,r,rpn:fmeaRpn(r.s,r.o,r.d)})));
-  const openAct=rowsAll.filter(x=>fmeaRowOpen(x.r)), high=openAct.filter(x=>x.rpn>=125), overdue=openAct.filter(x=>x.r.target&&x.r.target<today), due=L.filter(w=>w.status==='Approved'&&w.nextReview&&w.nextReview<=qmsAddDays(today,14));
+  const openAct=rowsAll.filter(x=>fmeaRowOpen(x.r)), high=openAct.filter(x=>fmeaLevel(x.rpn,x.r.s)==='HIGH'), overdue=openAct.filter(x=>x.r.target&&x.r.target<today), due=L.filter(w=>w.status==='Approved'&&w.nextReview&&w.nextReview<=qmsAddDays(today,14));
   const kpi=(n,l,c)=>`<div class="card" style="padding:10px 14px;flex:1 1 130px;"><div style="font-size:22px;font-weight:800;color:${c};">${n}</div><div style="font-size:11.5px;color:var(--text-muted);">${l}</div></div>`;
   const list=L.filter(w=>_fmeaFilter==='all'||(_fmeaFilter==='impartiality'?w.trigger==='Impartiality':_fmeaFilter==='open'?(w.rows||[]).some(fmeaRowOpen):w.status!=='Approved'));
   box.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${kpi(L.length,'Worksheets','var(--navy)')}${kpi(openAct.length,'Open actions','#b45309')}${kpi(high.length,'HIGH risks open','#b42318')}${kpi(overdue.length,'Actions overdue','#b42318')}${kpi(due.length,'Reviews due','#7c3aed')}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
       <div class="st-tabs">${[['all','All'],['impartiality','Impartiality'],['open','Open actions'],['pending','Draft / to approve']].map(([k,l])=>`<button class="st-tab${_fmeaFilter===k?' active':''}" onclick="_fmeaFilter='${k}';renderFmea()">${l}</button>`).join('')}</div>
       <span style="flex:1;"></span><button class="btn btn-outline" onclick="exportF031Pdf()">📄 F031 Register Log (PDF)</button><button class="btn btn-primary" onclick="openFmea(null)">+ New worksheet</button></div>
+    ${fmeaTrigCard()}
     <div class="card"><div class="table-wrap"><table class="m-cards"><thead><tr><th>FMEA Ref.</th><th>Process / Activity</th><th>Trigger</th><th>Status</th><th>Highest risk</th><th>Open actions</th><th>Next review</th><th></th></tr></thead><tbody>
-    ${list.map(w=>{ const rp=(w.rows||[]).map(r=>fmeaRpn(r.s,r.o,r.d)); const mx=Math.max(0,...rp); const oa=(w.rows||[]).filter(fmeaRowOpen).length;
+    ${list.map(w=>{ const top=fmeaTop(w.rows); const oa=(w.rows||[]).filter(fmeaRowOpen).length;
       return `<tr><td style="font-weight:700;white-space:nowrap;">${escapeHtml(w.ref)}${w.rev?` <span style="font-size:11px;color:var(--text-muted);">Rev ${w.rev}</span>`:''}</td><td>${escapeHtml(w.process||'')}${w.suggested&&w.status==='Draft'?' <span class="badge badge-blue" style="font-size:10px;">suggested — edit &amp; approve</span>':''}</td><td>${escapeHtml(w.trigger||'')}</td>
-        <td><span class="badge ${w.status==='Approved'?'badge-green':w.status==='Awaiting approval'?'badge-amber':'badge-slate'}">${escapeHtml(w.status)}</span></td><td>${fmeaLevelBadge(mx)}</td><td>${oa||'—'}</td>
+        <td><span class="badge ${w.status==='Approved'?'badge-green':w.status==='Awaiting approval'?'badge-amber':'badge-slate'}">${escapeHtml(w.status)}</span></td><td>${fmeaLevelBadge(top.rpn,top.s)}</td><td>${oa||'—'}</td>
         <td style="white-space:nowrap;${w.nextReview&&w.nextReview<=today?'color:#b42318;font-weight:700;':''}">${w.nextReview?qmsDate(w.nextReview):'—'}</td>
         <td><div style="display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="openFmea('${w.id}')">Open</button><button class="btn btn-outline btn-sm" onclick="exportF032Pdf('${w.id}')">📄 F032</button></div></td></tr>`; }).join('')||'<tr><td colspan="8" style="color:var(--text-muted);padding:14px;">No worksheets.</td></tr>'}
     </tbody></table></div></div>
-    <div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">RPN = Severity × Occurrence × Detection (1–10 each). HIGH ≥ 125 — immediate action, escalate to QM, within 30 days · MEDIUM 50–124 — plan action, 60–90 days · LOW &lt; 50 — monitor, next annual review.</div>`;
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">RPN = Severity × Occurrence × Detection (1–10 each). HIGH ≥ 125, or any severity ≥ 9 — immediate action, escalate to QM, within 30 days · MEDIUM 50–124 — plan action, 60–90 days · LOW &lt; 50 — monitor, next annual review.</div>`;
 }
 let _fmeaDraft=null;
 function openFmea(id){
@@ -32586,7 +32661,7 @@ function fmeaRenderEditor(){
       <div style="font-weight:700;margin:14px 0 6px;">Section 3 — FMEA analysis &amp; Section 5 — actions</div>
       ${(w.rows||[]).map((r,i)=>{ const rp=fmeaRpn(r.s,r.o,r.d), rp2=fmeaRpn(r.s2,r.o2,r.d2);
         return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;"><b>${escapeHtml(w.ref||'FMEA')}-${i+1}</b><span>RPN ${fmeaLevelBadge(rp)}${rp2?` → revised ${fmeaLevelBadge(rp2)}`:''}</span>${lk?'':`<button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="_fmeaDraft.rows.splice(${i},1);fmeaRenderEditor()">✕ Remove</button>`}</div>
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;"><b>${escapeHtml(w.ref||'FMEA')}-${i+1}</b><span>RPN ${fmeaLevelBadge(rp,r.s)}${rp2?` → revised ${fmeaLevelBadge(rp2,r.s2||r.s)}`:''}</span>${lk?'':`<button class="btn btn-outline btn-sm" style="color:var(--red);" onclick="_fmeaDraft.rows.splice(${i},1);fmeaRenderEditor()">✕ Remove</button>`}</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:6px 10px;">
           <div><label class="form-label">Step</label><select class="form-control" ${dis} onchange="fmeaSet('rows.${i}.step',this.value,true)"><option value="">—</option>${(w.steps||[]).map((s,k)=>`<option value="${k+1}" ${String(r.step)===String(k+1)?'selected':''}>${k+1}. ${escapeHtml(String(s).slice(0,40))}</option>`).join('')}</select></div>
           <div style="grid-column:1/-1;min-width:0;"><label class="form-label">Potential failure mode</label>${txt(`rows.${i}.mode`,r.mode,'How could it fail?')}</div>
@@ -32604,9 +32679,9 @@ function fmeaRenderEditor(){
             <div><label class="form-label">Effectiveness criteria</label>${inp(`rows.${i}.criteria`,r.criteria,'e.g. zero overdue for 3 months','','')}</div>
             <div><label class="form-label">Evidence of implementation</label>${inp(`rows.${i}.evidence`,r.evidence,'Record / NCR no. / file','','')}</div>
             <div><label class="form-label">Review date</label>${inp(`rows.${i}.review`,r.review,'','date','')}</div>
-            <div><label class="form-label">Status</label><select class="form-control" onchange="fmeaSet('rows.${i}.actStatus',this.value)">${['Open','In progress','Closed'].map(s=>`<option ${(r.actStatus||'Open')===s?'selected':''}>${s}</option>`).join('')}</select></div>
+            <div><label class="form-label">Status</label>${r.actStatus==='Closed'?`<input class="form-control" value="Closed${fmeaEffLast(r)?.result==='Confirmed'?' — effective':''}" disabled/>`:`<select class="form-control" onchange="fmeaSet('rows.${i}.actStatus',this.value)">${['Open','In progress'].map(s=>`<option ${(r.actStatus||'Open')===s?'selected':''}>${s}</option>`).join('')}</select>`}</div>
             <div style="display:flex;gap:6px;"><div><label class="form-label">S*</label>${num(i,'s2',r.s2,true)}</div><div><label class="form-label">O*</label>${num(i,'o2',r.o2,true)}</div><div><label class="form-label">D*</label>${num(i,'d2',r.d2,true)}</div></div>
-            <div style="grid-column:1/-1;min-width:0;"><label class="form-label">Remarks / next step</label>${inp(`rows.${i}.remarks`,r.remarks,'','','')}</div></div></details></div>`; }).join('')}
+            <div style="grid-column:1/-1;min-width:0;"><label class="form-label">Remarks / next step</label>${inp(`rows.${i}.remarks`,r.remarks,'','','')}</div></div>${fmeaEffHtml(w,r,i)}</details></div>`; }).join('')}
       ${lk?'':`<button class="btn btn-outline btn-sm" onclick="_fmeaDraft.rows.push({id:'R'+Date.now(),actStatus:'Open'});fmeaRenderEditor()">+ Add failure mode</button>`}
       ${(w.reviews||[]).length?`<div style="margin-top:12px;font-size:12px;"><b>Reviews:</b> ${w.reviews.map(v=>`${qmsDate(v.at)} by ${escapeHtml(staffNameOf(v.by))}${v.note?' — '+escapeHtml(v.note):''}`).join(' · ')}</div>`:''}
       <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
@@ -32619,9 +32694,9 @@ function fmeaRenderEditor(){
 }
 function fmeaSet(path,val,isNum){ const ks=path.split('.'); let o=_fmeaDraft; for(let i=0;i<ks.length-1;i++) o=o[ks[i]]; const k=ks[ks.length-1];
   o[k]=isNum&&k!=='step'?(val===''?'':Math.max(1,Math.min(10,parseInt(val,10)||1))):val;
-  if(ks[0]==='rows'&&['s','o','d','step'].includes(k)){ const r=_fmeaDraft.rows[+ks[1]]; if(!r.target&&r.action) r.target=fmeaDefaultTarget(fmeaRpn(r.s,r.o,r.d),_fmeaDraft); fmeaRenderEditor(); }
+  if(ks[0]==='rows'&&['s','o','d','step'].includes(k)){ const r=_fmeaDraft.rows[+ks[1]]; if(!r.target&&r.action) r.target=fmeaDefaultTarget(fmeaRpn(r.s,r.o,r.d),_fmeaDraft,r.s); fmeaRenderEditor(); }
   else if(ks[0]==='rows'&&['s2','o2','d2'].includes(k)) fmeaRenderEditor();
-  else if(ks[0]==='rows'&&k==='action'&&val&&!_fmeaDraft.rows[+ks[1]].target){ const r=_fmeaDraft.rows[+ks[1]]; r.target=fmeaDefaultTarget(fmeaRpn(r.s,r.o,r.d),_fmeaDraft); fmeaRenderEditor(); } }
+  else if(ks[0]==='rows'&&k==='action'&&val&&!_fmeaDraft.rows[+ks[1]].target){ const r=_fmeaDraft.rows[+ks[1]]; r.target=fmeaDefaultTarget(fmeaRpn(r.s,r.o,r.d),_fmeaDraft,r.s); fmeaRenderEditor(); } }
 async function fmeaSave(submit){
   const w=_fmeaDraft; if(!w) return; if(!String(w.process||'').trim()){ alert('Enter the process / activity.'); return; }
   if(submit){ if(!(w.rows||[]).length){ alert('Add at least one failure mode.'); return; } const bad=(w.rows||[]).findIndex(r=>!r.mode||!fmeaRpn(r.s,r.o,r.d)); if(bad>-1){ alert(`Failure mode ${bad+1}: enter the failure mode and S, O and D.`); return; } }
@@ -32645,7 +32720,7 @@ async function fmeaApprove(){ if(!canApproveFmea(currentUser)){ alert('An FMEA w
 async function fmeaSendBack(){ if(!canApproveFmea(currentUser)) return; const why=prompt('Send back — what needs changing?',''); if(!why||!why.trim()) return; const id=_fmeaDraft.id;
   await _fmeaStore.patch(arr=>{ const x=arr.find(y=>y.id===id); if(x&&x.status==='Awaiting approval'){ x.status='Draft'; x.sentBack={by:currentUser,at:new Date().toISOString(),reason:why.trim()}; } });
   _fmeaDraft=JSON.parse(JSON.stringify(fmeaList().find(y=>y.id===id))); fmeaRenderEditor(); renderFmea(); refreshAllBadges(); }
-async function fmeaRevise(){ const why=prompt('Revise this worksheet — reason (e.g. annual review, NCR-…, audit finding, change):',''); if(!why||!why.trim()) return; const id=_fmeaDraft.id; const now=new Date().toISOString();
+async function fmeaRevise(reason){ const why=reason||prompt('Revise this worksheet — reason (e.g. annual review, NCR-…, audit finding, change):',''); if(!why||!why.trim()) return; const id=_fmeaDraft.id; const now=new Date().toISOString();
   await _fmeaStore.patch(arr=>{ const x=arr.find(y=>y.id===id); if(!x||x.status!=='Approved') return; const snap=JSON.parse(JSON.stringify(x)); delete snap.history;
     (x.history=x.history||[]).push({...snap,supersededAt:now,supersededReason:why.trim()}); x.rev=(x.rev||0)+1; x.status='Draft'; x.revReason=why.trim(); delete x.approvedBy; delete x.approvedAt; });
   addAudit('✏️',`FMEA ${escapeHtml(_fmeaDraft.ref)} revised — ${escapeHtml(why.trim())}`); _fmeaDraft=JSON.parse(JSON.stringify(fmeaList().find(y=>y.id===id))); fmeaRenderEditor(); renderFmea(); refreshAllBadges(); }
@@ -32672,9 +32747,10 @@ function qmsAttentionItems(items){
   { const sb=qmsPending().sentBack; if(sb.length) items.push({icon:'↩️',level:'high',text:`${sb.length} FMEA worksheet${sb.length>1?'s were':' was'} sent back to you — revise and resubmit (${escapeHtml(sb[0].ref)}: "${escapeHtml(String(sb[0].sentBack.reason||'').slice(0,60))}")`,view:'fmea'}); }
   if(canApproveFmea(currentUser)){ const ap=L.filter(w=>w.status==='Awaiting approval'); if(ap.length) items.push({icon:'🧯',level:'high',text:`${ap.length} FMEA worksheet${ap.length>1?'s':''} waiting for approval (${ap.map(w=>w.ref).join(', ')})`,view:'fmea'}); }
   const rows=L.flatMap(w=>(w.rows||[]).map(r=>({w,r}))).filter(x=>fmeaRowOpen(x.r));
-  const hi=rows.filter(x=>fmeaRpn(x.r.s,x.r.o,x.r.d)>=125); if(hi.length&&isQmOrMd(currentUser)) items.push({icon:'🔥',level:'high',text:`${hi.length} HIGH risk${hi.length>1?'s':''} (RPN ≥ 125) with open action — escalate (${hi.slice(0,2).map(x=>escapeHtml(x.w.ref+': '+String(x.r.mode||'').slice(0,40))).join('; ')})`,view:'fmea'});
+  const hi=rows.filter(x=>fmeaRowLevel(x.r)==='HIGH'); if(hi.length&&isQmOrMd(currentUser)) items.push({icon:'🔥',level:'high',text:`${hi.length} HIGH risk${hi.length>1?'s':''} (RPN ≥ 125 or severity ≥ 9) with open action — escalate (${hi.slice(0,2).map(x=>escapeHtml(x.w.ref+': '+String(x.r.mode||'').slice(0,40))).join('; ')})`,view:'fmea'});
   const ov=rows.filter(x=>x.r.target&&x.r.target<today&&(x.r.owner===currentUser||isQmOrMd(currentUser))); if(ov.length) items.push({icon:'⏰',level:'high',text:`${ov.length} FMEA action${ov.length>1?'s':''} past the target date`,view:'fmea'});
   const rd=L.filter(w=>w.status==='Approved'&&w.nextReview&&w.nextReview<=qmsAddDays(today,14)); if(rd.length) items.push({icon:'🗓️',text:`${rd.length} FMEA worksheet${rd.length>1?'s':''} due for review (${rd.map(w=>w.ref).join(', ')})`,view:'fmea'});
+  try{ fmeaEffAttention(items); fmeaTrigAttention(items); }catch(e){ console.warn('fmea 8.5 attention',e); }
   const dr=L.filter(w=>w.status==='Draft'&&w.suggested); if(dr.length) items.push({icon:'🧯',text:`Impartiality risk assessment (${dr.map(w=>w.ref).join(', ')}) drafted with suggested risks — review, score and submit for approval`,view:'fmea'});
 }
 
@@ -32778,7 +32854,7 @@ async function exportF031Pdf(){
   const g=QF_LS, xs=[72,106.7,149.1,204,258.9,314.9,334,354.3,374.6,408.2,483.1,532.5,575.1,617.6,709.8,769.5], F8=`8pt/9.75pt ${QF_FONT}`;
   const hdr=qfRow(xs,['No.','Date','Process / Activity','Potential Failure Mode','Potential Effect(s)','S','O','D','RPN','Recommended Action','Person in Charge','Due Date','Status','Effectiveness','Review Date'].map(h=>[h,'center']),{h:20,font:F8,bg:QF_GREY,pad:2});
   const lines=fmeaList().slice().sort((a,b)=>String(a.ref).localeCompare(String(b.ref))).flatMap(w=>(w.rows||[]).map((r,i)=>({w,r,i})));
-  const rpnCell=r=>{ const n=fmeaRpn(r.s,r.o,r.d), l=fmeaLevel(n); const bg=l==='HIGH'?'#ee0000':l==='MEDIUM'?'#ffc000':l==='LOW'?'#92d050':''; return [n||'','center',bg?`background:${bg};${l==='HIGH'?'color:#fff;':''}`:'']; };
+  const rpnCell=r=>{ const n=fmeaRpn(r.s,r.o,r.d), l=fmeaLevel(n,r.s); const bg=l==='HIGH'?'#ee0000':l==='MEDIUM'?'#ffc000':l==='LOW'?'#92d050':''; return [n||'','center',bg?`background:${bg};${l==='HIGH'?'color:#fff;':''}`:'']; };
   const rows=lines.map(({w,r,i})=>({hdr,hdrMt:12,mt:-0.5,html:qfRow(xs,[[qfE(w.ref+'-'+(i+1)),'center'],[qfDmy(w.date),'center'],[qfE(w.process),'center'],qfE(r.mode),qfE(r.effect),[qfE(r.s),'center'],[qfE(r.o),'center'],[qfE(r.d),'center'],rpnCell(r),qfE(r.action),[qfE(r.owner?staffNameOf(r.owner):''),'center'],[qfDmy(r.target),'center'],[r.action?qfE(r.actStatus||'Open'):'','center'],qfE(r.criteria||''),[qfDmy(r.review||w.nextReview),'center']],{h:10.3,font:F8,pad:2})}));
   const sp=(await pdfStaffSignature(currentUser)).data;
   const sig=qfSigs({title:'Prepared By:',name:staffNameOf(currentUser),date:qmsDate(toLocalDateStr(new Date())),sig:sp},{title:'Approved By:',name:'',date:'',sig:''},{xb:324.1,lineY:37.3,nameY:50,dateY:72,lw:119.4,rw:139.2,font:`10pt/1 ${QF_FONT}`,imgH:30});
@@ -32805,7 +32881,7 @@ async function exportF032Pdf(id,draft){
     +`<div style="margin-top:-0.5pt;">${qfRow(x3,['Process step #','How could it fall ?','Impact on lab / customer','1-10','Root cause','1-10','Existing safeguard','1-10','S×O×D','H / M / L','Action to reduce risk','Responsible','DD-MM-YY','After action','After action','After action','Revised RPN'].map(h=>[h,'center']),{h:20,font:F8,bg:QF_GREY2,valign:'top',pad:2})}</div>`;
   const RL={HIGH:'H',MEDIUM:'M',LOW:'L'};
   const rows3=(w.rows||[]).map(r=>{ const rp=fmeaRpn(r.s,r.o,r.d), rp2=fmeaRpn(r.s2,r.o2,r.d2); const C=v=>[qfE(v),'center'];
-    return {hdr:hdr3,mt:-0.5,html:qfRow(x3,[C(r.step),qfE(r.mode),qfE(r.effect),C(r.s),qfE(r.cause),C(r.o),qfE(r.controls),C(r.d),C(rp||''),C(RL[fmeaLevel(rp)]||''),qfE(r.action),C(r.owner?staffNameOf(r.owner):''),C(qfDmyShort(r.target)),C(r.s2),C(r.o2),C(r.d2),C(rp2||'')],{h:10.3,font:F8,pad:2})}; })
+    return {hdr:hdr3,mt:-0.5,html:qfRow(x3,[C(r.step),qfE(r.mode),qfE(r.effect),C(r.s),qfE(r.cause),C(r.o),qfE(r.controls),C(r.d),C(rp||''),C(RL[fmeaLevel(rp,r.s)]||''),qfE(r.action),C(r.owner?staffNameOf(r.owner):''),C(qfDmyShort(r.target)),C(r.s2),C(r.o2),C(r.d2),C(rp2||'')],{h:10.3,font:F8,pad:2})}; })
     .concat(Array.from({length:Math.max(0,8-(w.rows||[]).length)},()=>({mt:-0.5,html:qfRow(x3,x3.slice(1).map(()=>''),{h:10.3,font:F8,pad:2})})));
   const x4=[72,107.2,304.5,334,537,568,769.5];
   const g4=[['1-2','Negligible – no impact on measurement result or client','Very unlikely — &lt; 1%; no known history at Westlab','Almost certain to detect — automated system check'],['3-4','Minor — slight deviation; easily corrected before issue','Low — isolated incident; infrequent occurrence','High likelihood of detection by current controls'],['5-6','Moderate — result questionable; client may notice error','Moderate — occasional; documented in NCR log','Moderate — may be detected before issue'],['7-8','High — invalid result issued; client affected; rework needed','High — frequent; recurring pattern observed','Low — unlikely to be detected in time'],['9-10','Critical — safety, legal, or accreditation risk','Almost certain — &gt; 30% of jobs affected','No control — failure reaches client undetected']];
