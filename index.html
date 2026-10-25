@@ -10071,12 +10071,34 @@ const STATUS_BADGE={
 };
 
 // ⋯ menu on a job row (Equipment & Calibration): the less-used actions, with Delete kept at the bottom
+// assign several items of one job to one engineer (instead of ✏️ Edit item by item)
+function bulkAssignable(it){ return !!it&&['Unassigned','Assigned',undefined,''].includes(it.status)&&!it.outsourceVendorId; }
+function openBulkAssign(jobNo){ if(!canCreateJobs(currentUser)) return; const j=getJob(jobNo); if(!j) return; const its=(j.items||[]).map((it,i)=>({it,i})).filter(x=>bulkAssignable(x.it));
+  if(!its.length){ alert('No item can be assigned — items in calibration, submitted, outsourced or done keep their engineer.'); return; }
+  cOv(`👥 Assign items — ${escapeHtml(jobNo)}`,`<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:8px;">Tick the items, choose the engineer, then Assign. Items already in calibration, submitted, outsourced or done are not listed.</div>
+    <div style="font-size:12px;margin-bottom:4px;"><a href="javascript:void(0)" onclick="document.querySelectorAll('.ba-it').forEach(c=>c.checked=true)">Select all</a> · <a href="javascript:void(0)" onclick="document.querySelectorAll('.ba-it').forEach(c=>c.checked=false)">None</a></div>
+    ${its.map(({it,i})=>`<label style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--border);font-weight:normal;font-size:12.5px;"><input type="checkbox" class="ba-it" value="${i}" ${it.assignedTo?'':'checked'}/><span><b>Item ${escapeHtml(String(it.itemNo||i+1))}</b> ${escapeHtml(it.eqName||'')}${it.range?' · '+escapeHtml(it.range):''}${it.calType==='Onsite'?' · On-site':''} <span style="color:var(--text-muted);">— ${it.assignedTo?'now: '+escapeHtml(USERS[it.assignedTo]?.name||it.assignedTo):'unassigned'}</span></span></label>`).join('')}
+    <div class="form-group" style="margin-top:10px;"><label class="form-label">Assign to <span class="req">*</span></label><select class="form-control" id="ba-to"></select></div>
+    <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-control" id="ba-note"/></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" id="ba-go" onclick="confirmBulkAssign('${escapeForJsAttr(jobNo)}')">👥 Assign</button></div>`,560);
+  populateUserDropdown('ba-to',false,true); }
+async function confirmBulkAssign(jobNo){ if(!canCreateJobs(currentUser)) return; const to=el('ba-to')?.value; const idx=[...document.querySelectorAll('.ba-it:checked')].map(c=>+c.value);
+  if(!idx.length){ alert('Tick at least one item.'); return; } if(!to){ alert('Choose the engineer.'); return; }
+  const j=getJob(jobNo); const its=idx.map(i=>j?.items?.[i]).filter(Boolean); const pb=compAssignProblem(its,to); if(pb){ alert('⛔ '+pb); return; } if(!compRestrictionOk(its,to)) return;
+  const note=(el('ba-note')?.value||'').trim(); const now=new Date().toISOString(); const b=el('ba-go'); if(b){ b.disabled=true; b.textContent='⏳ Assigning…'; } const done=[];
+  try{ await updateJob(jobNo,jj=>{ idx.forEach(i=>{ const it=jj.items[i]; if(!bulkAssignable(it)) return; if(it.assignedTo!==to) it.assignedAt=now; it.assignedTo=to; it.status='Assigned'; it.assignNote=note; done.push(it.itemNo||i+1); });
+      (jj.history=jj.history||[]).push({action:`Items ${done.join(', ')} assigned to ${USERS[to]?.name||to}`,by:currentUser,time:now,note}); }); }
+  catch(e){ showToast('❌ Assign failed: '+(e.message||e),'error',5000); if(b){ b.disabled=false; b.textContent='👥 Assign'; } return; }
+  f027Close(); renderEquipmentTable(); renderDashboard(); refreshAllBadges();
+  addAudit('👤',`Job <strong>${escapeHtml(jobNo)}</strong>: item${done.length>1?'s':''} ${done.join(', ')} assigned to <strong>${escapeHtml(USERS[to]?.name||to)}</strong>`); addNotification('🔧',`${done.length} item${done.length>1?'s':''} of ${jobNo} assigned to ${USERS[to]?.name||to}`,jobNo);
+  showToast(`👥 ${done.length} item${done.length>1?'s':''} assigned to ${USERS[to]?.name||to}`,'success',3000); }
 function eqJobMenu(ev,jobNo){
   ev.stopPropagation(); const j=getJob(jobNo); if(!j) return;
   const role=getUserRole(currentUser); let h=stMenuItem('👁️ View job',`viewJobDetail('${escapeForJsAttr(jobNo)}')`);
   if(canCreateJobs(currentUser)){
     h+=stMenuItem('🧾 Reissue receipt',`reissueJobReceipt('${escapeForJsAttr(jobNo)}')`)+stMenuItem('🖨️ Print work order',`printWorkOrder('${escapeForJsAttr(jobNo)}')`);
     if((j.items||[]).some(it=>it.calType!=='Onsite')) h+=stMenuItem('🏷️ Reprint receiving labels',`reprintReceivingLabels('${escapeForJsAttr(jobNo)}')`);
+    if((j.items||[]).some(bulkAssignable)) h+=stMenuItem('👥 Assign items…',`openBulkAssign('${escapeForJsAttr(jobNo)}')`);
   }
   if(role==='Admin'||role==='Managing Director')
     h+='<hr/>'+(j.status!=='Completed'?stMenuItem('🗑 Delete job…',`deleteJob('${escapeForJsAttr(jobNo)}')`,{danger:true}):stMenuItem('🗑️ Delete job (permanent)…',`openRequestPermanentDeletionModal('${escapeForJsAttr(jobNo)}')`,{danger:true}));
@@ -11480,13 +11502,48 @@ async function openBackupFile(){
     _openedBackup=await decryptBackup(await f.text(),pw);
     const t=_openedBackup.tables||{};
     box.innerHTML=`<div class="qt-note info">✅ Backup from <b>${new Date(_openedBackup.createdAt).toLocaleString('en-MY')}</b>: ${Object.entries(t).map(([k,v])=>`${v.length} ${k.replace('wl_','')}`).join(' · ')}</div>
-      <div style="font-size:12px;color:var(--text-muted);margin:6px 0;">Restoring puts every record in this backup back as it was then. Records created after the backup are kept; staff passwords are not changed.</div>
-      <button class="btn btn-danger btn-sm" onclick="restoreOpenedBackup()">♻️ Restore this backup</button>`;
+      <div style="font-size:12px;color:var(--text-muted);margin:6px 0;">Restore <b>fills the gaps</b>: only records missing now come back from the backup. Everything entered after the backup stays as it is, and jobs deleted on purpose (Record Disposal Log) stay deleted. You see the list first.</div>
+      <button class="btn btn-primary btn-sm" onclick="restoreCheck()">🔍 Check what would come back</button> <div id="restore-plan" style="margin-top:8px;"></div>`;
   }catch(e){ _openedBackup=null; box.innerHTML=`<div class="qt-note warn">❌ ${escapeHtml(e.message)}</div>`; }
 }
+// ── restore = fill the gaps: missing records (whole records, or missing entries inside a list) come back; nothing current is overwritten ──
+let _restorePlan=null;
+function restoreItemKey(x){ if(x==null) return null; if(typeof x!=='object') return 'v:'+String(x); const k=x.id??x.no??x.ncNo??x.invoiceNo??x.invNo??x.number??x.poNumber??x.doNumber??x.key??x.username??null; return k==null?null:'k:'+String(k); }
+function restoreLabel(t,id){ return t==='wl_jobs'?'Job '+id:t==='wl_customers'?'Customer '+id:t==='wl_staff'?'Staff '+id:t==='wl_ref_equipment'?'Reference equipment '+id:String(id).replace(/^wl_/,''); }
+async function restoreCheck(){ const bk=_openedBackup; if(!bk||!isAdmin(currentUser)) return; const box=el('restore-plan'); box.innerHTML='<span style="font-size:12px;">⏳ Comparing with the current records…</span>';
+  try{ const plan=[]; let disposedSkip=0, unmatched=0; const disposed=new Set(dispLog().filter(e=>e&&e.kind==='Job').map(e=>e.ref));
+    for(const [t,rows] of Object.entries(bk.tables||{})){ if(t==='wl_sequences') continue;
+      if(t==='wl_settings'){ let k=0; // settings rows are read one by one (the table listing does not carry the row ids)
+        for(const r of rows){ if(!r||!r.id||r.id==='login_guard') continue; let c=null; try{ c=await apiFetch('/api/row/wl_settings/'+encodeURIComponent(r.id)); }catch(e){ c=null; } if(++k%10===0) box.innerHTML=`<span style="font-size:12px;">⏳ Comparing… ${k} of ${rows.length}</span>`;
+          if(c==null) plan.push({t,id:r.id,kind:'row',data:r.data,n:Array.isArray(r.data)?r.data.length:1});
+          else if(Array.isArray(r.data)&&Array.isArray(c)){ const ck=new Set(c.map(restoreItemKey).filter(Boolean)); const miss=r.data.filter(x=>{ const k=restoreItemKey(x); if(!k){ unmatched++; return false; } return !ck.has(k); }); if(miss.length) plan.push({t,id:r.id,kind:'items',items:miss,n:miss.length}); } } }
+      else { const cur=await apiFetch(`/api/table/${t}`); const curArr=Array.isArray(cur)?cur:[]; const ids=new Set(); curArr.forEach(d=>{ if(d&&typeof d==='object') ['jobNo','id','username'].forEach(k=>{ if(d[k]!=null) ids.add(String(d[k])); }); });
+        for(const r of rows){ if(!r||r.id==null||ids.has(String(r.id))) continue; if(t==='wl_jobs'&&disposed.has(r.id)){ disposedSkip++; continue; } plan.push({t,id:r.id,kind:'row',data:r.data,n:1}); } } }
+    _restorePlan=plan; const tot=plan.reduce((a,p)=>a+p.n,0);
+    box.innerHTML=plan.length?`<div class="qt-note info" style="margin-bottom:6px;"><b>${tot} record${tot>1?'s':''}</b> would come back. Nothing current is overwritten.${disposedSkip?` ${disposedSkip} job${disposedSkip>1?'s':''} on the Record Disposal Log stay${disposedSkip>1?'':'s'} deleted.`:''} Untick anything that was removed on purpose.</div>
+      ${plan.map((p,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-weight:normal;font-size:12.5px;"><input type="checkbox" class="rs-pick" value="${i}" checked/> <span>${escapeHtml(restoreLabel(p.t,p.id))} — ${p.kind==='row'?(p.t==='wl_settings'?'whole record':'missing now'):`${p.n} missing entr${p.n>1?'ies':'y'}`}</span></label>`).join('')}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="restoreGaps()">♻️ Restore the ticked records</button></div>`
+      :`<div class="qt-note info">✅ Nothing is missing — every record in this backup is still in the LIMS.${disposedSkip?` (${disposedSkip} disposed job${disposedSkip>1?'s':''} left deleted.)`:''}</div>`;
+    const empty=!(await apiFetch('/api/table/wl_jobs')||[]).length; box.innerHTML+=`<div style="font-size:11.5px;color:var(--text-muted);margin-top:10px;">${empty?`Empty database (e.g. moving to a new server)? <a href="javascript:void(0)" onclick="restoreOpenedBackup()">Full replace from the backup</a>.`:'Full replace is only offered on an empty database.'}${unmatched?` · ${unmatched} list entr${unmatched>1?'ies have':'y has'} no reference no. and cannot be compared — left as they are now.`:''}</div>`;
+  }catch(e){ box.innerHTML=`<div class="qt-note warn">❌ ${escapeHtml(e.message||String(e))}</div>`; } }
+async function restoreGaps(){ const plan=_restorePlan, bk=_openedBackup; if(!plan||!bk||!isAdmin(currentUser)) return; const pick=[...document.querySelectorAll('.rs-pick:checked')].map(c=>plan[+c.value]).filter(Boolean);
+  if(!pick.length){ alert('Nothing ticked.'); return; } const tot=pick.reduce((a,p)=>a+p.n,0);
+  if(!confirm(`Bring back ${tot} record${tot>1?'s':''} from the backup of ${new Date(bk.createdAt).toLocaleString('en-MY')}?\n\nNothing current is overwritten.`)) return;
+  const box=el('restore-plan'); let done=0, failed=0;
+  for(const p of pick){ try{
+      if(p.kind==='row') await apiFetch('/api/upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:p.t,id:p.id,data:p.data})});
+      else { const fresh=await SB.get('wl_settings',p.id); const arr=Array.isArray(fresh)?fresh:[]; const have=new Set(arr.map(restoreItemKey).filter(Boolean)); const add=p.items.filter(x=>!have.has(restoreItemKey(x)));
+        if(add.length) await apiFetch('/api/upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'wl_settings',id:p.id,data:[...arr,...add]})}); }
+      done+=p.n; }catch(e){ failed+=p.n; console.warn('restore',p.id,e); }
+    box.innerHTML=`<span style="font-size:12px;">⏳ Restoring… ${done} of ${tot}</span>`; }
+  addAudit('♻️',`Backup from ${bk.createdAt} — gaps filled: ${done} record${done===1?'':'s'} brought back${failed?`, ${failed} failed`:''}`);
+  alert(`Done: ${done} record${done===1?'':'s'} brought back${failed?`, ${failed} could not be written`:''}. Nothing current was overwritten. The LIMS will now reload.`); location.reload(); }
+// full replace — only for an empty database (e.g. moving to a new server)
 async function restoreOpenedBackup(){
   const bk=_openedBackup; if(!bk) return;
-  const typed=prompt('This overwrites current records with the backup versions.\n\nType RESTORE to continue:',''); if(typed!=='RESTORE') return;
+  if((await apiFetch('/api/table/wl_jobs')||[]).length){ alert('Full replace is only for an empty database. Use "Check what would come back" — it fills the gaps without overwriting anything.'); return; }
+  const typed=prompt('FULL REPLACE — every record in the backup is written back as it was then.\n\nType RESTORE to continue:',''); if(typed!=='RESTORE') return;
+  if(!confirm('Are you sure? This is meant for an empty database only.')) return;
   const list=[]; Object.entries(bk.tables||{}).forEach(([t,rows])=>rows.forEach(r=>{ if(!(t==='wl_settings'&&r.id==='login_guard')&&t!=='wl_sequences') list.push([t,r]); }));
   const seqs=(bk.tables?.wl_sequences||[]).filter(r=>/_seq|^WL|^W[A-Z]{2,4}/i.test(r.id)).map(r=>`${r.id}: ${r.data?.val}`); if(seqs.length) setTimeout(()=>alert('Document numbering at the time of the backup (check / set in Settings → Document Numbering so no number is issued twice):\n\n'+seqs.slice(0,40).join('\n')),500);
   const box=el('backup-preview'); let done=0, failed=0;
@@ -20355,7 +20412,10 @@ const LIMS_RELEASES=[
     'Forms amended in place (Issue 01 Rev 00 kept): F005, F010, F015, F017, F019, F025, F026, F030, F031, F032, F035; every form footer now reads “PRINTED COPIES OF THIS FORM ARE CONTROLLED”.',
     'F010 Supplier Evaluation on the new layout: Part A critical requirements by supplier type (any No = Not Approved), Part B score, risk, decision rule, annual review rule. Earlier evaluations keep their layout.',
     'F015: “No” can be recorded; an item answered No blocks approval. F005 prints the correction with the corrective action. F032 prints the Severity 9–10 rule.',
-    'Forms register: the MD uploads the amended forms and their originals in one go; original files are visible to the MD only.']},
+    'Forms register: the MD uploads the amended forms and their originals in one go; original files are visible to the MD only.',
+    'Job Management: ⋯ → 👥 Assign items — tick several items of a job and assign them to one engineer at once.',
+    'Dates on forms: header 08 Mar 2026, footer F015, 08 March 2026 (no "FORM" prefix); F022 effective 15 Jun 2026.',
+    'Backup restore fills the gaps: only missing records come back (whole records or missing list entries), nothing current is overwritten, disposed jobs stay deleted; full replace only on an empty database.']},
   {version:'1.0',date:'2026-10-13',changes:[
     'First controlled release of the Westlab LIMS, after the clause-by-clause ISO/IEC 17025 review (clauses 4 to 7.11).',
     'Jobs: contract review, receipt and handling racks (7.4), calibration records with versions and the Excel original reference (7.5), uncertainty vs CMC (7.6), approval and certificates (7.8), amended certificates.',
@@ -33042,7 +33102,7 @@ const FORMS_SEED=[
  ['F013','Feedback Evaluation Form','00','2026-04-17',4,'Clause 8.9.2 (i)'],['F014','Amendment & Revision Log Register','00','2026-03-20',1,'Clause 7.2.1.2'],['F015','Equip. Commissioning Checklist','00','2026-03-08',3,'Clause 6.4.4'],
  ['F016','Employee Declaration Note','00','2026-04-20',1,'Clause 4.1.3, 4.2.4'],['F017','Competency Checklist','00','2026-03-06',6,'Clause 6.2.5'],['F018','Training Record','00','2026-04-20',1,'Clause 6.2.5'],
  ['F019','Customer Complaint Form','00','2026-04-20',3,'Clause 7.9'],['F020','Master List of Documents','00','2026-03-10',1,'Clause 8.3.1'],['F021','Meeting Minute Form','00','2026-04-21',2,'Clause 5.7'],
- ['F022','Master List of Forms','00','2026-03-01',1,'Clause 8.3.1'],['F023','Equipment Maintenance Form','00','2026-03-13',1,'Clause 6.4.3, 6.4.13(g), 7.7.1(c)'],['F024','Master List of Equipment','00','2026-03-10',2,'Clause 6.7'],
+ ['F022','Master List of Forms','00','2026-06-15',1,'Clause 8.3.1'],['F023','Equipment Maintenance Form','00','2026-03-13',1,'Clause 6.4.3, 6.4.13(g), 7.7.1(c)'],['F024','Master List of Equipment','00','2026-03-10',2,'Clause 6.7'],
  ['F025','Organization Competence & Authorization Matrix','00','2026-03-07',1,'Clause 6.2.3 & 6.2.6'],['F026','Visitor Log','00','2026-02-28',1,'Clause 4.2.4'],['F027','Confidential Information Release Form','00','2026-04-21',1,'Clause 4.2.2'],
  ['F028','Non-conforming Work Log','00','2026-04-21',1,'Clause 7.10, 8.8'],['F029','Staff Personnel Feedback','00','2026-04-21',3,'Clause 8.9.2 (i)'],['F030','Send-Out, Receive-In & On-site Verification Form','00','2026-03-11',3,'Clause 6.4.4'],
  ['F031','FMEA Register Log','00','2026-04-08',1,'Clause 8.5'],['F032','FMEA Worksheet','00','2026-04-08',3,'Clause 8.5'],['F033','Contract Review Form','00','2026-03-16',1,'Clause 7.1.1, 7.1.3, 7.1.4, 7.1.8'],
@@ -33066,7 +33126,7 @@ function formVersion(no){ const f=formsList().find(x=>x.no===no)||formsSeedRecor
   return f; }
 function formActive(f){ return !!(f.issue)&&!f.obsolete; }
 // F022 listed F009 / F010 as 15 Jul 2026, but the forms themselves say 15 Apr / 16 Mar 2026 — the form's own date applies (Jay, 12 Oct 2026)
-const FORM_DATE_FIX={F009:['2026-07-15','2026-04-15'],F010:['2026-07-15','2026-03-16']};
+const FORM_DATE_FIX={F009:['2026-07-15','2026-04-15'],F010:['2026-07-15','2026-03-16'],F022:['2026-03-01','2026-06-15']}; // F022: 15 Jun 2026 (Jay, 25 Oct 2026)
 const FORMS_ADDED=['F035'];
 // amended in place on 25 Oct 2026 — Issue / Rev unchanged (Jay); the original files are kept for the MD
 const FORM_AMEND_NOTES={F005:'“Used for”, “(if applicable)”, “Correction & Corrective Action”, “Verified By”, 1-week return note, clause 8.7',F010:'New evaluation layout — Part A critical requirements, Part B score, decision and annual review rules (4 pages)',
@@ -35077,7 +35137,7 @@ async function eqFormsRegisterFix(){ if(!isAdmin(currentUser)||!_formsStore.load
 // ═══ PRINTOUTS — F015, F030, F023, F024 ═══
 const qfChk=x=>`<span style="font-family:'Segoe UI Symbol','MS Gothic',${QF_FONT};">${x?'☒':'☐'}</span>`;
 const qfAbs=(x,y,html,st='')=>`<div style="position:absolute;left:${x}pt;top:${y}pt;margin-top:-0.16em;${st}">${html}</div>`;
-async function f015Pdf(id,returnBlob){ const r=eqRef(id); if(!r) return; const c=r.commission||{items:{}}; const g=QF_LS, no='F015', fv=formVersion(no); const v={...fv,title:'Equipment Commissioning Checklist',footNo:'FORM F015'};
+async function f015Pdf(id,returnBlob){ const r=eqRef(id); if(!r) return; const c=r.commission||{items:{}}; const g=QF_LS, no='F015', fv=formVersion(no); const v={...fv,title:'Equipment Commissioning Checklist',footNo:'F015'};
   const F12=`12pt/14.8pt ${QF_FONT}`, B=`bold 12pt/1 ${QF_FONT}`; const xs=[72.25,107.45,320.2,421.05,490.25,554,769.75];
   const hdr=qfRow(xs,['No.','Activity','Verified?','Initials','Date','Comments'].map(t=>[`<b>${t}</b>`,'center']),{h:15.1,font:F12,pad:5.4});
   const row=(n,txt,h)=>{ const it=(c.items||{})[n]||{}; const t=n===12?`${qfE(txt)}<br/>Calibration Certificate No.:<br/><u>${qfE(c.certNo||'')||'&nbsp;'.repeat(40)}</u>`:n===16?`Calibration status label applied (with due date: <u>${qfE(qmsDate(c.due)||'')||'&nbsp;'.repeat(30)}</u>)`:qfE(txt);
@@ -35097,7 +35157,7 @@ async function f015Pdf(id,returnBlob){ const r=eqRef(id); if(!r) return; const c
     +qfAbs(0,473.7,'Clause 6.4.4 or Individual equipment',`width:${g.R}pt;text-align:right;font:10pt/1 ${QF_FONT};color:#a5a5a5;`);
   const pages=[p1,p2,p3].map((b,i)=>qfPage(g,no,v,i+1,3,b));
   return await qfExport(pages,{landscape:true,filename:`F015_${safeFileName(r.id)}.pdf`,label:'F015 Equipment Commissioning Checklist',returnBlob}); }
-async function f030Pdf(id){ const f=f030Of(id); if(!f) return; const g={...QF_P,rows:[84.7,96.7,117.05]}, no='F030', fv=formVersion(no); const v={...fv,title:fv.title||'Send-Out, Receive-In & On-site Verification Form',footNo:'FORM F030'};
+async function f030Pdf(id){ const f=f030Of(id); if(!f) return; const g={...QF_P,rows:[84.7,96.7,117.05]}, no='F030', fv=formVersion(no); const v={...fv,title:fv.title||'Send-Out, Receive-In & On-site Verification Form',footNo:'F030'};
   const B10=`bold 10pt/1 ${QF_FONT}`, F10=`10pt/12.3pt ${QF_FONT}`; const L=x=>(x-72).toFixed(2);
   const box=(top,html)=>`<div style="position:absolute;left:72pt;top:${top}pt;width:${(g.R-72).toFixed(2)}pt;">${html}</div>`;
   const hx=[50.65,135.85,298.85,362.7,539.85]; const hrow=(h,a,b,c,d)=>`<div style="margin-top:-0.5pt;">${qfRow(hx,[`<b>${a}</b>`,qfE(b),`<b>${c}</b>`,qfE(d)],{h,font:F10,pad:4.5})}</div>`;
@@ -35158,7 +35218,7 @@ async function exportF024Pdf(){ const fv=formVersion('F024'); const W=841.92,H=5
     const top=p===0?`<img src="${QF_LOGO}" style="position:absolute;left:381.6pt;top:11.5pt;width:87.5pt;height:85.3pt;"/>
       <div style="position:absolute;right:${(W-824.5).toFixed(1)}pt;top:81pt;margin-top:-0.16em;font:bold 10pt/1 ${QF_FONT};">LABORATORY MANAGEMENT FORM</div>
       <div style="position:absolute;left:34.55pt;top:91.7pt;width:789.9pt;height:22.5pt;border:0.9pt solid #000;box-sizing:border-box;"></div><div style="position:absolute;left:35pt;top:92.2pt;width:789pt;height:10.6pt;background:#e8e8e8;"></div><div style="position:absolute;left:410.6pt;top:102.7pt;width:0.9pt;height:11.5pt;background:#000;"></div>
-      ${[['DOCUMENT TITLE',`F024 - ${fv.title||'Master List of Equipment'}`,34.55,411.1],['ISSUE',fv.issue||'01',411.1,505],['REVISION',fv.rev||'00',505,600],['EFFECTIVE DATE',qmsDateLong(fv.effective)||'10 March 2026',600,705],['LOCATION','SAMM',705,824.45]].map(([h,val,x0,x1])=>`<div style="position:absolute;left:${x0}pt;width:${x1-x0}pt;top:93.6pt;margin-top:-0.16em;text-align:center;font:italic bold 8pt/1 ${QF_FONT};">${h}</div><div style="position:absolute;left:${x0}pt;width:${x1-x0}pt;top:105.1pt;margin-top:-0.16em;text-align:center;font:8pt/1 ${QF_FONT};">${qfE(val)}</div>`).join('')}
+      ${[['DOCUMENT TITLE',`F024 - ${fv.title||'Master List of Equipment'}`,34.55,411.1],['ISSUE',fv.issue||'01',411.1,505],['REVISION',fv.rev||'00',505,600],['EFFECTIVE DATE',qmsDate(fv.effective)||'10 Mar 2026',600,705],['LOCATION','SAMM',705,824.45]].map(([h,val,x0,x1])=>`<div style="position:absolute;left:${x0}pt;width:${x1-x0}pt;top:93.6pt;margin-top:-0.16em;text-align:center;font:italic bold 8pt/1 ${QF_FONT};">${h}</div><div style="position:absolute;left:${x0}pt;width:${x1-x0}pt;top:105.1pt;margin-top:-0.16em;text-align:center;font:8pt/1 ${QF_FONT};">${qfE(val)}</div>`).join('')}
       <div style="position:absolute;left:0;width:${W}pt;top:127.7pt;margin-top:-0.16em;text-align:center;font:bold 10pt/1 ${QF_FONT};">MASTER LIST OF EQUIPMENT</div>
       <div style="position:absolute;left:72pt;top:149.4pt;">${colHdr}${body}</div>`:`<div style="position:absolute;left:72pt;top:12.2pt;">${colHdr}${body}</div>`;
     const sign=p===N-1?`<div style="position:absolute;left:97.9pt;top:522pt;margin-top:-0.16em;font:bold 8pt/1 ${QF_FONT};">Updated by: ${qfE((staffNameOf(currentUser)||'').split(' ')[0])}</div><div style="position:absolute;left:339.6pt;top:522pt;margin-top:-0.16em;font:bold 8pt/1 ${QF_FONT};">Date: ${qfDmy(today)}</div><div style="position:absolute;left:508.9pt;top:522pt;margin-top:-0.16em;font:bold 8pt/1 ${QF_FONT};">Approved by: ${isAdmin(currentUser)||getUserRole(currentUser)==='Managing Director'?qfE((staffNameOf(currentUser)||'').split(' ')[0]):'<span style="display:inline-block;width:80pt;border-bottom:0.6pt solid #000;">&nbsp;</span>'}</div><div style="position:absolute;right:${(W-824.5).toFixed(1)}pt;top:533pt;margin-top:-0.16em;font:8pt/1 ${QF_FONT};color:#a5a5a5;">${qfE(fv.clauses||'Clause 6.7')}</div>`:'';
