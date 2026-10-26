@@ -4188,15 +4188,25 @@ const _blobs=new Map(), _filePending=new Set();
 function fileBlobUrl(u,purpose){ const p=r2PathOf(u); if(!p) return Promise.resolve(u); if(p.startsWith('settings/')) return Promise.resolve(fileUrl(u));
   const ctrl=CTRL_FILE_RE.test(p); if(!ctrl&&_blobs.has(p)) return _blobs.get(p);
   const job=(async()=>{ const r=await fileFetchRaw(p,purpose); let b=await r.blob();
-    if(ctrl&&purpose!=='master'){ if(/pdf/i.test(b.type||'')||/\.pdf$/i.test(p)) b=await stampControlled(b); else if(!isAdmin(currentUser)) throw new Error('This controlled file can only be opened by the Managing Director.'); }
+    if(ctrl&&purpose!=='master'){ if(/pdf/i.test(b.type||'')||/\.pdf$/i.test(p)) b=await stampControlled(b); else if(!isAdmin(currentUser)&&!(p.startsWith('qms/forms/')&&canSeeQms(currentUser))) throw new Error('This controlled file can only be opened by the Managing Director.'); }
     return URL.createObjectURL(b); })();
   if(!ctrl){ _blobs.set(p,job); job.catch(()=>_blobs.delete(p)); } _filePending.add(job); job.finally(()=>_filePending.delete(job)).catch(()=>{}); return job; }
 async function filesSettle(){ await new Promise(r=>setTimeout(r,0)); await Promise.allSettled([..._filePending]); }
-// open a stored file in a new tab (controlled documents stamped); purpose 'master' = MD's clean copy
+// open a stored file in a new tab (controlled documents stamped); purpose 'master' = MD's clean copy.
+// The tab shows the file in a small viewer page (a new tab cannot be sent straight to a file held in this page's memory).
+function fileViewerHtml(b,name,kind){ const t=escapeHtml(name||'File'); return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${t}</title>
+  <style>html,body{margin:0;height:100%;background:#525659;font-family:Arial,sans-serif}.bar{height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:#0f1f3d;color:#fff;font-size:13px}.bar a{color:#fff;background:#2563eb;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12px}iframe,img{border:0;display:block;width:100%;height:calc(100% - 40px);object-fit:contain;background:#525659}</style></head>
+  <body><div class="bar"><span>${t}</span><a href="${b}" download="${t}">⬇ Save</a></div>${kind==='img'?`<img src="${b}" alt="${t}">`:`<iframe src="${b}" title="${t}"></iframe>`}</body></html>`; }
+function fileShowInPage(b,name,kind){ cOv(`📄 ${escapeHtml(name||'File')}`,`<div style="height:75vh;">${kind==='img'?`<img src="${b}" style="max-width:100%;max-height:100%;display:block;margin:auto;">`:`<iframe src="${b}" style="border:0;width:100%;height:100%;"></iframe>`}</div>`); }
 function openStoredFile(u,purpose,name){ const p=r2PathOf(u); if(!p) return _origOpen(u,'_blank');
-  const w=_origOpen('','_blank'); try{ if(w) w.document.write('<p style="font-family:Arial;padding:24px;color:#555;">Opening the file…</p>'); }catch(e){}
-  fileBlobUrl(u,purpose).then(b=>{ if(purpose==='master'||!/\.(pdf|png|jpe?g|gif|webp)$/i.test(p)){ const a=document.createElement('a'); a.href=b; a.download=name||p.split('/').pop().replace(/^\d+_/,''); document.body.appendChild(a); a.click(); a.remove(); if(w) w.close(); }
-    else if(w) w.location.href=b; else location.href=b; }).catch(e=>{ try{ if(w) w.close(); }catch(x){} alert(e.message||e); }); return w; }
+  const fname=name||p.split('/').pop().replace(/^\d+_/,''); const kind=/\.pdf$/i.test(p)?'pdf':/\.(png|jpe?g|gif|webp)$/i.test(p)?'img':'other';
+  const dl=purpose==='master'||kind==='other';
+  const w=dl?null:_origOpen('','_blank'); try{ if(w) w.document.write('<p style="font-family:Arial;padding:24px;color:#555;">Opening the file…</p>'); }catch(e){}
+  fileBlobUrl(u,purpose).then(b=>{
+    if(dl){ const a=document.createElement('a'); a.href=b; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); return; }
+    if(w&&!w.closed){ try{ w.document.open(); w.document.write(fileViewerHtml(b,fname,kind)); w.document.close(); return; }catch(e){} }
+    fileShowInPage(b,fname,kind); // pop-up blocked: show it over the LIMS
+  }).catch(e=>{ try{ if(w) w.close(); }catch(x){} alert(e.message||e); }); return w; }
 (function(){
   window.fetch=async function(input,init){
     try{
@@ -33303,7 +33313,7 @@ async function renderForms(){
         <td>${escapeHtml(f.issue?v.issue:'—')}</td><td>${escapeHtml(f.issue?v.rev:'—')}</td><td style="white-space:nowrap;">${f.issue?qmsDate(v.effective):'—'}</td><td>${escapeHtml(String(v.pages||''))}</td><td style="font-size:12px;">${escapeHtml(v.clauses||'')}</td>
         <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(FORM_LIMS_USE[f.no]||'—')}</td>
         <td style="white-space:nowrap;"><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
-          ${v.file?.url?`<button class="btn btn-outline btn-sm" onclick="openSignedUrl('${escapeForJsAttr(v.file.url)}')" title="${escapeHtml(v.file.name||'template')}">⬇ Template</button>`:''}${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" title="Attach the template file (no revision)" onclick="attachFormTemplate('${f.no}')">📎</button>`:''}${isAdmin(currentUser)&&((f.originals||[]).length||(f.fileHistory||[]).length)?`<button class="btn btn-outline btn-sm" title="Original files (MD only)" onclick="showFormOriginals('${f.no}')">🗂️ ${(f.originals||[]).length+(f.fileHistory||[]).length}</button>`:''}
+          ${v.file?.url?(/\.pdf$/i.test(v.file.name||v.file.url)?`<button class="btn btn-outline btn-sm" onclick="openStoredFile('${escapeForJsAttr(v.file.url)}')" title="${escapeHtml(v.file.name||'template')} — opens as a controlled copy">👁 View</button>`:`<button class="btn btn-outline btn-sm" onclick="openStoredFile('${escapeForJsAttr(v.file.url)}','download','${escapeForJsAttr(v.file.name||'')}')" title="${escapeHtml(v.file.name||'template')}">⬇ Template</button>`):''}${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" title="Attach the template file (no revision)" onclick="attachFormTemplate('${f.no}')">📎</button>`:''}${isAdmin(currentUser)&&((f.originals||[]).length||(f.fileHistory||[]).length)?`<button class="btn btn-outline btn-sm" title="Original files (MD only)" onclick="showFormOriginals('${f.no}')">🗂️ ${(f.originals||[]).length+(f.fileHistory||[]).length}</button>`:''}
           ${p&&p.status!=='Approved'&&canApproveForms(currentUser)?`<button class="btn btn-primary btn-sm" onclick="approveFormChange('${f.no}')">✅ Approve</button>`:''}
           ${p?((p.status!=='Approved'&&(canApproveForms(currentUser)||p.preparedBy===currentUser))||canApproveForms(currentUser)?`<button class="btn btn-outline btn-sm" onclick="cancelFormChange('${f.no}')">✕ Withdraw change</button>`:''):`<button class="btn btn-outline btn-sm" onclick="openFormRevise('${f.no}')">✏️ Revise</button>`}
           ${(f.history||[]).length?`<button class="btn btn-outline btn-sm" onclick="showFormHistory('${f.no}')">🕘 ${f.history.length}</button>`:''}</div></td></tr>`; }).join('')}
