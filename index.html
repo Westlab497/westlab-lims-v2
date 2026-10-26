@@ -1033,7 +1033,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
           <div class="page-title">🏢 Customer Database</div>
           <div class="page-sub" id="cust-sub">All registered customers</div>
         </div>
-        <button class="btn btn-primary" onclick="openAddCustomerModal()">+ Add Customer</button>
+        <button class="btn btn-primary" id="cust-add-btn" onclick="openAddCustomerModal()">+ Add Customer</button>
       </div>
       <div class="kpi-row">
         <div class="kpi-mini"><div class="kpi-val" id="cust-kpi-total">0</div><div class="kpi-lbl">Total Customers</div></div>
@@ -3885,14 +3885,14 @@ textarea.form-control{resize:vertical;min-height:70px;}
       </div>
       <div class="form-group"><label class="form-label">Role <span class="req">*</span></label>
         <select class="form-control" id="staff-role" onchange="updateStaffRoleDesc()">
-          <option value="Engineer">Engineer / Technician</option>
+          <option value="Engineer">Engineer (My Jobs, perform calibration)</option>
           <option value="Manager">Technical Manager (Approve certs, view reports, assign jobs)</option>
           <option value="Quality Manager">Quality Manager (Same as Technical Manager, plus sole sticker approval authority)</option>
           <option value="Coordinator">Coordinator (Create/edit jobs, receive items, pricing, deposits)</option>
           <option value="Sales">Sales (Lead capture only)</option>
           <option value="Receptionist">Receptionist (Front desk: everything coming in and going out, plans the driver — no prices)</option>
           <option value="Driver">Driver (own trips: pickups and deliveries — no prices)</option>
-          <option value="HR">HR / Accounts (Leave, claims, attendance only)</option>
+          <option value="HR">HR (Leave, claims, attendance only)</option>
           <option value="Admin">Admin (Full access)</option>
           <option value="Managing Director">Managing Director (Full access, same as Admin)</option>
         </select>
@@ -4709,9 +4709,8 @@ function showToast(msg, type='info', duration=2500, action=null){
   if(!t){
     t=document.createElement('div');
     t.id='wl-toast';
+    // phones: messages at the top, so they never cover the buttons at the bottom of a window (toastPlace)
     t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:1000010;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
-    // phones: messages at the top, so they never cover the buttons at the bottom of a window
-    if(window.matchMedia('(max-width: 820px)').matches) t.style.cssText='position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;right:10px;z-index:1000010;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
     document.body.appendChild(t);
   }
   const item=document.createElement('div');
@@ -4721,17 +4720,21 @@ function showToast(msg, type='info', duration=2500, action=null){
     border-left:4px solid ${colors[type]||colors.info};
     animation:slideInToast .2s ease;max-width:280px;pointer-events:none;`;
   item.textContent=msg;
-  // keep the stack short so messages never bury the page (phones: 2, desktop: 4); tap a message to dismiss it
+  // keep the stack short so messages never bury the page (phones: 2, desktop: 4); its × dismisses a message
   const phone=window.matchMedia('(max-width: 820px)').matches; while(t.children.length>=(phone?2:4)) t.firstElementChild.remove();
   if(phone){ item.style.maxWidth='none'; item.style.fontSize='12.5px'; item.style.padding='8px 12px'; }
-  item.style.pointerEvents='auto'; item.style.cursor='pointer'; item.title='Tap to dismiss'; item.addEventListener('click',e=>{ if(e.target===item) item.remove(); });
+  // a message never blocks a click on what is under it: only its own × (and its action button) can be clicked
+  { item.style.display='flex'; item.style.alignItems='flex-start'; item.style.gap='8px'; const tx=document.createElement('span'); tx.style.flex='1'; tx.textContent=msg; item.textContent=''; item.appendChild(tx);
+    const x=document.createElement('button'); x.type='button'; x.textContent='×'; x.title='Dismiss'; x.setAttribute('aria-label','Dismiss message');
+    x.style.cssText='pointer-events:auto;background:none;border:none;color:#cbd5e1;font-size:16px;line-height:1;padding:0 2px;margin:-1px -6px 0 0;cursor:pointer;flex-shrink:0;';
+    x.onclick=e=>{ e.stopPropagation(); item.remove(); }; item.appendChild(x); }
   if(action&&action.label){
     const btn=document.createElement('button'); btn.textContent=action.label;
     btn.style.cssText='margin-left:12px;background:#fff;color:#1e293b;border:none;border-radius:6px;padding:3px 10px;font-weight:600;font-size:12px;cursor:pointer;';
     btn.onclick=()=>{ try{ action.onclick(); }catch(e){ console.error(e); } item.remove(); };
-    item.appendChild(btn); item.style.pointerEvents='auto'; item.style.maxWidth='380px';
+    btn.style.pointerEvents='auto'; btn.style.flexShrink='0'; item.insertBefore(btn,item.lastChild); item.style.maxWidth='380px';
   }
-  t.appendChild(item);
+  t.appendChild(item); toastPlace(t);
   setTimeout(()=>{
     item.style.transition='opacity .3s';
     item.style.opacity='0';
@@ -4739,6 +4742,26 @@ function showToast(msg, type='info', duration=2500, action=null){
   },duration);
 }
 
+// where the messages go: their usual corner, or — while a window (modal) is open — a corner that does not cover the window's buttons
+function toastPlace(t){ try{
+  const phone=window.matchMedia('(max-width: 820px)').matches, W=innerWidth, H=innerHeight;
+  const base='position:fixed;z-index:1000010;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+  const pos=phone?[ 'top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;right:10px;', 'bottom:calc(env(safe-area-inset-bottom,0px) + 10px);left:10px;right:10px;' ]
+    :[ 'bottom:24px;right:24px;align-items:flex-end;', 'top:24px;right:24px;align-items:flex-end;', 'bottom:24px;left:24px;align-items:flex-start;', 'top:24px;left:24px;align-items:flex-start;', 'top:8px;left:50%;transform:translateX(-50%);align-items:center;' ];
+  t.style.cssText=base+pos[0];
+  // the open window: the topmost full-screen fixed layer under the middle of the screen
+  const ov=(document.elementsFromPoint(W/2,H/2)||[]).find(e=>!t.contains(e)&&getComputedStyle(e).position==='fixed'&&(r=>r.width>=W*0.9&&r.height>=H*0.9)(e.getBoundingClientRect()));
+  if(!ov) return;
+  const ctl=[...ov.querySelectorAll('button,a[href],a[onclick],input:not([type=hidden]),select,textarea,[onclick]')].map(e=>e.getBoundingClientRect()).filter(r=>r.width>0&&r.height>0&&r.bottom>0&&r.top<H&&r.right>0&&r.left<W);
+  // the window itself (the box inside the dark layer): covering none of its buttons comes first, then covering as little of it as possible
+  let dlg=ov; for(let k=0;k<4&&dlg&&dlg.getBoundingClientRect().width>=W*0.98;k++) dlg=[...dlg.children].sort((a,b)=>b.getBoundingClientRect().height-a.getBoundingClientRect().height)[0]; const db=dlg?dlg.getBoundingClientRect():null;
+  const score=()=>{ const tr=t.getBoundingClientRect(); const ov2=(a,b)=>Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left))*Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+    return ctl.filter(r=>ov2(r,tr)>0).length*1e7+(db?ov2(db,tr):0); };
+  let best=0, bestN=Infinity; for(let i=0;i<pos.length;i++){ t.style.cssText=base+pos[i]; const n=score(); if(n<bestN){ best=i; bestN=n; } if(!n) break; }
+  // phones (full-width messages): when both ends cover a button, the first free band further down the screen
+  if(phone&&bestN>=1e7){ t.style.cssText=base+pos[0]; const h=t.getBoundingClientRect().height; for(let y=10;y+h<H-4;y+=24){ const p2=`top:${y}px;left:10px;right:10px;`; t.style.cssText=base+p2; if(score()<1e7){ pos.push(p2); best=pos.length-1; break; } } }
+  t.style.cssText=base+pos[best];
+}catch(e){} }
 // Show saving spinner on buttons during async operations
 function setSaving(btnEl, saving){
   if(!btnEl) return;
@@ -4895,11 +4918,11 @@ function setCurrentUser(username){
   const av=el('topbar-avatar');
   if(av){av.textContent=u.name.slice(0,2).toUpperCase();av.className='avatar '+(u.avatarClass||'');}
   const tu=el('topbar-username');if(tu)tu.textContent=u.name;
-  const tr=el('topbar-role');if(tr)tr.textContent=u.display;
+  const tr=el('topbar-role');if(tr)tr.textContent=u.role?roleLabel(u.role):u.display;
   // Sidebar footer user block
   const sfa=el('sidebar-footer-avatar');if(sfa)sfa.textContent=u.name.slice(0,2).toUpperCase();
   const sfn=el('sidebar-footer-name');if(sfn)sfn.textContent=u.name;
-  const sfr=el('sidebar-footer-role');if(sfr)sfr.textContent=u.display;
+  const sfr=el('sidebar-footer-role');if(sfr)sfr.textContent=u.role?roleLabel(u.role):u.display;
   try{localStorage.setItem('wl_sess',JSON.stringify({user:username,token:_authToken,fileToken:_fileToken,exp:_authExp,time:Date.now()}));}catch(e){}
   applyRoleUI();
   applySettings(_settings);
@@ -5019,6 +5042,9 @@ function doLogout(){
 
 // ── ROLE-BASED UI ──
 // Roles: Admin, Manager, Engineer, Sales, HR
+// one display name per role everywhere (the stored role value 'Manager' stays internally)
+const ROLE_LABELS={Admin:'Admin','Managing Director':'Managing Director','Quality Manager':'Quality Manager',Manager:'Technical Manager',Engineer:'Engineer',Coordinator:'Coordinator',Sales:'Sales',HR:'HR',Receptionist:'Receptionist',Driver:'Driver',Signatory:'Technical Manager'};
+function roleLabel(r){ return ROLE_LABELS[r]||r||''; }
 function getUserRole(username){
   // Role Simulation — only affects the CURRENT user's own session, only while Testing Mode is on,
   // and only when checking their own role (never affects how other users/records are treated).
@@ -5041,6 +5067,12 @@ function isHR(u){ const r=getUserRole(u||currentUser); return r==='Admin'||r==='
 function canCreateJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator'].includes(r); }
 function canPerformCal(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Engineer','Manager','Quality Manager'].includes(r); }
 function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
+// customer records are added / edited only by the office roles (not Engineer, Driver, Receptionist, HR)
+const CUST_EDIT_MSG='Customer records are added and edited by the Coordinator, Sales, Technical Manager, Quality Manager or Managing Director.';
+function canEditCustomers(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator','Sales','Manager','Quality Manager'].includes(r); }
+// a certificate amendment request is approved only by the MD or the QM (QC before hand-over); one the QM requested only by the MD
+function canApproveAmendment(u,a){ const r=getUserRole(u||currentUser); if(!['Admin','Managing Director','Quality Manager'].includes(r)) return false;
+  if(a&&a.requestedBy&&(USERS[a.requestedBy]?.role==='Quality Manager')&&!['Admin','Managing Director'].includes(r)) return false; return true; }
 function canRequestAmendment(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator','Sales'].includes(r); }
 function canViewAllJobs(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager','Coordinator'].includes(r); }
 function canViewReports(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Manager','Quality Manager'].includes(r); }
@@ -8796,7 +8828,7 @@ function populateUserDropdown(selectId, includeAdmin=false, engineersOnly=false)
     if(engineersOnly) return s.role==='Engineer'||s.role==='Admin'||s.role==='Managing Director'||s.role==='Manager'||s.role==='Quality Manager';
     return true;
   }).forEach(s=>{
-    sel.innerHTML+=`<option value="${s.username}">${s.name} (${s.role})</option>`;
+    sel.innerHTML+=`<option value="${s.username}">${s.name} (${roleLabel(s.role)})</option>`;
   });
   if(current) sel.value=current;
 }
@@ -9813,6 +9845,8 @@ function openApproveItemModal(jobNo, itemIdx){
   const approveBtnEl=el('approve-job-btn');
   const noticeEl=el('approve-signatory-notice');
   if(approveBtnEl) approveBtnEl.style.display=isSignatory?'':'none';
+  // "Approve & Complete Job" only for the last open item; otherwise the item alone is approved
+  if(approveBtnEl){ const lastOpen=(j.items||[]).every((x,k)=>k===itemIdx||x.status==='Deleted'||x.status==='Completed'||x.status==='Returned - Abnormal'); approveBtnEl.textContent=lastOpen?'✓ Approve & Complete Job':'✓ Approve item'; }
   if(noticeEl){
     if(isSignatory){
       noticeEl.style.display='none';
@@ -9981,9 +10015,9 @@ async function submitAmendmentRequest(jobNo,itemIdx){
   addAudit('📝',`Amendment requested for ${jobNo} — Certificate ${getJob(jobNo)?.items?.[itemIdx]?.certNo}`);
 }
 async function approveAmendment(jobNo,itemIdx,amendmentId){
-  if(!canApprove(currentUser)){alert('Only an Approved Signatory can approve a certificate amendment.');return;}
   const job=getJob(jobNo); const item=job?.items?.[itemIdx]; const amendment=item?.amendments?.find(a=>a.id===amendmentId);
   if(!amendment)return;
+  if(!canApproveAmendment(currentUser,amendment)){alert(['Admin','Managing Director','Quality Manager'].includes(getUserRole(currentUser))&&USERS[amendment.requestedBy]?.role==='Quality Manager'?'The Quality Manager requested this amendment — only the Managing Director approves it.':'A certificate amendment is approved by the Managing Director or the Quality Manager.');return;}
   if(!confirm(`Approve Amendment No. ${amendment.amendmentNo} to Certificate ${item.certNo}?\n\n"${amendment.description}"`))return;
   let selfAmd='';
   if(amendment.requestedBy===currentUser){ const r=prompt('You requested this amendment yourself. Self-approval is avoided — allowed only when urgent.\n\nReason:',''); if(r===null) return; if(!r.trim()){ alert('A reason is needed.'); return; } selfAmd=r.trim(); }
@@ -10425,10 +10459,11 @@ async function showCertForItem(jobNo, itemIdx){
   const cd={...item.calData};
   if(!cd.job_no) cd.job_no=j.jobNo;
   if(!cd.cert_no) cd.cert_no=item.certNo;
-  if(item.approvedBy){
-    const staffRec=_staff&&_staff.find(x=>x.username===item.approvedBy);
-    if(staffRec){cd.approved_by=staffRec.certName||staffRec.name;cd.approvedByUsername=item.approvedBy;}
-  }
+  { const signer=cd.amended?.issuedBy||item.approvedBy; // an amended certificate shows the signatory who issued it, not the original one
+  if(signer){
+    const staffRec=_staff&&_staff.find(x=>x.username===signer);
+    if(staffRec){cd.approved_by=staffRec.certName||staffRec.name;cd.approvedByUsername=signer;}
+  } }
   if(cd.calibratedByUsername){
     const calStaff=_staff&&_staff.find(x=>x.username===cd.calibratedByUsername);
     if(calStaff) cd.calibrated_by=calStaff.certName||calStaff.name||cd.calibrated_by;
@@ -13249,7 +13284,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
   // Paginate. Items (each kept together with its SoC lines when it fits) fill the pages. The totals +
   // signature block then goes on the last page:
   //  • fits → normal;
-  //  • nearly fits (page would need to shrink to no less than 85%) → kept on the same page, which is
+  //  • nearly fits (page would need to shrink to no less than 97%, so text stays 8 pt or larger) → kept on the same page, which is
   //    drawn a little taller and scaled to A4 — no extra page;
   //  • clearly doesn't fit → the last item moves to a new page WITH the totals, so a page never
   //    carries only the totals and signatures.
@@ -13264,7 +13299,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
       cur.rows.push(row); cur.used+=hs[ri]; if(!cur.gids.includes(gi)) cur.gids.push(gi);
     });
   });
-  const MIN_SCALE=0.85, need=footH+10;
+  const MIN_SCALE=0.97, need=footH+10; // a nearly-full last page may shrink only so far that 11 px text stays 8 pt (Jay, 27 Oct 2026); otherwise the last item moves on with the totals
   let last=pages[pages.length-1], tallLast=false;
   if(last.used+need>avail){
     if(last.used+need<=avail/MIN_SCALE) tallLast=true;
@@ -13284,14 +13319,16 @@ async function exportQuotationV2Pdf(quotationId,opts){
   const pageHtml=pages.map((pg,pi)=>{
     const isLast=pi===pageCount-1, tall=isLast&&tallLast;
     return `<div class="pdf-doc" style="${tall?tallStyle:pageStyle}">
-      ${letterhead}${custBlock(pi+1,pageCount)}
+      ${letterhead}${custBlock(pi+1,pageCount+1)}
       <table style="width:100%;border-collapse:collapse;table-layout:fixed;">${COLS}${tableHead}${pg.rows.join('')}</table>
       ${isLast?(tall?`<div style="margin-top:14px;">${footerBlock}</div>`:`<div style="position:absolute;left:${PX}px;right:${PX}px;bottom:${BOTTOM}px;">${footerBlock}</div>`):''}
     </div>`;
   });
   const extraTerms=qtIsLegacyDefaultTerms(q.termsConditions)?'':String(q.termsConditions||'').trim();
+  // the Terms & Conditions page counts as a page: "Page x of N" includes it (Jay, 27 Oct 2026)
   const termsPage=`<div class="pdf-doc" style="${pageStyle}font-size:12px;">
       ${letterhead}
+      <div style="text-align:right;font-size:12.5px;margin:-2px 0 2px;">QUOTATION : ${esc(q.quotationNo)} &nbsp;·&nbsp; Page ${pageCount+1} of ${pageCount+1}</div>
       <div style="text-align:center;font-weight:bold;font-size:13.5px;margin:4px 0 12px;">Term &amp; Condition</div>
       <ol style="padding-left:20px;margin:0;line-height:1.5;">
       <li>This quotation is valid for 30 days from the date of issue</li>
@@ -14169,7 +14206,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
       <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;text-align:center;">
         <colgroup><col style="width:34%"><col><col><col style="width:17%"><col><col></colgroup>
         <tr>${['DOCUMENT TITLE','ISSUE','REVISION','EFFECTIVE DATE','PAGE NO.','LOCATION'].map(h=>`<td style="border:1px solid #000;padding:3px 4px;font-weight:bold;background:#e9edf2;">${h}</td>`).join('')}</tr>
-        <tr>${[`${CRF_DOC.no}: ${CRF_DOC.title}`,CRF_DOC.issue,CRF_DOC.revision,CRF_DOC.effective,`${pageNo} of ${pageCount}`,CRF_DOC.location].map(v=>`<td style="border:1px solid #000;padding:4px;">${v}</td>`).join('')}</tr>
+        <tr>${[`${CRF_DOC.no}: ${CRF_DOC.title}`,CRF_DOC.issue,CRF_DOC.revision,CRF_DOC.effective,`${pageNo} of ${pageCount}`,CRF_DOC.location].map((v,i)=>`<td${i===4?' data-crfpg="1"':''} style="border:1px solid #000;padding:4px;">${v}</td>`).join('')}</tr>
       </table>
     </div>`;
   const footer=`<div style="position:absolute;left:48px;right:48px;bottom:24px;text-align:center;font-size:9px;line-height:1.45;color:#333;">
@@ -14255,7 +14292,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   // Slightly too tall (up to ~10%): shrink this record a touch so it stays on one page. The
   // scaled block is laid out a little wider first, so it keeps the full width after scaling.
   const k=avail/h;
-  if(k>=0.9){
+  if(k>=0.93){ // body text 11.5 px = 8.6 pt: shrinking stops at 8 pt (Jay, 27 Oct 2026) — a longer record takes a second page
     const kk=Math.floor(k*1000)/1000;
     return [pageWrap(`<div style="width:${(698/kk).toFixed(1)}px;transform:scale(${kk});transform-origin:top left;">${whole}</div>`,1,1)];
   }
@@ -14282,6 +14319,8 @@ async function exportEntryCapabilityReviewPdf(entryId){
   pdfSignatureWarning(missing,blocked);
   const pages=[];
   for(let i=0;i<reviewedItems.length;i++) pages.push(...await buildContractReviewPages(entry,reviewedItems[i],i+1,reviewedItems.length,loadedSigs));
+  // page numbers run across the whole PDF ("1 of 4 … 4 of 4"), not per item (Jay, 27 Oct 2026)
+  const NP=pages.length; pages.forEach((h,i)=>{ pages[i]=h.replace(/(<td data-crfpg="1"[^>]*>)[^<]*/,`$1${i+1} of ${NP}`); });
   await exportPagedPdf(pages,`F033_Contract_Review_${String(entry.name||entry.id||'enquiry').replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`,'Contract Review Form (F033)',reviewedItems.length,true);
 }
 async function exportCapabilityReviewPdf(){
@@ -18031,7 +18070,7 @@ async function payslipPdf(ym,u,returnBlob){
   if(!canPayroll()&&(u!==currentUser||run.status!=='Paid')) return null;
   const lh=await westlabQtLetterhead(); const name=`Payslip_${ym}_${safeFileName(l.name)}.pdf`;
   // a long payslip (many claims / allowances) is shrunk a little onto one sheet; longer still, it continues on page 2 instead of becoming unreadably small
-  const {pages}=await pdfPaginateHtml(payslipHtml(run,l,lh),{landscape:false,minScale:0.85});
+  const {pages}=await pdfPaginateHtml(payslipHtml(run,l,lh),{landscape:false,minScale:0.97}); // shrink at most so 11 px text stays 8 pt (Jay, 27 Oct 2026); longer → page 2
   return await exportPagedPdf(pages,name,`Payslip ${ym} — ${l.name}`,1,!returnBlob,returnBlob?{returnBlob:true}:{});
 }
 async function payEmailSlip(ym,u,quiet){
@@ -18952,12 +18991,12 @@ function qftPages(tpl,fv,overlays,pageCount,landscape){ const st=['','font-weigh
       h+=`<div${pgA} style="position:absolute;left:${t[0]}pt;top:${t[1]}pt;margin-top:-0.16em;white-space:pre;font:${t[2]}pt/1 ${fam};${st[t[3]&3]||''}">${qfE(s)}</div>`; });
     return `<div style="position:relative;width:${landscape?841.92:595.32}pt;height:${landscape?595.32:841.92}pt;background:#fff;color:#000;overflow:hidden;font-family:${QF_FONT};">${h}${ov.html||''}</div>`; }); }
 // a value printed on a form. A value with a box (w and h, or w alone = one line of its size) is fitted when the PDF is made
-// (qfFitPages): it wraps inside the box and shrinks down to 7 pt; if it still does not fit it ends "… (cont. p.N)" and the full
+// (qfFitPages): it wraps inside the box and shrinks down to 8 pt (never smaller — Jay, 27 Oct 2026: printed values are at least 8 pt); if it still does not fit it ends "… (cont. p.N)" and the full
 // text goes on a continuation page. o.mw: a one-line value no wider than this · o.free: wrap downwards without a limit
 // o.lines: box height in lines · o.min: smallest size · o.pre: keep line breaks · o.label: its name on the continuation page
 // x = null: placed where it stands (e.g. inside a table cell) · o.bottom / o.mid: the text sits at the bottom / in the middle of its box when it needs fewer lines than the box has
-const qftTxt=(x,y,s,o={})=>{ const size=o.size||9, fit=!o.free&&(o.w||o.mw), h=o.h||(o.w&&!o.free?+((o.lines||1)*size*1.15+0.8).toFixed(2):0);
-  return `<div${fit?` data-qfit="1" data-qs="${size}" data-qmin="${Math.min(size,o.min||7)}"${o.label?` data-qlab="${qfE(o.label)}"`:''}${o.bottom||o.mid?` data-qbot="${o.mid?'m':'1'}"`:''}`:''} style="${x==null?(o.w?'position:relative;':'position:relative;display:inline-block;vertical-align:middle;'):`position:absolute;left:${x}pt;top:${y}pt;`}${o.w?`width:${o.w}pt;overflow-wrap:break-word;${o.pre?'white-space:pre-line;':'white-space:normal;'}`:`white-space:nowrap;${o.mw?`max-width:${o.mw}pt;`:''}`}${o.center?'text-align:center;':''}font:${size}pt/1.15 ${QF_FONT};${o.bold?'font-weight:bold;':''}color:#000;overflow:hidden;${h?`max-height:${h}pt;`:''}">${qfE(s)}</div>`; };
+const qftTxt=(x,y,s,o={})=>{ const size=Math.max(8,o.size||9), fit=!o.free&&(o.w||o.mw), h=o.h||(o.w&&!o.free?+((o.lines||1)*size*1.15+0.8).toFixed(2):0);
+  return `<div${fit?` data-qfit="1" data-qs="${size}" data-qmin="${Math.min(size,Math.max(8,o.min||8))}"${o.label?` data-qlab="${qfE(o.label)}"`:''}${o.alt?` data-qalt="${qfE(o.alt)}"`:''}${o.bottom||o.mid?` data-qbot="${o.mid?'m':'1'}"`:''}`:''} style="${x==null?(o.w?'position:relative;':'position:relative;display:inline-block;vertical-align:middle;'):`position:absolute;left:${x}pt;top:${y}pt;`}${o.w?`width:${o.w}pt;overflow-wrap:break-word;${o.pre?'white-space:pre-line;':'white-space:normal;'}`:`white-space:nowrap;${o.mw?`max-width:${o.mw}pt;`:''}`}${o.center?'text-align:center;':''}font:${size}pt/1.15 ${QF_FONT};${o.bold?'font-weight:bold;':''}color:#000;overflow:hidden;${h?`max-height:${h}pt;`:''}">${qfE(s)}</div>`; };
 // does value s fit a qftTxt box (w × h pt) at `size` pt? — used to give a register row the height its values need
 let _qftMeas=null;
 function qftFits(s,w,h,size,pre){ if(!_qftMeas||!_qftMeas.isConnected){ _qftMeas=document.createElement('div'); _qftMeas.style.cssText='position:fixed;left:-40000px;top:0;'; document.body.appendChild(_qftMeas); }
@@ -18999,24 +19038,54 @@ async function f008Pdf(){ const fv=formVersion('F008'); const T=(await qft('F008
   const L=(_externalPartners||[]).filter(p=>p.asl&&['Active','Suspended'].includes(p.asl.status)).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
   const R=[]; (_externalPartners||[]).forEach(p=>(p.asl?.log||[]).forEach(l=>{ if(['Suspended','Removed'].includes(l.to)) R.push({p,l}); })); R.sort((a,b)=>String(a.l.at).localeCompare(String(b.l.at)));
   const rowTops=[170.1,194.0,217.9,241.6,265.5,289.4,313.2,337.0,360.9,384.8,408.5,432.4,456.3,480.1]; const cols=[[72,100.1],[100.1,246.3],[246.3,312.8],[312.8,420.6],[420.6,507.9],[507.9,595],[595,688.5],[688.5,769.5]];
-  const B=qftBoxes(T); const chunks=[]; for(let i=0;i<Math.max(1,L.length);i+=14) chunks.push(L.slice(i,i+14));
-  const rChunks=[]; for(let i=0;i<Math.max(1,R.length);i+=4) rChunks.push(R.slice(i,i+4));
+  // approved suppliers (page 1 table): 8 pt, a row grows to the lines its values need (up to 4; the rest on a continuation page), as
+  // many rows per page as fit; the page is ruled down to the bottom with empty rows like the paper form (Jay, 27 Oct 2026)
+  const xs1=[...cols.map(c=>c[0]),769.5], TOP1=170.06, BOT1=503.98, RH1=23.88; await qfFonts();
+  const lCells=p=>[p.name+(p.asl.kind==='external'?' (external provider)':''),p.contactPerson||'',[p.phone||p.mobile,p.email].filter(Boolean).join(' / '),p.asl.product||'',qfDmy(p.asl.evalDate),'',qfDmy(p.asl.nextEval)];
+  const lH=k=>+Math.max(RH1,k*8*1.15+2.5).toFixed(2);
+  const lK=L.map(p=>{ const c=lCells(p); for(let k=2;k<=4;k++){ if(c.every((t,i)=>!t||qftFits(t,cols[i+1][1]-cols[i+1][0]-4,lH(k)-1.5,8))) return k; } return 4; });
+  const chunks=[[]]; { let used=0; L.forEach((p,i)=>{ const h=lH(lK[i]); if(chunks[chunks.length-1].length&&used+h>BOT1-TOP1+0.5){ chunks.push([]); used=0; } chunks[chunks.length-1].push(p); used+=h; }); }
+  // removed / suspended suppliers (page 2 table): 8 pt, a row takes as many lines as it needs (Jay, 27 Oct 2026). The rows that fit
+  // above the sign-off stay on the form's page 2 (up to 6 lines a row there); the others follow on continuation pages with the same
+  // columns, where a row takes all the lines it needs. The reason is printed as written — no "Removed: " prefix; a suspension is
+  // marked under its date (the column says "Date Removed").
+  const rc=[[72,100.1],[100.1,246.3],[246.3,312.8],[312.8,420.6],[420.6,507.9],[507.9,595],[595,688.5],[688.5,769.5]], rxs=[...rc.map(c=>c[0]),769.5];
+  const rCells=({p,l})=>[p.name,p.contactPerson||'',[p.phone||p.mobile,p.email].filter(Boolean).join(' / '),p.asl?.product||'',qfDmy(isoDay(l.at))+(l.to==='Suspended'?'\n(Suspended)':''),l.reason||'',staffNameOf(l.by)];
+  const rH=k=>+Math.max(11.52,k*8*1.15+2.3).toFixed(2), RTOP=239.33, RBOT=331; await qfFonts();
+  const rK=R.map(x=>{ const c=rCells(x); for(let k=1;k<=6;k++){ if(c.every((t,i)=>!t||qftFits(t,rc[i+1][1]-rc[i+1][0]-4,rH(k)-1.5,8,true))) return k; } return 6; });
+  const fitFirst=room=>{ const a=[]; let u=0; for(let i=0;i<R.length;i++){ const h=rH(rK[i]); if(a.length&&u+h>room) break; a.push(i); u+=h; } return a; };
+  let rFirst=fitFirst(RBOT-RTOP); if(rFirst.length<R.length) rFirst=fitFirst(RBOT-RTOP-11); // room for the "continued" line
+  const rUsed=rFirst.reduce((t,i)=>t+rH(rK[i]),0);
+  const rChunks=[rFirst], rRest=R.map((x,i)=>i).slice(rFirst.length);
   const N=chunks.length+rChunks.length; const ov=[];
-  chunks.forEach((ch,ci)=>{ let html=''; ch.forEach((p,ri)=>{ const a=p.asl; const y=rowTops[ri]; const c=(i,t,o={})=>{ if(t) html+=qftTxt(cols[i][0]+2,y+0.8,t,{size:o.size||7.5,min:6.2,w:cols[i][1]-cols[i][0]-4,h:22.4,mid:true,center:o.center,label:`${p.name} — ${['No.','Supplier Name','Contact Person','Phone / Email','Product/Service Provided','Evaluation Date','Approval Status','Next Evaluation Date'][i]}`}); };
-      c(0,String(ci*14+ri+1),{center:true}); c(1,p.name+(a.kind==='external'?' (external provider)':'')); c(2,p.contactPerson||''); c(3,[p.phone||p.mobile,p.email].filter(Boolean).join(' / '),{size:7}); c(4,a.product||'',{size:6.8}); c(5,qfDmy(a.evalDate),{center:true}); c(7,qfDmy(a.nextEval),{center:true});
-      const bA=B.find(b=>b[0]===0&&Math.abs(b[2]-(y+2.6))<5&&b[1]<620), bS=B.find(b=>b[0]===0&&Math.abs(b[2]-(y+14.3))<5);
-      if(a.status==='Active'&&bA) html+=qftTick(bA[1],bA[2],9); if(a.status==='Suspended'&&bS) html+=qftTick(bS[1],bS[2],9); });
-    ov.push({tpl:0,html}); });
+  const box=on=>`<span style="position:relative;display:inline-block;font:9pt/1 'Segoe UI Symbol','DejaVu Sans','Noto Sans Symbols2',sans-serif;">☐${on?`<span style="position:absolute;left:0.6pt;top:-1.6pt;font:bold 10pt/1 'DejaVu Sans',sans-serif;">✓</span>`:''}</span>`;
+  const stCell=st=>`<div style="font:9pt/1.3 ${QF_FONT};white-space:nowrap;text-align:left;padding-left:4pt;">${box(st==='Active')} Active&nbsp;&nbsp;${box(st==='Removed')} Removed<br/><span style="padding-left:15.5pt;">${box(st==='Suspended')} Suspended</span></div>`;
+  let lNo=0;
+  chunks.forEach((ch,ci)=>{ const F8=`8pt/9.2pt ${QF_FONT}`; let used=0;
+    const rowsHtml=ch.map(p=>{ const k=lK[L.indexOf(p)], h=lH(k); used+=h; lNo++; const c=lCells(p);
+      return `<div style="margin-top:-0.5pt;">${qfRow(xs1,[[String(lNo),'center'],...c.map((t,i)=>i===5?[stCell(p.asl.status),'left']:[t?qftTxt(null,null,t,{w:+(cols[i+1][1]-cols[i+1][0]-4).toFixed(2),h:+(h-1.5).toFixed(2),size:8,center:i===4||i===6,label:`${p.name} — ${['Supplier Name','Contact Person','Phone / Email','Product/Service Provided','Evaluation Date','Approval Status','Next Evaluation Date'][i]}`}):'',i===4||i===6?'center':'left'])],{h,font:F8,pad:2})}</div>`; });
+    while(used+RH1<=BOT1-TOP1+0.5){ rowsHtml.push(`<div style="margin-top:-0.5pt;">${qfRow(xs1,['','','','','','',[stCell(''),'left'],''],{h:RH1,font:F8,pad:2})}</div>`); used+=RH1; }
+    ov.push({tpl:0,html:`<div style="position:absolute;left:71.6pt;top:${TOP1+0.3}pt;width:698.6pt;height:${(BOT1-TOP1+0.2).toFixed(2)}pt;background:#fff;"></div><div style="position:absolute;left:72pt;top:${TOP1+0.5}pt;">${rowsHtml.join('')}</div>`}); });
   const md=(_staff||[]).find(s=>getUserRole(s.username)==='Managing Director'); const tm=(_staff||[]).find(s=>getUserRole(s.username)==='Manager');
   let mdSig='', tmSig=''; try{ if(md) mdSig=(await pdfStaffSignature(md.username)).data||''; if(tm) tmSig=(await pdfStaffSignature(tm.username)).data||''; }catch(x){}
-  const rTops=[239.3,250.9,262.4,273.9]; const rc=[[72,100.1],[100.1,246.3],[246.3,312.8],[312.8,420.6],[420.6,507.9],[507.9,595],[595,688.5],[688.5,769.5]];
-  rChunks.forEach((ch,ci)=>{ let html=''; ch.forEach(({p,l},ri)=>{ const y=rTops[ri]; const c=(i,t,o={})=>{ if(t) html+=qftTxt(rc[i][0]+2,y+0.6,t,{size:o.size||7,min:6,w:rc[i][1]-rc[i][0]-4,h:10.6,mid:true,center:o.center,label:`Removed / suspended: ${p.name} — ${['No.','Supplier Name','Contact Person','Phone / Email','Product/Service Provided','Date Removed','Reason for Removal / Suspension','Authorized By'][i]}`}); };
-      c(0,String(ci*4+ri+1),{center:true}); c(1,p.name); c(2,p.contactPerson||''); c(3,[p.phone||p.mobile,p.email].filter(Boolean).join(' / '),{size:6.5}); c(4,p.asl?.product||''); c(5,qfDmy(isoDay(l.at)),{center:true}); c(6,l.to==='Suspended'?(l.reason||''):`${l.to}: ${l.reason||''}`,{size:6.5}); c(7,staffNameOf(l.by),{center:true}); });
+  let rNo=0;
+  rChunks.forEach((ch,ci)=>{ let html=`<div style="position:absolute;left:71.6pt;top:${RTOP+0.3}pt;width:698.6pt;height:${(285.9-RTOP).toFixed(2)}pt;background:#fff;"></div><div style="position:absolute;left:72pt;top:${RTOP}pt;">`; const F8=`8pt/9.2pt ${QF_FONT}`;
+    const rowsHtml=ch.map(i=>{ const x=R[i], k=rK[i], h=rH(k); rNo++; const cells=rCells(x);
+      return `<div style="margin-top:-0.5pt;">${qfRow(rxs,[[String(rNo),'center'],...cells.map((t,ci2)=>[t?qftTxt(null,null,t,{w:+(rc[ci2+1][1]-rc[ci2+1][0]-4).toFixed(2),h:+(h-1.5).toFixed(2),size:8,pre:true,center:ci2===4||ci2===6,label:`Removed / suspended: ${x.p.name} — ${['Supplier Name','Contact Person','Phone / Email','Product/Service Provided','Date Removed','Reason for Removal / Suspension','Authorized By'][ci2]}`}):'',ci2===4||ci2===6?'center':'left'])],{h,font:F8,pad:2})}</div>`; });
+    let pad=285.9-RTOP-ch.reduce((t,i)=>t+rH(rK[i]),0); while(pad>=11.5){ pad-=11.52; rowsHtml.push(`<div style="margin-top:-0.5pt;">${qfRow(rxs,Array(8).fill(''),{h:11.52,font:F8,pad:2})}</div>`); } // a short page keeps the form's four ruled rows
+    html+=`<div style="margin-top:0.5pt;">${rowsHtml.join('')}</div></div>`;
     { const b=T.blanks; html+=qftTxt(b['Prepared By'][1]+2,b['Prepared By'][2]-1.5,tm?tm.name:'',{size:10})+qftTxt(b['Approved By'][1]+2,b['Approved By'][2]-1.5,md?md.name:'',{size:10});
       if(tmSig) html+=qfSigOnLine(tmSig,b['Signature'][1],b['Signature'][3],595.32-b['Signature'][2]-11,18); if(mdSig) html+=qfSigOnLine(mdSig,b['Signature+'][1],b['Signature+'][3],595.32-b['Signature+'][2]-11,18);
       const nd=(k,v)=>{ const x=b[k]; if(x&&v) html+=qftTxt(x[1]+2,x[2]-1.5,v,{size:10,w:x[3]-4}); }; nd('Name',tm?tm.name:''); nd('Name+',md?md.name:''); nd('Date',tm?qfDmy(today):''); nd('Date+',md?qfDmy(today):''); }
+    if(rRest.length) html+=qftTxt(72,Math.max(288.5,RTOP+rUsed+2.5),`Suspended / removed suppliers ${rFirst.length+1}–${R.length}: continued on the next page${rRest.length>1?'s':''}`,{size:8,w:500});
     ov.push({tpl:1,html}); });
-  await qfExport(qftPages(T,{...fv,no:'F008'},ov,N,true),{landscape:true,filename:`F008_Approved_Supplier_List_${today}.pdf`,label:'F008 Approved Supplier List'}); }
+  const pagesF8=qftPages(T,{...fv,no:'F008'},ov,N,true);
+  if(rRest.length){ const F8=`8pt/9.2pt ${QF_FONT}`, F9=`9pt/1.15 ${QF_FONT}`;
+    const hd=qfRow(rxs,['No.','Supplier Name','Contact Person','Phone / Email','Product/Service Provided','Date Removed','Reason for Removal / Suspension','Authorized By'].map(t=>[t,'center']),{h:22.4,font:F9,pad:2});
+    const blocks=[{mt:12,html:`<div style="font:bold 12pt/1 ${QF_FONT};">Suspended / Removed Suppliers (continued)</div>`},{mt:10,html:hd},
+      ...rRest.map(i=>({hdr:hd,hdrMt:12,mt:-0.5,html:qfRow(rxs,[[String(i+1),'center'],...rCells(R[i]).map((t,c)=>[`<div style="white-space:pre-line;">${qfE(t)}</div>`,c===4||c===6?'center':'left'])],{h:11.52,font:F8,pad:2})}))];
+    pagesF8.push(...await qfFlow({g:QF_LS,no:'F008',v:{...fv,title:fv.title||'Approved Supplier List'},blocks})); }
+  await qfExport(pagesF8,{landscape:true,renumber:true,filename:`F008_Approved_Supplier_List_${today}.pdf`,label:'F008 Approved Supplier List'}); }
 
 // ── requirements to the supplier (6.6.3), on the PO and the request for quotation ──
 function supplierReqDefault(purpose,p){ if(purpose==='outsource') return ['Calibration by an ISO/IEC 17025 accredited laboratory, within its accredited scope; the accreditation mark shall appear on the certificate.','Certificate to state the results (as found / as left if adjusted), the measurement uncertainty and the metrological traceability.','Certificate issued to the customer named under "Cert To"; no recalibration interval unless requested.','Inform us before any adjustment, repair or deviation from this order; handle and return items in the same condition with all accessories.','Work by competent, authorised personnel.'].join('\n');
@@ -19402,6 +19471,9 @@ async function f011Pdf(mid,fid){ const m=methGet(mid); const r=(m?.f011||[]).fin
   const who=async(w,kName,kSig,kDate)=>{ if(!w?.by) return; add(3,qftTxt(bl[kName][1]+2,bl[kName][2]-1.5,staffNameOf(w.by),{size:10.5}));
     const s=await sg(w.by); if(s) add(3,qfSigOnLine(s,bl[kSig][1],bl[kSig][3],H-bl[kSig][2]-11,20)); add(3,qftTxt(bl[kDate][1]+2,bl[kDate][2]-1.5,qmsDateLong(isoDay(w.at)),{size:10.5})); };
   await who(r.prepared,'Prepared By','Signature','Date'); if(r.status==='Approved') await who(r.approved,T.blanks['Approved By (Technical Manager)']?'Approved By (Technical Manager)':'Approved By','Signature+','Date+');
+  // the approver's actual role in the label, e.g. "Approved By (Managing Director)" (Jay, 27 Oct 2026); unapproved: the form's own wording
+  { const lt=T.pages[3].t.find(t=>/^Approved By \(Technical Manager\):/.test(t[4])); const ar=r.status==='Approved'&&r.approved?.by?(ROLE_DISPLAY[getUserRole(r.approved.by)]?.label||''):'';
+    if(lt&&ar&&ar!=='Technical Manager'){ ov[3].hide.push([lt[0],lt[1]]); add(3,`<div style="position:absolute;left:${lt[0]}pt;top:${lt[1]}pt;margin-top:-0.16em;white-space:pre;font:${lt[2]}pt/1 ${QF_FONT};">${qfE(lt[4].replace('(Technical Manager)',`(${ar})`))}</div>`); } }
   await qfExport(qftPages(T,{...fv,no:'F011'},ov,4,true),{landscape:true,filename:`F011_${m.code.replace(/\s+/g,'')}_${r.forRev.replace('/','-')}.pdf`,label:'F011 Method Verification'}); }
 // F014 rows: an entry takes 1–3 of the form's ruled rows (the ruling between them is covered), so a long description wraps
 // at a readable size instead of being cut; only what does not fit 3 rows goes on a continuation page
@@ -19744,19 +19816,28 @@ async function saveAmdPrepare(jobNo,ix,amdId){ const it=getJob(jobNo)?.items?.[i
     const now=new Date().toISOString();
     await updateJob(jobNo,j=>{ const x=j.items[ix]; const a=(x.amendments||[]).find(y=>y.id===amdId); if(!a) return; a.reissue={status:'Prepared',draft:{cd:ch,excelFile,raw:raw||undefined,by:currentUser,at:now}};
       j.history.push({action:`📝 Amended certificate prepared for ${escapeHtml(x.certNo)} (amendment ${a.amendmentNo}) — waiting for the signatory`,by:currentUser,time:now}); });
-    f027Close(); refreshJobViews(jobNo); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); showToast('📝 Ready — an approver issues the amended certificate','success',3000);
+    f027Close(); refreshJobViews(jobNo); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); showToast('📝 Ready — an approved signatory issues the amended certificate','success',3000);
   }catch(e){ alert(e.message||e); } finally{ if(b) b.disabled=false; } }
-function openAmdIssue(jobNo,ix,amdId){ if(!canApprove(currentUser)){ alert('An approver issues the amended certificate.'); return; } const it=getJob(jobNo)?.items?.[ix]; const a=(it?.amendments||[]).find(x=>x.id===amdId); if(!a||a.reissue?.status!=='Prepared') return;
+// the amended certificate is issued and signed by an approved signatory holding F025 "A" for the activity (the issuer) — '' when this person may
+function amdIssueProblem(it,u){ u=u||currentUser; if(!it) return 'Item not found.'; if(!isSignatory(u)) return 'The amended certificate is issued and signed by an Approved Signatory.';
+  const cp=typeof compApproveProblem==='function'?compApproveProblem(it,u):''; if(cp) return cp.replace('can approve this certificate','can issue and sign the amended certificate');
+  const cd=it.calData||{}; if(typeof certIsAccredited==='function'&&certIsAccredited(cd)&&!itemIsExternal(it)){ const m=scopeMatch(it); if(m.state==='in'&&!(m.line.signatories||[]).includes(u)) return `This is an ACCREDITED certificate (${m.line.instrument} up to ${m.line.max} ${m.line.unit}) — only the approved signatories on that scope line issue it: ${(m.line.signatories||[]).map(staffNameOf).join(', ')||'none listed'}.`; }
+  return ''; }
+function canIssueAmd(u,it){ return !amdIssueProblem(it,u); }
+function openAmdIssue(jobNo,ix,amdId){ const it=getJob(jobNo)?.items?.[ix]; { const pb=amdIssueProblem(it,currentUser); if(pb){ alert('⛔ '+pb); return; } } const a=(it?.amendments||[]).find(x=>x.id===amdId); if(!a||a.reissue?.status!=='Prepared') return;
   const cd=it.calData||{}, d=a.reissue.draft; const next=amdBaseNo(it)+amdLetter(amdIssuedCount(it)+1); const lbl=k=>(AMD_FIELDS.find(f=>f[0]===k)||[,k])[1];
   _amdShown={key:jobNo+'|'+ix+'|'+amdId,d:JSON.stringify(d||null),next}; // what the approver sees is exactly what gets issued
   cOv(`✅ Issue amended certificate ${escapeHtml(next)}`,`<div style="font-size:12.5px;margin-bottom:8px;"><b>Amendment ${a.amendmentNo}:</b> ${escapeHtml(a.description)} — ${escapeHtml(a.reason)}</div>
     <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:8px;"><tr style="color:var(--text-muted);"><td>Field</td><td>On ${escapeHtml(it.certNo)}</td><td>On ${escapeHtml(next)}</td></tr>${Object.entries(d.cd||{}).map(([k,v])=>`<tr style="border-top:1px solid var(--border);"><td>${escapeHtml(lbl(k))}</td><td>${escapeHtml(cd[k]??'')}</td><td><b>${escapeHtml(v)}</b></td></tr>`).join('')}${d.excelFile?`<tr style="border-top:1px solid var(--border);"><td>Data pages</td><td>${escapeHtml(it.excelFile?.name||'')}</td><td><b>${escapeHtml(d.excelFile.name)}</b></td></tr>`:''}</table>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Prepared by ${escapeHtml(staffNameOf(d.by))}. ${escapeHtml(it.certNo)} is kept on record as superseded.</div>
+    <div style="font-size:12.5px;margin-bottom:8px;">Issued and signed by <b>${escapeHtml(amdSignName(currentUser))}</b> (approved signatory) — your name and signature go on ${escapeHtml(next)}${cd.approved_by&&cd.approvedByUsername!==currentUser?`, in place of ${escapeHtml(cd.approved_by)} on ${escapeHtml(it.certNo)}`:''}.</div>
     <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-outline" style="color:#b91c1c;" onclick="amdSendBack('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">↩️ Back to preparer</button><button class="btn btn-primary" onclick="saveAmdIssue('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">✅ Issue ${escapeHtml(next)}</button></div>`,700); }
 async function amdSendBack(jobNo,ix,amdId){ const why=prompt('What needs changing?'); if(!why||!why.trim()) return;
   try{ await updateJob(jobNo,j=>{ const a=(j.items[ix].amendments||[]).find(y=>y.id===amdId); if(a&&a.reissue){ a.reissue.status='To prepare'; a.reissue.sentBack={by:currentUser,at:new Date().toISOString(),why:why.trim()}; } }); }catch(e){ alert(e.message||e); return; } f027Close(); refreshJobViews(jobNo); }
 let _amdShown=null;
+function amdSignName(u){ const s=(_staff||[]).find(x=>x.username===u); return (s&&(s.certName||s.name))||USERS[u]?.name||u; }
 async function saveAmdIssue(jobNo,ix,amdId){ const it0=getJob(jobNo)?.items?.[ix]; const a0=(it0?.amendments||[]).find(x=>x.id===amdId);
+  { const pb=amdIssueProblem(it0,currentUser); if(pb){ alert('⛔ '+pb); return; } }
   const shown=_amdShown&&_amdShown.key===jobNo+'|'+ix+'|'+amdId?_amdShown:null; if(!shown){ alert('Open the amended certificate again (✅ Issue amended certificate) to check it before issuing.'); return; }
   if(a0?.reissue?.draft?.by===currentUser&&!confirm('You prepared this amended certificate yourself — issue it anyway?')) return;
   const now=new Date().toISOString(); const today=toLocalDateStr(new Date()); let newNo='', changed=null;
@@ -19764,7 +19845,7 @@ async function saveAmdIssue(jobNo,ix,amdId){ const it0=getJob(jobNo)?.items?.[ix
       const base=amdBaseNo(it); const n=amdIssuedCount(it)+1; newNo=base+amdLetter(n);
       if(JSON.stringify(a.reissue.draft||null)!==shown.d||newNo!==shown.next){ changed=JSON.parse(JSON.stringify(j)); throw new Error('The amended certificate was changed since you opened it — nothing was issued. The new version is shown now — check it before issuing.'); } const oldNo=it.certNo, oldIssue=it.calData?.issue_date||'';
       it.lastReturn={how:'amended',by:currentUser,at:now,reason:`Superseded by ${newNo} (amendment ${a.amendmentNo}: ${a.description})`}; h75KeepVersion(it);
-      const d=a.reissue.draft; it.calData={...it.calData,...(d.cd||{}),cert_no:newNo,issue_date:today,amended:{no:newNo,supersedes:oldNo,supersededIssue:oldIssue,amendmentNo:a.amendmentNo,what:a.description,why:a.reason},approved_by:it.calData?.approved_by,approvedByUsername:it.calData?.approvedByUsername};
+      const d=a.reissue.draft; it.calData={...it.calData,...(d.cd||{}),cert_no:newNo,issue_date:today,amended:{no:newNo,supersedes:oldNo,supersededIssue:oldIssue,amendmentNo:a.amendmentNo,what:a.description,why:a.reason,issuedBy:currentUser,originalApprovedBy:it.calData?.approved_by||'',originalApprovedByUsername:it.calData?.approvedByUsername||''},approved_by:amdSignName(currentUser),approvedByUsername:currentUser}; // the amended certificate shows its issuing signatory
       if(d.raw) it.calData.raw={ref:d.raw};
       { const M={eq_name:'eqName',serial:'serial',model:'model',brand:'brand',range:'range',tag_no:'tagNo'}; Object.entries(M).forEach(([ck,ik])=>{ const v=(d.cd||{})[ck]; if(v!==undefined&&v!==''&&v!==it[ik]) it[ik]=v; }); } // the item itself shows the corrected details too (invoice, labels, lists)
       if(d.excelFile) it.excelFile=d.excelFile;
@@ -19776,12 +19857,12 @@ async function saveAmdIssue(jobNo,ix,amdId){ const it0=getJob(jobNo)?.items?.[ix
 function amdButtonsHtml(j,idx,a){ const J=escapeForJsAttr(j.jobNo); const it=j.items[idx]; const r=a.reissue||{};
   if(a.status!=='Approved') return '';
   if(r.status==='Issued') return `<span style="font-size:11px;background:#dcfce7;color:#166534;font-weight:600;padding:4px 8px;border-radius:4px;">📄 Amended certificate ${escapeHtml(r.certNo)} issued</span>`;
-  if(r.status==='Prepared') return canApprove(currentUser)?`<button class="btn btn-primary btn-sm" onclick="openAmdIssue('${J}',${idx},'${a.id}')">✅ Issue amended certificate</button>`:`<span style="font-size:11px;color:#92400e;">Amended certificate waiting for an approver</span>`;
+  if(r.status==='Prepared') return canIssueAmd(currentUser,it)?`<button class="btn btn-primary btn-sm" onclick="openAmdIssue('${J}',${idx},'${a.id}')">✅ Issue amended certificate</button>`:`<span style="font-size:11px;color:#92400e;">Amended certificate waiting for an approved signatory to issue it</span>`;
   return canPrepareAmd(currentUser,it)?`<button class="btn btn-primary btn-sm" onclick="openAmdPrepare('${J}',${idx},'${a.id}')">📝 Prepare amended certificate${r.sentBack?' (sent back)':''}</button>`:''; }
 function amdAttentionItems(){ const out=[]; if(typeof _jobs==='undefined') return out; const J=escapeForJsAttr;
   (_jobs||[]).filter(j=>j.status!=='Deleted').forEach(j=>(j.items||[]).forEach((it,ix)=>(it.amendments||[]).forEach(a=>{ if(a.status!=='Approved') return; const st=a.reissue?.status||'To prepare';
     if(st==='To prepare'&&(canRequestAmendment(currentUser)||it.assignedTo===currentUser)) out.push({icon:'📝',level:'high',text:`Prepare the amended certificate for ${escapeHtml(it.certNo)} (amendment ${a.amendmentNo}: ${escapeHtml(a.description)})${a.reissue?.sentBack?' — sent back: '+escapeHtml(a.reissue.sentBack.why):''}`,onclick:`openAmdPrepare('${J(j.jobNo)}',${ix},'${a.id}')`});
-    if(st==='Prepared'&&canApprove(currentUser)) out.push({icon:'📄',level:'high',text:`Issue the amended certificate for ${escapeHtml(it.certNo)} (amendment ${a.amendmentNo})`,onclick:`openAmdIssue('${J(j.jobNo)}',${ix},'${a.id}')`}); }))); return out; }
+    if(st==='Prepared'&&canIssueAmd(currentUser,it)) out.push({icon:'📄',level:'high',text:`Issue the amended certificate for ${escapeHtml(it.certNo)} (amendment ${a.amendmentNo})`,onclick:`openAmdIssue('${J(j.jobNo)}',${ix},'${a.id}')`}); }))); return out; }
 
 // ═══ ISO/IEC 17025 7.9 — COMPLAINTS (F019) · CUSTOMER FEEDBACK (F012) · FEEDBACK EVALUATION (F013) ═══
 // Microsoft Forms exports (F019 complaints, F012 feedback) are uploaded by the QM; each new response becomes a record.
@@ -20009,8 +20090,17 @@ async function f013Pdf(id){ const r=h79Fb().find(x=>x.id===id); if(!r) return; c
   const bx=(pg,i)=>B.filter(b=>b[0]===pg)[i]; const tick=(pg,i)=>{ const b=bx(pg,i); if(b) add(pg,qftTick(b[1],b[2],10)); }; const bl=T.blanks; const BL=(k,s)=>{ const b=bl[k]; if(b) add(b[0],h79T(b[1]+2,b[2]-1.5,s,{w:Math.max(30,b[3]),h:11.7,size:9.5,min:6.5,label:k})); }; // one line on the blank
   const D=(y,s)=>add(0,h79T(205,y-1,s,{w:315})); D(165.23,r.refNo); D(179.75,`${qmsDateLong(r.from)} – ${qmsDateLong(r.to)}`); D(194.27,staffNameOf(r.evaluator)); D(208.79,r.designation); D(223.31,qmsDateLong(r.date)); (r.forms||[]).forEach(i=>tick(0,i));
   const cols=[[100,171],[171,242],[242,312.8],[312.8,383.7],[383.7,440.4],[440.4,522.9]]; const rowsY=[333.74,346.46,359.18,371.9,384.62];
-  a.complaints.slice(0,5).forEach((c,ri)=>{ [c.ncNo,qfDmy(c.date),c.sev,c.status,qfDmy(c.closed),c.cat].forEach((t,ci)=>add(0,h79T(cols[ci][0]+2,rowsY[ri]-0.5,t||'',{w:cols[ci][1]-cols[ci][0]-4,size:7.5,min:6,h:11,center:ci<5,label:`Complaint ${ri+1} — ${['Complaint Ref. No.','Date Received','Severity','Resolution Status','Date Closed','Root Cause Category'][ci]}`}))); });
-  if(a.complaints.length>5) add(0,h79T(78,395,`+ ${a.complaints.length-5} more complaint(s) — listed in the LIMS register`,{w:300,size:7.5}));
+  const C13H=['Complaint Ref. No.','Date Received','Severity','Resolution Status','Date Closed','Root Cause Category'], c13=c=>[c.ncNo,qfDmy(c.date),c.sev,c.status,qfDmy(c.closed),c.cat];
+  a.complaints.slice(0,5).forEach((c,ri)=>{ c13(c).forEach((t,ci)=>add(0,h79T(cols[ci][0]+2,rowsY[ri]-0.5,t||'',{w:cols[ci][1]-cols[ci][0]-4,size:8,h:11,center:ci<5,label:`Complaint ${ri+1} — ${C13H[ci]}`}))); });
+  // more than five complaints: all of them are printed — the rest in a continuation table with the same columns on the page(s)
+  // after page 1, with the form's header and footer (Jay, 27 Oct 2026)
+  let cont13=[];
+  if(a.complaints.length>5){ const xs=[72.02,99.98,171.02,241.97,312.79,383.71,440.38,522.94], F9=`9pt/10.6pt ${QF_FONT}`;
+    const hd=qfRow(xs,['No.',...C13H].map(t=>[`<span style="font:10pt/1.15 ${QF_FONT};">${t}</span>`,'center']),{h:24.84,font:F9,pad:2});
+    const blocks=[{mt:14,html:`<div style="text-align:center;font:bold 12pt/1 ${QF_FONT};">SECTION A – CUSTOMER COMPLAINTS REVIEW (continued)</div>`},{mt:10,html:hd},
+      ...a.complaints.slice(5).map((c,i)=>({hdr:hd,hdrMt:14,mt:-0.5,html:qfRow(xs,[[`${i+6}.`,'center'],...c13(c).map((t,ci)=>[qfE(t||''),ci<5?'center':'left'])],{h:12.72,font:F9,pad:3})}))];
+    cont13=await qfFlow({g:QF_P,no:'F013',v:{...formVersion('F013'),title:formVersion('F013').title||'Feedback Evaluation Form'},blocks});
+    add(0,h79T(78,395,`Complaints 6–${a.complaints.length}: continued in the table on page${cont13.length>1?`s 2–${cont13.length+1}`:' 2'}`,{w:440,size:9}));  }
   BL('Total Received',String(a.total)); BL('Total Resolved',String(a.resolved)); BL('Total Pending',String(a.pending)); BL('Avg. Resolution Time',a.avgDays!=null?String(a.avgDays):'—');
   const box=(pg,y0,y1,s,label)=>add(pg,h79T(78,y0+3,s||'',{w:440,h:y1-y0-5,size:8.5,label}));
   box(0,456.8,506.1,r.A.findings,'Complaint Trend Analysis & Key Findings'); box(0,518.8,555.9,a.top3.map((t,i)=>`${i+1}. ${t}`).join('   '),'Top 3 Recurring Complaint Categories'); box(0,568.6,630.2,r.A.ca,'Corrective Actions Implemented');
@@ -20024,7 +20114,8 @@ async function f013Pdf(id){ const r=h79Fb().find(x=>x.id===id); if(!r) return; c
   add(3,h79T(118,691,staffNameOf(r.evaluator),{w:175,size:10.5})+h79T(112,713,qmsDateLong(String(r.preparedAt||r.date).slice(0,10)),{w:175,size:10.5}));
   { const s=await sg(r.evaluator); if(s) add(3,qfSigOnLine(s,72,225,841.92-675+3,60)); }
   if(r.approved){ add(3,h79T(344,691,staffNameOf(r.approved.by),{w:175,size:10.5})+h79T(338,713,qmsDateLong(isoDay(r.approved.at)),{w:175,size:10.5})); const s=await sg(r.approved.by); if(s) add(3,qfSigOnLine(s,297.4,225,841.92-675+3,60)); }
-  await qfExport(qftPages(T,{...formVersion('F013'),no:'F013'},ov,4,false),{no:'F013',filename:`${r.refNo||'F013'}.pdf`,label:'F013 Feedback Evaluation Form'}); }
+  const pg13=qftPages(T,{...formVersion('F013'),no:'F013'},ov,4,false); pg13.splice(1,0,...cont13);
+  await qfExport(pg13,{no:'F013',renumber:true,filename:`${r.refNo||'F013'}.pdf`,label:'F013 Feedback Evaluation Form'}); }
 // feedback page: Microsoft Forms responses + F013 evaluations
 function h79FbSection(){ if(!canSeeQms(currentUser)) return ''; const F=h79Fb().filter(x=>x.type==='f012').sort((a,b)=>String(b.at).localeCompare(String(a.at))); const E=h79Fb().filter(x=>x.type==='f013').sort((a,b)=>String(b.from).localeCompare(String(a.from)));
   const avg=x=>{ const v=(x.ratings||[]).filter(Boolean); return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):'—'; };
@@ -20342,7 +20433,7 @@ async function f005Pdf(id){ const n=(_ncrs||[]).find(x=>x.id===id); if(!n) retur
     (n.docAmends||[]).length?`Documents amended: ${n.docAmends.map(d=>`${d.doc}${d.done?' ('+d.done.note+')':' (pending)'}`).join('; ')}.`:'',
     (n.caAttempts||[]).length?`Earlier action not effective: ${n.caAttempts.map(a=>`${a.correctiveAction||''} (verified ${qfDmy(String(a.verify?.at||'').slice(0,10))})`).join('; ')}.`:'',
     n.verifyNotes?`Verification: ${n.verifyNotes}`:'',n.riskUpd?`Risk register: ${n.riskUpd==='Yes'?'updated':'no update needed'}${n.riskRef?' — '+n.riskRef:''}.`:'',n.similarNc==='Yes'&&n.similarNote?`Similar NCs: ${n.similarNote}`:''].filter(Boolean).join(' ');
-  if(extra) t(115,511.3,extra,{w:405,h:26,size:7.5,label:'Remark'});
+  if(extra) t(115,511.3,extra,{w:405,h:30,size:8,label:'Remark'}); // 8 pt minimum: three lines (the space above Verified By)
   if(n.verifiedBy){ add(qfSigOnLine(await h710Sig(n.verifiedBy),118,150,841.92-556,18)); t(326,545.5,qmsDateLong(isoDay(n.verifiedAt)),{w:136}); t(110,582,staffNameOf(n.verifiedBy),{w:156,label:'Verified By — Name'}); }
   if(n.similarNc==='Yes') ring(363.3,376.2,646.8); else if(n.similarNc==='No') ring(391.4,402.9,646.8);
   await qfExport(qftPages(T,{...formVersion('F005'),no:'F005'},ov,1,false),{filename:`F005_${n.ncNo}.pdf`,label:'F005 Non-conformity Report'}); }
@@ -20360,12 +20451,13 @@ const F028_COLS=['No.','NCW Log No.','Date','Customer','PIC','Handled By','Natur
 async function f028Pdf(){ const from=el('f28-from')?.value||'0000', to=el('f28-to')?.value||'9999'; const kinds=[...document.querySelectorAll('.f28-kind:checked')].map(x=>x.value);
   const rows=f028Rows(from,to,kinds); if(!rows.length){ alert('No record in that period.'); return; }
   const T=(await qft('F028')), PER=21, Y=[137.8,152.9,167.7,182.3,197.1,212.3,227,241.7,256.9,271.6,286.2,301.5,316.1,330.9,345.6,360.8,375.6,390.2,405.4,420.1,434.8,450.1];
-  const X=[72,118,207.4,271.6,407.2,478.6,557.1,660,715,770.7]; const pages=Math.ceil(rows.length/PER); const hide=T.pages[0].t.filter(t=>t[0]<X[1]&&t[1]>Y[0]&&t[1]<Y[PER]&&/^\d+$/.test(String(t[4]).trim())).map(t=>[t[0],t[1]]); /* the form's printed row numbers 1-10: the LIMS numbers every row itself */ const ov=[]; const sig=await h710Sig(currentUser); const td=qmsDateLong(toLocalDateStr(new Date()));
-  for(let p=0;p<pages;p++){ let h=''; rows.slice(p*PER,(p+1)*PER).forEach((n,i)=>{ const y0=Y[i], y1=Y[i+1];
-      const cells=[String(p*PER+i+1),n.ncNo,qfDmy(n.raisedAt),n.custName||'',h710Pic(n),staffNameOf(n.actionOwner)||'',n.description||'',n.ncNo,n.status==='Closed'&&n.closedAt?qfDmy(isoDay(n.closedAt)):''];
-      cells.forEach((s,c)=>{ if(s==='') return; const w=X[c+1]-X[c]-4; h+=qftTxt(X[c]+2,y0+0.4,s,{size:8,min:6,w,h:y1-y0-0.8,mid:true,center:c<3||c>6,label:`No. ${p*PER+i+1} — ${F028_COLS[c]}`}); }); });
+  const X=[72,118,207.4,271.6,407.2,478.6,557.1,660,715,770.7];
+  // rows grow with their values at 8 pt (Jay, 27 Oct 2026); as many per page as fit
+  const GT=qfGrowTable({xs:X,top:Y[0],bottom:Y[PER],minH:14.7,rows:rows.map((n,i)=>[String(i+1),n.ncNo,qfDmy(n.raisedAt),n.custName||'',h710Pic(n),staffNameOf(n.actionOwner)||'',n.description||'',n.ncNo,n.status==='Closed'&&n.closedAt?qfDmy(isoDay(n.closedAt)):'']),align:c=>c<3||c>6?'center':'left',label:(i,c)=>`No. ${i+1} — ${F028_COLS[c]}`});
+  const pages=GT.length; const hide=T.pages[0].t.filter(t=>t[0]<X[1]&&t[1]>Y[0]&&t[1]<Y[PER]&&/^\d+$/.test(String(t[4]).trim())).map(t=>[t[0],t[1]]); /* the form's printed row numbers 1-10: the LIMS numbers every row itself */ const ov=[]; const sig=await h710Sig(currentUser); const td=qmsDateLong(toLocalDateStr(new Date()));
+  for(let p=0;p<pages;p++){ let h=GT[p].html;
     h+=qftTxt(145,453.5,staffNameOf(currentUser),{size:11,w:200})+qftTxt(108,478.5,td,{size:11,w:200})+qfSigOnLine(sig,300,120,595.32-472,26);
-    h+=qftTxt(72,505,`Period ${qfDmy(from)} – ${qfDmy(to)} · ${kinds.join(', ')}`,{size:6.5,w:400});
+    h+=qftTxt(72,505,`Period ${qfDmy(from)} – ${qfDmy(to)} · ${kinds.join(', ')}`,{size:8,w:400});
     ov.push({html:h,tpl:0,hide}); }
   await qfExport(qftPages(T,{...formVersion('F028'),no:'F028'},ov,pages,true),{landscape:true,filename:`F028_${from}_${to}.pdf`,label:'F028 Non-conforming Work Log'}); ncrClose(); }
 
@@ -20990,16 +21082,29 @@ async function copyAct(did,cid,act){ const now=new Date().toISOString();
     if(act==='issue'&&c.qm&&c.md&&!c.issued){ c.copyNo=Math.max(0,...(x.copies||[]).map(y=>+y.copyNo||0))+1; c.issued={by:currentUser,at:now}; }
     if(act==='retrieve'&&c.issued&&!c.retrieved){ c.retrieved={by:currentUser,at:now}; } }); }catch(e){ alert(e.message||e); return; } renderDocs(); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); }
 // prints
-async function f020Pdf(){ const T=(await qft('F020')); const X=[31.1,127.4,386.5,434.7,482.8,592.5,649.5,745.7,804.2]; const Y=[]; for(let y=136.3;y<=514;y+=10.49) Y.push(+y.toFixed(1));
+// F020 — values at 8 pt (never smaller); the Retention Time column is widened (from the one-letter I / E column) so the full
+// retention wording stays on one line; a longer value wraps and its row grows; rows
+// run onto as many pages as needed; every page carries the standard form header with "PAGE NO. x of N" and the standard footer
+// (Jay, 27 Oct 2026). The last page is ruled down to the sign-off line like the paper form.
+async function f020Pdf(){
   const rows=[]; docDocs().filter(d=>d.kind==='I'&&d.status!=='Obsolete').sort((a,b)=>String(a.no).localeCompare(String(b.no),undefined,{numeric:true})).forEach(d=>rows.push([d.no,d.title,`${d.issue}/${d.rev}`,qfDmy(d.effective),d.location,d.retention,'I','']));
   (typeof methList==='function'?methList():[]).filter(m=>!m.withdrawn).forEach(m=>rows.push([m.code,m.title,`${m.issue}/${m.rev}`,qfDmy(m.effective),'LIMS — Methods / SharePoint',DOC_RETENTION,'I','']));
   docDocs().filter(d=>d.kind==='E'&&d.status!=='Obsolete').sort((a,b)=>String(a.no).localeCompare(String(b.no),undefined,{numeric:true})).forEach(d=>rows.push([d.no,d.title,d.issue||'',qfDmy(d.effective),d.location,d.retention,'E','']));
   docDocs().forEach(d=>(d.obsolete||[]).forEach(o=>rows.push([d.no,d.title,o.issueRev,qfDmy(o.effective),d.location,d.retention,d.kind,'OBS']))); docDocs().filter(d=>d.status==='Obsolete').forEach(d=>rows.push([d.no,d.title,d.kind==='I'?`${d.issue}/${d.rev}`:d.issue,qfDmy(d.effective),d.location,d.retention,d.kind,'OBS']));
-  const per=Y.length-1; const pages=Math.max(1,Math.ceil(rows.length/per)); const ov=[]; const last=docDocs().filter(d=>d.kind==='I').flatMap(d=>(d.history||[]).filter(x=>x.approvedBy)).sort((a,b)=>String(b.at).localeCompare(String(a.at)))[0];
-  for(let p=0;p<pages;p++){ let h=''; rows.slice(p*per,(p+1)*per).forEach((r,i)=>{ r.forEach((s,c)=>{ const w=X[c+1]-X[c]-4; if(s) h+=qftTxt(X[c]+2,Y[i]+0.5,s,{size:7,min:5.8,w,h:9.5,mid:true,center:c>=2&&c!==4&&c!==5,label:`${r[0]} — ${['Doc. No.','Description','Rev.','Last Update','Location','Retention Time','Internal (I) / External (E)','Obsolete (OBS)'][c]}`}); }); });
-    h+=qftTxt(140,546.5,staffNameOf(currentUser),{size:8,w:150})+qftTxt(330,546.5,qfDmy(toLocalDateStr(new Date())),{size:8,w:120})+(last?qftTxt(540,546.5,staffNameOf(last.approvedBy),{size:8,w:150}):'');
-    ov.push({tpl:0,html:h}); }
-  await qfExport(qftPages(T,{...formVersion('F020'),no:'F020'},ov,pages,true),{landscape:true,filename:`F020_Master_List_of_Documents_${toLocalDateStr(new Date())}.pdf`,label:'F020 Master List of Documents'}); }
+  const last=docDocs().filter(d=>d.kind==='I').flatMap(d=>(d.history||[]).filter(x=>x.approvedBy)).sort((a,b)=>String(b.at).localeCompare(String(a.at)))[0];
+  const fv=formVersion('F020'), v={...fv,title:fv.title||'Master List of Documents'};
+  const g={...QF_LS,L:31.15,R:804.2,cols:[31.15,386.5,450,514,610,706,804.2]};
+  const xs=[31.15,127.4,353.5,401.7,449.8,559.5,685.5,745.7,804.2].map(x=>+(x-31.15+72).toFixed(2)), F8=`8pt/9.2pt ${QF_FONT}`, RH=10.49; await qfFonts(); // qfRow places tables from x 72 = the page's left edge g.L here
+  const hdr=qfRow(xs,['Doc. No.','Description','Rev.','Last Update','Location','Retention Time','Internal (I) / External (E)','Obsolete (OBS)'].map(t=>[`<b>${t}</b>`,'center']),{h:RH,font:F8,bg:QF_GREY,pad:2});
+  const row=r=>qfRow(xs,r.map((t,c)=>[qfE(t),c>=2&&c!==4&&c!==5?'center':'left']),{h:RH,font:F8,pad:2});
+  const blank=qfRow(xs,Array(8).fill(''),{h:RH,font:F8,pad:2});
+  const lab=(x,t,val)=>`<div style="position:absolute;left:${(x-31.15).toFixed(2)}pt;top:0;white-space:nowrap;font:8pt/1 ${QF_FONT};"><b>${t}</b>&nbsp;&nbsp;&nbsp;&nbsp;${qfE(val)}</div>`;
+  const sign=`<div style="position:relative;height:22pt;">${lab(85.5,'Updated by:',staffNameOf(currentUser))}${lab(301,'Date:',qfDmy(toLocalDateStr(new Date())))}${lab(485.2,'Approved by:',last?staffNameOf(last.approvedBy):'')}<div style="position:absolute;right:0;top:12pt;font:8pt/1 ${QF_FONT};">${qfE(fv.clauses||'Clause 8.3.1')}</div></div>`;
+  const SIGN_H=22, SIGN_MT=12;
+  const blocks=[{mt:6,html:`<div style="text-align:center;font:bold 10pt/1 ${QF_FONT};">MASTER LIST OF DOCUMENTS</div>`},{mt:8,html:hdr},...rows.map(r=>({hdr,hdrMt:12,mt:-0.5,html:row(r)})),
+    {fill:{html:blank,h:RH,until:g.max-SIGN_H-SIGN_MT}},{mt:SIGN_MT,keepPrev:true,html:sign}];
+  const pages=await qfFlow({g,no:'F020',v,blocks});
+  await qfExport(pages,{landscape:true,no:'F020',v,filename:`F020_Master_List_of_Documents_${toLocalDateStr(new Date())}.pdf`,label:'F020 Master List of Documents'}); }
 async function docF014Pdf(id){ const d=docGet(id); if(!d) return; const T=(await qft('F014')); const fv=formVersion('F014'); const L=d.history||[];
   const vals=l=>[String(l.rev||'').replace('/',' / '),l.clause||'',d.no,l.desc||'',qfDmy(l.date),l.revisedBy||'']; const chunks=await f014Pages(L,vals);
   // Prepared By: who made the latest entry; Approved By: the MD who approved it (a new internal document: the MD who registered it)
@@ -21419,6 +21524,10 @@ function iaAudits(){ return iaList().filter(x=>x.type==='audit'); }
 function iaPlan(y){ return iaList().find(x=>x.type==='plan'&&+x.year===+y)||null; }
 function iaAuditors(all){ return iaList().filter(x=>x.type==='auditor'&&(all||x.active!==false)); }
 function iaGet(id){ return iaList().find(x=>x.id===id)||null; }
+// internal auditors: only MD, QM and TM staff — plus external auditors on the register
+const IA_AUD_ROLES=['Managing Director','Quality Manager','Manager'];
+function iaStaffAuditorOk(u){ const s=(_staff||[]).find(x=>x.username===u); return IA_AUD_ROLES.includes((s&&s.role)||USERS[u]?.role); }
+function iaAuditorPickable(x){ return !x.username||iaStaffAuditorOk(x.username); }
 function iaCanManage(u){ return canSeeQms(u||currentUser); }
 function iaCanApprove(u){ const r=getUserRole(u||currentUser); return isAdmin(u||currentUser)||r==='Quality Manager'; }
 function iaIsTm(u){ const r=getUserRole(u||currentUser); return isAdmin(u||currentUser)||r==='Manager'; }
@@ -21460,11 +21569,11 @@ async function iaPlanApprove(Y){ if(!iaCanApprove()) return; const p=iaPlan(Y); 
   addAudit('✅',`Internal audit plan ${Y} authorised`); iaRenderPlan(); }
 // ── Auditor register (6.2.1 a: trained, qualified, independent) ──
 function iaRenderAuditors(){ const box=el('ia-tab'); const L=iaAuditors(true);
-  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12.5px;color:var(--text-muted);">Only auditors on this list can be assigned. Each must be trained / qualified, and is never assigned to audit their own work (LQP 8.8 6.2.1 a).</span>${iaCanApprove()?`<button class="btn btn-primary" onclick="iaAuditorOpen()">+ Auditor</button>`:''}</div>
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12.5px;color:var(--text-muted);">Only auditors on this list can be assigned: the Managing Director, Quality Manager or Technical Manager, or an external auditor. Each must be trained / qualified, and is never assigned to audit their own work (LQP 8.8 6.2.1 a).</span>${iaCanApprove()?`<button class="btn btn-primary" onclick="iaAuditorOpen()">+ Auditor</button>`:''}</div>
     <div class="card"><div class="table-wrap"><table><thead><tr><th>Auditor</th><th>Internal / external</th><th>Qualification / training</th><th>Status</th><th></th></tr></thead><tbody>
-    ${L.map(a=>`<tr><td><b>${escapeHtml(iaAudName(a.id))}</b></td><td>${a.username?'Westlab staff':'External'+(a.org?' — '+escapeHtml(a.org):'')}</td><td style="font-size:12px;">${escapeHtml(a.qual||'')}${a.evidence?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(a.evidence)}')">certificate</a>`:''}</td><td>${a.active===false?'<span class="badge badge-slate">Removed</span>':'<span class="badge badge-green">Active</span>'}</td>
+    ${L.map(a=>`<tr><td><b>${escapeHtml(iaAudName(a.id))}</b></td><td>${a.username?'Westlab staff':'External'+(a.org?' — '+escapeHtml(a.org):'')}</td><td style="font-size:12px;">${escapeHtml(a.qual||'')}${a.evidence?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(a.evidence)}')">certificate</a>`:''}</td><td>${a.active===false?'<span class="badge badge-slate">Removed</span>':!iaAuditorPickable(a)?'<span class="badge badge-amber" title="Internal auditors are the Managing Director, Quality Manager or Technical Manager">Not assignable</span>':'<span class="badge badge-green">Active</span>'}</td>
       <td>${iaCanApprove()&&a.active!==false?`<button class="btn btn-outline btn-sm" onclick="iaAuditorRemove('${a.id}')">Remove</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--text-muted);padding:14px;">No auditors yet — add the trained internal auditor(s), internal or external.</td></tr>'}</tbody></table></div></div>`; }
-function iaAuditorOpen(){ cOv('+ Internal auditor',`<div class="form-group"><label class="form-label">Westlab staff member (leave empty for an external auditor)</label><select class="form-control" id="iau-u"><option value="">— External auditor —</option>${(_staff||[]).filter(s=>s.active!==false).map(s=>`<option value="${escapeHtml(s.username)}">${escapeHtml(s.name||s.username)}</option>`).join('')}</select></div>
+function iaAuditorOpen(){ cOv('+ Internal auditor',`<div class="form-group"><label class="form-label">Westlab staff member — Managing Director, Quality Manager or Technical Manager (leave empty for an external auditor)</label><select class="form-control" id="iau-u"><option value="">— External auditor —</option>${(_staff||[]).filter(s=>s.active!==false&&iaStaffAuditorOk(s.username)).map(s=>`<option value="${escapeHtml(s.username)}">${escapeHtml(s.name||s.username)}</option>`).join('')}</select></div>
     <div class="form-row"><div class="form-group"><label class="form-label">External auditor name</label><input class="form-control" id="iau-n"/></div><div class="form-group"><label class="form-label">Company</label><input class="form-control" id="iau-o"/></div></div>
     <div class="form-group"><label class="form-label">Qualification / training <span class="req">*</span></label><input class="form-control" id="iau-q" placeholder="e.g. ISO/IEC 17025:2017 Internal Audit course, 2 days, 2026"/></div>
     <div class="form-group"><label class="form-label">Training certificate (optional)</label><input class="form-control" type="file" id="iau-f" accept=".pdf,image/*"/></div>
@@ -21482,9 +21591,9 @@ function iaRenderList(){ const box=el('ia-tab'); const L=iaAudits().sort((a,b)=>
       <td style="font-size:12px;">${escapeHtml(iaAudName(a.lead))} (Lead)${(a.auditors||[]).length?', '+a.auditors.map(iaAudName).map(escapeHtml).join(', '):''}</td><td><span class="badge ${IA_ST[st]||'badge-slate'}">${st}</span></td>
       <td style="font-size:12px;">${N.length?`${N.filter(n=>!iaObs(n)).length} NC · ${N.filter(iaObs).length} OBS`:'—'}</td><td><button class="btn btn-outline btn-sm" onclick="openIa('${a.id}')">Open</button></td></tr>`; }).join('')||'<tr><td colspan="7" style="color:var(--text-muted);padding:14px;">No audits yet. Prepare the plan (F001), add the auditors, then create the audit.</td></tr>'}</tbody></table></div></div>`; }
 function iaStaffChecks(cls,sel){ return `<div style="display:flex;flex-wrap:wrap;gap:4px 14px;">${(_staff||[]).filter(s=>s.active!==false).map(s=>`<label style="font-size:12.5px;display:flex;gap:4px;align-items:center;font-weight:normal;"><input type="checkbox" class="${cls}" value="${escapeHtml(s.username)}" ${(sel||[]).includes(s.username)?'checked':''}/>${escapeHtml(s.name||s.username)}</label>`).join('')}</div>`; }
-function iaOpenNew(id){ const a=id?iaGet(id):null; const A=iaAuditors(); if(!A.length){ alert('Add the internal auditor(s) first (Auditors tab).'); _iaTab='auditors'; renderAudits(); return; }
+function iaOpenNew(id){ const a=id?iaGet(id):null; const A=iaAuditors(); if(!A.filter(iaAuditorPickable).length){ alert('Add the internal auditor(s) first (Auditors tab).'); _iaTab='auditors'; renderAudits(); return; }
   const m=new Date().getMonth()+1; const p=iaPlan(new Date().getFullYear()); const pre=a?a.clauses:IA_CL.map(c=>c[0]).filter(c=>((p?.cells||{})[c]||[]).includes(m));
-  const ao=sel=>A.map(x=>`<option value="${x.id}" ${sel===x.id?'selected':''}>${escapeHtml(iaAudName(x.id))}</option>`).join('');
+  const ao=sel=>A.filter(x=>iaAuditorPickable(x)||sel===x.id).map(x=>`<option value="${x.id}" ${sel===x.id?'selected':''}>${escapeHtml(iaAudName(x.id))}${x.username?'':' (external)'}</option>`).join('');
   cOv(a?`✏️ ${escapeHtml(a.no)}`:'+ Internal audit',`<div class="form-group"><label class="form-label">Clauses audited <span class="req">*</span> ${p?`<span style="font-weight:400;color:var(--text-muted);">— ticked from the plan for ${IA_MONTHS[m-1]}</span>`:''}</label><div style="display:flex;flex-wrap:wrap;gap:4px 12px;">${IA_CL.filter(c=>!IA_NA.includes(c[0])).map(([c,t])=>`<label style="font-size:12px;display:flex;gap:4px;align-items:center;font-weight:normal;" title="${escapeHtml(t)}"><input type="checkbox" class="ian-cl" value="${c}" ${(pre||[]).includes(c)?'checked':''}/>${c}</label>`).join('')}</div></div>
     <div class="form-row"><div class="form-group" style="flex:2;"><label class="form-label">Area / lab under audit <span class="req">*</span></label><input class="form-control" id="ian-area" value="${escapeHtml(a?.area||'Calibration Laboratory and management system')}"/></div><div class="form-group"><label class="form-label">Department</label><input class="form-control" id="ian-dept" value="${escapeHtml(a?.dept||'')}"/></div></div>
     <div class="form-row"><div class="form-group"><label class="form-label">Date of audit <span class="req">*</span></label><input class="form-control" type="date" id="ian-date" value="${escapeHtml(a?.date||toLocalDateStr(new Date(Date.now()+14*864e5)))}"/></div><div class="form-group"><label class="form-label">Time</label><input class="form-control" id="ian-time" value="${escapeHtml(a?.time||'9:00 am – 5:00 pm')}"/></div></div>
@@ -21495,6 +21604,7 @@ function iaOpenNew(id){ const a=id?iaGet(id):null; const A=iaAuditors(); if(!A.l
 async function iaSaveNew(id){ const cl=[...document.querySelectorAll('.ian-cl:checked')].map(x=>x.value), ae=[...document.querySelectorAll('.ian-ae:checked')].map(x=>x.value); const area=(el('ian-area').value||'').trim(), date=el('ian-date').value, lead=el('ian-lead').value, a2=el('ian-aud2').value;
   if(!cl.length||!area||!date||!lead||!ae.length){ alert('Choose the clauses, area, date, lead auditor and auditees.'); return; } if(a2&&a2===lead){ alert('Choose a different second auditor.'); return; }
   const clash=[lead,a2].filter(Boolean).map(x=>iaGet(x)).filter(x=>x&&x.username&&ae.includes(x.username)); if(clash.length){ alert(`⛔ ${clash.map(x=>staffNameOf(x.username)).join(', ')} cannot be both auditor and auditee — auditors must be independent of the area they audit (LQP 8.8 6.2.1 a).`); return; }
+  { const was=id?iaGet(id):null, prevA=was?[was.lead,...(was.auditors||[])]:[]; const bad=[lead,a2].filter(Boolean).filter(x=>!prevA.includes(x)).map(iaGet).filter(x=>x&&!iaAuditorPickable(x)); if(bad.length){ alert(`${bad.map(x=>iaAudName(x.id)).join(', ')} cannot be assigned — internal auditors are the Managing Director, Quality Manager or Technical Manager (or an external auditor from the register).`); return; } }
   const now=new Date().toISOString(); const old=id?iaGet(id):null; let no='';
   if(old&&old.notice&&old.date!==date){ alert('The notice was already issued — use "Change date" on the audit so the change is recorded.'); return; }
   try{ await _iaStore.patch(arr=>{ let x=id&&arr.find(y=>y.id===id);
@@ -21630,12 +21740,19 @@ async function f002Pdf(id){ const a=iaGet(id); const n=a.notice||{}; const T=(aw
   if(n.by){ ov[0].html+=qfSigOnLine(await h710Sig(n.by),77.7,120,841.92-437,24); t(112,464.5,staffNameOf(n.by),{w:200}); }
   await qfExport(qftPages(T,{...formVersion('F002'),no:'F002'},ov,1,false),{filename:`F002_${a.no}.pdf`,label:'F002 Internal Audit Notice'}); }
 async function f003Pdf(id){ const a=iaGet(id); const att=a.attendance||{}; const conf=att.confirms||{}; const T=(await qft('F003'));
-  const people=[...new Set([...(att.opening?.present||[]),...(att.closing?.present||[])])]; const per=7; const pages=Math.max(1,Math.ceil(people.length/per)); const ov=[];
-  for(let p=0;p<pages;p++){ let h=''; const t=(x,y,s,o={})=>{ h+=qftTxt(x,y,s,{...o,size:o.size||9}); }; const dS=d=>{ const [y,m,dd]=String(d).slice(0,10).split('-'); return dd?`${dd}/${m}/${y.slice(2)}`:''; }; // the Date cells are narrow: dd/mm/yy
-    t(120,149.8,att.purpose||'',{w:400,h:21,label:'Purpose'}); t(145,174.7,iaAudName(a.lead),{w:300}); if(att.opening?.date) t(405,230.1,dS(att.opening.date),{size:8.5,mw:24,min:6}); if(att.closing?.date) t(495,230.1,dS(att.closing.date),{size:8.5,mw:24,min:6});
-    for(let i=0;i<per;i++){ const u=people[p*per+i]; if(!u) break; const y=242.3+i*15.15; t(72,y+3,String(p*per+i+1),{w:90,center:true}); const s=(_staff||[]).find(z=>z.username===u)||{}; t(165,y+0.4,staffNameOf(u),{w:85,h:14.4,size:9,min:6.2,mid:true,label:'Name (row '+(p*per+i+1)+')'}); t(255,y+0.4,s.designation||getUserRole(u)||'',{w:86,h:14.4,size:7.5,min:6.2,mid:true,label:'Designation (row '+(p*per+i+1)+')'});
-      const sg=await h710Sig(u); if(sg&&conf[u]?.opening&&(att.opening?.present||[]).includes(u)) h+=qfSigOnLine(sg,345,85,841.92-(y+15),13); if(sg&&conf[u]?.closing&&(att.closing?.present||[]).includes(u)) h+=qfSigOnLine(sg,435,85,841.92-(y+15),13); }
-    ov.push({html:h,tpl:0}); }
+  const people=[...new Set([...(att.opening?.present||[]),...(att.closing?.present||[])])]; const ov=[];
+  // rows grow with their values at 8 pt (a long name wraps) — Jay, 27 Oct 2026; signatures sit in their cells
+  const sigImg=src=>src?{html:`<div style="height:13pt;display:flex;align-items:flex-end;justify-content:center;"><img src="${src}" style="max-height:13pt;max-width:85pt;object-fit:contain;"/></div>`}:'';
+  const prow=[]; for(let i=0;i<people.length;i++){ const u=people[i]; const s=(_staff||[]).find(z=>z.username===u)||{}; const sg=await h710Sig(u);
+    prow.push([String(i+1),staffNameOf(u),s.designation||getUserRole(u)||'',sg&&conf[u]?.opening&&(att.opening?.present||[]).includes(u)?sigImg(sg):'',sg&&conf[u]?.closing&&(att.closing?.present||[]).includes(u)?sigImg(sg):'']); }
+  const GT=qfGrowTable({xs:[72.02,162.14,252.41,342.55,432.67,522.94],top:242.3,bottom:348.41,minH:15.16,rows:prow,align:c=>c===0||c>2?'center':'left',label:(i,c)=>`${['No.','Name','Designation'][c]||''} (row ${i+1})`});
+  const pages=GT.length;
+  for(let p=0;p<pages;p++){ let h=''; const hide=[]; const t=(x,y,s,o={})=>{ h+=qftTxt(x,y,s,{...o,size:o.size||9}); }; const dS=d=>{ const [y,m,dd]=String(d).slice(0,10).split('-'); return dd?`${dd}/${m}/${y.slice(2)}`:''; }; // the Date cells are narrow: dd/mm/yy
+    t(120,149.8,att.purpose||'',{w:400,h:21,label:'Purpose'}); t(145,174.7,iaAudName(a.lead),{w:300}); // the date did not fit after "Date:" at 8 pt: "Date:" and the date are centred together in the column (Jay, 27 Oct 2026 — 8 pt minimum)
+    const dCell=(x0,x1,lx,d)=>{ if(!d) return; hide.push([lx,230.06]); h+=`<div style="position:absolute;left:${x0}pt;width:${x1-x0}pt;top:230.06pt;margin-top:-0.16em;text-align:center;white-space:nowrap;"><b style="font:bold 12pt/1 ${QF_FONT};">Date:</b> <span style="font:9pt/1 ${QF_FONT};">${qfE(qfDmy(d))}</span></div>`; };
+    dCell(342.55,432.67,374.47,att.opening?.date); dCell(432.67,522.94,464.62,att.closing?.date);
+    h+=GT[p].html;
+    ov.push({html:h,tpl:0,hide}); }
   await qfExport(qftPages(T,{...formVersion('F003'),no:'F003'},ov,pages,false),{filename:`F003_${a.no}.pdf`,label:'F003 Attendance List'}); }
 async function f004Pdf(id){ const a=iaGet(id); const C=a.checklist||{}; const T=(await qft('F004')); const ov=T.pages.map(()=>({html:''})); const R=iaRows(); const X={Y:[383.7,412.0],N:[412.0,440.4],NA:[440.4,475.9]};
   R.forEach(r=>{ const e=C[r.key]; if(!e) return; const H=r.y1-r.y0; if(e.c&&X[e.c]) ov[r.pg].html+=qftTxt(X[e.c][0],r.y0+H/2-5.5,'✓',{w:X[e.c][1]-X[e.c][0],center:true,bold:true,size:10});
@@ -24092,7 +24209,7 @@ function renderMyJobs(){
         ${item.status==='Completed'&&canRequestAmendment(currentUser)&&!(item.amendments||[]).some(a=>a.status==='Pending Approval')?
           `<button class="btn btn-outline btn-sm" onclick="openAmendmentRequestModal('${j.jobNo}',${idx})">📝 Request Amendment</button>`:''}
         ${(item.amendments||[]).map(a=>a.status==='Pending Approval'
-          ?`<span style="font-size:11px;background:#fef3c7;color:#92400e;font-weight:600;padding:4px 8px;border-radius:4px;">📝 Amendment ${a.amendmentNo} pending approval${canApprove(currentUser)?` <button class="btn btn-outline btn-sm" style="margin-left:4px;padding:1px 6px;" onclick="approveAmendment('${j.jobNo}',${idx},'${a.id}')">✅ Approve</button>`:''}</span>`
+          ?`<span style="font-size:11px;background:#fef3c7;color:#92400e;font-weight:600;padding:4px 8px;border-radius:4px;">📝 Amendment ${a.amendmentNo} pending approval${canApproveAmendment(currentUser,a)?` <button class="btn btn-outline btn-sm" style="margin-left:4px;padding:1px 6px;" onclick="approveAmendment('${j.jobNo}',${idx},'${a.id}')">✅ Approve</button>`:''}</span>`
           :`<span style="font-size:11px;background:#dcfce7;color:#166534;font-weight:600;padding:4px 8px;border-radius:4px;">📝 Amendment ${a.amendmentNo} approved <a href="javascript:void(0)" onclick="exportAmendmentPdf('${j.jobNo}',${idx},'${a.id}')" style="margin-left:4px;">📄 View</a></span>`+(typeof amdButtonsHtml==='function'?amdButtonsHtml(j,idx,a):'')
         ).join('')}
         <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="toggleJobHistory('${histId}')">📋 History</button>
@@ -24633,9 +24750,9 @@ async function exportSocPdf(jobNo,idx,pIdx,revIdx){
   const noRule=p.decisionRule==='No Decision Rule — Measurement Only';
   const draft=p.superseded?`<div style="position:absolute;top:44%;left:0;right:0;text-align:center;font-size:64px;font-weight:bold;color:rgba(100,116,139,.16);transform:rotate(-24deg);">SUPERSEDED</div>`:p.status!=='Approved'?`<div style="position:absolute;top:44%;left:0;right:0;text-align:center;font-size:64px;font-weight:bold;color:rgba(220,38,38,.12);transform:rotate(-24deg);">DRAFT — NOT APPROVED</div>`:'';
   const row=(k,val)=>`<tr><td style="width:150px;padding:2px 0;color:#333;">${k}</td><td style="width:12px;">:</td><td style="padding:2px 0;">${val}</td></tr>`;
-  const topBlock=()=>`${draft}<div style="text-align:center;font-weight:bold;font-size:16px;letter-spacing:.5px;margin:4px 0 10px;">STATEMENT OF CONFORMITY</div>
+  const topBlock=(pi,pn)=>`${draft}<div style="text-align:center;font-weight:bold;font-size:16px;letter-spacing:.5px;margin:4px 0 10px;">STATEMENT OF CONFORMITY</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
-      ${row('SoC No.',`<b>${esc(sno)}</b>`)}${row('Refers to Certificate No.',`<b>${esc(cref||'—')}</b>${ext?` — calibrated by ${esc(it.outsourcedTo||'an external laboratory')} (external provider)`:''}`)}
+      ${row('SoC No.',`<b>${esc(sno)}</b>`)}${row('Page',`${pi||1} of ${pn||1}`)}${row('Refers to Certificate No.',`<b>${esc(cref||'—')}</b>${ext?` — calibrated by ${esc(it.outsourcedTo||'an external laboratory')} (external provider)`:''}`)}
       ${row('Customer',esc(j.custName||''))}${row('Address',esc(String(j.address||cust.address||'').split(/\s*\n\s*/).map(x=>x.replace(/,\s*$/,'')).filter(Boolean).join(', ')))}
       ${row('Equipment',esc(it.eqName||''))}${row('Make / Model',esc([it.brand,it.model].filter(Boolean).join(' / ')||'—'))}
       ${row('Serial No. / ID',esc([it.serial&&it.serial!=='N/A'?it.serial:'',it.tagNo&&it.tagNo!=='N/A'?'Tag '+it.tagNo:''].filter(Boolean).join(' · ')||'—'))}
@@ -25004,9 +25121,9 @@ function renderNeedsAttention(){
   }
   if(canApprove(currentUser)){
     const am=[], ab=[]; (_jobs||[]).forEach(j=>{ if(j.status==='Deleted') return; (j.items||[]).forEach((it,ix)=>{
-      if((it.amendments||[]).some(a=>a.status==='Pending Approval')) am.push({j,it,ix});
+      if((it.amendments||[]).some(a=>a.status==='Pending Approval'&&canApproveAmendment(currentUser,a))) am.push({j,it,ix});
       if(it.status==='Returned - Abnormal'&&!it.abnormalCause&&it.assignedTo!==currentUser) ab.push({j,it,ix}); }); });
-    if(am.length) items.push({icon:'📝',level:'high',text:`${am.length} certificate amendment${am.length>1?'s':''} waiting for approval (${am.slice(0,2).map(x=>escapeHtml(x.it.certNo||x.j.jobNo)).join(', ')})`,onclick:`approveAmendment('${escapeForJsAttr(am[0].j.jobNo)}',${am[0].ix},'${escapeForJsAttr((am[0].it.amendments||[]).find(a=>a.status==='Pending Approval').id)}')`});
+    if(am.length) items.push({icon:'📝',level:'high',text:`${am.length} certificate amendment${am.length>1?'s':''} waiting for approval (${am.slice(0,2).map(x=>escapeHtml(x.it.certNo||x.j.jobNo)).join(', ')})`,onclick:`approveAmendment('${escapeForJsAttr(am[0].j.jobNo)}',${am[0].ix},'${escapeForJsAttr((am[0].it.amendments||[]).find(a=>a.status==='Pending Approval'&&canApproveAmendment(currentUser,a)).id)}')`});
     if(ab.length) items.push({icon:'🔍',level:'high',text:`${ab.length} abnormal report${ab.length>1?'s':''} — classify the cause: pre-existing or during handling (${ab.slice(0,2).map(x=>`${escapeHtml(x.j.jobNo)} ${escapeHtml(x.it.eqName)}`).join('; ')})`,onclick:`openAbnormalCauseModal('${escapeForJsAttr(ab[0].j.jobNo)}',${ab[0].ix})`});
   }
   if(typeof canUseInvoiceSystem==='function'&&canUseInvoiceSystem(currentUser)){
@@ -25266,7 +25383,7 @@ function jmActionRows(u){
     if(canApprove(u)&&isSignatory(u)) its.forEach(o=>(o.it.socParameters||[]).forEach((p,pi)=>{ if(p.status==='RevEntered') add(j,'✅',`Revised SoC to approve — ${escapeHtml(o.it.eqName)} (${escapeHtml(p.parameterName||'')})`,'Review',`openSocEntry('${J(j.jobNo)}',${o.ix},${pi})`,'high'); }));
     if(canApprove(u)){
       its.filter(o=>o.it.status==='Returned - Abnormal'&&!o.it.abnormalCause&&o.it.assignedTo!==u).forEach(o=>add(j,'🔍',`Abnormal report — classify the cause (${escapeHtml(o.it.eqName)})`,'Classify',`openAbnormalCauseModal('${J(j.jobNo)}',${o.ix})`));
-      its.forEach(o=>(o.it.amendments||[]).filter(a=>a.status==='Pending Approval').forEach(a=>add(j,'📝',`Amendment ${a.amendmentNo} to ${escapeHtml(o.it.certNo||'')} — approve`,'Approve',`approveAmendment('${J(j.jobNo)}',${o.ix},'${J(a.id)}')`)));
+      its.forEach(o=>(o.it.amendments||[]).filter(a=>a.status==='Pending Approval'&&canApproveAmendment(u,a)).forEach(a=>add(j,'📝',`Amendment ${a.amendmentNo} to ${escapeHtml(o.it.certNo||'')} — approve`,'Approve',`approveAmendment('${J(j.jobNo)}',${o.ix},'${J(a.id)}')`)));
     }
     if(canCreateJobs(u)){ its.filter(o=>itemOnIncident(o.it)).forEach(o=>add(j,'⚠️',`Vendor incident — ${escapeHtml(o.it.eqName)}: ${escapeHtml((o.it.vendorIncident.problems||[]).join('; '))} — inform customer, replacement, cost, NC`,'Open incident',`openVendorIncident('${J(j.jobNo)}',${o.ix})`,'high'));
       its.filter(o=>o.it.status==='Outsourced'&&o.it.outsourceVendorId&&o.it.outsourceStage==='to-send'&&!jobOutsourcePo(j,o.it)).forEach(o=>add(j,'🔗',`${escapeHtml(o.it.eqName)}: no live PO to ${escapeHtml(o.it.outsourcedTo||'the vendor')} — raise one, then link it`,'🔗 Link PO',`linkVendorPo('${J(j.jobNo)}',${o.ix})`,'high'));
@@ -25760,7 +25877,8 @@ async function downloadCombinedPDF(returnBytes){
     if(typeof html2canvas!=='undefined'&&body&&body.innerHTML.trim()){
       showToast('Rendering certificate page 1…','info',2000);
       await certFontReady();
-      const canvas=await certPageCanvas(body.innerHTML);
+      // "Page 1 of N" filled with the real total: page 1 + the data PDF's pages (Jay, 27 Oct 2026 — the paper is still checked)
+      const canvas=await certPageCanvas(body.innerHTML.replace(/(<span data-certpg="1">)[^<]*(<\/span>)/,`$1${'1 of '+(1+dataPdf.getPageCount())}$2`));
       const imgData=canvas.toDataURL('image/jpeg',0.95);
       const imgBytes=await fetch(imgData).then(r=>r.arrayBuffer());
       const jpgImage=await mergedPdf.embedJpg(imgBytes);
@@ -25920,7 +26038,7 @@ function buildCertPage1HTML(cd,s){
   ${H(142.0,72,'Date of Issue',e(fmtDate(cd.issue_date)),144.6,157.8)}
   ${T(166.5,72,'Issued To')}${T(166.5,144.6,':')}${addr(166.5,157.8,cd.issued_to||'',custLines)}
   ${H(117.6,316.2,'Certificate Number',e(cd.cert_no||''),395.4,408.6)}
-  ${H(142.0,316.2,'Page',e(cd.page||'1 of 2'),395.4,408.6)}
+  ${H(142.0,316.2,'Page',`<span data-certpg="1">${e(cd.page||'1 of 2')}</span>`,395.4,408.6)}
   ${T(166.5,316.2,'Issued By')}${T(166.5,395.4,':')}${addr(166.5,408.6,labName.toUpperCase(),labLines.slice(0,5))}
   ${rule(238.9,37.3,572.0)}
   ${R(252.2,'Equipment Name',e(na(cd.eq_name)))}${R(264.4,'Brand/Manufacturer',e(na(cd.brand)))}${R(276.7,'Model/Type',e(na(cd.model)))}
@@ -26150,7 +26268,6 @@ async function saveRefEquipment(){
   // Upload each parameter's own certificate file, if a new one was selected
   for(const p of _refEqParams){
     if(p._certFile){
-      const oldParamCertUrl=p.certFileUrl||'';
       try{
         const ppath=`ref-equipment/${id}/${sanitizeFilenameForPath(p.parameter||'param')}_${sanitizeFilenameForPath(p._certFile.name)}`;
         const pRes=await fetch('https://westlab-upload.sales-2fb.workers.dev',{
@@ -26161,25 +26278,24 @@ async function saveRefEquipment(){
         if(pRes.ok){
           const pr2=await pRes.json();
           p.certFileUrl=pr2.url||`https://pub-0d9d817c12b44fb1bafb2cf6e9c0923f.r2.dev/${ppath}`;
-          if(oldParamCertUrl&&oldParamCertUrl!==p.certFileUrl){
-            const oldPPath=extractR2Path(oldParamCertUrl);
-            if(oldPPath){
-              try{ await fetch('https://westlab-upload.sales-2fb.workers.dev',{method:'DELETE',headers:{'Content-Type':'application/json',...authHeader()},body:JSON.stringify([oldPPath])}); }
-              catch(delErr){console.warn('Old parameter cert cleanup failed (new file still saved fine):',delErr);}
-            }
-          }
         }
       }catch(e){console.error('Parameter cert upload failed:',e);}
       delete p._certFile; // never persist the raw File object
     }
   }
+  // a certificate replaced (or no longer on any parameter) is kept (7.5.2): it goes into the equipment's documents as a superseded certificate — never deleted
+  const _refEqOldCerts=[]; if(existing){ const now=new Date().toISOString(), still=new Set(_refEqParams.map(p=>p&&p.certFileUrl).filter(Boolean));
+    [...(existing.parameters||[]),existing].forEach(o=>{ const u=o&&o.certFileUrl; if(!u||still.has(u)||r2PathOf(u).startsWith('drafts/')||_refEqOldCerts.some(d=>d.url===u)) return;
+      _refEqOldCerts.push({name:o.certFileName||decodeURIComponent(String(u).split('/').pop().split('?')[0]),url:u,at:now,by:currentUser,
+        kind:`Previous calibration certificate${o.parameter?' — '+o.parameter:''}${o.certNo?' ('+o.certNo+(o.lastCal?', calibrated '+o.lastCal:'')+')':''} — superseded`}); }); }
   const formPart=refEqFormPart(existing);
   // Every field the form doesn't manage (lifecycle / out-of-service, availability, checkout, checks, history…) is kept from the
   // LATEST saved copy — editing must never silently wipe or roll back these.
   // An edit writes only the fields this user changed since the form opened — a change someone else saved meanwhile to another field is kept.
   const _op=modal._refEqOpened, opened=(isEdit&&!idChanged&&_op&&_op.id===editId)?_op.v:null;
   const fillRec=rec=>{ if(opened) Object.keys(formPart).forEach(k=>{ if(JSON.stringify(formPart[k])!==JSON.stringify(opened[k])) rec[k]=formPart[k]; }); else Object.assign(rec,formPart); if(!rec.lifecycleStatus) rec.lifecycleStatus='In Use'; if(!rec.addedAt) rec.addedAt=new Date().toISOString();
-    rec.dueDate=refEqEarliestDueDate(rec); }; // overall status reflects whichever parameter's certificate expires soonest
+    rec.dueDate=refEqEarliestDueDate(rec); // overall status reflects whichever parameter's certificate expires soonest
+    if(_refEqOldCerts.length){ const have=new Set((rec.docs||[]).map(d=>d&&d.url)); const add=_refEqOldCerts.filter(d=>!have.has(d.url)); if(add.length){ rec.docs=[...(rec.docs||[]),...add]; add.forEach(d=>eqHist(rec,`Calibration certificate ${d.name} superseded — kept in the documents`)); } } };
   let record;
   try{
     if(isEdit&&!idChanged){ record=await updateRefEq(id,fillRec); }
@@ -27108,6 +27224,7 @@ async function showCertFromJob(jobNo){
 // ── CUSTOMER DATABASE ──
 
 function openAddCustomerModal(){
+  if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'warn',4000); return; }
   _custModalContext='main';
   const titleEl=document.getElementById('customer-modal-title');
   if(titleEl) titleEl.textContent='🏢 Add Customer';
@@ -27135,6 +27252,7 @@ function checkCustTypeConflict(){
 }
 
 async function openEditCustomerModal(custId){
+  if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'warn',4000); return; }
   // open on the LATEST saved copy (the list may be stale), so the "what changed" snapshot below matches the server
   try{ const f=await SB.get(CUST_TABLE,custId); if(f&&typeof f==='object'&&!Array.isArray(f)&&f.id===custId){ delete f.__v; const i=_customers.findIndex(x=>x.id===custId); if(i>-1) _customers[i]=f; else _customers.push(f); } }catch(e){}
   const c=_customers.find(x=>x.id===custId); if(!c)return;
@@ -27175,6 +27293,7 @@ function custFormRead(){ const t=id=>(el(id)?.value||'').trim(), types=[];
     attention:t('cust-attention'), address:t('cust-address'), tel:t('cust-tel'), mobile:t('cust-mobile'), fax:t('cust-fax'), tin:t('cust-tin'), brn:t('cust-brn'), email:t('cust-email'),
     contacts:custReadContacts(), paymentTerms:el('cust-payment-terms')?.value||'', notes:t('cust-notes') }; }
 async function saveCustomer(){
+  if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'error',4000); return; }
   const saveBtn=document.querySelector('#modal-add-customer .btn-primary');
   const saveBtnText=saveBtn?saveBtn.textContent:'';
   if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Saving…';}
@@ -27278,6 +27397,7 @@ function renderCustomerTable(){
   const q=(el('cust-search')?.value||'').toLowerCase();
   const tf=el('cust-filter-type')?.value||'';
   const tbody=el('customer-tbody'); if(!tbody)return;
+  { const ab=el('cust-add-btn'); if(ab) ab.style.display=canEditCustomers()?'':'none'; }
   // Safety filter - remove any null/invalid entries
   const validCustomers=_customers.filter(c=>c&&c.company);
   const getTypes=c=>c.custTypes||(c.type==='Dealer'?['Dealer']:['Direct']);
@@ -27297,7 +27417,7 @@ function renderCustomerTable(){
   const kpi4=el('cust-kpi-jobs');if(kpi4)kpi4.textContent=totalJobs;
   const sub=el('cust-sub');if(sub)sub.textContent=`${validCustomers.length} customers · ${dealers} dealers · ${directs} direct`;
   if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🏢</div><p>${validCustomers.length?'No matching customers.':'No customers yet. Click "+ New Customer" to add.'}</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🏢</div><p>${validCustomers.length?'No matching customers.':'No customers yet.'+(canEditCustomers()?' Click "+ Add Customer" to add.':'')}</p></div></td></tr>`;
     return;
   }
   const typeBadgeHtml=types=>types.map(t=>t==='Dealer'?'<span class="badge badge-purple">Dealer</span>':t==='EndUserOnly'?'<span class="badge badge-slate">End User Only</span>':'<span class="badge badge-blue">Direct</span>').join(' ');
@@ -27317,7 +27437,7 @@ function renderCustomerTable(){
       <td><span class="badge badge-blue">${jobCount} job${jobCount!==1?'s':''}</span></td>
       <td style="white-space:nowrap;">
         <button class="btn btn-outline btn-sm" onclick="viewCustomerDetail('${c.id}')">👁 View</button>
-        <button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditCustomerModal('${c.id}')">✏️</button>
+        ${canEditCustomers()?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditCustomerModal('${c.id}')">✏️</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteCustomer('${c.id}')">🗑</button>`:''}
       </td>
     </tr>`;
@@ -29190,6 +29310,7 @@ function hideCustBadge(){
 }
 
 function prefillNewCustomerModal(name, context='main'){
+  if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'warn',4000); return; }
   el('customer-suggestions').style.display='none';
   el('end-user-suggestions')?.style.setProperty('display','none');
   _custModalContext=context;
@@ -29533,7 +29654,7 @@ function compJobMenu(ev,jobNo,histId){
     if(canCreateJobs(currentUser)) h+=stMenuItem('💬 WhatsApp collection message',`sendWhatsAppCollection(${q})`);
   }
   if(canRequestAmendment(currentUser)) h+=stMenuItem('📝 Request certificate amendment',`compRequestAmendment(${q})`);
-  if(canApprove(currentUser)) (j.items||[]).forEach((it,ix)=>(it.amendments||[]).filter(a=>a.status==='Pending Approval').forEach(a=>{ h+=stMenuItem(`✅ Approve amendment ${a.amendmentNo} — ${escapeHtml(it.certNo||'item '+it.itemNo)}`,`approveAmendment(${q},${ix},'${escapeForJsAttr(a.id)}')`); }));
+  (j.items||[]).forEach((it,ix)=>(it.amendments||[]).filter(a=>a.status==='Pending Approval'&&canApproveAmendment(currentUser,a)).forEach(a=>{ h+=stMenuItem(`✅ Approve amendment ${a.amendmentNo} — ${escapeHtml(it.certNo||'item '+it.itemNo)}`,`approveAmendment(${q},${ix},'${escapeForJsAttr(a.id)}')`); }));
   if(isAdmin(currentUser)) h+='<hr/>'+stMenuItem('🗑️ Permanent deletion…',`openRequestPermanentDeletionModal(${q})`,{danger:true});
   stShowMenu(ev.currentTarget,h);
 }
@@ -30921,8 +31042,9 @@ async function exportLegacyTrackerPoPdf(entryId){
   await exportHtmlAsPdf(html,`${e.poNumber}.pdf`,'Purchase Order',1);
 }
 // Invoice settings (Invoices page → ⚙️ Invoice layout): notes, default terms; bank details are shared with the statements
-const INVOICE_NOTES_DEFAULT='1. All cheques should be crossed and made payable to Westlab (M) Sdn Bhd\n2. Goods sold are neither returnable nor refundable.';
-function invoiceCfg(){ const v=_settings.invoiceCfg||{}; return {notes:v.notes!=null?v.notes:INVOICE_NOTES_DEFAULT,terms:v.terms||'30 Days',showJob:v.showJob!==false,signature:!!v.signature}; }
+const INVOICE_NOTES_DEFAULT='1. All cheques should be crossed and made payable to Westlab (M) Sdn. Bhd.\n2. Goods sold are neither returnable nor refundable.'; // company name standard (Jay, 27 Oct 2026)
+const INVOICE_NOTES_OLD='1. All cheques should be crossed and made payable to Westlab (M) Sdn Bhd\n2. Goods sold are neither returnable nor refundable.'; // the earlier default, if it was saved unchanged
+function invoiceCfg(){ const v=_settings.invoiceCfg||{}; return {notes:v.notes!=null&&v.notes!==INVOICE_NOTES_OLD?v.notes:INVOICE_NOTES_DEFAULT,terms:v.terms||'30 Days',showJob:v.showJob!==false,signature:!!v.signature}; }
 function openInvoiceSettings(){
   if(!isAdmin(currentUser)&&!canUseInvoiceSystem(currentUser)) return;
   const v=invoiceCfg(), b=_settings.soaBank||{};
@@ -33918,8 +34040,9 @@ async function qfFitPages(pages,{landscape,no,v,renumber}={}){
     const doms=pages.map(h=>{ const d=document.createElement('div'); d.innerHTML=h; box.appendChild(d); return d; });
     const ok=e=>e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth;
     const over=[];
-    doms.forEach((d,pi)=>d.querySelectorAll('[data-qfit]').forEach(e=>{ const mn=+e.dataset.qmin||7; let sz=+e.dataset.qs||9;
+    doms.forEach((d,pi)=>d.querySelectorAll('[data-qfit]').forEach(e=>{ const mn=Math.max(8,+e.dataset.qmin||8); let sz=Math.max(mn,+e.dataset.qs||9);
       while(!ok(e)&&sz>mn){ sz=Math.max(mn,+(sz-0.25).toFixed(2)); e.style.fontSize=sz+'pt'; }
+      if(!ok(e)&&e.dataset.qalt){ e.textContent=e.dataset.qalt; e.style.whiteSpace='pre-line'; sz=+e.dataset.qs||9; e.style.fontSize=sz+'pt'; while(!ok(e)&&sz>mn){ sz=Math.max(mn,+(sz-0.25).toFixed(2)); e.style.fontSize=sz+'pt'; } } // o.alt: the value written over two lines (e.g. a date "26/10/" "2026") when one line does not fit at 8 pt
       if(!ok(e)) over.push({e,page:pi+1,label:e.dataset.qlab||'',text:e.textContent}); }));
     if(!over.length){ qfFitBottom(doms); if(renumber){ const N=doms.length; doms.forEach((d,i)=>d.querySelectorAll('[data-qfpg]').forEach(x=>{ x.textContent=`${x.dataset.qfpgpre||''}${i+1} of ${N}`; })); } return doms.map(d=>d.innerHTML); }
     const fv=v||formVersion(no||''), g=landscape?QF_LS:QF_P; const blocks=[];
@@ -33940,11 +34063,28 @@ async function qfFitPages(pages,{landscape,no,v,renumber}={}){
 }
 // one table row (own table, so rows can flow across pages); cells: [html, align]
 function qfRow(xs,cells,{h,font,bg,valign,pad}={}){ return `<table style="width:${(xs[xs.length-1]-xs[0]).toFixed(2)}pt;border-collapse:collapse;table-layout:fixed;${xs[0]!==72?`margin-left:${(xs[0]-72).toFixed(2)}pt;`:''}">${qfCols(xs)}<tr style="height:${h}pt;">${cells.map(c=>{ const [t,al,st]=Array.isArray(c)?c:[c,'left','']; return `<td style="${QF_B}font:${font};text-align:${al};vertical-align:${valign||'middle'};padding:0 ${pad??5.4}pt;${bg?`background:${bg};`:''}word-wrap:break-word;overflow-wrap:anywhere;${st||''}">${t}</td>`; }).join('')}</tr></table>`; }
+// The ruled rows of a table on an original form layout, redrawn so that they grow with their values (Jay, 27 Oct 2026: 8 pt minimum —
+// a value that does not fit wraps in its cell and the row grows, up to maxLines lines; only what still does not fit is continued).
+// rows: arrays of cell values (a string, or {html} for e.g. a signature). Returns one overlay per page: a white cover over the form's
+// own fixed rows, then the rows, ruled down to `bottom` with empty rows like the paper form. xs: column edges (page x, pt).
+function qfGrowTable({xs,top,bottom,rows,minH,maxLines=4,size=8,align,label,pad=2}){
+  const cw=i=>+(xs[i+1]-xs[i]-2*pad-1).toFixed(2), H=k=>+Math.max(minH,k*size*1.15+2.5).toFixed(2), room=bottom-top+0.5, F=`${size}pt/${(size*1.15).toFixed(2)}pt ${QF_FONT}`;
+  const txt=t=>t!=null&&t!==''&&typeof t!=='object';
+  const ks=rows.map(c=>{ for(let k=1;k<=maxLines;k++){ if(c.every((t,i)=>!txt(t)||qftFits(String(t),cw(i),H(k)-1.5,size,true))) return k; } return maxLines; });
+  const chunks=[[]]; let used=0; rows.forEach((c,i)=>{ const h=H(ks[i]); if(chunks[chunks.length-1].length&&used+h>room){ chunks.push([]); used=0; } chunks[chunks.length-1].push(i); used+=h; });
+  return chunks.map(ch=>{ let u=0; const out=ch.map(i=>{ const h=H(ks[i]); u+=h; return `<div style="margin-top:-0.5pt;">${qfRow(xs,rows[i].map((t,ci)=>{ const al=(align&&align(ci))||'left'; return [t&&typeof t==='object'?(t.html||''):txt(t)?qftTxt(null,null,String(t),{w:cw(ci),h:+(h-1.5).toFixed(2),size,pre:true,center:al==='center',label:label?label(i,ci):''}):'',al]; }),{h,font:F,pad})}</div>`; });
+    while(u+minH<=room){ out.push(`<div style="margin-top:-0.5pt;">${qfRow(xs,xs.slice(1).map(()=>''),{h:minH,font:F,pad})}</div>`); u+=minH; }
+    return {idx:ch,html:`<div style="position:absolute;left:${(xs[0]-0.4).toFixed(2)}pt;top:${(top+0.3).toFixed(2)}pt;width:${(xs[xs.length-1]-xs[0]+0.8).toFixed(2)}pt;height:${(bottom-top+0.4).toFixed(2)}pt;background:#fff;"></div><div style="position:absolute;left:72pt;top:${(top+0.5).toFixed(2)}pt;">${out.join('')}</div>`}; }); }
 const qfE=v=>escapeHtml(v==null?'':String(v));
 // splits a text over n ruled lines at word boundaries (about cpl characters a line); the last line takes the rest (it is fitted / continued)
 const qfWrapLines=(t,n,cpl)=>{ const out=[]; let cur=''; String(t||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean).forEach(x=>{ if(out.length<n-1&&cur&&(cur+' '+x).length>cpl){ out.push(cur); cur=x; } else cur=cur?cur+' '+x:x; }); out.push(cur); return out; };
-// a date in a narrow table cell: kept on one line (never split "26/10/202|6"), shrunk to fit the cell
-const qfDateCell=(d,w,size)=>{ const t=qfDmy(d); return t?qftTxt(null,null,t,{mw:+(w).toFixed(2),size:size||9,min:5}):''; };
+// a date in a narrow table cell: on one line, shrunk to fit the cell down to 8 pt; narrower than that, it wraps after the month
+// ("26/10/" over "2026") — never split inside a number, never below 8 pt (Jay, 27 Oct 2026)
+const qfDateCell=(d,w,size)=>{ const t=qfDmy(d); return t?qftTxt(null,null,t,{mw:+(w).toFixed(2),size:size||9,alt:t.replace(/\/(\d{4})$/,'/\n$1')}):''; };
+// a word too long for a narrow cell at `size` pt, broken over lines with a hyphen ("Muham-" / "mad") — used as qftTxt's o.alt, so a
+// name keeps 8 pt and stays whole instead of being shrunk (Jay, 27 Oct 2026)
+function qfHyph(t,wpt,size){ const c=qfHyph.c||(qfHyph.c=document.createElement('canvas').getContext('2d')); c.font=`${size||8}pt ${QF_FONT}`; const fit=x=>c.measureText(x).width<=wpt*96/72;
+  const out=[]; String(t||'').split(/\s+/).filter(Boolean).forEach(wd=>{ while(!fit(wd)&&wd.length>2){ let k=wd.length-1; while(k>1&&!fit(wd.slice(0,k)+'-')) k--; out.push(wd.slice(0,k)+'-'); wd=wd.slice(k); } out.push(wd); }); return out.join('\n'); }
 const qfShort=(v,n)=>{ const t=String(v||'').replace(/\s+/g,' ').trim(); if(t.length<=n) return t; const k=t.lastIndexOf(' ',n); return t.slice(0,k>n/2?k:n).replace(/[\s,;:.]+$/,'')+'…'; }; // a short name for a continuation-page heading
 // signature block: labels at x 0 and xb; signature image sits on the line
 // a signature centred on its signature line: box spans the line (left x, width w), image sits on the line
@@ -33986,16 +34126,27 @@ async function f016BuildPdf(rec,returnBlob){
 }
 
 // ── F022 Master List of Forms (landscape) ──
+// "Number of Pages" on the printed F022 = the pages the LIMS really prints for each form (Jay, 27 Oct 2026), not the stored field:
+// forms printed on their original layout → that layout's page count (F010 prints on the F010B layout); forms the LIMS draws itself →
+// the pages of its print of one record with nothing continued (counted from the LIMS prints, 27 Oct 2026); F022 → this print itself.
+// A form the LIMS does not print (e.g. F029, filled in on screen) keeps the stored page count.
+const FORM_PRINT_LAYOUT={F010:'F010B'};
+const FORM_PRINT_PAGES={F015:3,F016:1,F017:6,F018:1,F020:1,F023:1,F024:2,F025:1,F026:1,F027:1,F030:3,F031:1,F032:4,F033:2,F034:7};
+async function formPrintPages(no){ if(FORM_PRINT_PAGES[no]) return FORM_PRINT_PAGES[no]; try{ const T=await qft(FORM_PRINT_LAYOUT[no]||no); return T&&T.pages?T.pages.length:null; }catch(e){ return null; } }
 async function exportF022Pdf(){
-  const list=formsList().filter(f=>f.issue).slice().sort((a,b)=>a.no.localeCompare(b.no)).map(f=>({...formVersion(f.no),no:f.no}));
+  // the printed list shows the forms in use: a withdrawn form (F009) is left out (Jay, 27 Oct 2026)
+  const list=formsList().filter(f=>f.issue&&!f.obsolete&&!FORM_WITHDRAWN[f.no]).slice().sort((a,b)=>a.no.localeCompare(b.no)).map(f=>({...formVersion(f.no),no:f.no}));
+  for(const f of list){ if(f.no==='F022') continue; const n=await formPrintPages(f.no); if(n) f.pages=n; }
   const g={...QF_LS,rows:[84.3,96.7,109.8],cols:[72,345.3,443.7,509.7,620.3,691.3,768.5],R:768.5};
   const xs=[72,148.5,377,447.4,542.4,656.6,768.5], F12=`12pt/1.2 ${QF_FONT}`, F10=`10pt/1.2 ${QF_FONT}`;
   const hdr=qfRow(xs,[['Form No.','center'],['Description','center'],['Revision','center'],['Last Update','center'],['Number of Pages','center'],['ISO/IEC 17025 Clause','center']],{h:29.8,font:F12,bg:QF_GREY});
-  const rows=list.map(f=>({hdr,hdrMt:12,mt:-0.5,html:qfRow(xs,[[qfE(f.no),'center'],qfE(f.title),[qfE(f.rev)+(f.issue&&f.issue!=='01'?` (Issue ${qfE(f.issue)})`:''),'center'],[qmsDate(f.effective),'center'],[qfE(f.pages||''),'center'],[qfE(f.clauses||''),'center']],{h:15.2,font:F10})}));
+  const row22=f=>({hdr,hdrMt:12,mt:-0.5,html:qfRow(xs,[[qfE(f.no),'center'],qfE(f.title),[qfE(f.rev)+(f.issue&&f.issue!=='01'?` (Issue ${qfE(f.issue)})`:''),'center'],[qmsDate(f.effective),'center'],[qfE(f.pages||''),'center'],[qfE(f.clauses||''),'center']],{h:15.2,font:F10})});
+  const rows=list.map(row22);
   const blank=qfRow(xs,['','','','','',''],{h:15.2,font:F10});
   const pad=Array.from({length:Math.max(0,19-rows.length)},()=>({mt:-0.5,html:blank}));
   const blocks=[{mt:122.5-109.8,html:hdr},...rows,...pad,{mt:27.7,html:`<div style="position:relative;top:-0.16em;text-align:center;font:bold 12pt/1 ${QF_FONT};">End</div>`}];
-  const pages=await qfFlow({g,no:'F022',v:{...formVersion('F022'),title:formVersion('F022').title||'Master List of Forms'},blocks});
+  let pages=await qfFlow({g,no:'F022',v:{...formVersion('F022'),title:formVersion('F022').title||'Master List of Forms'},blocks});
+  const f22=list.find(f=>f.no==='F022'); if(f22&&String(f22.pages)!==String(pages.length)){ f22.pages=pages.length; blocks.splice(1,rows.length,...list.map(row22)); pages=await qfFlow({g,no:'F022',v:{...formVersion('F022'),title:formVersion('F022').title||'Master List of Forms'},blocks}); }
   await qfExport(pages,{landscape:true,filename:`F022_Master_List_of_Forms_${toLocalDateStr(new Date())}.pdf`,label:'F022 Master List of Forms'});
 }
 
@@ -34297,7 +34448,7 @@ function renderDocLog(){ const L=_docLog; const people=[...new Set(L.rows.map(x=
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Every time an LQM, LQP, CLQI, working instruction or form file is opened, the server records who, which file and when — including refused attempts. Only the MD / Admin see this log and nobody can change or delete it. Opened copies are stamped with the reader's name and the time, so any printout or saved copy shows whose it was.</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;"><div><label class="form-label">Month</label><input type="month" class="form-control" value="${L.ym}" onchange="openDocLog(this.value)"/></div>
       <div><label class="form-label">Person</label><select class="form-control" onchange="_docLog.who=this.value;renderDocLog()"><option value="">Everyone</option>${people.map(u=>`<option value="${escapeHtml(u)}" ${u===L.who?'selected':''}>${escapeHtml(staffNameOf(u))}</option>`).join('')}</select></div></div>
-    ${rows.length?`<div class="table-wrap"><table class="m-cards"><thead><tr><th>Time</th><th>By</th><th>Document</th><th>What</th></tr></thead><tbody>${rows.slice(0,500).map(x=>`<tr style="${x.status==='refused'?'background:#fef2f2;':''}"><td style="white-space:nowrap;">${tm(x.at)}</td><td>${escapeHtml(staffNameOf(x.by))}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(x.role||'')}</div></td><td><b>${escapeHtml(docLogLabel(x.path))}</b><div style="font-size:11px;color:var(--text-muted);">${escapeHtml(String(x.path).split('/').pop().replace(/^\d+_/,''))}</div></td><td>${x.status==='refused'?'<span class="badge badge-red">Refused</span>':escapeHtml(P[x.purpose]||x.purpose||'')}</td></tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--text-muted);padding:10px 0;">Nothing recorded for this month.</div>'}
+    ${rows.length?`<div class="table-wrap"><table class="m-cards"><thead><tr><th>Time</th><th>By</th><th>Document</th><th>What</th></tr></thead><tbody>${rows.slice(0,500).map(x=>`<tr style="${x.status==='refused'?'background:#fef2f2;':''}"><td style="white-space:nowrap;">${tm(x.at)}</td><td>${escapeHtml(staffNameOf(x.by))}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(roleLabel(x.role))}</div></td><td><b>${escapeHtml(docLogLabel(x.path))}</b><div style="font-size:11px;color:var(--text-muted);">${escapeHtml(String(x.path).split('/').pop().replace(/^\d+_/,''))}</div></td><td>${x.status==='refused'?'<span class="badge badge-red">Refused</span>':escapeHtml(P[x.purpose]||x.purpose||'')}</td></tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--text-muted);padding:10px 0;">Nothing recorded for this month.</div>'}
     <div style="display:flex;justify-content:flex-end;margin-top:10px;"><button class="btn btn-outline" onclick="f027Close()">Close</button></div></div>`,900); }
 
 // ═══ WORKING INSTRUCTIONS ═══ Not part of the LQM / LQP / CLQI and not on F020: step-by-step instructions given to staff.
@@ -34366,7 +34517,7 @@ function renderEmailLog(){
     </div>
     ${sum.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${sum.map(p=>`<div style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;${p.blocked?'border-color:#fca5a5;background:#fef2f2;':''}"><b>${escapeHtml(staffNameOf(p.u))}</b> · ${p.sent} sent${p.blocked?` · <span style="color:#b91c1c;">${p.blocked} blocked</span>`:''}${p.failed?` · ${p.failed} failed`:''}</div>`).join('')}</div>`:''}
     ${rows.length?`<div class="table-wrap"><table class="m-cards"><thead><tr><th>Time</th><th>By</th><th>To</th><th>Subject</th><th>Status</th></tr></thead><tbody>
-    ${rows.slice(0,500).map(x=>`<tr style="${x.status==='blocked'?'background:#fef2f2;':''}"><td style="white-space:nowrap;">${tm(x.at)}</td><td>${escapeHtml(staffNameOf(x.by))}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(x.role||'')}</div></td><td style="font-size:12px;">${escapeHtml((x.to||[]).join(', '))}</td><td title="${escapeHtml(x.text||'')}">${escapeHtml(x.subject||'')}${(x.files||[]).length?`<div style="font-size:11px;color:var(--text-muted);">📎 ${escapeHtml(x.files.join(', '))}</div>`:''}<div style="font-size:11px;color:var(--text-muted);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(x.text||'')}</div></td><td>${st(x)}</td></tr>`).join('')}</tbody></table></div>${rows.length>500?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Showing the latest 500 of ${rows.length}.</div>`:''}`:'<div style="color:var(--text-muted);padding:10px 0;">No emails recorded for this month.</div>'}
+    ${rows.slice(0,500).map(x=>`<tr style="${x.status==='blocked'?'background:#fef2f2;':''}"><td style="white-space:nowrap;">${tm(x.at)}</td><td>${escapeHtml(staffNameOf(x.by))}<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(roleLabel(x.role))}</div></td><td style="font-size:12px;">${escapeHtml((x.to||[]).join(', '))}</td><td title="${escapeHtml(x.text||'')}">${escapeHtml(x.subject||'')}${(x.files||[]).length?`<div style="font-size:11px;color:var(--text-muted);">📎 ${escapeHtml(x.files.join(', '))}</div>`:''}<div style="font-size:11px;color:var(--text-muted);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(x.text||'')}</div></td><td>${st(x)}</td></tr>`).join('')}</tbody></table></div>${rows.length>500?`<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Showing the latest 500 of ${rows.length}.</div>`:''}`:'<div style="color:var(--text-muted);padding:10px 0;">No emails recorded for this month.</div>'}
     <div style="display:flex;justify-content:flex-end;margin-top:10px;"><button class="btn btn-outline" onclick="f027Close()">Close</button></div></div>`,980);
 }
 async function saveMailCap(){ const v=parseInt(el('ml-cap')?.value,10); if(!(v>=1&&v<=1000)){ alert('Enter a limit between 1 and 1000 emails a day.'); return; }
@@ -34379,7 +34530,7 @@ async function openAccessReview(){
   f027Overlay(f027Head('🔐 LIMS access review (ISO/IEC 17025 4.2.4)')+`<div style="padding:12px 16px;font-size:13px;">
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Check every account: does this person still work here, and is the role right for what they do? Deactivate leavers and correct roles in Personnel first, then record the review.</div>
     <div class="table-wrap"><table class="m-cards"><thead><tr><th>Account</th><th>Role</th><th>Status</th><th>Last sign-in</th></tr></thead><tbody>
-    ${rows.map(u=>`<tr style="${u.active?'':'opacity:.6;'}"><td><b>${escapeHtml(u.name||u.username)}</b><div style="font-size:11px;color:var(--text-muted);">${escapeHtml(u.username)}</div></td><td>${escapeHtml(u.role)}${u.signatory?' · signatory':''}</td><td>${u.active?'<span class="badge badge-green">Active</span>':'<span class="badge badge-slate">Deactivated</span>'}</td><td>${u.lastLogin?qmsDate(new Date(u.lastLogin).toISOString()):'never'}${u.active&&u.lastLogin&&Date.now()-u.lastLogin>90*864e5?' <span class="badge badge-amber">90+ days</span>':''}</td></tr>`).join('')}</tbody></table></div>
+    ${rows.map(u=>`<tr style="${u.active?'':'opacity:.6;'}"><td><b>${escapeHtml(u.name||u.username)}</b><div style="font-size:11px;color:var(--text-muted);">${escapeHtml(u.username)}</div></td><td>${escapeHtml(roleLabel(u.role))}${u.signatory?' · signatory':''}</td><td>${u.active?'<span class="badge badge-green">Active</span>':'<span class="badge badge-slate">Deactivated</span>'}</td><td>${u.lastLogin?qmsDate(new Date(u.lastLogin).toISOString()):'never'}${u.active&&u.lastLogin&&Date.now()-u.lastLogin>90*864e5?' <span class="badge badge-amber">90+ days</span>':''}</td></tr>`).join('')}</tbody></table></div>
     <div class="form-group" style="margin-top:10px;"><label class="form-label">Result / changes made <span class="req">*</span></label><textarea class="form-control" id="ar-note" rows="2" placeholder="e.g. All roles correct. / Deactivated Ali (left 30 Sep); Aina changed to Coordinator."></textarea></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" onclick="saveAccessReview()">✅ Record review</button></div>
     ${prev.length?`<div style="font-weight:700;margin:14px 0 6px;">Earlier reviews</div>${prev.map(p=>`<div style="border-top:1px solid var(--border);padding:6px 0;font-size:12px;"><b>${qmsDate(p.at)}</b> · ${escapeHtml(staffNameOf(p.by))} · ${p.users?.length||0} accounts — ${escapeHtml(p.note||'')}</div>`).join('')}`:''}</div>`,720);
@@ -34495,7 +34646,7 @@ function f026Badge(){ const b=el('f026-badge'); if(!b) return; const n=vOnSite()
 async function exportF026Pdf(){
   if(!canSeeVisitorHistory(currentUser)) return; const g=QF_LS, fv=formVersion('F026'); const v={...fv,title:fv.title||'Visitor Log Form'};
   const list=f026List().filter(x=>String(x.date).slice(0,7)===_f026Month).sort((a,b)=>String(a.timeIn).localeCompare(String(b.timeIn)));
-  const xs=[72,121.5,241.9,376.6,465,532.5,589.3,653,709.8,769.5], F10=`10pt/1.15 ${QF_FONT}`, F6=`6pt/1.1 ${QF_FONT}`;
+  const xs=[72,121.5,241.9,376.6,465,532.5,589.3,653,709.8,769.5], F10=`10pt/1.15 ${QF_FONT}`, F6=`8pt/1.1 ${QF_FONT}`; // notes in a cell: 8 pt minimum, the row grows (Jay, 27 Oct 2026)
   const hdr=qfRow(xs,['Date','Name','Company','Purpose','Person Visited','Time In','Sign In','Time Out','Sign Out'].map(h=>[`<b>${h}</b>`,'center']),{h:12.7,font:F10,bg:QF_GREY,pad:2});
   const sigs={}; for(const r of list){ if(r.sigInUrl) sigs[r.sigInUrl]=(await pdfSigDataUrl(r.sigInUrl)).data; if(r.sigOutUrl) sigs[r.sigOutUrl]=(await pdfSigDataUrl(r.sigOutUrl)).data; }
   const img=u=>u&&sigs[u]?`<img src="${sigs[u]}" style="max-height:15pt;max-width:56pt;object-fit:contain;vertical-align:middle;"/>`:'';
@@ -34713,7 +34864,7 @@ function canSeeComp(u){ return canSeeQms(u||currentUser); }
 function canGrantAuth(u){ const r=getUserRole(u||currentUser); return isAdmin(u||currentUser)||r==='Manager'; }
 function compActs(){ return (_actStore.data||[]).filter(a=>!a.removed); }
 function compAct(id){ return compActs().find(a=>a.id===id); }
-function compStaff(){ return (_staff||[]).filter(s=>s.active!==false&&s.username&&!['Sales','HR','Coordinator'].includes(s.role)); }
+function compStaff(){ return (_staff||[]).filter(s=>s.active!==false&&s.username&&!['Sales','HR','Coordinator','Receptionist','Driver'].includes(s.role)); } // technical personnel only (Receptionist / Driver added — Jay, 27 Oct 2026)
 function persOf(u){ return (_persStore.data||[]).find(p=>p.username===u)||{username:u}; }
 function onProbation(u){ const p=persOf(u).probation; return !!(p&&p.end&&p.end>toLocalDateStr(new Date())); }
 // which F025 activity covers this job item (null = not covered → no restriction)
@@ -34771,7 +34922,7 @@ async function renderComp(){
     const y=new Date().getFullYear();
     box.innerHTML=head+`<div class="card"><div class="table-wrap"><table class="m-cards"><thead><tr><th>Staff</th><th>Position</th><th>Probation</th><th>Requirement</th><th>F016</th><th>F025</th><th>CPD ${y}</th><th></th></tr></thead><tbody>
     ${S.map(s=>{ const p=persOf(s.username); const pr=p.probation; const grants=(_authStore.data||[]).filter(g=>g.username===s.username&&g.status==='active');
-      return `<tr><td><b>${escapeHtml(s.name)}</b><div style="font-size:11px;color:var(--text-muted);">${escapeHtml(s.role||'')}</div></td><td>${escapeHtml(p.position||'—')}</td><td>${pr&&pr.end?(onProbation(s.username)?`<span class="badge badge-amber">until ${qmsDate(pr.end)}</span>`:`ended ${qmsDate(pr.end)}`):'—'}</td>
+      return `<tr><td><b>${escapeHtml(s.name)}</b><div style="font-size:11px;color:var(--text-muted);">${escapeHtml(roleLabel(s.role))}</div></td><td>${escapeHtml(p.position||'—')}</td><td>${pr&&pr.end?(onProbation(s.username)?`<span class="badge badge-amber">until ${qmsDate(pr.end)}</span>`:`ended ${qmsDate(pr.end)}`):'—'}</td>
       <td>${p.meetsReq?'<span class="badge badge-green">Met</span>':'<span class="badge badge-slate">Not checked</span>'}</td><td>${f016Valid(s.username)?'✔':'<span class="badge badge-red">not signed</span>'}</td>
       <td>${grants.map(g=>`${g.level} · ${escapeHtml(compAct(g.activityId)?.title||'')}`).join('<br/>')||'—'}</td><td>${cpdHours(s.username,y)} h${s.approvedSignatory&&cpdHours(s.username,y)<16?' <span class="badge badge-amber">&lt;16</span>':''}</td>
       <td><button class="btn btn-primary btn-sm" onclick="openPersFile('${escapeForJsAttr(s.username)}')">📁 File</button></td></tr>`; }).join('')}</tbody></table></div></div>`; return; }
@@ -35039,7 +35190,7 @@ async function exportF025Pdf(){ const g=QF_P, fv=formVersion('F025'); const v={.
   for(const grp of groups){ const cols=[0,1,2].map(i=>grp[i]);
     const hdr=qfRow(xs,[['<b>Calibration / Test Title</b>','center'],...cols.map(s=>[`<b style="font-size:9pt;">${qfE(s?s.name:'')}</b>`,'center']),['<b>Supervise and Authorized By</b>','center'],['<b>Date</b>','center']],{h:27.2,font:F11,bg:QF_GREY,pad:3});
     const rows=compActs().map(a=>{ const gs=cols.map(s=>s?authGrant(s.username,a.id):null); const latest=gs.filter(Boolean).sort((x,y)=>String(y.date).localeCompare(String(x.date)))[0];
-      return {mt:-0.5,html:qfRow(xs,[`${qfE(a.title)}${(a.lines||[]).map(l=>'<br/>'+qfE(l)).join('')}`,...gs.map(gg=>[`<b style="font-size:14pt;">${gg?gg.level:''}</b>${gg&&grantRestrictLabel(gg)?`<div style="font:7pt/8pt ${QF_FONT};margin-top:2pt;">Restricted: ${qfE(grantRestrictLabel(gg))}</div>`:''}`,'center']),[latest?qfE(staffNameOf(latest.by)):'','center'],[latest?qfDateCell(latest.date,xs[6]-xs[5]-12,9):'','center']],{h:67.7,font:F11,pad:5.7,valign:'top'})}; });
+      return {mt:-0.5,html:qfRow(xs,[`${qfE(a.title)}${(a.lines||[]).map(l=>'<br/>'+qfE(l)).join('')}`,...gs.map(gg=>[`<b style="font-size:14pt;">${gg?gg.level:''}</b>${gg&&grantRestrictLabel(gg)?`<div style="font:8pt/9pt ${QF_FONT};margin-top:2pt;">Restricted: ${qfE(grantRestrictLabel(gg))}</div>`:''}`,'center']),[latest?qfE(staffNameOf(latest.by)):'','center'],[latest?qfDateCell(latest.date,xs[6]-xs[5]-12,9):'','center']],{h:67.7,font:F11,pad:5.7,valign:'top'})}; });
     const blocks=[{mt:125-109.8,html:`<div style="text-align:center;font:bold 11pt/1 ${QF_FONT};${T}">F025: Organization Competence and Authorization Matrix</div>`},{mt:11,html:`<div style="font:italic 8pt/1 ${QF_FONT};${T}">*Instructions: “A” is authorized to supervise and sign (Approved Signatory); “T” is authorized to perform, requires review (Training)</div>`},{mt:9,html:hdr},...rows,{mt:20,html:`<div style="text-align:right;font:8pt/1 ${QF_FONT};color:#a5a5a5;">${qfE(v.clauses||'Clause 6.2.3 & 6.2.6')}</div>`}];
     pages.push(...await qfFlow({g,no:'F025',v,blocks})); }
   const n=pages.length; const fixed=pages.map((h,i)=>h.replace(/(\d+) of (\d+)<\/td><td style="[^"]*">SAMM/,(m)=>m.replace(/\d+ of \d+/,`${i+1} of ${n}`)));
@@ -35627,7 +35778,7 @@ async function exportF023Pdf(id,month){ const r=eqRef(id); if(!r) return; month=
   const log={}; (r.dailyMaintenanceLog||[]).filter(m=>String(m.date).startsWith(month)).forEach(m=>{ log[+String(m.date).slice(8,10)]=m; });
   const xs=[72.25,154.35,193.25,231.95,270.75,309.55,347.55,385.6,423.65,461.7,499.75,538.5,577.25,616.05,654.85,693.55,732.35,769.75];
   const B12=`bold 12pt/14.6pt ${QF_FONT}`;
-  const cell=(d,k)=>{ const m=log[d]; if(!m) return ['','center']; if(k==='by') return [qftTxt(null,null,(staffNameOf(m.checkedBy)||'').split(' ')[0]+(m.late?'*':''),{mw:31,size:8,min:5,label:`Day ${d} — Check By`}),'center']; /* a name is shrunk to fit, never split */ const ok=m[k]!==false; return [`<span style="font:12pt/1 'Segoe UI Symbol',${QF_FONT};${ok?'':'color:#c00;'}">${ok?'✓':'✗'}</span>`,'center']; };
+  const cell=(d,k)=>{ const m=log[d]; if(!m) return ['','center']; if(k==='by'){ const nm=(staffNameOf(m.checkedBy)||'').split(' ')[0]+(m.late?'*':''); return [qftTxt(null,null,nm,{mw:31,size:8,alt:qfHyph(nm,30.5,8),label:`Day ${d} — Check By`}),'center']; } /* 8 pt: a name too long for the cell is broken with a hyphen over 2–3 lines, never shrunk */ const ok=m[k]!==false; return [`<span style="font:12pt/1 'Segoe UI Symbol',${QF_FONT};${ok?'':'color:#c00;'}">${ok?'✓':'✗'}</span>`,'center']; };
   const block=(days,lbl)=>{ const d=days.concat(Array(16-days.length).fill(null));
     return qfRow(xs,[[`<b>Date</b>`,'center'],...d.map(x=>[x?`<b>${x}</b>`:'','center'])],{h:15.1,font:B12,pad:2})
       +[['visual','Visual<br/>Inspection'],['functional','Functional<br/>Check'],['by','Check By']].map(([k,l])=>`<div style="margin-top:-0.5pt;">${qfRow(xs,[[`<b>${l}</b>`,lbl],...d.map(x=>x?cell(x,k):['','center'])],{h:29.8,font:B12,pad:4,valign:k==='by'?'top':'middle'})}</div>`).join('')
@@ -35642,29 +35793,31 @@ async function exportF023Pdf(id,month){ const r=eqRef(id); if(!r) return; month=
     +(late.length?qftTxt(72,511.6,`* late entry recorded by the TM / MD with reason (${late.map(m=>`${+String(m.date).slice(8,10)}: ${m.late.reason}`).join('; ')})`,{w:540,size:7,min:6,label:'Late entries'}):'')
     +qfAbs(0,512.3,qfE(v.clauses||'Clause 6.4.3, 6.4.13(g), 7.7.1(c)'),`width:${g.R}pt;text-align:right;font:10pt/1 ${QF_FONT};`);
   await qfExport([qfPage(g,no,v,1,1,body)],{landscape:true,no,v,filename:`F023_${safeFileName(r.id)}_${month}.pdf`,label:'F023 Equipment Maintenance Form'}); }
-async function exportF024Pdf(){ const fv=formVersion('F024'); const W=841.92,H=595.32; const xs=[34.55,58.25,126.25,181.75,231.55,276.15,324.15,371.95,416.15,463.35,508.55,553.75,598.95,655.15,702.85,757.35,824.45];
-  const F8=`6.5pt/1 ${QF_FONT}`, H8=`bold 8pt/1.1 ${QF_FONT}`; const today=eqToday();
+// F024 — values at 8 pt (never smaller); a row grows to as many lines as its longest value needs (up to 4 lines, beyond that the
+// rest goes on a continuation page); rows run onto as many pages as needed. Every page has the standard form header with
+// "PAGE NO. x of N" and the standard footer (Jay, 27 Oct 2026). Like the paper form there are at least two pages, ruled with empty rows.
+async function exportF024Pdf(){ const fv=formVersion('F024'); const v={...fv,title:fv.title||'Master List of Equipment'}; const xs=[34.55,58.25,126.25,181.75,231.55,276.15,324.15,371.95,416.15,463.35,508.55,553.75,598.95,655.15,702.85,757.35,824.45].map(x=>+(x-34.55+72).toFixed(2)); // qfRow places tables from x 72 = the page's left edge here
+  const F8=`8pt/9.2pt ${QF_FONT}`, H8=`bold 8pt/1.1 ${QF_FONT}`; const today=eqToday();
   const rows=[]; (_refEq||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).forEach(r=>{ const st=EQ_OOS.includes(r.lifecycleStatus)?r.lifecycleStatus:!eqCommissioned(r)?'Not commissioned':r.dueDate&&r.dueDate<today?'Overdue':(r.availability==='UnderCalibration'?'Out for calibration':'In Service');
     const ps=(r.parameters&&r.parameters.length?r.parameters:[r]); ps.forEach((p,i)=>rows.push([r.name+(ps.length>1&&p.parameter?` — ${p.parameter}`:''),r.scope||'',r.model||'',r.brand||'',r.supplier||'',[r.serial,r.id].filter(Boolean).join(' / '),r.location||'',p.traceability||r.traceability||'',qfDmy(p.lastCal||r.lastCal),qfDmy(p.dueDate||r.dueDate),p.calBy||r.calBy||'',(p.calInterval||r.calInterval)?`${p.calInterval||r.calInterval} months`:'',st,p.measurementUncertainty||'',p.acceptanceCriteria||''])); });
   const hdrCells=['No.','Equipment','Description for Usage','Model','Brand','Supplier','Serial No. / Control No.','Current Location of Equip.','Metrological Traceability','Last Traceability Date','Calibration Due Date','Traceable to','Metrological / Calibration Interval','Equipment Status','Measurement Uncertainty','Acceptance Criteria (U ≤ MPE / tolerance)'];
   const colHdr=qfRow(xs,hdrCells.map(t=>[`<b>${t}</b>`,'center']),{h:33.2,font:H8,bg:'#e8e8e8',pad:1.5});
-  // a row grows to 2 or 3 lines (6.5 pt) when a value needs it; only what does not fit 3 lines continues on a continuation page
-  const cw=ci=>+(xs[ci+2]-xs[ci+1]-3.5).toFixed(2), rowH=k=>+(11.05+(k-1)*6.5*1.15).toFixed(2); await qfFonts();
-  const ks=rows.map(c=>{ for(let k=1;k<=3;k++){ if(c.every((x,ci)=>!x||qftFits(x,cw(ci),rowH(k)-1.45,6.5))) return k; } return 3; });
-  const dRow=(n,c,k)=>`<div style="margin-top:-0.5pt;">${qfRow(xs,[[n?String(n):'','center'],...c.map((x,ci)=>[x?qftTxt(null,null,x,{w:cw(ci),h:+(rowH(k||1)-1.45).toFixed(2),size:6.5,min:6.5,label:`No. ${n} ${c[0]} — ${hdrCells[ci+1]}`}):'','left','overflow:hidden;'])],{h:rowH(k||1),font:F8,pad:1.5})}</div>`;
-  // pages are filled by row height (page 1 holds 33 one-line rows, the next pages 42); like the paper form there are always at least two pages, padded with empty rows
-  const cap=[33*11.05,42*11.05]; const chunks=[[]]; let used=0; rows.forEach((c,k)=>{ const h=rowH(ks[k]); if(chunks[chunks.length-1].length&&used+h>cap[chunks.length>1?1:0]+0.01){ chunks.push([]); used=0; } chunks[chunks.length-1].push(k); used+=h; }); if(chunks.length<2) chunks.push([]);
-  const N=chunks.length; const md=(_staff||[]).find(s=>getUserRole(s.username)==='Managing Director');
-  const pages=chunks.map((idx,p)=>{ const free=cap[p?1:0]-idx.reduce((s,k)=>s+rowH(ks[k]),0); const body=idx.map(k=>dRow(k+1,rows[k],ks[k])).join('')+Array(Math.max(0,Math.floor(free/11.05+0.01))).fill(0).map(()=>dRow('',Array(15).fill(''),1)).join('');
-    const top=p===0?`<img src="${QF_LOGO}" style="position:absolute;left:381.6pt;top:11.5pt;width:87.5pt;height:85.3pt;"/>
-      <div style="position:absolute;right:${(W-824.5).toFixed(1)}pt;top:81pt;margin-top:-0.16em;font:bold 10pt/1 ${QF_FONT};">LABORATORY MANAGEMENT FORM</div>
-      <div style="position:absolute;left:34.55pt;top:91.7pt;width:789.9pt;height:22.5pt;border:0.9pt solid #000;box-sizing:border-box;"></div><div style="position:absolute;left:35pt;top:92.2pt;width:789pt;height:10.6pt;background:#e8e8e8;"></div><div style="position:absolute;left:410.6pt;top:102.7pt;width:0.9pt;height:11.5pt;background:#000;"></div>
-      ${[['DOCUMENT TITLE',`F024 - ${fv.title||'Master List of Equipment'}`,34.55,411.1],['ISSUE',fv.issue||'01',411.1,505],['REVISION',fv.rev||'00',505,600],['EFFECTIVE DATE',qmsDate(fv.effective)||'10 Mar 2026',600,705],['LOCATION','SAMM',705,824.45]].map(([h,val,x0,x1])=>`<div style="position:absolute;left:${x0}pt;width:${x1-x0}pt;top:93.6pt;margin-top:-0.16em;text-align:center;font:italic bold 8pt/1 ${QF_FONT};">${h}</div><div style="position:absolute;left:${x0}pt;width:${x1-x0}pt;top:105.1pt;margin-top:-0.16em;text-align:center;font:8pt/1 ${QF_FONT};">${qfE(val)}</div>`).join('')}
-      <div style="position:absolute;left:0;width:${W}pt;top:127.7pt;margin-top:-0.16em;text-align:center;font:bold 10pt/1 ${QF_FONT};">MASTER LIST OF EQUIPMENT</div>
-      <div style="position:absolute;left:72pt;top:149.4pt;">${colHdr}${body}</div>`:`<div style="position:absolute;left:72pt;top:12.2pt;">${colHdr}${body}</div>`;
-    const sign=p===N-1?`<div style="position:absolute;left:97.9pt;top:522pt;margin-top:-0.16em;font:bold 8pt/1 ${QF_FONT};">Updated by: ${qfE((staffNameOf(currentUser)||'').split(' ')[0])}</div><div style="position:absolute;left:339.6pt;top:522pt;margin-top:-0.16em;font:bold 8pt/1 ${QF_FONT};">Date: ${qfDmy(today)}</div><div style="position:absolute;left:508.9pt;top:522pt;margin-top:-0.16em;font:bold 8pt/1 ${QF_FONT};">Approved by: ${isAdmin(currentUser)||getUserRole(currentUser)==='Managing Director'?qfE((staffNameOf(currentUser)||'').split(' ')[0]):'<span style="display:inline-block;width:80pt;border-bottom:0.6pt solid #000;">&nbsp;</span>'}</div><div style="position:absolute;right:${(W-824.5).toFixed(1)}pt;top:533pt;margin-top:-0.16em;font:8pt/1 ${QF_FONT};color:#a5a5a5;">${qfE(fv.clauses||'Clause 6.7')}</div>`:'';
-    return `<div style="position:relative;width:${W}pt;height:${H}pt;background:#fff;color:#000;overflow:hidden;font-family:${QF_FONT};">${top}${sign}<div data-qfpg="1" data-qfpgpre="Page " style="position:absolute;left:0;width:${W}pt;top:562.9pt;margin-top:-0.16em;text-align:center;font:8pt/1 ${QF_FONT};">Page ${p+1} of ${N}</div></div>`; });
-  await qfExport(pages,{landscape:true,filename:`F024_Master_List_of_Equipment_${today}.pdf`,label:'F024 Master List of Equipment'}); }
+  const cw=ci=>+(xs[ci+2]-xs[ci+1]-3.5).toFixed(2), rowH=k=>+(11.5+(k-1)*8*1.15).toFixed(2), MAXK=4; await qfFonts();
+  const ks=rows.map(c=>{ for(let k=1;k<=MAXK;k++){ if(c.every((x,ci)=>!x||qftFits(x,cw(ci),rowH(k)-1.45,8))) return k; } return MAXK; });
+  const dRow=(n,c,k)=>qfRow(xs,[[n?String(n):'','center'],...c.map((x,ci)=>[x?qftTxt(null,null,x,{w:cw(ci),h:+(rowH(k||1)-1.45).toFixed(2),size:8,min:8,label:`No. ${n} ${c[0]} — ${hdrCells[ci+1]}`}):'','left','overflow:hidden;'])],{h:rowH(k||1),font:F8,pad:1.5});
+  const blank=dRow('',Array(15).fill(''),1);
+  const g={...QF_LS,L:34.55,R:824.45,cols:[34.55,380,460,540,640,740,824.45]};
+  const md=(_staff||[]).find(s=>getUserRole(s.username)==='Managing Director');
+  const appr=isAdmin(currentUser)||getUserRole(currentUser)==='Managing Director'?qfE((staffNameOf(currentUser)||'').split(' ')[0]):'<span style="display:inline-block;width:80pt;border-bottom:0.6pt solid #000;">&nbsp;</span>';
+  const lab=(x,html)=>`<div style="position:absolute;left:${(x-34.55).toFixed(2)}pt;top:0;white-space:nowrap;font:bold 8pt/1 ${QF_FONT};">${html}</div>`;
+  const SIGN_H=22, SIGN_MT=12;
+  const sign=`<div style="position:relative;height:${SIGN_H}pt;">${lab(97.9,`Updated by: ${qfE((staffNameOf(currentUser)||'').split(' ')[0])}`)}${lab(339.6,`Date: ${qfDmy(today)}`)}${lab(508.9,`Approved by: ${appr}`)}<div style="position:absolute;right:0;top:12pt;font:8pt/1 ${QF_FONT};color:#a5a5a5;">${qfE(fv.clauses||'Clause 6.7')}</div></div>`;
+  const head=[{mt:6,html:`<div style="text-align:center;font:bold 10pt/1 ${QF_FONT};">MASTER LIST OF EQUIPMENT</div>`},{mt:8,html:colHdr}];
+  const data=rows.map((c,k)=>({hdr:colHdr,hdrMt:12,mt:-0.5,html:dRow(k+1,c,ks[k])}));
+  const tail=[{fill:{html:`<div>${blank}</div>`,h:rowH(1),until:g.max-SIGN_H-SIGN_MT}},{mt:SIGN_MT,keepPrev:true,html:sign}];
+  let pages=await qfFlow({g,no:'F024',v,blocks:[...head,...data,...tail]});
+  if(pages.length<2) pages=await qfFlow({g,no:'F024',v,blocks:[...head,...data,{fill:{html:`<div>${blank}</div>`,h:rowH(1),until:g.max}},{breakBefore:true,mtNew:12,html:colHdr},...tail]});
+  await qfExport(pages,{landscape:true,no:'F024',v,filename:`F024_Master_List_of_Equipment_${today}.pdf`,label:'F024 Master List of Equipment'}); }
 
 // ═══════════════════════════ PURCHASE ORDERS ═══════════════════════════
 const PURCHASE_ORDERS_KEY='wl_purchase_orders';
