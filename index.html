@@ -4449,7 +4449,9 @@ const SB={
             reject(new Error('Invalid response from upload worker'));
           }
         } else {
-          reject(new Error(`Upload failed: ${xhr.status} ${xhr.responseText}`));
+          // the file service answers {"error":"…"} — show its sentence, not the raw reply
+          let why=''; try{ const o=JSON.parse(xhr.responseText); why=o&&(o.error||o.message)||''; }catch(e){}
+          reject(new Error(why?String(why):`Upload failed: ${xhr.status} ${xhr.responseText}`));
         }
       };
       xhr.onerror = () => reject(new Error('Upload failed — check your internet connection'));
@@ -4553,7 +4555,14 @@ function custChangedSinceCert(j,it){ if(!j||!it||!custNoticeRole()) return []; c
   const eu=!!j.endUserName&&custNorm(cd.issued_to)===custNorm(j.endUserName); const rec=eu?custRecFor(j.endUserId||null,j.endUserName):custRecFor(j.custId,cd.issued_to);
   return custChangedFields(rec,{name:cd.issued_to,address:cd.cust_addr||''}); }
 function custChangedSinceInvoice(inv){ if(!inv||!custNoticeRole()||(typeof invCancelled==='function'&&invCancelled(inv))) return [];
-  return custChangedFields(custRecFor(inv.custId,inv.custName),{name:inv.custName,address:inv.address||'',attention:inv.attention||'',email:inv.email||''}); }
+  const rec=custRecFor(inv.custId,inv.custName);
+  // the invoice was addressed to another contact person of the same customer (rec.contacts): not a change
+  const p=rec&&custNorm(inv.attention)?(rec.contacts||[]).find(c=>c&&c.name&&custNorm(c.name)===custNorm(inv.attention)):null;
+  const pMail=p&&(!String(p.email||'').trim()||String(p.email).trim().toLowerCase()===String(inv.email||'').trim().toLowerCase());
+  return custChangedFields(rec,{name:inv.custName,address:inv.address||'',attention:p?null:(inv.attention||''),email:pMail?null:(inv.email||'')}); }
+// customer details written into an invoice when it is made (the latest customer record — decision 14); the issued invoice then keeps them
+function invCustSnap(j){ const d=docCustLatest(j)||j||{}; const rec=custRecFor(j&&j.custId,j&&j.custName)||{};
+  return {custName:d.custName,custId:(j&&j.custId)||null,attention:d.attention||'',address:d.address||'',email:d.email||'',tel:d.tel||d.mobile||'',fax:d.fax||'',custTin:rec.tin||'',custBrn:rec.brn||''}; }
 function custChangedNoticeHtml(f,what){ if(!f||!f.length) return '';
   return `<div class="cust-chg-note" style="margin:0;font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:4px 8px;">ℹ️ Customer details changed since this was issued (${f.join(', ')}) — ${what==='invoice'?'re-issue (credit note + new invoice) if needed':'amend the certificate if needed (ISO/IEC 17025 7.8.8)'}.</div>`; }
 const SETTINGS_SERVER_ADMIN_FIELDS=['phone','salesEmail','tinNo','companyTin','username','labName','address','branch','regNo','email','tel','fax','website','logoUrl','publicStatusUrl','feedbackFormUrl','complaintFormUrl','sstEnabled','slaExpress','slaNormal','slaRoutine','slaUrgent','invoiceCfg','testingModeOn','docNumberFloors','officeNet','recordDisposals','limsLive','mailDailyCap','accreditation','soaBank'];
@@ -4800,7 +4809,13 @@ function toastPlace(t){ try{
     return ctl.filter(r=>ov2(r,tr)>0).length*1e7+(db?ov2(db,tr):0); };
   let best=0, bestN=Infinity; for(let i=0;i<pos.length;i++){ t.style.cssText=base+pos[i]; const n=score(); if(n<bestN){ best=i; bestN=n; } if(!n) break; }
   // phones (full-width messages): when both ends cover a button, the first free band further down the screen
-  if(phone&&bestN>=1e7){ t.style.cssText=base+pos[0]; const h=t.getBoundingClientRect().height; for(let y=10;y+h<H-4;y+=24){ const p2=`top:${y}px;left:10px;right:10px;`; t.style.cssText=base+p2; if(score()<1e7){ pos.push(p2); best=pos.length-1; break; } } }
+  if(phone&&bestN>=1e7){ t.style.cssText=base+pos[0]; const h=t.getBoundingClientRect().height; for(let y=10;y+h<H-4;y+=24){ const p2=`top:${y}px;left:10px;right:10px;`; t.style.cssText=base+p2; if(score()<1e7){ pos.push(p2); best=pos.length-1; bestN=0; break; } } }
+  // phones, still no free place: never cover the window's title / ✕ or its bottom buttons — keep only the newest message, just under the window's header
+  if(phone&&bestN>=1e7){ while(t.children.length>1) t.firstElementChild.remove();
+    const hd=[...ov.querySelectorAll('.modal-header')].find(e=>e.getBoundingClientRect().height>0)||(dlg&&dlg.firstElementChild); const hb=hd?hd.getBoundingClientRect().bottom:0;
+    if(hb>0&&hb<H*0.6){ const h=t.getBoundingClientRect().height; let bp=null, bn=Infinity; // below the header: the band that covers the fewest controls
+      for(let y=Math.round(hb+6);y+h<H-4;y+=12){ const p2=`top:${y}px;left:10px;right:10px;`; t.style.cssText=base+p2; const n=score(); if(n<bn){ bn=n; bp=p2; } }
+      if(bp){ pos.push(bp); best=pos.length-1; } } }
   t.style.cssText=base+pos[best];
 }catch(e){} }
 // Show saving spinner on buttons during async operations
@@ -7365,7 +7380,7 @@ async function testEmailTemplate(type){
         ${sampleItems.map(it=>`<tr>
           <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${it.itemNo}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${escapeHtml(it.eqName)}${escapeHtml(it.brand||it.model?' ('+[it.brand,it.model].filter(Boolean).join(' ')+')'  :'')}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.certNo}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${escapeHtml(it.certNo)}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${escapeHtml(it.serial)}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.calData.date}</td>
         </tr>`).join('')}
@@ -7564,7 +7579,7 @@ function fmtDateShort(d){
   // ("2026-09-20T09:00:00Z") — timestamps used to come back unformatted.
   const str=String(d);
   const dt=/^\d{4}-\d{2}-\d{2}$/.test(str)?new Date(str+'T00:00:00'):new Date(d);
-  if(isNaN(dt))return str;
+  if(isNaN(dt))return escapeHtml(str); // returned into HTML templates — never raw
   return `${String(dt.getDate()).padStart(2,'0')} ${wlMon(dt)} ${dt.getFullYear()}`; // fixed month names — browsers differ ("Sep" / "Sept")
 }
 // English month abbreviations, the same in every browser (some write September as "Sept")
@@ -8013,7 +8028,7 @@ function buildReceiptHtml(jobs){
   const itemRows=allItems.map((it,i)=>`
     <tr>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${i+1}</td>
-      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;font-weight:700;color:#1a56db;">${it.certNo||'—'}</td>
+      <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;font-weight:700;color:#1a56db;">${escapeHtml(it.certNo||'—')}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${escapeHtml(it.eqName)}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;">${escapeHtml(it.serial||'—')}</td>
       <td style="padding:5px 8px;border:0.5pt solid #ccc;font-size:9pt;${it.calType==='Onsite'?'color:#c84b00;font-weight:700;':''}">${it.calType==='Onsite'?'Onsite':'Lab'}</td>
@@ -8027,13 +8042,13 @@ function buildReceiptHtml(jobs){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6mm;">
       <div>
         ${logoUrl?`<img src="${logoUrl}" style="height:14mm;object-fit:contain;margin-bottom:2mm;"/>`:`<div style="font-size:16pt;font-weight:900;letter-spacing:2px;">WESTLAB</div>`}
-        <div style="font-size:9pt;font-weight:700;margin-top:1mm;">${labName}${regNo?` <span style="font-size:7pt;font-weight:400;color:#666;">(Reg. No: ${regNo})</span>`:''}</div>
+        <div style="font-size:9pt;font-weight:700;margin-top:1mm;">${labName}${regNo?` <span style="font-size:8pt;font-weight:400;color:#666;">(Reg. No: ${regNo})</span>`:''}</div>
         <div style="font-size:8pt;color:#555;white-space:pre-line;margin-top:0.5mm;">${labAddr}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:13pt;font-weight:700;border:1.5pt solid #111;padding:3mm 6mm;">JOB RECEIPT</div>
         ${qrImg?`<img src="${qrImg}" style="width:20mm;height:20mm;margin:2mm 0 1mm auto;display:block;"/>
-        <div style="font-size:6.5pt;color:#888;">Scan to check status</div>`:''}${jobCheckCodeOk(j0.checkCode)?`<div style="font-size:6.5pt;color:#888;">or enter the Job No. and check code</div>`:''}
+        <div style="font-size:8pt;color:#888;">Scan to check status</div>`:''}${jobCheckCodeOk(j0.checkCode)?`<div style="font-size:8pt;color:#888;">or enter the Job No. and check code</div>`:''}
         <div style="font-size:8pt;color:#555;margin-top:1.5mm;">Date: ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
       </div>
     </div>
@@ -8092,10 +8107,10 @@ function buildReceiptHtml(jobs){
         <div style="width:60mm;border-top:0.7pt solid #111;padding-top:1.5mm;font-size:8.5pt;">Prepared by (${labName})</div>
       </div>
     </div>
-    <div style="margin-top:4mm;font-size:7.5pt;color:#777;text-align:center;border-top:0.3pt solid #ccc;padding-top:2mm;">
+    <div style="margin-top:4mm;font-size:8pt;color:#777;text-align:center;border-top:0.3pt solid #ccc;padding-top:2mm;">
       If this receipt is not signed by the customer, it is deemed accepted upon collection of equipment. Please retain this receipt for your records — check the status online with your Job Number and check code, or contact us.
     </div>
-    <div data-pgno="1" style="position:absolute;bottom:6mm;right:16mm;font-size:7pt;color:#999;">Page 1 of 1</div>
+    <div data-pgno="1" style="position:absolute;bottom:6mm;right:16mm;font-size:8pt;color:#999;">Page 1 of 1</div>
   </div>`;
 }
 
@@ -8163,8 +8178,8 @@ function buildWorkOrderHTML(job){
     const descLines=[
       `<strong>${escapeHtml(it.eqName||'—')}</strong>`,
       `Brand: ${escapeHtml(it.brand||'—')}, Model: ${escapeHtml(it.model||'—')}, S/N: ${escapeHtml(it.serial||'—')}`,
-      `Range: ${it.range||'—'}, Specification: ${it.spec||'—'}, Cal points: ${escapeHtml(it.calPoints||'—')}`,
-      `Condition: ${it.condition||'—'}, Accessories: ${it.accessories||'—'}`,
+      `Range: ${escapeHtml(it.range||'—')}, Specification: ${escapeHtml(it.spec||'—')}, Cal points: ${escapeHtml(it.calPoints||'—')}`,
+      `Condition: ${escapeHtml(it.condition||'—')}, Accessories: ${escapeHtml(it.accessories||'—')}`,
       it.remarks?`Remark: ${escapeHtml(it.remarks)}`:''
     ].filter(Boolean).join('<br/>');
     const calDate=it.calData?.date?fmtDate(it.calData.date):'';
@@ -8172,47 +8187,48 @@ function buildWorkOrderHTML(job){
     const stickerNo=it.calData?.sticker_no||'';
     return `<tr>
       <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${i+1}</td>
-      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;font-size:8px;vertical-align:top;">${descLines}</td>
-      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${it.priority||'Normal'}</td>
-      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calDate}</td>
-      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${calBy}</td>
-      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${stickerNo}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;font-size:11.5px;vertical-align:top;">${descLines}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${escapeHtml(it.priority||'Normal')}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${escapeHtml(calDate)}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${escapeHtml(calBy)}</td>
+      <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${escapeHtml(stickerNo)}</td>
     </tr>`;
   }).join('');
   // the top block (letterhead, work order no., customer, job details) is repeated at the top of every page (data-pgrepeat) —
   // page 2 onwards shows the same details as page 1 before the continuing table (Jay, 27 Oct 2026)
+  // text at least 11 px = 8 pt on the A4 page (Jay, 27 Oct 2026: 8 pt minimum on every print)
   return `<div style="width:760px;padding:20px;font-family:Arial,sans-serif;background:#fff;color:#111;">
     <div data-pgrepeat="1">
     <table style="width:100%;margin-bottom:14px;">
       <tr>
         <td style="vertical-align:top;">
-          <div style="font-size:13px;font-weight:800;">${labName}${s.regNo?' ('+s.regNo+')':''}</div>
-          <div style="font-size:9px;color:#444;">${escapeHtml(s.address||'')}</div>
-          <div style="font-size:9px;color:#444;">Phone: ${escapeHtml(co.tel)} email: ${escapeHtml(co.email)}</div>
+          <div style="font-size:13px;font-weight:800;">${escapeHtml(labName)}${s.regNo?' ('+escapeHtml(s.regNo)+')':''}</div>
+          <div style="font-size:11px;color:#444;">${escapeHtml(s.address||'')}</div>
+          <div style="font-size:11px;color:#444;">Phone: ${escapeHtml(co.tel)} email: ${escapeHtml(co.email)}</div>
         </td>
       </tr>
     </table>
     <div style="border-top:1pt solid #111;margin-bottom:12px;"></div>
-    <table style="width:100%;font-size:10px;margin-bottom:14px;">
+    <table style="width:100%;font-size:11.5px;margin-bottom:14px;">
       <tr>
         <td style="width:55%;vertical-align:top;">
           <strong>${escapeHtml(job.custName||'—')}</strong><br/>
           ${escapeHtml(job.address||'').replace(/\n/g,'<br/>')}<br/>
-          Attn: ${escapeHtml(job.attention||'—')}<br/>Tel: ${job.tel||job.mobile||'—'}<br/>
-          Email: ${job.email||'—'}<br/>Fax: ${job.fax||'--'}
+          Attn: ${escapeHtml(job.attention||'—')}<br/>Tel: ${escapeHtml(job.tel||job.mobile||'—')}<br/>
+          Email: ${escapeHtml(job.email||'—')}<br/>Fax: ${escapeHtml(job.fax||'--')}
         </td>
         <td style="vertical-align:top;">
-          <strong>WORK ORDER: ${job.jobNo}</strong><br/>
+          <strong>WORK ORDER: ${escapeHtml(job.jobNo)}</strong><br/>
           Receiving Date: ${fmtDate(job.receiveDate)}<br/>
           Issue Date: ${fmtDate(toLocalDateStr(new Date()))}<br/>
-          Prepared By: ${preparedBy}<br/>
-          PO Number: ${job.po||'—'}<br/>
+          Prepared By: ${escapeHtml(preparedBy)}<br/>
+          PO Number: ${escapeHtml(job.po||'—')}<br/>
           Location: ${(job.items||[]).some(it=>it.calType==='Onsite')?'Onsite':'Lab'}
         </td>
       </tr>
     </table>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:8.5px;">
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
       <thead><tr>
         <th style="padding:5px 4px;width:5%;background:#0f1f3d;color:#fff;">No.</th><th style="padding:5px 4px;text-align:left;width:40%;background:#0f1f3d;color:#fff;">Description</th>
         <th style="padding:5px 4px;width:12%;background:#0f1f3d;color:#fff;">Priority</th><th style="padding:5px 4px;width:16%;background:#0f1f3d;color:#fff;">Cal. Date</th>
@@ -8273,8 +8289,8 @@ function renderReceivingLogPage(){
   box.innerHTML=`<div class="card"><div class="table-wrap"><table>
     <thead><tr><th>No.</th><th>Company Name</th><th>Receiving Date</th><th>Job Number</th><th>Equipment Name</th><th>Brand</th><th>Model</th><th>Serial No.</th><th>Cert/Report No.</th><th>Condition on receipt</th><th>Received by</th></tr></thead>
     <tbody>${rows.slice().reverse().slice(0,_rlShowN).map(r=>`<tr>
-      <td>${r.no}</td><td>${escapeHtml(r.company||'—')}</td><td style="white-space:nowrap;">${fmtDateShort(r.receiveDate)}</td><td style="white-space:nowrap;">${r.jobNo}</td>
-      <td>${escapeHtml(r.eqName||'—')}</td><td>${escapeHtml(r.brand||'—')}</td><td>${escapeHtml(r.model||'—')}</td><td>${escapeHtml(r.serial||'—')}</td><td style="white-space:nowrap;">${r.certNo||'—'}</td>
+      <td>${r.no}</td><td>${escapeHtml(r.company||'—')}</td><td style="white-space:nowrap;">${fmtDateShort(r.receiveDate)}</td><td style="white-space:nowrap;">${escapeHtml(r.jobNo)}</td>
+      <td>${escapeHtml(r.eqName||'—')}</td><td>${escapeHtml(r.brand||'—')}</td><td>${escapeHtml(r.model||'—')}</td><td>${escapeHtml(r.serial||'—')}</td><td style="white-space:nowrap;">${escapeHtml(r.certNo||'—')}</td>
       <td style="font-size:12px;">${escapeHtml(r.condition||'—')}</td><td style="white-space:nowrap;">${escapeHtml(r.receivedBy||'—')}</td>
     </tr>`).join('')}${rows.length>_rlShowN?`<tr><td colspan="12" style="text-align:center;padding:10px;"><button class="btn btn-outline btn-sm" onclick="_rlShowN+=100;renderReceivingLogPage()">Show more (${rows.length-_rlShowN} more)</button></td></tr>`:''}</tbody>
   </table></div></div>`;
@@ -8415,12 +8431,14 @@ async function exportStickerLogPdf(){
 async function pdfPaginateHtml(html,{landscape,minScale}={}){
   const box=document.createElement('div'); box.style.cssText='position:fixed;left:-40000px;top:0;'; document.body.appendChild(box);
   try{
-    box.innerHTML=html; const root=box.firstElementChild; if(!root) return {pages:[html],landscape:!!landscape};
+    box.innerHTML=html; const root=box.firstElementChild; if(!root) return {pages:[html],landscape:!!landscape}; pdfNoHyphenBreak(root); html=box.innerHTML; // measured as it will print
     await filesSettle().catch(()=>{}); await Promise.all([...root.querySelectorAll('img')].map(im=>im.complete?0:new Promise(r=>{ im.onload=im.onerror=r; setTimeout(r,3000); })));
     const RW=root.getBoundingClientRect().width; if(landscape==null) landscape=RW>820;
     const pageH=Math.floor(RW*(landscape?595.28/841.89:841.89/595.28)); const cs=getComputedStyle(root);
     const padT=parseFloat(cs.paddingTop)||0, padB=parseFloat(cs.paddingBottom)||0, own=root.querySelector('[data-pgno]');
-    const avail=pageH-padT-padB-(own?0:18);
+    // a block marked data-pgfoot (e.g. the abnormal report's company footer) is printed at the bottom of every page
+    const foots=[...root.children].filter(c=>c.hasAttribute('data-pgfoot')), footH=foots.reduce((t,c)=>{ const r=c.getBoundingClientRect(), z=getComputedStyle(c); return t+r.height+(parseFloat(z.marginTop)||0); },0);
+    const avail=pageH-padT-padB-(own?0:18)-footH;
     if(root.getBoundingClientRect().height<=pageH/Math.min(1,minScale||1)+1) return {pages:[html],landscape};
     const units=[], abs=[]; const top0=root.getBoundingClientRect().top;
     const ext=e=>{ const r=e.getBoundingClientRect(), st=getComputedStyle(e); return {t:r.top-(parseFloat(st.marginTop)||0)-top0, b:r.bottom+(parseFloat(st.marginBottom)||0)-top0}; };
@@ -8437,7 +8455,7 @@ async function pdfPaginateHtml(html,{landscape,minScale}={}){
       rg.selectNodeContents(node); const tops=[...new Set([...rg.getClientRects()].filter(r=>r.height>0).map(r=>Math.round(r.top*2)/2))].sort((a,b)=>a-b); if(tops.length<2) return null;
       const offs=[0]; tops.slice(1).forEach(t=>{ let lo=offs[offs.length-1], hi=len; while(lo<hi){ const m=(lo+hi)>>1; if(topAt(m)>=t-1) hi=m; else lo=m+1; } offs.push(lo); }); offs.push(len);
       return tops.map((t,i)=>({from:offs[i],to:offs[i+1],t:i?t-top0:x.t,b:i<tops.length-1?tops[i+1]-top0:x.b})).filter(l=>l.to>l.from); };
-    const walk=(parent,chain,rowMap)=>{ for(const ch of [...parent.children]){ if(ch.hasAttribute('data-pgno')) continue; const x=(rowMap&&rowMap.get(ch))||ext(ch); const h=x.b-x.t; const st=getComputedStyle(ch); let fr=null;
+    const walk=(parent,chain,rowMap)=>{ for(const ch of [...parent.children]){ if(ch.hasAttribute('data-pgno')||(parent===root&&ch.hasAttribute('data-pgfoot'))) continue; const x=(rowMap&&rowMap.get(ch))||ext(ch); const h=x.b-x.t; const st=getComputedStyle(ch); let fr=null;
       if(st.position==='absolute'||st.position==='fixed'){ if(parent===root) abs.push(ch); continue; } // decorations placed on the page: kept on page 1
       let rows=ch.tagName==='TABLE'&&ch.tBodies.length?[...ch.tBodies].flatMap(tb=>[...tb.rows]):[];
       const hrow=ch.tagName==='TABLE'&&!ch.tHead&&rows.length>1&&[...rows[0].cells].length&&[...rows[0].cells].every(c=>c.tagName==='TH')?rows[0]:null; if(hrow) rows=rows.slice(1); // a plain first row of headings is repeated like a <thead>
@@ -8465,8 +8483,9 @@ async function pdfPaginateHtml(html,{landscape,minScale}={}){
         else par.appendChild(u.el.cloneNode(true)); });
       if(!pi) abs.forEach(a=>pr.appendChild(a.cloneNode(true)));
       if(pi) reps.slice().reverse().forEach(c=>pr.insertBefore(c.cloneNode(true),pr.firstChild));
+      if(foots.length){ const fb=document.createElement('div'); fb.style.cssText=`position:absolute;left:${parseFloat(cs.paddingLeft)||0}px;right:${parseFloat(cs.paddingRight)||0}px;bottom:${padB}px;`; foots.forEach(c=>{ const k=c.cloneNode(true); fb.appendChild(k); }); pr.appendChild(fb); }
       if(own){ const o=own.cloneNode(true); o.textContent=`Page ${pi+1} of ${N}`; pr.appendChild(o); }
-      else if(N>1){ const d=document.createElement('div'); d.style.cssText=`position:absolute;right:${parseFloat(cs.paddingRight)||16}px;bottom:${Math.max(4,padB/2-6)}px;font:10px Arial,sans-serif;color:#555;`; d.textContent=`Page ${pi+1} of ${N}`; pr.appendChild(d); }
+      else if(N>1){ const d=document.createElement('div'); d.style.cssText=`position:absolute;right:${parseFloat(cs.paddingRight)||16}px;bottom:${Math.max(4,padB/2-6)}px;font:11px Arial,sans-serif;color:#555;`; d.textContent=`Page ${pi+1} of ${N}`; pr.appendChild(d); }
       return pr.outerHTML; });
     return {pages:out,landscape};
   }finally{ box.remove(); }
@@ -8495,6 +8514,11 @@ function exportPagedPdf(...a){ return rpfQueue(()=>exportPagedPdfRun(...a)); }
 // drawn, every solid border on it is measured as laid out and redrawn once as a plain line of the same thickness and colour — the
 // way the original form layouts draw their lines; lines that fall on the same place are drawn once. The page layout is unchanged
 // (the borders stay, transparent). Rounded, dotted and dashed borders are left as they are.
+const PDF_RASTER_SCALE=3;
+// No word is split at its hyphen on a print (Jay, 27 Oct 2026: never "as-|found"): a word joiner (U+2060, no width) after the hyphen of
+// a hyphenated word keeps it on one line. E-mails, links, file names and long codes keep their natural break points (qfNat).
+const pdfWJ=t=>/[@\/_]/.test(t)||(t.length>=16&&/\d/.test(t))?t:t.replace(/([A-Za-z0-9])-(?=[A-Za-z])/g,'$1-\u2060');
+function pdfNoHyphenBreak(root){ try{ if(!root) return; const tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); let n; while(n=tw.nextNode()){ const d=n.data; if(/[A-Za-z0-9]-[A-Za-z]/.test(d)){ const x=d.replace(/[^\s]+/g,pdfWJ); if(x!==d) n.data=x; } } }catch(e){} }
 function pdfCrispLines(root){
   try{
     if(!root||!root.getBoundingClientRect().width) return;
@@ -8534,7 +8558,8 @@ function pdfCrispLines(root){
         groups.forEach(g=>{ const sp=g.items.map(x=>[x.a,x.b]).sort((p,q)=>p[0]-q[0]); let cur=null; sp.forEach(([a,b])=>{ if(cur&&a<=cur[1]+0.6) cur[1]=Math.max(cur[1],b); else{ cur=[a,b]; lines.push({o,c:g.c,w:g.w,col,s:cur}); } }); }); }); });
     const ov=document.createElement('div'); ov.setAttribute('data-crisp','1'); ov.style.cssText='position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;';
     root.appendChild(ov); const O=ov.getBoundingClientRect();
-    ov.innerHTML=lines.map(l=>{ const [x,y,wd,ht]=l.o==='h'?[l.s[0]-O.left,l.c-l.w/2-O.top,l.s[1]-l.s[0],l.w]:[l.c-l.w/2-O.left,l.s[0]-O.top,l.w,l.s[1]-l.s[0]];
+    const SN=v=>Math.round(v*PDF_RASTER_SCALE)/PDF_RASTER_SCALE, TW=w=>Math.max(1,Math.round(w*PDF_RASTER_SCALE))/PDF_RASTER_SCALE; // each line on whole picture pixels: every line equally black and thick
+    ov.innerHTML=lines.map(l=>{ const [x,y,wd,ht]=l.o==='h'?[SN(l.s[0]-O.left),SN(l.c-l.w/2-O.top),SN(l.s[1]-l.s[0]),TW(l.w)]:[SN(l.c-l.w/2-O.left),SN(l.s[0]-O.top),TW(l.w),SN(l.s[1]-l.s[0])];
       return `<div style="position:absolute;left:${x.toFixed(3)}px;top:${y.toFixed(3)}px;width:${wd.toFixed(3)}px;height:${ht.toFixed(3)}px;background:${l.col};"></div>`; }).join('');
     done.forEach(([e,on])=>on.forEach((v,i)=>{ if(v) e.style.setProperty('border-'+SIDES[i].toLowerCase()+'-color','transparent','important'); }));
   }catch(err){ console.warn('pdfCrispLines',err); }
@@ -8550,8 +8575,8 @@ async function exportPagedPdfRun(pagesHtml,filename,auditLabel,rowCount,previewM
       frame.innerHTML=pageHtml;
       await new Promise(res=>setTimeout(res,120));
       const target=frame.firstElementChild||frame;
-      await filesSettle(); pdfCrispLines(target); // each table line drawn once, as thin as on the original form
-      const canvas=await (await filesSettle(),html2canvas)(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+      await filesSettle(); pdfNoHyphenBreak(target); pdfCrispLines(target); // each table line drawn once, as thin as on the original form
+      const canvas=await (await filesSettle(),html2canvas)(target,{scale:PDF_RASTER_SCALE,useCORS:true,backgroundColor:'#ffffff',logging:false});
       const imgBytes=await fetch(canvas.toDataURL('image/jpeg',0.92)).then(x=>x.arrayBuffer());
       const img=await pdf.embedJpg(imgBytes);
       let w=A4W, h=A4W*(canvas.height/canvas.width);
@@ -9181,11 +9206,13 @@ function buildAbnormalReportHtml(r){
   const chkOne=(val,expected)=>val===expected?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>';
   const logoUrl=_pdfLogoData||(_settings.logoUrl&&!_settings.logoUrl.startsWith('data:')?_settings.logoUrl:'')||WESTLAB_LETTERHEAD_LOGO;
   return `<div style="width:794px;padding:28px 36px;font-family:'DM Sans',Arial,sans-serif;color:#111;background:#fff;font-size:9.5pt;">
+    <div data-pgrepeat="1"><!-- logo, title and report no. at the top of every page -->
     <div style="text-align:center;margin-bottom:10px;">
-      ${logoUrl?`<img src="${logoUrl}" style="height:40px;"/>`:`<div style="font-weight:800;font-size:16pt;color:#0f1f3d;">${_settings.labName||'WESTLAB'}</div>`}
+      ${logoUrl?`<img src="${logoUrl}" style="height:40px;"/>`:`<div style="font-weight:800;font-size:16pt;color:#0f1f3d;">${escapeHtml(_settings.labName||'WESTLAB')}</div>`}
     </div>
     <div style="text-align:center;font-weight:800;font-size:14pt;margin-bottom:4px;">ABNORMAL REPORT / NOTIFICATION</div>
-    <div style="text-align:center;font-size:9pt;margin-bottom:14px;">Report Number: ${r.reportNo}</div>
+    <div style="text-align:center;font-size:9pt;margin-bottom:14px;">Report Number: ${escapeHtml(r.reportNo)}</div>
+    </div>
     <div style="border:1pt solid #333;padding:10px 14px;margin-bottom:0;">
       <table style="width:100%;font-size:9pt;"><tr>
         <td style="width:55%;vertical-align:top;">
@@ -9194,18 +9221,18 @@ function buildAbnormalReportHtml(r){
         </td>
         <td style="vertical-align:top;">
           Issue Date &nbsp;: &nbsp;${fmtDateShort(r.issueDate)}<br/>
-          Tel &nbsp;: &nbsp;${r.tel||'—'}<br/>
-          Fax &nbsp;: &nbsp;${r.fax||'—'}<br/>
-          Job Number &nbsp;: &nbsp;${r.jobNo}
+          Tel &nbsp;: &nbsp;${escapeHtml(r.tel||'—')}<br/>
+          Fax &nbsp;: &nbsp;${escapeHtml(r.fax||'—')}<br/>
+          Job Number &nbsp;: &nbsp;${escapeHtml(r.jobNo)}
         </td>
       </tr></table>
       <div style="margin-top:6px;">Contact / Dept &nbsp;: &nbsp;${escapeHtml(r.attention||'—')}</div>
     </div>
-    <div style="border:1pt solid #333;border-top:none;padding:10px 14px;">
+    <div data-pgsplit="1" style="border:1pt solid #333;margin-top:-1pt;padding:10px 14px;"><!-- may continue on the next page (closed on each page) -->
       <div style="font-weight:700;margin-bottom:4px;">Equipment Details:</div>
       <table style="width:100%;font-size:9pt;margin-bottom:8px;"><tr>
         <td style="width:55%;">Descriptions &nbsp;: &nbsp;${escapeHtml(r.eqName)}<br/>Model &nbsp;: &nbsp;${escapeHtml(r.model||'—')}</td>
-        <td>Serial No. &nbsp;: &nbsp;${escapeHtml(r.serial||'—')}<br/>Range / Capacity &nbsp;: &nbsp;${r.range||'N/A'}</td>
+        <td>Serial No. &nbsp;: &nbsp;${escapeHtml(r.serial||'—')}<br/>Range / Capacity &nbsp;: &nbsp;${escapeHtml(r.range||'N/A')}</td>
       </tr></table>
       <div style="margin-bottom:4px;"><strong>Condition when detected:</strong></div>
       <div style="margin-bottom:8px;">
@@ -9232,17 +9259,17 @@ function buildAbnormalReportHtml(r){
       </div>
       <table style="width:100%;font-size:9pt;margin-top:20px;"><tr>
         <td style="width:50%;text-align:center;">
-          <div style="border-top:1pt solid #333;padding-top:4px;margin:0 20px;">${r.checkedByName}</div>
+          <div style="border-top:1pt solid #333;padding-top:4px;margin:0 20px;">${escapeHtml(r.checkedByName||'')}</div>
         </td>
         <td style="text-align:center;">
-          <div style="border-top:1pt solid #333;padding-top:4px;margin:0 20px;">${r.verifiedByName}</div>
+          <div style="border-top:1pt solid #333;padding-top:4px;margin:0 20px;">${escapeHtml(r.verifiedByName||'')}</div>
         </td>
       </tr><tr>
         <td style="text-align:center;font-size:8pt;color:#555;">Checked By</td>
         <td style="text-align:center;font-size:8pt;color:#555;">Verified By</td>
       </tr></table>
     </div>
-    <div style="border:1pt solid #333;border-top:none;padding:10px 14px;font-size:9pt;">
+    <div style="border:1pt solid #333;margin-top:-1pt;padding:10px 14px;font-size:9pt;">
       <strong>Customer Instruction:</strong>
       <div style="margin-top:6px;">
         ${['Return without service','Proceed with calibration','Proceed with repair','Scrap Equipment'].map(o=>`<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>${o} &nbsp;&nbsp; `).join('')}
@@ -9257,8 +9284,8 @@ function buildAbnormalReportHtml(r){
         <td style="vertical-align:bottom;">Company Stamp/Chop:</td>
       </tr></table>
     </div>
-    <div style="text-align:center;font-size:7.5pt;color:#555;margin-top:10px;border-top:0.5pt solid #ccc;padding-top:6px;">
-      <b>${escapeHtml(_settings.labName||'WESTLAB (M) SDN. BHD.')}</b><br/>${escapeHtml(_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor')}<br/>Tel: ${escapeHtml(pdfCo('016-258 9602').tel)} | Website: ${escapeHtml(_settings.website||'www.westlab.com.my')}
+    <div data-pgfoot="1" style="text-align:center;font-size:8pt;color:#555;margin-top:10px;border-top:0.5pt solid #ccc;padding-top:6px;"><!-- on every page, at least 8 pt -->
+      <b>${escapeHtml(_settings.labName||'WESTLAB (M) SDN. BHD.')}</b><br/>${escapeHtml(_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor')}<br/>Tel: ${escapeHtml(pdfCo('016-258 9602').tel)} | Email: ${escapeHtml(pdfCo().email)} | Website: ${escapeHtml(_settings.website||'www.westlab.com.my')}
     </div>
   </div>`;
 }
@@ -9940,9 +9967,9 @@ function openApproveItemModal(jobNo, itemIdx){
   const cd=item.calData||{};
   el('approve-job-summary').innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;font-size:13px;">
-      <div><span style="color:var(--text-muted);">Job No.:</span> <strong>${j.jobNo}</strong></div>
+      <div><span style="color:var(--text-muted);">Job No.:</span> <strong>${escapeHtml(j.jobNo)}</strong></div>
       <div><span style="color:var(--text-muted);">Item:</span> <strong>${item.itemNo} of ${j.items.length}</strong></div>
-      <div><span style="color:var(--text-muted);">Cert No.:</span> <strong style="color:var(--blue);">${item.certNo||'—'}</strong></div>
+      <div><span style="color:var(--text-muted);">Cert No.:</span> <strong style="color:var(--blue);">${escapeHtml(item.certNo||'—')}</strong></div>
       <div><span style="color:var(--text-muted);">Customer:</span> ${escapeHtml(j.custName)}</div>
       <div><span style="color:var(--text-muted);">Equipment:</span> ${escapeHtml(item.eqName)}</div>
       <div><span style="color:var(--text-muted);">Submitted by:</span> ${escapeHtml(USERS[cd.submittedBy]?.name||cd.submittedBy||'—')}${item.rejectionCount?` <span class="badge badge-amber" style="font-size:10px;">resubmitted · rejected ${item.rejectionCount}×</span>`:''}</div>
@@ -10169,9 +10196,9 @@ async function exportAmendmentPdf(jobNo,itemIdx,amendmentId){
       <div style="font-size:11px;color:#64748b;">${escapeHtml(s.address||'')}</div>
     </div>
     <div style="text-align:center;font-size:15px;font-weight:800;text-decoration:underline;margin-bottom:6px;">AMENDMENT TO CALIBRATION CERTIFICATE</div>
-    <div style="text-align:center;font-size:13px;margin-bottom:24px;">Amendment No. ${amendment.amendmentNo} to Certificate No. ${item.certNo}</div>
+    <div style="text-align:center;font-size:13px;margin-bottom:24px;">Amendment No. ${amendment.amendmentNo} to Certificate No. ${escapeHtml(item.certNo)}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px;">
-      <tr><td style="padding:5px 8px;color:#64748b;width:160px;">Original Certificate No.</td><td style="padding:5px 8px;font-weight:600;">${item.certNo}</td></tr>
+      <tr><td style="padding:5px 8px;color:#64748b;width:160px;">Original Certificate No.</td><td style="padding:5px 8px;font-weight:600;">${escapeHtml(item.certNo)}</td></tr>
       <tr><td style="padding:5px 8px;color:#64748b;">Job No.</td><td style="padding:5px 8px;font-weight:600;">${job.jobNo}</td></tr>
       <tr><td style="padding:5px 8px;color:#64748b;">Customer</td><td style="padding:5px 8px;font-weight:600;">${escapeHtml(job.custName||'')}</td></tr>
       <tr><td style="padding:5px 8px;color:#64748b;">Item</td><td style="padding:5px 8px;font-weight:600;">${escapeHtml(item.eqName)} ${escapeHtml(item.brand||'')} ${escapeHtml(item.model||'')}</td></tr>
@@ -10435,7 +10462,7 @@ function renderEquipmentTable(){
           ${typeBadge}${depositBadge}${emailFailBadge}
         </td>
         <td colspan="2" style="padding:7px 10px;font-size:12.5px;"><strong>${escapeHtml(j.custName)}</strong>${j.attention?`<span style="color:var(--text-muted);font-size:11px;"> · ${escapeHtml(j.attention)}</span>`:''}</td>
-        <td style="padding:7px 10px;font-size:12px;">${j.priority?`<span class="badge ${PB[j.priority]||'badge-slate'}">${j.priority}</span>`:'<span style="color:var(--text-muted);">—</span>'}</td>
+        <td style="padding:7px 10px;font-size:12px;">${j.priority?`<span class="badge ${PB[j.priority]||'badge-slate'}">${escapeHtml(j.priority)}</span>`:'<span style="color:var(--text-muted);">—</span>'}</td>
         <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${j.receiveDate?fmtDateShort(j.receiveDate):'—'}</td>
         <td style="padding:7px 10px;font-size:12px;white-space:nowrap;">${j.promisedDate?`<span style="color:${overdue?'var(--red)':'inherit'};font-weight:${overdue?700:400};">${fmtDateShort(j.promisedDate)}${overdue?' · overdue':''}</span>`:'<span style="color:var(--text-muted);">—</span>'}</td>
         <td></td>
@@ -10468,13 +10495,13 @@ function renderEquipmentTable(){
           actions+=`<button class="btn btn-outline btn-sm" style="font-size:11px;" onclick="openSignedUrl('${escapeForJsAttr(item.vendorCertUrl)}')" title="Vendor certificate ${escapeHtml(item.vendorCertNo||'')}">📄 Vendor cert</button> `;
         rows.push(`<tr style="border-left:3px solid var(--border);">
           <td style="padding:5px 10px 5px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
-          <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${item.certNo||'—'}</td>
+          <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${escapeHtml(item.certNo||'—')}</td>
           <td style="padding:5px 8px;font-size:12px;">${escapeHtml(item.eqName)}<br/><span style="font-size:11px;color:var(--text-muted);">${escapeHtml([item.brand,item.model].filter(Boolean).join(' / '))}</span></td>
           <td style="padding:5px 8px;font-size:11px;color:var(--text-muted);">${escapeHtml(item.serial||'—')}</td>
           <td></td><td></td>
           <td style="padding:5px 8px;font-size:11px;white-space:nowrap;">${item.promisedDate&&item.promisedDate!==j.promisedDate?fmtDateShort(item.promisedDate):''}</td>
           <td style="padding:5px 8px;font-size:11.5px;">${assignedName}</td>
-          <td style="padding:5px 8px;"><span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">${item.status}</span>${item.status==='Outsourced'||item.outsourceStage==='review'?`<div style="font-size:10.5px;color:#7c2d12;margin-top:2px;white-space:normal;max-width:220px;">${escapeHtml(outsourceStageText(item)||'')}${item.outsourcedTo?' · '+escapeHtml(item.outsourcedTo):''}</div>`:''}${item.outsourceVendorId||item.outsourceApproval?osaSummaryHtml(j,idx):''}${item.status==='Completed'&&item.vendorCertNo?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">Vendor cert ${escapeHtml(item.vendorCertNo)}</div>`:''}${(()=>{ const f=custChangedSinceCert(j,item); return f.length?`<div style="font-size:10.5px;color:#92400e;margin-top:2px;white-space:normal;max-width:220px;" title="An issued certificate keeps the details it was issued with (ISO/IEC 17025 7.8.8)">ℹ️ Customer ${f.join(', ')} changed since issue — amend if needed</div>`:''; })()}</td>
+          <td style="padding:5px 8px;"><span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">${escapeHtml(item.status)}</span>${item.status==='Outsourced'||item.outsourceStage==='review'?`<div style="font-size:10.5px;color:#7c2d12;margin-top:2px;white-space:normal;max-width:220px;">${escapeHtml(outsourceStageText(item)||'')}${item.outsourcedTo?' · '+escapeHtml(item.outsourcedTo):''}</div>`:''}${item.outsourceVendorId||item.outsourceApproval?osaSummaryHtml(j,idx):''}${item.status==='Completed'&&item.vendorCertNo?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">Vendor cert ${escapeHtml(item.vendorCertNo)}</div>`:''}${(()=>{ const f=custChangedSinceCert(j,item); return f.length?`<div style="font-size:10.5px;color:#92400e;margin-top:2px;white-space:normal;max-width:220px;" title="An issued certificate keeps the details it was issued with (ISO/IEC 17025 7.8.8)">ℹ️ Customer ${f.join(', ')} changed since issue — amend if needed</div>`:''; })()}</td>
           <td style="padding:5px 8px;white-space:nowrap;text-align:right;">${actions}</td>
         </tr>`);
       });
@@ -10602,6 +10629,7 @@ async function showCertForItem(jobNo, itemIdx){
   const btnP1=el('btn-download-p1only');
   if(btnCombined) btnCombined.style.display=hasDataPdf?'inline-flex':'none';
   if(btnP1) btnP1.style.display='inline-flex';
+  { const bs=el('btn-share-cert'); if(bs) bs.style.display=canShareCert(currentUser)?'':'none'; } // the file service only takes shared certificates from these roles
   openModal('modal-cert-preview');
 }
 
@@ -12160,7 +12188,7 @@ async function invoicePendingJobCharges(jobNo){
   if(!confirm(`Create an invoice for ${pend.length} charge${pend.length>1?'s':''} (RM ${pend.reduce((s2,c)=>s2+c.amount,0).toFixed(2)}) on job ${jobNo}?`)) return;
   const invoiceNo=await getNextDocNumber('WIV'); const invoiceDate=new Date().toISOString(); const dueDate=new Date(); dueDate.setDate(dueDate.getDate()+30);
   const subtotal=pend.reduce((s2,c)=>s2+c.amount,0); const sstAmount=_settings.sstEnabled?Math.round(subtotal*8)/100:0;
-  const inv={id:'INV-'+Date.now(),invoiceNo,jobNo,custName:j.custName,custId:j.custId||null,attention:j.attention||'',address:j.address||'',email:j.email||'',
+  const inv={id:'INV-'+Date.now(),invoiceNo,jobNo,...invCustSnap(j),
     items:pend.map(c=>({eqName:c.desc,brand:'',model:'',certNo:'',price:c.amount,isCharge:true})),supplementary:true,
     invoiceDate,dueDate:toLocalDateStr(dueDate),subtotal,sstAmount,totalAmount:Math.round((subtotal+sstAmount)*100)/100,paymentStatus:'Unpaid',amountPaid:0,createdBy:currentUser,createdAt:invoiceDate};
   _invoices.push(inv); await saveInvoices();
@@ -13276,7 +13304,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
   const letterhead=`<div style="display:flex;align-items:center;">
       <img src="${logo}" crossorigin="anonymous" style="width:88px;height:auto;margin-left:18px;"/>
       <div style="flex:1;text-align:center;margin-right:${symOn?'0':'106px'};font-family:'Times New Roman',Times,serif;font-size:15px;line-height:1.3;">
-        <div><span style="font-size:23px;font-weight:bold;">${esc(labName)}</span> <span style="font-size:10px;">(${esc(regNo)})</span></div>
+        <div><span style="font-size:23px;font-weight:bold;">${esc(labName)}</span> <span style="font-size:11px;">(${esc(regNo)})</span></div>
         <div style="white-space:nowrap;">${addressHtml}</div>
         <div>Phone: ${esc(phone)}&nbsp;&nbsp;&nbsp;email: ${esc(email)}</div>
         <div>(TIN No: ${esc(tin)})</div>
@@ -13294,7 +13322,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
         <div>${esc(q.custName)}</div>
         <div style="white-space:pre-line;">${esc(q.address||'')}</div>
         <div>Attn : ${esc(q.attention||'')}</div>
-        <div style="display:flex;"><span style="width:58%;">TEL : ${esc(q.tel||q.mobile||'')}</span><span>FAX : ${esc(q.fax||'')}</span></div>
+        <div style="display:flex;flex-wrap:wrap;"><span style="flex:none;min-width:58%;padding-right:8px;box-sizing:border-box;">TEL : ${esc(q.tel||q.mobile||'')}</span><span>FAX : ${esc(q.fax||'')}</span></div>
       </div>
       <div style="width:37%;">
         <div style="font-weight:bold;font-size:${Math.min(16.5,Math.floor(10*244/(('QUOTATION : '+String(q.quotationNo||'')).length*0.66))/10)}px;margin-bottom:6px;white-space:nowrap;">QUOTATION : ${esc(q.quotationNo)}</div>
@@ -13305,7 +13333,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
     </div>
     ${q.endUserName?`<div style="font-size:12px;margin-bottom:4px;">End User : ${esc(q.endUserName)}${q.endUserAddress?' — '+esc(q.endUserAddress).replace(/\n/g,', '):''}</div>`:''}
     <div style="margin-bottom:4px;">Thank you for your inquiry. We are pleased to submit our quote as follows:</div>`;
-  const COLS='<colgroup><col style="width:36px"><col style="width:76px"><col><col style="width:78px"><col style="width:74px"><col style="width:48px"><col style="width:80px"></colgroup>';
+  const COLS='<colgroup><col style="width:36px"><col style="width:86px"><col><col style="width:78px"><col style="width:74px"><col style="width:48px"><col style="width:80px"></colgroup>';
   const TH='padding:4px 3px;font-weight:normal;text-align:left;';
   const tableHead=`<tr style="border-top:1px solid #000;border-bottom:1px solid #000;"><th style="${TH}">Item</th><th style="${TH}">Item Code</th><th style="${TH}">Description</th><th style="${TH}text-align:center;">Qty</th><th style="${TH}">Unit Price</th><th style="${TH}">Disc</th><th style="${TH}text-align:right;">Amount</th></tr>`;
   const TD='padding:3px 3px 5px;vertical-align:top;';
@@ -13340,7 +13368,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
     }
     if(!reqCommon) L.push(esc(qtRequirementLines(it).map(x=>x.replace(' (standard — please tell us if you need a different interval)',' (standard)')).join(' · ')));
     const discTxt=c.baseDisc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.baseDisc.toFixed(2)):'';
-    const rows=[`<tr><td style="${TD}">${i+1}</td><td style="${TD}">${esc(it.itemCode||'')}</td>
+    const rows=[`<tr><td style="${TD}">${i+1}</td><td style="${TD}${String(it.itemCode||'').length<=12?'white-space:nowrap;':''}">${esc(it.itemCode||'')}</td>
       <td style="${TD}"><div>${outFlags[i]?'* ':''}${esc(it.eqName)} ${qtServiceTag(it,symOn)}</div><div style="padding-left:6px;">${L.join('<br/>')}</div></td>
       <td style="${TD}text-align:center;white-space:nowrap;">${c.qty.toFixed(2)} UNIT</td><td style="${TD}">${money(c.price)}</td><td style="${TD}">${discTxt}</td><td style="${TD}text-align:right;">${money(c.baseNet)}</td></tr>`];
     if(c.extra.gross) rows.push(`<tr><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"><div style="padding-left:6px;">Additional calibration points${it.extraPointsStd?` (beyond the standard ${it.extraPointsStd} per unit)`:''}</div></td>
@@ -14272,7 +14300,7 @@ async function buildContractReviewPages(entry,item,itemNo,itemCount,loadedSigs){
   const esc=v=>escapeHtml(v==null?'':String(v));
   const staffOf=u=>(_staff||[]).find(x=>x.username===u);
   const nameOf=u=>{ if(!u)return ''; const st=staffOf(u); return st?.name||USERS[u]?.name||st?.certName||u; }; // full name (not the name printed on certificates)
-  const roleOf=u=>{ if(!u)return ''; const st=staffOf(u); return st?.role||USERS[u]?.role||''; };
+  const roleOf=u=>{ if(!u)return ''; const st=staffOf(u); return roleLabel(st?.role||USERS[u]?.role||''); }; // the role's display name ("Technical Manager", not "Manager")
   const NAVY='#1f3a5f', LINE='#b8c2cf', MUTED='#5b6776';
 
   // ── data (same mapping as before) ──
@@ -16283,8 +16311,8 @@ async function exportTrackerPdf(type){
     frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
     try{ await new Promise(res=>setTimeout(res,150));
     const target=frame.firstElementChild||frame;
-    await filesSettle(); pdfCrispLines(target); // each table line drawn once (see exportPagedPdfRun)
-    return await (await filesSettle(),html2canvas)(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    await filesSettle(); pdfNoHyphenBreak(target); pdfCrispLines(target); // each table line drawn once (see exportPagedPdfRun)
+    return await (await filesSettle(),html2canvas)(target,{scale:PDF_RASTER_SCALE,useCORS:true,backgroundColor:'#ffffff',logging:false});
     }finally{ frame.style.display='none'; frame.style.position=''; frame.style.left=''; } });
     const imgData=canvas.toDataURL('image/jpeg',0.92);
     const imgBytes=await fetch(imgData).then(x=>x.arrayBuffer());
@@ -18032,7 +18060,7 @@ function payComputeLine(u,ym,prev){
   const ots=(_overtime||[]).filter(o=>o.username===u&&o.status==='Approved'&&o.compensation!=='Replacement Leave'&&(!o.paidAt||o.paidMonth===ym)&&(o.calc?.eqHours||0)>0&&String(o.date)<=end);
   const otLines=ots.map(o=>({id:o.id,date:o.date,eqHours:o.calc.eqHours})); const otEq=r2(otLines.reduce((s,x)=>s+x.eqHours,0)); const ot=r2(otEq*otRate);
   const cls=(_claims||[]).filter(c=>c.submittedBy===u&&c.status==='Approved'&&(!c.paidAt||c.paidRef===`PAY-${ym}`)&&String(c.date||'')<=end);
-  const claims=cls.map(c=>({id:c.id,amount:r2(c.amount),desc:`${c.type||'Claim'}${c.description?' — '+c.description:''}`.slice(0,80)})); const claimsTotal=r2(claims.reduce((s,c)=>s+c.amount,0));
+  const claims=cls.map(c=>({id:c.id,amount:r2(c.amount),desc:`${c.type||'Claim'}${c.description?' — '+c.description:''}`})); /* the full description on the payslip (it wraps) */ const claimsTotal=r2(claims.reduce((s,c)=>s+c.amount,0));
   const commission=r2(keep.commission), bonus=r2(keep.bonus), otherEarn=r2(keep.otherEarn), otherDed=r2(keep.otherDed), pcb=r2(keep.pcb);
   const epfWage=r2(basic+allowNormal+commission+bonus+otherEarn), socsoWage=r2(basic+allowNormal+ot+commission+otherEarn);
   const ov=keep.ov||{}; const e=payEpf(epfWage,p,age,cfg), s=paySocso(socsoWage,p,age,cfg), i=payEis(socsoWage,p,age,cfg);
@@ -18190,7 +18218,7 @@ function payslipHtml(run,l,lh){
     <div style="display:flex;gap:14px;margin-top:12px;">
       <div style="flex:1;"><div style="font-weight:bold;background:#f1f5f9;padding:4px 6px;">EMPLOYER'S CONTRIBUTIONS (RM)</div><table style="width:100%;border-collapse:collapse;">${row('EPF',r2(l.epfEr).toFixed(2))}${row('SOCSO',r2(l.socsoEr).toFixed(2))}${row('EIS',r2(l.eisEr).toFixed(2))}</table></div>
       <div style="flex:1;"><div style="font-weight:bold;background:#f1f5f9;padding:4px 6px;">YEAR TO DATE ${run.month.slice(0,4)} (RM)</div><table style="width:100%;border-collapse:collapse;">${row('Gross pay',Y('gross'))}${row('EPF (employee)',Y('epfEe'))}${row('SOCSO + EIS (employee)',r2(Number(Y('socsoEe'))+Number(Y('eisEe'))).toFixed(2))}${row('PCB',Y('pcb'))}${row('Net pay',Y('net'))}</table></div></div>
-    <div style="font-size:10px;color:#555;margin-top:18px;">This payslip is computer-generated and needs no signature. Unpaid leave and part months follow the Employment Act 1955 s.18A. Keep it for your records.</div></div>`;
+    <div style="font-size:11px;color:#555;margin-top:18px;">This payslip is computer-generated and needs no signature. Unpaid leave and part months follow the Employment Act 1955 s.18A. Keep it for your records.</div></div>`;
 }
 async function payslipPdf(ym,u,returnBlob){
   const run=payRunOf(ym); const l=run&&(run.lines||[]).find(x=>x.username===u); if(!l) return null;
@@ -18309,7 +18337,7 @@ function payAttentionItems(){ const out=[]; if(typeof _payroll==='undefined') re
 // ═══ RECEPTION ═══ The Receptionist sits at the counter: logs what arrives (customer items against the accepted quotation,
 // supplier parcels), hands finished items back (DO, signature, C.O.D. check) and answers "is it ready?". No prices.
 // A logged arrival goes to the Technical Manager / office, who create the job from it and assign the engineer.
-const RECEIPTS_KEY='wl_receipts'; let _receipts=[], _rcpTab='move';
+const RECEIPTS_KEY='wl_receipts'; let _receipts=[], _rcpTab='move', _rcpGoto=''; // _rcpGoto: a Movements section a dashboard tile asked for
 function isReceptionist(u){ return getUserRole(u||currentUser)==='Receptionist'; }
 function canReception(u){ return isReceptionist(u)||canCreateJobs(u); }
 function canHandOver(u){ return isReceptionist(u)||canCreateJobs(u); }
@@ -18323,7 +18351,10 @@ function renderReception(){
   const tabs=[['move','🔄 Movements'],['trips','🚐 Trips'],['status','🔍 Job status'],['log','🗂️ Arrival log']];
   let h=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${tabs.map(([k,l])=>`<button class="btn ${_rcpTab===k?'btn-primary':'btn-outline'} btn-sm" onclick="_rcpTab='${k}';renderReception()">${l}</button>`).join('')}</div>`;
   if(_rcpTab==='move') h+=rcpMovementsHtml(); else if(_rcpTab==='trips') h+=tripsBoardHtml(); else if(_rcpTab==='status') h+=rcpStatusHtml(); else h+=rcpLogHtml();
-  box.innerHTML=h; if(_rcpTab==='status') rcpStatusSearch(); }
+  box.innerHTML=h; if(_rcpTab==='status') rcpStatusSearch();
+  // a dashboard tile opened this page: go to its section (open it), not the top of Movements
+  if(_rcpGoto){ const want=_rcpGoto; _rcpGoto=''; const d=_rcpTab==='move'?[...box.querySelectorAll('details')].find(x=>(x.querySelector('summary')?.textContent||'').includes(want)):null;
+    if(d){ d.open=true; setTimeout(()=>{ try{ d.scrollIntoView({block:'start'}); }catch(e){} },60); } } }
 function rcpReceiveHtml(){
   const qs=(_quotationsV2||[]).filter(q=>q.status==='Accepted'&&qtUnreceived(q).length).map(q=>({q,open:qtUnreceived(q).filter(x=>!rcpLoggedUnits(q.id).has(x.i+':'+x.u))})).filter(x=>x.open.length)
     .sort((a,b)=>String(a.q.custName).localeCompare(String(b.q.custName)));
@@ -20223,7 +20254,7 @@ function f013Auto(from,to){ const inP=d=>{ const s=String(d||'').slice(0,10); re
     fbCount:F.length,avg:avg!=null?Math.round(avg*100)/100:null,sat:satMode,hi:hi?`${F12_CRIT[hi[1]]} (${hi[0].toFixed(2)})`:'',lo:lo?`${F12_CRIT[lo[1]]} (${lo[0].toFixed(2)})`:''}; }
 let _f013Draft=null;
 function openF013(id){ if(!canSeeQms(currentUser)) return; const ex=id?h79Fb().find(x=>x.id===id):null; const y=new Date().getFullYear();
-  _f013Draft=ex?JSON.parse(JSON.stringify(ex)):{type:'f013',id:'F013-'+Date.now(),from:`${y}-01-01`,to:toLocalDateStr(new Date()),evaluator:currentUser,designation:(_staff||[]).find(s=>s.username===currentUser)?.designation||getUserRole(currentUser),date:toLocalDateStr(new Date()),forms:[0,1],A:{},B:{},C:{rows:[{},{},{},{}]},D:{},status:'Draft'};
+  _f013Draft=ex?JSON.parse(JSON.stringify(ex)):{type:'f013',id:'F013-'+Date.now(),from:`${y}-01-01`,to:toLocalDateStr(new Date()),evaluator:currentUser,designation:(_staff||[]).find(s=>s.username===currentUser)?.designation||roleLabel(getUserRole(currentUser)),date:toLocalDateStr(new Date()),forms:[0,1],A:{},B:{},C:{rows:[{},{},{},{}]},D:{},status:'Draft'};
   const r=_f013Draft; const lock=r.status==='Approved'||(r.status==='Submitted'&&!isAdmin(currentUser)); const dis=lock?'disabled':''; const v=x=>escapeHtml(x==null?'':String(x));
   const ta=(k,l,val,rows=2)=>`<div class="form-group"><label class="form-label">${l}</label><textarea class="form-control" id="f13-${k}" rows="${rows}" ${dis}>${v(val)}</textarea></div>`;
   const au=f013Auto(r.from,r.to);
@@ -20584,7 +20615,7 @@ function h710AttentionItems(){ const out=[]; if(!Array.isArray(_ncrs)) return ou
 
 // ── F005 Non-conformity Report ──
 async function f005Pdf(id){ const n=(_ncrs||[]).find(x=>x.id===id); if(!n) return; const T=(await qft('F005')); const ov=[{html:''}]; const add=h=>{ ov[0].html+=h; }; const t=(x,y,s,o={})=>add(qftTxt(x,y,s,{...o,size:o.size||9.5}));
-  const ring=(x0,x1,y)=>{ const p=2+(x1-x0)*0.07; add(`<div style="position:absolute;left:${(x0-p).toFixed(2)}pt;top:${y-2.5}pt;width:${(x1-x0+2*p).toFixed(2)}pt;height:15pt;border:1pt solid #000;border-radius:50%;box-sizing:border-box;"></div>`); }; // the oval leaves room at its ends so it never cuts the word
+  const ring=(x0,x1,y)=>{ const p=Math.min(2.5,2+(x1-x0)*0.07); add(`<div style="position:absolute;left:${(x0-p).toFixed(2)}pt;top:${y-1.5}pt;width:${(x1-x0+2*p).toFixed(2)}pt;height:13pt;border:0.75pt solid #000;border-radius:6.5pt;box-sizing:border-box;"></div>`); }; // a rounded ring around its own word only: its round ends clear the word's first and last letters, it does not run into the next word or touch the row's lines
   if(n.kind==='Audit finding') ring(117.1,174.7,140.1); else ring(183.5,276,140.1);
   t(207,152.6,n.ncNo,{bold:true}); t(394,152.6,n.department||'',{w:126,label:'Department'}); t(102,165.3,qmsDateLong(isoDay(n.raisedAt)),{w:225}); t(413,165.3,staffNameOf(n.actionOwner)||'',{w:108,min:6.5,label:'Person In Charge'});
   if(n.kind==='Audit finding'){ if(n.iaNo) t(198,177.3,n.iaNo,{w:14}); if(n.iaOf) t(225,177.3,n.iaOf,{w:14}); }
@@ -20603,7 +20634,7 @@ async function f005Pdf(id){ const n=(_ncrs||[]).find(x=>x.id===id); if(!n) retur
     (n.holds||[]).length?`Work held: ${n.holds.map(h=>{ const L=h710HoldLive(h); return `${h.label}${L.resumed?' — resumed '+qfDmy(L.resumed.at)+' by '+staffNameOf(L.resumed.by):' — still held'}`; }).join('; ')}.`:'',
     (n.docAmends||[]).length?`Documents amended: ${n.docAmends.map(d=>`${d.doc}${d.done?' ('+d.done.note+')':' (pending)'}`).join('; ')}.`:'',
     (n.caAttempts||[]).length?`Earlier action not effective: ${n.caAttempts.map(a=>`${a.correctiveAction||''} (verified ${qfDmy(String(a.verify?.at||'').slice(0,10))})`).join('; ')}.`:'',
-    n.verifyNotes?`Verification: ${n.verifyNotes}`:'',n.riskUpd?`Risk register: ${n.riskUpd==='Yes'?'updated':'no update needed'}${n.riskRef?' — '+n.riskRef:''}.`:'',n.similarNc==='Yes'&&n.similarNote?`Similar NCs: ${n.similarNote}`:''].filter(Boolean).join(' ');
+    n.verifyNotes?`Verification: ${n.verifyNotes}`:'',n.riskUpd?`Risk register: ${n.riskUpd==='Yes'?'updated':'no update needed'}${n.riskRef?' — '+n.riskRef:''}.`:'',n.similarNc==='Yes'&&n.similarNote?`Similar NCs: ${n.similarNote}`:''].filter(Boolean).map(x=>String(x).trim()).filter(Boolean).map(x=>/[.!?]$/.test(x)?x:x+'.').join(' '); // each part ends with a full stop
   if(extra) t(115,511.3,extra,{w:405,h:30,size:8,label:'Remark'}); // 8 pt minimum: three lines (the space above Verified By)
   if(n.verifiedBy){ add(qfSigOnLine(await h710Sig(n.verifiedBy),118,150,841.92-556,18)); t(326,545.5,qmsDateLong(isoDay(n.verifiedAt)),{w:136}); t(110,582,staffNameOf(n.verifiedBy),{w:156,label:'Verified By — Name'}); }
   if(n.similarNc==='Yes') ring(363.3,376.2,646.8); else if(n.similarNc==='No') ring(391.4,402.9,646.8);
@@ -21337,7 +21368,8 @@ async function f021Pdf(id){ const m=mtList().find(x=>x.id===id); if(!m) return; 
   const gY=[423.6,438.8,454.0,469.1,484.3]; const AG=m.agenda||[]; AG.slice(0,5).forEach((a,i)=>t(0,110,gY[i]+2.5,i===4&&AG.length>5?AG.slice(4).map((x,k)=>`${k+5}. ${x}`).join('\n'):a,{w:410,pre:true,label:i===4&&AG.length>5?'Agenda items 5–'+AG.length:'Agenda item '+(i+1)}));
   const dY=[[569.8,614.4],[614.4,658.8],[658.8,703.2],[703.2,747.7]]; (m.minutes||[]).slice(0,4).forEach((x,i)=>{ t(0,104,dY[i][0]+3,x.topic,{w:265,h:dY[i][1]-dY[i][0]-5,pre:true,label:`Item ${i+1} — discussion`}); t(0,375,dY[i][0]+3,x.discussion,{w:145,h:dY[i][1]-dY[i][0]-5,size:8,pre:true,label:`Item ${i+1} — decision / outcome`}); });
   const MN=m.minutes||[], m5=MN[4]; if(m5){ const L5=MN.slice(4); /* more than five items: the rest run on from row 5 to a continuation page */ t(1,104,125.4,L5.map((x,k)=>L5.length>1?`${k+5}. ${x.topic||''}`:x.topic).join('\n'),{w:265,h:38,pre:true,label:L5.length>1?'Items 5–'+MN.length+' — discussion':'Item 5 — discussion'}); t(1,375,125.4,L5.map((x,k)=>L5.length>1?`${k+5}. ${x.discussion||''}`:x.discussion).join('\n'),{w:145,h:38,size:8,pre:true,label:L5.length>1?'Items 5–'+MN.length+' — decision / outcome':'Item 5 — decision / outcome'}); }
-  const cY=[222.6,237.9,253.0,268.1,283.2,298.5]; const AC=m.actions||[]; AC.slice(0,6).forEach((a,i)=>{ const y=cY[i]+2.5; const more=i===5&&AC.length>6; /* more than six actions: row 6's description runs on to a continuation page that lists actions 6 onwards in full */ t(1,103,y,more?AC.slice(5).map((x,k)=>`${k+6}. ${x.desc} — ${S(x.owner)} — due ${qfDmy(x.due)} — ${x.done?'Done '+qfDmy(x.done.at):'Open'}`).join('\n'):a.desc,{w:165,size:8,pre:true,label:more?'Actions 6–'+AC.length:`Action ${i+1}`}); t(1,272,y,S(a.owner),{w:95,size:8,min:6,label:`Action ${i+1} — Person In Charge`}); t(1,371,y,qfDmy(a.due),{w:60,center:true,size:8}); t(1,435,y,a.done?`Done ${qfDmy(a.done.at)}`:'Open',{w:86,size:8}); });
+  const cY=[222.6,237.9,253.0,268.1,283.2,298.5]; const AC=m.actions||[]; const picIni=new Map(); AC.slice(0,6).forEach((a,i)=>{ const y=cY[i]+2.5; const more=i===5&&AC.length>6; /* more than six actions: row 6's description runs on to a continuation page that lists actions 6 onwards in full */ t(1,103,y,more?AC.slice(5).map((x,k)=>`${k+6}. ${x.desc} — ${S(x.owner)} — due ${qfDmy(x.due)} — ${x.done?'Done '+qfDmy(x.done.at):'Open'}`).join('\n'):a.desc,{w:165,size:8,pre:true,label:more?'Actions 6–'+AC.length:`Action ${i+1}`}); t(1,272,y,qfNameCell(S(a.owner),null,95,8,picIni),{w:95,size:8,label:`Action ${i+1} — Person In Charge`}); t(1,371,y,qfDmy(a.due),{w:60,center:true,size:8}); t(1,435,y,a.done?`Done ${qfDmy(a.done.at)}`:'Open',{w:86,size:8}); });
+  if(picIni.size) t(1,72,316.5,qfIniLegend(picIni),{w:450,h:20,size:8,label:'Person In Charge — initials'}); // a name too long for its cell is printed as initials, listed under the table (Jay, 27 Oct 2026)
   const sg=async u=>{ if(!u) return ''; try{ return (await pdfStaffSignature(u)).data||''; }catch(e){ return ''; } };
   const pu=m.prepared?.by, au=m.approved?.by; if(pu){ const s=await sg(pu); if(s) add(1,qfSigOnLine(s,72,225,841.92-426,52)); t(1,118,431,S(pu),{w:175,size:10}); t(1,112,446,qmsDateLong(isoDay(m.prepared.at)),{w:175,size:10}); }
   if(au){ const s=await sg(au); if(s) add(1,qfSigOnLine(s,297.4,225,841.92-426,52)); t(1,343,431,S(au),{w:175,size:10}); t(1,337,446,qmsDateLong(isoDay(m.approved.at)),{w:175,size:10}); }
@@ -21936,7 +21968,7 @@ async function f001Pdf(Y){ const p=iaPlan(Y); if(!p) return; const T=(await qft(
   if(p.approved){ await sig(p.approved.by,324); t(1,347,319.8+F001_DY,qfDmy(isoDay(p.approved.at))); }
   await qfExport(qftPages(T,{...formVersion('F001'),no:'F001'},ov,2,false),{filename:`F001_Internal_Audit_Plan_${Y}.pdf`,label:'F001 Internal Audit Plan'}); }
 async function f002Pdf(id){ const a=iaGet(id); const n=a.notice||{}; const T=(await qft('F002')); const ov=[{html:''}]; const t=(x,y,s,o={})=>{ ov[0].html+=qftTxt(x,y,s,{...o,size:o.size||9.5}); };
-  t(136,150.4,n.to||'',{w:158,label:'To'}); t(376,150.6,qfDmy(isoDay(n.at)),{w:140}); t(136,165.5,n.dept||a.dept||'',{w:158,label:'Dept'}); t(301,195.7,a.area||'',{w:220,label:'Area / Lab under Audit'});
+  t(136,150.4,n.to||'',{w:158,label:'To'}); t(376,150.6,qfDmy(isoDay(n.at)),{w:140}); t(136,165.5,n.dept||a.dept||[...new Set((a.auditees||[]).map(u=>{ const r=getUserRole(u); return ['Engineer','Manager'].includes(r)?'Laboratory':['Sales','Coordinator','Receptionist','HR','Driver'].includes(r)?'Office':'Management'; }))].join(', '),{w:158,label:'Dept'}); /* not entered: the auditees' departments (as on F021) */ t(301,195.7,a.area||'',{w:220,label:'Area / Lab under Audit'});
   { const A=(a.auditees||[]).map(staffNameOf); A.slice(0,3).forEach((nm,i)=>t(357,[226.1,241.2,256.4][i],nm,{w:165,label:'Auditee '+(i+1)})); if(A.length>3) t(357,271.5,A.slice(3).join(', '),{w:165,label:A.length>4?'Auditees 4–'+A.length:'Auditee 4'}); } // more than four: the rest share line 4 and run on to a continuation page
   t(376,286.7,iaAudName(a.lead),{w:146}); if((a.auditors||[])[0]) t(357,301.8,iaAudName(a.auditors[0]),{w:165}); t(301,317.0,qmsDateLong(n.date||a.date),{mw:220}); t(301,332.1,a.time||'',{mw:220,label:'Time of Audit'});
   if(n.by){ ov[0].html+=qfSigOnLine(await h710Sig(n.by),77.7,120,841.92-437,24); t(112,464.5,staffNameOf(n.by),{w:200}); }
@@ -21946,7 +21978,7 @@ async function f003Pdf(id){ const a=iaGet(id); const att=a.attendance||{}; const
   // rows grow with their values at 8 pt (a long name wraps) — Jay, 27 Oct 2026; signatures sit in their cells
   const sigImg=src=>src?{html:`<div style="height:13pt;display:flex;align-items:flex-end;justify-content:center;"><img src="${src}" style="max-height:13pt;max-width:85pt;object-fit:contain;"/></div>`}:'';
   const prow=[]; for(let i=0;i<people.length;i++){ const u=people[i]; const s=(_staff||[]).find(z=>z.username===u)||{}; const sg=await h710Sig(u);
-    prow.push([String(i+1),staffNameOf(u),s.designation||getUserRole(u)||'',sg&&conf[u]?.opening&&(att.opening?.present||[]).includes(u)?sigImg(sg):'',sg&&conf[u]?.closing&&(att.closing?.present||[]).includes(u)?sigImg(sg):'']); }
+    prow.push([String(i+1),staffNameOf(u),s.designation||roleLabel(getUserRole(u))||'',sg&&conf[u]?.opening&&(att.opening?.present||[]).includes(u)?sigImg(sg):'',sg&&conf[u]?.closing&&(att.closing?.present||[]).includes(u)?sigImg(sg):'']); }
   const GT=qfGrowTable({xs:[72.02,162.14,252.41,342.55,432.67,522.94],top:242.3,bottom:348.41,minH:15.16,rows:prow,align:c=>c===0||c>2?'center':'left',label:(i,c)=>`${['No.','Name','Designation'][c]||''} (row ${i+1})`});
   const pages=GT.length;
   for(let p=0;p<pages;p++){ let h=''; const hide=[]; const t=(x,y,s,o={})=>{ h+=qftTxt(x,y,s,{...o,size:o.size||9}); }; const dS=d=>{ const [y,m,dd]=String(d).slice(0,10).split('-'); return dd?`${dd}/${m}/${y.slice(2)}`:''; }; // the Date cells are narrow: dd/mm/yy
@@ -21958,7 +21990,7 @@ async function f003Pdf(id){ const a=iaGet(id); const att=a.attendance||{}; const
   await qfExport(qftPages(T,{...formVersion('F003'),no:'F003'},ov,pages,false),{filename:`F003_${a.no}.pdf`,label:'F003 Attendance List'}); }
 async function f004Pdf(id){ const a=iaGet(id); const C=a.checklist||{}; const T=(await qft('F004')); const ov=T.pages.map(()=>({html:''})); const R=iaRows(); const X={Y:[383.7,412.0],N:[412.0,440.4],NA:[440.4,475.9]};
   R.forEach(r=>{ const e=C[r.key]; if(!e) return; const H=r.y1-r.y0; if(e.c&&X[e.c]) ov[r.pg].html+=qftTxt(X[e.c][0],r.y0+H/2-5.5,'✓',{w:X[e.c][1]-X[e.c][0],center:true,bold:true,size:10});
-    const f=[e.nc?((_ncrs||[]).find(n=>n.id===e.nc)||{}).ncNo:'',e.f].filter(Boolean).join(' — '); if(f) ov[r.pg].html+=qftTxt(478,r.y0+1.2,f,{w:290,h:H-2,size:8,label:'Findings — '+[r.cl,qfShort(r.txt,60)].filter(Boolean).join(' ')}); }); // NC no. first, so it is never the part cut off
+    const f=[e.nc?((_ncrs||[]).find(n=>n.id===e.nc)||{}).ncNo:'',e.f].filter(Boolean).join(' — '); if(f) ov[r.pg].html+=qftTxt(478.4,r.y0+1.5,f,{w:288,h:H-3,size:8,mid:true,label:'Findings — '+[r.cl,qfShort(r.txt,60)].filter(Boolean).join(' ')}); }); // NC no. first, so it is never the part cut off
   const f4=a.f004||{}; const auds=[a.lead,...(a.auditors||[])].map(iaAudName).join(', '), aes=(a.auditees||[]).map(staffNameOf).join(', ');
   const b=(y,s)=>{ ov[9].html+=qftTxt(266,y,s||'',{w:170,size:8.5}); }; b(387.5,qmsDateLong(a.date)); ov[9].html+=qftTxt(551,387.5,a.time||'',{w:215,size:8.5});
   ov[9].html+=qftTxt(266,402.6,a.area||'',{w:500,size:8.5,label:'Lab under Audit'}); ov[9].html+=qftTxt(266,417.8,iaAudName(a.lead),{w:500,size:8.5});
@@ -22062,8 +22094,8 @@ function mrAttentionItems(){ const out=[]; const u=currentUser; if(!u) return ou
     else if(!last||String(last.date)<toLocalDateStr(new Date(Date.now()-335*864e5))) out.push({icon:'📊',level:last&&String(last.date)<toLocalDateStr(new Date(Date.now()-365*864e5))?'high':'',text:last?`Management review due — the last one (${escapeHtml(last.no)}) was on ${qmsDate(last.date)} (at least once a year, LQP 8.9)`:'Hold the first management review (F007) — at least once a year (LQP 8.9)',view:'mreview'}); }
   f029Attention(out); return out; }
 // F007 printout (+ continuation page for text that does not fit the form's cells)
-async function f007Pdf(id,draft){ const m=draft||mrGet(id); if(!m) return; const T=(await qft('F007')); const ov=[{html:''},{html:''}]; const cont=[]; const W=i=>MR_X[i+1]-MR_X[i]-4;
-  const cell=(pg,ci,y0,y1,s,ref)=>{ if(!s) return; ov[pg].html+=qftTxt(MR_X[ci]+2,y0+1.5,s,{w:W(ci),h:y1-y0-2,size:8,pre:true,label:ref}); }; // fitted in its cell; what does not fit goes on a continuation page
+async function f007Pdf(id,draft){ const m=draft||mrGet(id); if(!m) return; const T=(await qft('F007')); const ov=[{html:''},{html:''}]; const cont=[]; const W=i=>MR_X[i+1]-MR_X[i]-5;
+  const cell=(pg,ci,y0,y1,s,ref)=>{ if(!s) return; ov[pg].html+=qftTxt(MR_X[ci]+2.5,y0+1.5,s,{w:W(ci),h:y1-y0-3,size:8,pre:true,label:ref}); }; // 2 pt clear of the cell's lines all round // fitted in its cell; what does not fit goes on a continuation page
   ov[0].html+=qftTxt(437,125.3,String(String(m.date||'').slice(0,4)),{size:12,bold:true});
   { const b=T.blanks['Date of review meeting'], r=T.blanks['Minutes ref.']; if(b&&m.date) ov[0].html+=qftTxt(b[1]+2,b[2]-1,qfDmy(m.date),{size:10,w:b[3]-4}); if(r&&m.no) ov[0].html+=qftTxt(r[1]+2,r[2]-1,`${m.no} (this record)`,{size:10,w:r[3]-4}); }
   const A=m.actions||[]; const pr=(sec,[k,lab,pg,y0,y1])=>{ const L=A.filter(a=>a.sec===sec&&a.key===k); const t=(sec==='in'?m.items:m.outputs)[k]||''; const ref=`${sec==='in'?'Input':'Output'} ${k}`;
@@ -24351,10 +24383,10 @@ function renderMyJobs(){
     return `<div class="mj-item" style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;${isOverdue?'border-left:3px solid var(--red);padding-left:8px;':''}">
       <div class="approval-card-header">
         <span class="approval-card-title">Item ${item.itemNo}: ${escapeHtml(item.eqName)} ${slaHtml}</span>
-        <span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}">${item.status}</span>
+        <span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}">${escapeHtml(item.status)}</span>
       </div>
       <div class="approval-card-meta">
-        ${item.certNo?`Cert No.: <strong style="color:var(--blue);${item.status==='Returned - Abnormal'?'text-decoration:line-through;':''}">${item.certNo}</strong>${item.status==='Returned - Abnormal'?' (void — not calibrated)':''} &nbsp;·&nbsp;`:(item.outsourceVendorId?`<span style="color:#7c2d12;">Outsourced — vendor issues cert</span> &nbsp;·&nbsp;`:'')}
+        ${item.certNo?`Cert No.: <strong style="color:var(--blue);${item.status==='Returned - Abnormal'?'text-decoration:line-through;':''}">${escapeHtml(item.certNo)}</strong>${item.status==='Returned - Abnormal'?' (void — not calibrated)':''} &nbsp;·&nbsp;`:(item.outsourceVendorId?`<span style="color:#7c2d12;">Outsourced — vendor issues cert</span> &nbsp;·&nbsp;`:'')}
         ${escapeHtml(item.brand||'')} ${escapeHtml(item.model||'')} &nbsp;·&nbsp; S/N: ${escapeHtml(item.serial||'N/A')}${item.tagNo&&item.tagNo!=='N/A'?` &nbsp;·&nbsp; Tag: ${escapeHtml(item.tagNo)}`:''}
         ${item.assignNote?`<br/>📝 Note: <em>"${escapeHtml(item.assignNote)}"</em>`:''}
         ${item.approvalComments&&item.status==='Assigned'?`<br/><span style="color:var(--red);">✗ Rejected: <em>"${escapeHtml(item.approvalComments)}"</em></span>`:''}
@@ -24643,14 +24675,14 @@ async function viewJobDetail(jobNo){
     let block=`<div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <strong style="font-size:12.5px;color:var(--navy);">Item ${it.itemNo||idx+1}${it.calType==='Onsite'?' <span class="badge badge-teal" style="font-size:9px;">📍 Onsite</span>':''}</strong>
-        <span class="badge ${STATUS_BADGE[it.status]||'badge-slate'}">${it.status||'—'}</span>
+        <span class="badge ${STATUS_BADGE[it.status]||'badge-slate'}">${escapeHtml(it.status||'—')}</span>
       </div>
       <table style="width:100%;">
-        ${r('Equipment',it.eqName)}${r('Brand',it.brand)}${r('Model',it.model)}
-        ${r('Serial No.',it.serial)}${r('Range',it.range)}${r('Cal Points',it.calPoints)}
-        ${r('Specification',it.spec)}${r('Resolution',it.resolution||it.calData?.resolution)}${r('Condition',it.condition)}${r('Accessories',it.accessories)}
-        ${r('Assigned To',it.assignedTo?USERS[it.assignedTo]?.name||it.assignedTo:'Unassigned')}
-        ${it.certNo?r('Certificate No.',it.certNo):''}
+        ${r('Equipment',escapeHtml(it.eqName))}${r('Brand',escapeHtml(it.brand))}${r('Model',escapeHtml(it.model))}
+        ${r('Serial No.',escapeHtml(it.serial))}${r('Range',escapeHtml(it.range))}${r('Cal Points',escapeHtml(it.calPoints))}
+        ${r('Specification',escapeHtml(it.spec))}${r('Resolution',escapeHtml(it.resolution||it.calData?.resolution))}${r('Condition',escapeHtml(it.condition))}${r('Accessories',escapeHtml(it.accessories))}
+        ${r('Assigned To',escapeHtml(it.assignedTo?USERS[it.assignedTo]?.name||it.assignedTo:'Unassigned'))}
+        ${it.certNo?r('Certificate No.',escapeHtml(it.certNo)):''}
       </table>
       ${it.remarks?`<div style="margin-top:8px;padding:8px 10px;background:#fff;border-radius:6px;font-size:12px;"><strong>Remarks:</strong> ${escapeHtml(it.remarks)}</div>`:''}
       ${it.outsourceVendorId||it.outsourceApproval?`<div style="margin-top:8px;padding:6px 10px;background:#fff;border-radius:6px;">${osaSummaryHtml(j,idx,{wide:true}).replace(/onclick="openOsaRecord/g,'onclick="closeModal(\'modal-view-job\');openOsaRecord').replace('font-size:10.5px','font-size:12px')}</div>`:''}`;
@@ -24658,19 +24690,19 @@ async function viewJobDetail(jobNo){
       block+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
         <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:4px;">🔬 Calibration Data</div>
         <table style="width:100%;">
-          ${r('Date',qmsDate(it.calData.date))}
+          ${r('Date',escapeHtml(qmsDate(it.calData.date)))}
           ${(()=>{ const sp=(it.socParameters||[]).filter(p=>p.status!=='Withdrawn'&&p.verdict); // a result exists only for a Statement of Conformity
             return sp.length?r('SoC Result',sp.map(p=>`${escapeHtml(p.parameterName||'Parameter')} ${socVerdictBadge(p.verdict)}`).join('<br/>')):''; })()}
           ${r('Traceability',(it.calData.traceRows||[]).filter(t=>t&&(t.instrument||t.refId)).map(t=>escapeHtml([t.instrument||t.refId,t.serial?'S/N '+t.serial:'',t.certNo?'Cert '+t.certNo:''].filter(Boolean).join(' · '))).join('<br/>')||escapeHtml(it.calData.traceability||''))}
-          ${r('Next Due',(it.calData.next_due||it.calData.nextDue)?qmsDate(it.calData.next_due||it.calData.nextDue):(it.calData?.calInterval?getIntervalLabel(it.calData.calInterval):'—'))}
-          ${r('Calibrated By',USERS[it.calData.calibratedByUsername]?.name||it.calData.calibratedByUsername)}
+          ${r('Next Due',escapeHtml((it.calData.next_due||it.calData.nextDue)?qmsDate(it.calData.next_due||it.calData.nextDue):(it.calData?.calInterval?getIntervalLabel(it.calData.calInterval):'—')))}
+          ${r('Calibrated By',escapeHtml(USERS[it.calData.calibratedByUsername]?.name||it.calData.calibratedByUsername))}
         </table>
       </div>`;
     }
     if(it.photos&&it.photos.length){
       block+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
         <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:4px;">📷 Photos</div>
-        <div class="photo-preview-grid">${it.photos.map(p=>`<div class="photo-thumb"><img src="${p.dataUrl||p.url}" alt="${p.name}"/></div>`).join('')}</div>
+        <div class="photo-preview-grid">${it.photos.map(p=>`<div class="photo-thumb"><img src="${escapeHtml(p.dataUrl||p.url)}" alt="${escapeHtml(p.name)}"/></div>`).join('')}</div>
       </div>`;
     }
     block+='</div>';
@@ -24683,7 +24715,7 @@ async function viewJobDetail(jobNo){
     histSection+=`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
       <div style="font-size:12px;color:var(--text-muted);min-width:140px;">${(()=>{ const d=new Date(h.time); return isNaN(d)?escapeHtml(String(h.time||'—')):`${qmsDate(h.time)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })()}</div>
       <div><div style="font-size:13px;font-weight:600;">${escapeHtml(h.action)}</div>
-      <div style="font-size:12px;color:var(--text-muted);">By: ${USERS[h.by]?.name||h.by}${h.note?` · "${escapeHtml(h.note)}"`:''}
+      <div style="font-size:12px;color:var(--text-muted);">By: ${escapeHtml(USERS[h.by]?.name||h.by)}${h.note?` · "${escapeHtml(h.note)}"`:''}
       </div></div></div>`;
   });
   histSection+='</div>';
@@ -24692,13 +24724,13 @@ async function viewJobDetail(jobNo){
   el('view-job-body').innerHTML=`
     <div class="form-section-title">👤 Customer</div>
     <table style="width:100%;margin-bottom:14px;">
-      ${r('Customer',j.custName)}${r('Company',j.company)}${r('Attention',j.attention)}
-      ${r('Tel',j.tel)}${r('Mobile',j.mobile)}${r('Fax',j.fax)}
-      ${r('Email',j.email)}${r('PO No.',j.po)}
-      ${r('Priority','<span class="badge '+(PB[j.priority]||'badge-slate')+'">'+j.priority+'</span>')}
-      ${r('Received',qmsDate(j.receiveDate))}
+      ${r('Customer',escapeHtml(j.custName))}${r('Company',escapeHtml(j.company))}${r('Attention',escapeHtml(j.attention))}
+      ${r('Tel',escapeHtml(j.tel))}${r('Mobile',escapeHtml(j.mobile))}${r('Fax',escapeHtml(j.fax))}
+      ${r('Email',escapeHtml(j.email))}${r('PO No.',escapeHtml(j.po))}
+      ${r('Priority','<span class="badge '+(PB[j.priority]||'badge-slate')+'">'+escapeHtml(j.priority)+'</span>')}
+      ${r('Received',escapeHtml(qmsDate(j.receiveDate)))}
       ${r('Status check code',`<span id="jd-check-code">${jobCheckCodeOk(j.checkCode)?`<b style="font-family:monospace;letter-spacing:1px;">${escapeHtml(j.checkCode)}</b>`:`<a href="javascript:void(0)" onclick="showJobCheckCode('${escapeForJsAttr(j.jobNo)}')">show</a>`}</span> <span style="font-size:11px;color:var(--text-muted);">— the customer checks the status online with the job no. + this code (on the receipt)</span>`)}
-      ${j.promisedDate?r('Promised Ready',`<strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'var(--red)':'var(--green)'}">${qmsDate(j.promisedDate)}</strong>`):''}
+      ${j.promisedDate?r('Promised Ready',`<strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'var(--red)':'var(--green)'}">${escapeHtml(qmsDate(j.promisedDate))}</strong>`):''}
     </table>
     <div class="form-section-title">🔩 Item${items.length!==1?'s':''} (${items.length})</div>
     ${itemBlocks}
@@ -24974,7 +25006,7 @@ async function exportSocPdf(jobNo,idx,pIdx,revIdx){
   const statement=incomplete?`The results are incomplete — no statement can be made yet.`:noRule?`The measured values are reported in certificate ${esc(cref)}${ext?' issued by '+esc(it.outsourcedTo||'the external laboratory'):''}. No statement of conformity is made.`
     :`Based on the calibration results in certificate <b>${esc(cref)}</b>${ext?` issued by ${esc(it.outsourcedTo||'the external laboratory')}`:''} and the decision rule above, the ${esc(it.eqName||'instrument')} <b>${v==='PASS'?'COMPLIES':'DOES NOT COMPLY'}</b> with the specified limit${p.limitValue?` (${esc(p.limitValue)})`:''} for <b>${esc(p.parameterName||'the parameter')}</b>${v==='FAIL'?` at ${(p.points||[]).filter(pt=>socPointVerdict(p,pt)==='FAIL').length} of ${(p.points||[]).length} point(s)`:''}.`;
   const footerBlock=`<div style="border:1.5px solid #000;padding:8px 10px;margin-bottom:12px;font-size:12.5px;"><div style="font-weight:bold;margin-bottom:3px;">Statement${showOverall&&!noRule&&!incomplete?` — overall: ${v==='PASS'?'PASS':'FAIL'}`:''}</div>${statement}${p.entryNote?`<div style="font-size:11px;margin-top:4px;">Note: ${esc(p.entryNote)}</div>`:''}</div>
-    <div style="font-size:10.5px;color:#333;line-height:1.4;margin-bottom:24px;">This statement refers only to the item and the calibration results identified above, at the time of calibration. It is issued as a separate document and must be read together with the calibration certificate. It shall not be reproduced except in full without the written approval of the laboratory.</div>
+    <div style="font-size:11px;color:#333;line-height:1.4;margin-bottom:24px;">This statement refers only to the item and the calibration results identified above, at the time of calibration. It is issued as a separate document and must be read together with the calibration certificate. It shall not be reproduced except in full without the written approval of the laboratory.</div>
     <div style="display:flex;justify-content:flex-end;"><div style="width:230px;text-align:center;"><div style="height:46px;display:flex;align-items:flex-end;justify-content:center;">${sig?`<img src="${sig}" style="max-height:44px;max-width:200px;"/>`:''}</div>
       <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;">Approved Signatory</div><div style="font-size:11px;">${esc(signer?staffNameOf(signer):'')}</div></div></div>`;
   await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${sno}.pdf`,label:'Statement of Conformity',count:1,letterhead,pinFooter:true});
@@ -25662,7 +25694,7 @@ function dashTimeAgo(iso){
 // KPI tiles for the non-lab roles (null = the lab tiles). Each tile opens the page where the work is done.
 function dashRoleKpis(kpi){ const r=getUserRole(currentUser); const today=toLocalDateStr(new Date()), ym=today.slice(0,7); const A=v=>Array.isArray(v)?v:[];
   try{
-  if(r==='HR'){ const pl=A(typeof _leaveRecords!=='undefined'?_leaveRecords:[]).filter(x=>x&&x.status==='Pending').length, pc=A(typeof _claims!=='undefined'?_claims:[]).filter(x=>x&&x.status==='Pending').length, po=A(typeof _overtime!=='undefined'?_overtime:[]).filter(x=>x&&x.status==='Pending').length;
+  if(r==='HR'){ const pl=A(typeof _leaveRecords!=='undefined'?_leaveRecords:[]).filter(x=>x&&x.status==='Pending'&&canDecideStaffRequest(currentUser,x.submittedBy||x.username)).length, pc=A(typeof _claims!=='undefined'?_claims:[]).filter(x=>x&&x.status==='Pending'&&canDecideStaffRequest(currentUser,x.submittedBy||x.username)).length, po=A(typeof _overtime!=='undefined'?_overtime:[]).filter(x=>x&&x.status==='Pending'&&canDecideStaffRequest(currentUser,x.username||x.submittedBy)).length; // HR does not decide its own requests
     const run=typeof payRunOf==='function'?payRunOf(ym):null; const st=run?run.status:'Not started'; const pd=typeof payLastWorkingDay==='function'?payLastWorkingDay(ym):'';
     const mn=new Date().toLocaleDateString('en-GB',{month:'long'});
     const pay=`<button class="dash-kpi${st==='Paid'?' zero':''}" style="--k:#0f766e;" onclick="_payMonth='${ym}';_payTab='run';showView('payroll')"><div class="dash-kpi-label">Payroll — ${mn}</div><div class="dash-kpi-num" style="font-size:22px;">${escapeHtml(st)}</div><div class="dash-kpi-sub">${st==='Paid'?'paid':'pay day '+(pd?fmtDateShort(pd):'end of month')}</div></button>`;
@@ -25673,8 +25705,8 @@ function dashRoleKpis(kpi){ const r=getUserRole(currentUser); const today=toLoca
     const waiting=J.reduce((n,j)=>n+(j.items||[]).filter(it=>typeof rackOf==='function'&&rackOf(j,it)==='incoming').length,0);
     const ready=typeof rcpReadyJobs==='function'?rcpReadyJobs().length:0;
     const trips=T.filter(t=>['pickup','deliver','from-vendor','to-vendor','other'].includes(t.kind||'other')&&((t.status==='Planned'&&t.date===today)||t.status==='Requested')).length;
-    return kpi('To receive today',come,'customer items expected / brought back','#2563eb',"_rcpTab='move';showView('reception')")+kpi('Waiting at reception',waiting,'items on the incoming rack','#d97706',"_rcpTab='move';showView('reception')")
-      +kpi('Ready for collection',ready,'finished jobs to hand over','#16a34a',"_rcpTab='move';showView('reception')")+kpi('Deliveries / pick-ups',trips,'trips today or to plan','#7c3aed',"_rcpTab='trips';showView('reception')"); }
+    return kpi('To receive today',come,'customer items expected / brought back','#2563eb',"_rcpTab='move';_rcpGoto='Coming in — customer items';showView('reception')")+kpi('Waiting at reception',waiting,'items on the incoming rack','#d97706',"_rcpTab='move';_rcpGoto='Into the lab — Incoming rack';showView('reception')")
+      +kpi('Ready for collection',ready,'finished jobs to hand over','#16a34a',"_rcpTab='move';_rcpGoto='Going out — to customers';showView('reception')")+kpi('Deliveries / pick-ups',trips,'trips today or to plan','#7c3aed',"_rcpTab='trips';showView('reception')"); }
   if(r==='Driver'){ const T=A(typeof _trips!=='undefined'?_trips:[]).filter(t=>t.driver===currentUser);
     const td=T.filter(t=>t.status==='Planned'&&t.date&&t.date<=today).length, done=T.filter(t=>t.status==='Done'&&String(t.done?.at||'').slice(0,10)===today).length, next=T.filter(t=>t.status==='Planned'&&t.date>today).length;
     return kpi("Today's trips",td,'to do today','#2563eb',"showView('trips')")+kpi('Done today',done,'trips completed','#16a34a',"showView('trips')")+kpi('Coming up',next,'trips planned for later days','#64748b',"showView('trips')"); }
@@ -25982,6 +26014,7 @@ function previewCertPage1(){
     calibrated_by:el('cal-calibrated-by').value||'—'
   };
   el('cert-preview-body').innerHTML=buildCertPage1HTML(cd,s);
+  { const bs=el('btn-share-cert'); if(bs) bs.style.display=canShareCert(currentUser)?'':'none'; }
   { const nb=el('cert-preview-notice'); if(nb){ const it0=getJob(calJobNo)?.items?.[calItemIdx]; nb.innerHTML=it0?certP1Html(certP1Problems({...it0,calData:cd},getJob(calJobNo)),'warn').replace('margin:0 0 10px','margin:10px 0 0'):''; } }
   openModal('modal-cert-preview');
 }
@@ -26019,7 +26052,10 @@ async function downloadPage1PDF(){
 // Download Combined PDF — merges Page 1 (html→canvas→pdf) with uploaded data PDF using pdf-lib
 // ═══ SHARE A CERTIFICATE WITH THE CUSTOMER (C2) ═══ The combined certificate PDF is stored privately and
 // the customer gets a signed link to that one file, valid 90 days. The certificate itself stays in the LIMS.
+// who sends a customer a certificate link — the same roles the file service and /api/share-link accept
+function canShareCert(u){ return ['Admin','Managing Director','Quality Manager','Manager','Coordinator','Sales'].includes(getUserRole(u||currentUser)); }
 async function shareCertificate(){
+  if(!canShareCert(currentUser)){ alert('Certificates are shared with customers by the MD, QM, TM or the office (Coordinator, Sales).'); return; }
   const j0=_jobsCache[_certPreviewJobNo]||getJob(_certPreviewJobNo); const it0=j0?.items?.[_certPreviewItemIdx||0];
   if(!it0) return;
   if(!(it0.status==='Completed'||it0.approvedAt)){ alert('Only approved certificates can be shared.'); return; }
@@ -26234,7 +26270,7 @@ function buildCertPage1HTML(cd,s){
   const labName=String(s&&s.labName?s.labName:'Westlab (M) Sdn. Bhd.');
   const labAddrRaw=cd.lab_addr||(s&&s.address?s.address:'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor, Malaysia');
   const logoUrl=s&&s.logoUrl?s.logoUrl:'';
-  const e=v=>escapeHtml(v==null?'':String(v));
+  const e=v=>escapeHtml(v==null?'':String(v)).replace(/[^\s]+/g,pdfWJ); // a hyphenated word never splits at its hyphen (pdfWJ)
   const na=v=>(!v||v==='—'||v==='')?'N/A':v;
   const fmtDate=d=>{ if(!d||d==='—'||d==='N/A') return 'N/A'; const dt=new Date(String(d).length<=10?d+'T00:00:00':d); return isNaN(dt)?d:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'}); };
   const lines=t=>{ const a=typeof addressLinesPo==='function'?addressLinesPo(t||''):String(t||'').split(/\n+/); return a.map(x=>String(x).trim()).filter(Boolean); };
@@ -26347,7 +26383,11 @@ function certPage1Overflow(item,job){
       const b=(tb.getBoundingClientRect().bottom-R0.top)/PX, room=Math.floor((703.2-619.45)/12.2);
       if(b>703.2-0.3){ const wrapped=[]; [...tb.rows].forEach((tr,ri)=>{ [...tr.cells].filter((c,ci)=>ci%2===0).forEach((c,k)=>{ if(new Set(textRects(c).map(q=>Math.round(q.top))).size>1) wrapped.push({ri,k,max:maxCh(c,c.getBoundingClientRect().width/PX)}); }); });
         if(tb.rows.length>room) add('traceRows','Metrological traceability table','',0,`Too many reference instruments for page 1 — the traceability table has room for ${room} rows (${tb.rows.length} given); list fewer reference instruments`);
-        else add('traceRows','Metrological traceability table','',wrapped.length?Math.min(...wrapped.map(w=>w.max)):0,`Traceability table too tall for page 1 — ${wrapped.length?wrapped.map(w=>`row ${w.ri+1} ${heads[w.k]} (max ${w.max} characters)`).join(', ')+' take two lines; shorten them in the reference equipment record':'shorten the reference instrument details'}`); } } }
+        else add('traceRows','Metrological traceability table','',wrapped.length?Math.min(...wrapped.map(w=>w.max)):0,`Traceability table too tall for page 1 — ${wrapped.length?wrapped.map(w=>`row ${w.ri+1} ${heads[w.k]} (max ${w.max} characters)`).join(', ')+' take two lines; shorten them in the reference equipment record':'shorten the reference instrument details'}`); }
+      else{ // a value wider than its column (one long word, e.g. a certificate no.) runs into the next column: flag it too
+        const cw=[...tb.querySelectorAll('col')].filter((c,i)=>i%2===0).map(c=>parseFloat(c.style.width)||0), wide=[];
+        [...tb.rows].forEach((tr,ri)=>{ [...tr.cells].filter((c,ci)=>ci%2===0).forEach((c,k)=>{ const q=c.getBoundingClientRect(), rs=textRects(c), w=cw[k]||q.width/PX; if(rs.length&&(q.width/PX>w+0.5||Math.max(...rs.map(x=>x.width))/PX>w+0.5||Math.max(...rs.map(x=>x.right))>q.right+0.5||Math.min(...rs.map(x=>x.left))<q.left-0.5)) wide.push({ri,k,max:Math.max(1,Math.floor(len(c)*w/Math.max(w,...rs.map(x=>x.width/PX))))}); }); });
+        if(wide.length) add('traceRows','Metrological traceability table','',Math.min(...wide.map(w=>w.max)),`Traceability table: ${wide.map(w=>`row ${w.ri+1} ${heads[w.k]} (max ${w.max} characters)`).join(', ')} too wide for its column on the certificate; shorten it in the reference equipment record`); } } }
     // the names under the signatures (centred on the signature line)
     [[123.1,228.8,'calibrated_by','Name under "Calibrated By"'],[400.3,506.0,'approved_by','Name under "Approved By"']].forEach(([x1,x2,f,label])=>{ const d=divAt(753.1,x1); if(!d) return; const w=natW(d); if(w>x2-x1+0.5) add(f,label,'',maxCh(d,x2-x1),`${label} too long for the certificate — use a shorter certificate name in Personnel (max ${maxCh(d,x2-x1)} characters)`); });
   }catch(e){ console.warn('certPage1Overflow',e); }
@@ -27247,7 +27287,7 @@ async function openConfirmCalReceivedModal(refId){
       <button onclick="document.getElementById('ref-cal-received-overlay').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
     </div>
     <div style="padding:16px 20px;">
-      <div class="form-group"><label class="form-label">New Certificate No.</label><input class="form-control" id="ref-recv-cert-no" value="${r.certNo||''}"/></div>
+      <div class="form-group"><label class="form-label">New Certificate No.</label><input class="form-control" id="ref-recv-cert-no" value="${escapeHtml(r.certNo||'')}"/></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">New Last Calibrated Date <span class="req">*</span></label><input class="form-control" type="date" id="ref-recv-last-cal"/></div>
         <div class="form-group"><label class="form-label">New Next Due Date <span class="req">*</span></label><input class="form-control" type="date" id="ref-recv-due-date"/></div>
@@ -27790,18 +27830,18 @@ function viewCalendarJobSummary(jobNo){
     <div style="padding:16px 20px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
         <div>
-          <div style="font-size:16px;font-weight:800;color:var(--navy);">${j.jobNo}</div>
+          <div style="font-size:16px;font-weight:800;color:var(--navy);">${escapeHtml(j.jobNo)}</div>
           <div style="font-size:13px;color:var(--text);margin-top:2px;"><strong>${escapeHtml(j.custName)}</strong>${j.attention?` · ${escapeHtml(j.attention)}`:''}</div>
-          ${j.endUserName?`<div style="font-size:12px;color:var(--purple);margin-top:2px;">🏭 End User: ${j.endUserName}</div>`:''}
+          ${j.endUserName?`<div style="font-size:12px;color:var(--purple);margin-top:2px;">🏭 End User: ${escapeHtml(j.endUserName)}</div>`:''}
         </div>
-        <span class="badge ${j.status==='Completed'?'badge-green':'badge-blue'}" style="font-size:11px;">${j.status}</span>
+        <span class="badge ${j.status==='Completed'?'badge-green':'badge-blue'}" style="font-size:11px;">${escapeHtml(j.status)}</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:14px;background:var(--bg);border-radius:8px;padding:10px 12px;">
-        <div><span style="color:var(--text-muted);">Receiving Date:</span> ${j.receiveDate||'—'}</div>
-        <div><span style="color:var(--text-muted);">Priority:</span> ${j.priority||'—'}</div>
+        <div><span style="color:var(--text-muted);">Receiving Date:</span> ${escapeHtml(j.receiveDate||'—')}</div>
+        <div><span style="color:var(--text-muted);">Priority:</span> ${escapeHtml(j.priority||'—')}</div>
         ${hasOnsite?`<div><span style="color:var(--text-muted);">Onsite Dates:</span> ${jobVisitHtml(j)}</div>`:''}
-        ${j.promisedDate?`<div><span style="color:var(--text-muted);">Promised Ready:</span> ${j.promisedDate}</div>`:''}
-        ${j.po?`<div><span style="color:var(--text-muted);">PO No.:</span> ${j.po}</div>`:''}
+        ${j.promisedDate?`<div><span style="color:var(--text-muted);">Promised Ready:</span> ${escapeHtml(j.promisedDate)}</div>`:''}
+        ${j.po?`<div><span style="color:var(--text-muted);">PO No.:</span> ${escapeHtml(j.po)}</div>`:''}
       </div>
       ${hasOnsite&&j.siteAddress?`<div style="background:#fff3e0;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;">
         <strong style="color:#c84b00;">📍 Site:</strong> ${j.siteAddress}${j.siteContact?` · ${j.siteContact}`:''}${j.siteMobile?` · ${j.siteMobile}`:''}
@@ -27812,9 +27852,9 @@ function viewCalendarJobSummary(jobNo){
           <div style="background:var(--bg);border-radius:8px;padding:8px 10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <strong style="font-size:12.5px;">${escapeHtml(it.eqName)}${it.calType==='Onsite'?' 📍':''}</strong>
-              <span style="background:${statusColor[it.status]||'#64748b'};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">${it.status}</span>
+              <span style="background:${statusColor[it.status]||'#64748b'};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">${escapeHtml(it.status)}</span>
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${escapeHtml(it.brand||'')} ${escapeHtml(it.model||'')} · S/N: ${escapeHtml(it.serial||'—')} · Cert: <span style="color:var(--blue);font-weight:600;">${it.certNo||'—'}</span></div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${escapeHtml(it.brand||'')} ${escapeHtml(it.model||'')} · S/N: ${escapeHtml(it.serial||'—')} · Cert: <span style="color:var(--blue);font-weight:600;">${escapeHtml(it.certNo||'—')}</span></div>
             ${it.assignedTo?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Assigned to: ${USERS[it.assignedTo]?.name||it.assignedTo}</div>`:''}
           </div>`).join('')}
       </div>
@@ -28426,7 +28466,7 @@ function renderQuotationsList(){
               ${it.wonJobNo?`<span style="color:var(--blue);margin-left:6px;">→ Job ${it.wonJobNo}</span>`:''}
             </div>
             <div style="white-space:nowrap;">
-              <span class="badge ${statusBadge}">${it.status}</span>
+              <span class="badge ${statusBadge}">${escapeHtml(it.status)}</span>
               ${it.status==='Pending'?`<button class="btn btn-outline btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="openEditQuotationItemModal('${quo.id}',${idx})">✏️ Edit</button>
                 <button class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;" onclick="markQuotationItemStatus('${quo.id}',${idx},'Won')">Won</button>
                 <button class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;" onclick="markQuotationItemStatus('${quo.id}',${idx},'Lost')">Lost</button>`:''}
@@ -29341,7 +29381,7 @@ function viewCustomerDetail(custId){
           const itemSummary=(j.items||[]).length>1?`${j.items.length} items`:(j.items?.[0]?.eqName||'—');
           return `<div style="background:var(--bg);border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
             <span>🔧 <strong>${j.jobNo}</strong> · ${itemSummary} <span style="color:var(--text-muted);">· ${fmtDateShort(j.receiveDate)}</span></span>
-            <span class="badge ${STATUS_BADGE[j.status]||'badge-slate'}">${j.status}</span>
+            <span class="badge ${STATUS_BADGE[j.status]||'badge-slate'}">${escapeHtml(j.status)}</span>
           </div>`;
         } else if(ev.type==='sales'){
           const e=ev.data;
@@ -29853,7 +29893,7 @@ function openCalJobPopup(evt,jobNo){
     <div style="font-size:12px;color:var(--text);margin-bottom:4px;"><strong>${escapeHtml(j.custName)}</strong></div>
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Type: ${typeLabel} · Items: ${totalItems}</div>
     ${onsiteItems>0?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Engineer: ${onsiteAssignees.length?onsiteAssignees.join(', '):'⚠️ Unassigned'}</div>`:''}
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Status: ${j.status}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Status: ${escapeHtml(j.status)}</div>
     ${j.appointmentDate?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">Onsite: ${jobVisitHtml(j)}</div>`:''}
     ${j.promisedDate?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Promised: ${fmtDateShort(j.promisedDate)}</div>`:''}
     <button class="btn btn-primary btn-sm" style="width:100%;" onclick="closeCalPopup();openEventJob('${j.jobNo}')">👁 View Full Job</button>
@@ -30048,7 +30088,7 @@ function renderCompletedJobs(){
       const approvedName=USERS[item.approvedBy]?.name||item.approvedBy||'—';
       rows.push(`<tr>
         <td style="padding:5px 10px 5px 20px;font-size:11px;color:var(--text-muted);">Item ${item.itemNo}</td>
-        <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${item.certNo||'—'}</td>
+        <td style="padding:5px 8px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;color:var(--blue);">${escapeHtml(item.certNo||'—')}</td>
         <td style="padding:5px 8px;font-size:12px;">${escapeHtml(item.eqName)}<br/><span style="font-size:11px;color:var(--text-muted);">${escapeHtml([item.brand,item.model].filter(Boolean).join(' / '))}</span></td>
         <td style="padding:5px 8px;font-size:11px;color:var(--text-muted);">${escapeHtml(item.serial||'—')}</td>
         <td style="padding:5px 8px;font-size:11px;white-space:nowrap;">${(item.calData?.date||item.approvedAt)?fmtDateShort(item.calData?.date||item.approvedAt):'—'}</td>
@@ -30101,8 +30141,8 @@ function printBillingSummary(){
   const monthLabel=dt.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
   const rows=monthList.map((row,i)=>`<tr>
     <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${i+1}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;font-weight:700;">${row.jobNo}</td>
-    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${row.certNo||'—'}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;font-weight:700;">${escapeHtml(row.jobNo)}</td>
+    <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${escapeHtml(row.certNo||'—')}</td>
     <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${escapeHtml(row.custName)}</td>
     <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${escapeHtml(row.eqName)}</td>
     <td style="padding:4px 8px;border:0.5pt solid #ccc;font-size:9pt;">${row.calDate||'—'}</td>
@@ -30592,7 +30632,7 @@ async function exportDeliveryOrderPdf(jobNo){
         <div>${esc(j.custName)}</div>
         ${addr.map(l=>`<div>${esc(l)}</div>`).join('')}
         <div>Attn : ${esc(j.attention||cust.attention||'')}</div>
-        <div style="display:flex;"><span style="width:58%;">TEL : ${esc(j.tel||cust.tel||j.mobile||cust.mobile||'')}</span><span>FAX : ${esc(j.fax||cust.fax||'')}</span></div>
+        <div style="display:flex;flex-wrap:wrap;"><span style="flex:none;min-width:58%;padding-right:8px;box-sizing:border-box;">TEL : ${esc(j.tel||cust.tel||j.mobile||cust.mobile||'')}</span><span>FAX : ${esc(j.fax||cust.fax||'')}</span></div>
       </div></div>
       <div style="width:43%;padding-left:1%;"><table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
         ${[['Your Ref.',j.po||''],['Our Job No',j.jobNo],...(inv?[['Our Inv. No',inv.invoiceNo]]:[]),['Date',new Date(doDate).toLocaleDateString('en-GB')],['Page',`${pageNo} of ${pageCount}`]]
@@ -30621,10 +30661,10 @@ async function exportDeliveryOrderPdf(jobNo){
     <div style="display:flex;justify-content:space-between;margin-top:46px;">
       <div style="width:200px;"><div style="height:44px;display:flex;align-items:flex-end;justify-content:center;">${issSig?`<img src="${issSig}" style="max-height:42px;max-width:180px;"/>`:''}</div>
         <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;text-align:center;">Authorised Signature</div>
-        ${issuer?`<div style="font-size:10.5px;text-align:center;">${esc(staffNameOf(issuer))}</div>`:''}</div>
+        ${issuer?`<div style="font-size:11px;text-align:center;">${esc(staffNameOf(issuer))}</div>`:''}</div>
       <div style="width:220px;"><div style="height:44px;display:flex;align-items:flex-end;justify-content:center;">${cSig?`<img src="${cSig}" style="max-height:42px;max-width:200px;"/>`:''}</div>
         <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;">Received By :</div>
-        <div style="font-size:10.5px;line-height:1.8;">${j.collectedAt?`Name : ${esc(j.collectedBy||'')}<br/>Date : ${new Date(j.collectedAt).toLocaleDateString('en-GB')}`:'Name :<br/>IC / Staff No. :<br/>Date :'}</div></div>
+        <div style="font-size:11px;line-height:1.8;">${j.collectedAt?`Name : ${esc(j.collectedBy||'')}<br/>Date : ${new Date(j.collectedAt).toLocaleDateString('en-GB')}`:'Name :<br/>IC / Staff No. :<br/>Date :'}</div></div>
     </div>`;
   await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${j.doNumber}${safeFileName(j.custName)?'_'+safeFileName(j.custName):''}.pdf`,label:'Delivery Order',count:items.length,letterhead,pinFooter:true});
 }
@@ -30694,7 +30734,7 @@ async function generateInvoiceForJobs(jobNos){
     (j.extraCharges||[]).filter(c=>!c.waived&&!c.invoiceNo).forEach(c=>{ lines.push({eqName:c.desc,brand:'',model:'',certNo:'',price:c.amount,isCharge:true,jobNo:j.jobNo}); usedCharges.push({jobNo:j.jobNo,id:c.id}); }); });
   const subtotal=lines.reduce((s,l)=>s+(+l.price||0),0), sstAmount=_settings.sstEnabled?Math.round(subtotal*8)/100:0, totalAmount=Math.round((subtotal+sstAmount)*100)/100;
   const inv={id:'INV-'+Date.now(),invoiceNo,jobNo:first.jobNo,jobNos:js.map(j=>j.jobNo),quotationNo:q?.quotationNo||'',po:first.po||'',
-    custName:first.custName,custId:first.custId||null,attention:first.attention||'',address:first.address||'',email:first.email||'',
+    ...invCustSnap(first),
     items:lines,invoiceDate,dueDate:toLocalDateStr(due),subtotal,sstAmount,totalAmount,paymentStatus:'Unpaid',amountPaid:0,createdBy:currentUser,createdAt:invoiceDate};
   _invoices.push(inv); await saveInvoices();
   for(const j of js){ const ids=usedCharges.filter(u=>u.jobNo===j.jobNo).map(u=>u.id); if(ids.length) await updateJob(j.jobNo,jj=>{ (jj.extraCharges||[]).forEach(c=>{ if(ids.includes(c.id)) c.invoiceNo=invoiceNo; }); }); }
@@ -30714,7 +30754,7 @@ async function generateInvoiceFromJob(jobNo){
   const totalAmount=Math.round((subtotal+sstAmount)*100)/100;
   const inv={
     id:'INV-'+Date.now(),invoiceNo,jobNo,quotationNo:jobQuotation(j)?.quotationNo||'',po:j.po||jobQuotation(j)?.poNumber||'',
-    custName:j.custName,custId:j.custId||null,attention:j.attention||'',address:j.address||'',email:j.email||'',
+    ...invCustSnap(j),
     items:[...(j.items||[]).filter(it=>it.status!=='Deleted'&&it.status!=='Returned - Abnormal').map(it=>({...invItemLine(it),jobNo:j.jobNo})),
       ...charges.map(c=>({eqName:c.desc,brand:'',model:'',certNo:'',price:c.amount,isCharge:true}))],
     invoiceDate,dueDate:toLocalDateStr(dueDate),subtotal,sstAmount,totalAmount,
@@ -30929,6 +30969,7 @@ async function soaSaveBank(){ if(!isAdmin(currentUser)){ alert('Only Admin / MD 
 function soaPagesFor(c,date){
   const esc=v=>escapeHtml(v==null?'':String(v)); const money=n=>Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
   const cust=(_customers||[]).find(x=>x.id===c.custId)||{}; const addr=addressLinesPo(cust.address||c.address||'');
+  c={...c,name:cust.company||cust.name||c.name,attention:cust.attention||c.attention}; // a statement is not issued yet: the latest customer record first (decision 14), the invoice's details only as a fallback
   const ag={cur:0,a:0,b:0,c:0,d:0}; c.invoices.forEach(x=>{ const d=x.days; if(d<=0) ag.cur+=x.bal; else if(d<=30) ag.a+=x.bal; else if(d<=60) ag.b+=x.bal; else if(d<=90) ag.c+=x.bal; else ag.d+=x.bal; });
   const bank=_settings.soaBank||{}; const per=20; const chunks=[]; for(let i=0;i<c.invoices.length;i+=per) chunks.push(c.invoices.slice(i,i+per)); if(!chunks.length) chunks.push([]);
   const TH='padding:5px 4px;border-top:1px solid #000;border-bottom:1px solid #000;font-weight:normal;';
@@ -30945,7 +30986,7 @@ function soaPagesFor(c,date){
           <div>${esc(c.name)}</div>
           ${addr.map(l=>`<div>${esc(l)}</div>`).join('')}
           <div>Attn : ${esc(c.attention||cust.attention||'')}</div>
-          <div style="display:flex;"><span style="width:58%;">TEL : ${esc(cust.tel||cust.phone||cust.mobile||'')}</span><span>FAX : ${esc(cust.fax||'')}</span></div>
+          <div style="display:flex;flex-wrap:wrap;"><span style="flex:none;min-width:58%;padding-right:8px;box-sizing:border-box;">TEL : ${esc(cust.tel||cust.phone||cust.mobile||'')}</span><span>FAX : ${esc(cust.fax||'')}</span></div>
         </div></div>
       <div style="width:43%;padding-left:1%;"><table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
         ${[['Statement date',new Date(date+'T00:00:00').toLocaleDateString('en-GB')],['Currency','MYR'],['Page',`${pi+1} of ${chunks.length}`]].map(([k,v])=>`<tr><td style="width:100px;white-space:nowrap;">${k}</td><td style="width:14px;">:</td><td>${esc(v)}</td></tr>`).join('')}</table></div></div>
@@ -30958,7 +30999,7 @@ function soaPagesFor(c,date){
       ${c.credit>0.004?`<div style="font-size:11.5px;margin:-4px 0 8px;text-align:right;">Outstanding invoices RM ${money(c.gross)} &nbsp;·&nbsp; Less: credit on account RM ${money(c.credit)} <span style="color:#555;">(${c.creditRecs.map(r=>esc(r.cnNo?'credit note '+r.cnNo:('overpayment on '+r.fromInvoice))).join(', ')})</span> &nbsp;·&nbsp; <b>Total due RM ${money(c.total)}</b>${c.creditLeft>0.004?`<br/><b style="color:#15803d;">Credit balance in your favour: RM ${money(c.creditLeft)}</b> — it will be used on your next invoice.`:''}</div>`:''}
       <div style="font-size:11px;">Malaysian Ringgit : ${esc(amountInWordsMYR(c.total))}</div>
       ${bank.accountNo?`<div style="font-size:11.5px;margin-top:10px;line-height:1.5;"><b>Please pay to:</b> ${esc(bank.accountName||_settings.labName||'')} · ${esc(bank.bank||'')} · Account no. <b>${esc(bank.accountNo)}</b>${bank.contact?`<br/>Please send the payment advice to ${esc(bank.contact)}.`:''}</div>`:''}
-      <div style="font-size:10.5px;color:#444;margin-top:8px;">If payment has already been made, please disregard this statement and kindly send us the payment details. This is a computer-generated statement; no signature is required.</div>
+      <div style="font-size:11px;color:#444;margin-top:8px;">If payment has already been made, please disregard this statement and kindly send us the payment details. This is a computer-generated statement; no signature is required.</div>
     </div>`:''}</div>`);
 }
 async function soaGenerate(keys){
@@ -31126,12 +31167,12 @@ async function exportCreditNotePdf(invoiceId,cnNo){ // follows the Credit Note t
   const letterhead=await westlabQtLetterhead();
   const title=`CREDIT NOTE No. ${cn.cnNo}${cn.status==='cancelled'?' — CANCELLED':''}`;
   const addr=addressLinesPo(inv.address||j0.address||cust.address||''); const attn=inv.attention||j0.attention||cust.attention||'';
-  const tel=j0.tel||cust.tel||j0.mobile||cust.mobile||'', fax=j0.fax||cust.fax||'';
+  const tel=inv.tel!=null?inv.tel:(j0.tel||cust.tel||j0.mobile||cust.mobile||''), fax=inv.fax!=null?inv.fax:(j0.fax||cust.fax||''); // the invoice's own details
   const d8=x=>x?new Date(String(x).length===10?x+'T00:00:00':x).toLocaleDateString('en-GB'):'';
   const tax=cn.tax!=null?cn.tax:(inv.sstAmount>0&&inv.totalAmount>0?Math.round(cn.amount*inv.sstAmount/inv.totalAmount*100)/100:0); const gross=Math.round((cn.amount-tax)*100)/100;
   const sst=!!(_settings.sstEnabled||inv.sstAmount>0||tax>0); // tax columns only when SST applies
   const lines=(cn.lines&&cn.lines.length)?cn.lines:[{code:'',desc:cn.desc||'',qty:1,uprice:gross,amount:gross}];
-  const tin=cust.tin||'', brn=cust.brn||'';
+  const tin=inv.tel!=null?(inv.custTin||''):(cust.tin||''), brn=inv.tel!=null?(inv.custBrn||''):(cust.brn||'');
   const cr=cn.creditId?(_settings.customerCredits||[]).find(r=>r.id===cn.creditId):null;
   const topBlock=(pageNo,pageCount)=>`
     <div style="padding-left:57%;white-space:nowrap;font-weight:bold;font-size:${Math.min(16.5,Math.floor(10*284/(title.length*0.64))/10)}px;margin-bottom:4px;">${esc(title)}</div>
@@ -31145,7 +31186,7 @@ async function exportCreditNotePdf(invoiceId,cnNo){ // follows the Credit Note t
         <div>${esc(String(inv.custName||'').toUpperCase())}</div>
         ${addr.map(l=>`<div>${esc(l)}</div>`).join('')}
         <div>Attn : ${esc(attn)}</div>
-        <div style="display:flex;"><span style="width:58%;">TEL : ${esc(tel)}</span><span>FAX : ${esc(fax)}</span></div>
+        <div style="display:flex;flex-wrap:wrap;"><span style="flex:none;min-width:58%;padding-right:8px;box-sizing:border-box;">TEL : ${esc(tel)}</span><span>FAX : ${esc(fax)}</span></div>
         ${tin||brn?`<div style="display:flex;"><span style="width:58%;">TIN : ${esc(tin)}</span><span>${brn?'Reg. No. : '+esc(brn):''}</span></div>`:''}
       </div></div>
       <div style="width:43%;padding-left:1%;"><table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
@@ -31168,7 +31209,7 @@ async function exportCreditNotePdf(invoiceId,cnNo){ // follows the Credit Note t
         <tr><td style="padding:2px 8px;font-weight:bold;">Total (MYR)</td><td style="${box}font-weight:bold;">${money(cn.amount)}</td></tr></table></div>
     <div style="font-size:11px;margin-top:8px;line-height:1.5;">${cn.applied>0.004?`RM ${money(cn.applied)} is deducted from invoice ${esc(inv.invoiceNo)}.`:''}${cn.toCredit>0.004?` RM ${money(cn.toCredit)} is kept as credit on your account for your next invoice${cn.applied>0.004?'':` (invoice ${esc(inv.invoiceNo)} was already settled)`}.`:''}${cr&&cr.status==='refunded'&&cr.refund?` Refunded RM ${money(cr.refund.amount)} on ${d8(cr.refund.at)} — ref. ${esc(cr.refund.ref||'')}.`:''}</div>
     <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-top:22px;">
-      <div style="font-size:10.5px;line-height:1.5;">Issued By : ${esc(String(USERS[cn.by]?.name||cn.by||'').toUpperCase())}<br/>Printed On : ${esc(new Date().toLocaleString('en-GB',{day:'numeric',month:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}))}</div>
+      <div style="font-size:11px;line-height:1.5;">Issued By : ${esc(String(USERS[cn.by]?.name||cn.by||'').toUpperCase())}<br/>Printed On : ${esc(new Date().toLocaleString('en-GB',{day:'numeric',month:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}))}</div>
       <div style="width:200px;"><div style="height:44px;display:flex;align-items:flex-end;justify-content:center;">${sigRes.data?`<img src="${sigRes.data}" style="max-height:42px;max-width:180px;"/>`:''}</div>
         <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;text-align:center;">Authorised Signature</div></div></div>`;
   await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${cn.cnNo}${safeFileName(inv.custName)?'_'+safeFileName(inv.custName):''}.pdf`,label:'Credit Note',count:1,letterhead,pinFooter:true});
@@ -31383,12 +31424,13 @@ async function exportInvoicePdf(invoiceId){
   const money=n=>Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
   const cfg=invoiceCfg(), bank=_settings.soaBank||{};
   const jobs=invJobs(inv).map(n=>getJob(n)).filter(Boolean); const j0=jobs[0]||{};
-  const cust=(_customers||[]).find(x=>x.id===(inv.custId||j0.custId))||(_customers||[]).find(x=>(x.company||x.name)===inv.custName)||{};
+  const cust0=(_customers||[]).find(x=>x.id===(inv.custId||j0.custId))||(_customers||[]).find(x=>(x.company||x.name)===inv.custName)||{};
+  const cust=inv.tel!=null?{...cust0,tin:inv.custTin||'',brn:inv.custBrn||''}:cust0; // an issued invoice keeps the customer TIN / Reg. No. it was made with
   const letterhead=await westlabQtLetterhead();
   const title=`INVOICE : ${inv.invoiceNo}${invCancelled(inv)?' — CANCELLED':''}`;
   const addr=addressLinesPo(inv.address||j0.address||cust.address||'');
   const attn=inv.attention||j0.attention||cust.attention||'';
-  const tel=j0.tel||cust.tel||j0.mobile||cust.mobile||'', fax=j0.fax||cust.fax||'';
+  const tel=inv.tel!=null?inv.tel:(j0.tel||cust.tel||j0.mobile||cust.mobile||''), fax=inv.fax!=null?inv.fax:(j0.fax||cust.fax||'');
   const terms=(cust.paymentTerms==='cod'||j0.paymentTerms==='cod')?'C.O.D.':cfg.terms;
   const dos=[...new Set(jobs.map(x=>x.doNumber).filter(Boolean))];
   const ourDo=dos.join(', '); const jobList=jobs.map(x=>x.jobNo).join(', ')||inv.jobNo;
@@ -31405,7 +31447,7 @@ async function exportInvoicePdf(invoiceId){
         <div>${esc(String(inv.custName||'').toUpperCase())}</div>
         ${addr.map(l=>`<div>${esc(l)}</div>`).join('')}
         <div>Attn : ${esc(attn)}</div>
-        <div style="display:flex;"><span style="width:58%;">TEL : ${esc(tel)}</span><span>FAX : ${esc(fax)}</span></div>
+        <div style="display:flex;flex-wrap:wrap;"><span style="flex:none;min-width:58%;padding-right:8px;box-sizing:border-box;">TEL : ${esc(tel)}</span><span>FAX : ${esc(fax)}</span></div>
         ${cust.tin||cust.brn?`<div style="display:flex;"><span style="width:58%;">TIN : ${esc(cust.tin||'')}</span><span>${cust.brn?'Reg. No. : '+esc(cust.brn):''}</span></div>`:''}
       </div></div>
       <div style="width:43%;padding-left:1%;"><table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
@@ -32077,7 +32119,7 @@ function buildEmailReminderTable(items, showLastCalDate=false){
         <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">${i+1}</td>
         <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${escapeHtml(it.eqName||'')}${escapeHtml(it.brand?' ('+it.brand+(it.model?' '+it.model:'')+')':'')}</td>
         <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${escapeHtml(it.serial||'N/A')}</td>
-        <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${it.certNo||'N/A'}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${escapeHtml(it.certNo||'N/A')}</td>
         <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;">${dateVal}</td>
       </tr>`;
     }).join('')}
@@ -32925,9 +32967,9 @@ async function lookupJob(){
     return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <strong style="font-size:12.5px;">${escapeHtml(it.eqName||'Equipment')}</strong>
-        <span style="background:${c};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">${it.status}</span>
+        <span style="background:${c};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">${escapeHtml(it.status)}</span>
       </div>
-      <div style="font-size:11px;color:#64748b;">Cert No.: <strong style="color:#3b82f6;">${it.certNo||'—'}</strong> &nbsp;·&nbsp; S/N: ${escapeHtml(it.serial||'N/A')}${it.calType==='Onsite'?' &nbsp;·&nbsp; 📍 Onsite':''}</div>
+      <div style="font-size:11px;color:#64748b;">Cert No.: <strong style="color:#3b82f6;">${escapeHtml(it.certNo||'—')}</strong> &nbsp;·&nbsp; S/N: ${escapeHtml(it.serial||'N/A')}${it.calType==='Onsite'?' &nbsp;·&nbsp; 📍 Onsite':''}</div>
       <div style="font-size:11px;color:#374151;margin-top:4px;">${m}</div>
     </div>`;
   }).join('');
@@ -32942,14 +32984,14 @@ async function lookupJob(){
       </div>
       <div style="padding:16px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:12px;">
-          <div><span style="color:#64748b;">Job No.</span><br/><strong>${j.jobNo}</strong></div>
-          <div><span style="color:#64748b;">Received</span><br/><strong>${j.receiveDate||'—'}</strong></div>
+          <div><span style="color:#64748b;">Job No.</span><br/><strong>${escapeHtml(j.jobNo)}</strong></div>
+          <div><span style="color:#64748b;">Received</span><br/><strong>${escapeHtml(j.receiveDate||'—')}</strong></div>
           ${j.promisedDate&&!allDone?`<div><span style="color:#64748b;">Expected Ready</span><br/><strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'#ef4444':'#22c55e'}">${fmtDateShort(j.promisedDate)}</strong></div>`:''}
         </div>
         ${itemRows}
         ${readyForCollection?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;font-size:12px;color:#166534;text-align:center;margin-top:4px;">
           📞 Please contact us to collect your instrument(s).<br/>
-          <strong>${_settings.tel||''}</strong>${_settings.email?' · '+_settings.email:''}
+          <strong>${escapeHtml(_settings.tel||'')}</strong>${_settings.email?' · '+escapeHtml(_settings.email):''}
         </div>`:(allDone?`<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:12px;font-size:12px;color:#1e40af;text-align:center;margin-top:4px;">
           🧾 Your calibration is complete — we're finalizing your invoice and will contact you once it's ready for collection.
         </div>`:'')}
@@ -33851,7 +33893,7 @@ async function pdfFlowDoc({head,blocks,foot,landscape,filename,label,returnBlob}
   const W=landscape?1123:794, H=landscape?794:1123, PX=34, TOP=24, BOTTOM=28, cw=W-2*PX;
   const FONT="Tahoma,Verdana,'DejaVu Sans',Arial,sans-serif";
   const meas=document.createElement('div'); meas.style.cssText=`position:fixed;left:-30000px;top:0;width:${cw}px;font-family:${FONT};font-size:11px;`; document.body.appendChild(meas);
-  const hOf=html=>{ meas.innerHTML=`<div>${html}</div>`; return meas.firstElementChild.getBoundingClientRect().height; };
+  const hOf=html=>{ meas.innerHTML=`<div>${html}</div>`; pdfNoHyphenBreak(meas); return meas.firstElementChild.getBoundingClientRect().height; };
   let headH, footH; const bh=[], hh=[];
   try{ headH=hOf(head(1,1)); footH=hOf(foot||''); blocks.forEach(b=>{ bh.push(hOf(b.html)); hh.push(b.hdr?hOf(b.hdr):0); }); } finally{ meas.remove(); }
   const avail=H-TOP-BOTTOM-headH; const pages=[[]]; let used=0;
@@ -33976,7 +34018,7 @@ function f016RecordOf(u){ const v=formVersion('F016'); return (_f016Store.data||
 function f016Valid(u){ return !!f016RecordOf(u); }
 function canSeeIc(rec){ return rec&&(rec.username===currentUser||isQmOrMd(currentUser)); }
 function maskIc(ic){ const s=String(ic||''); return s.length>4?'•'.repeat(Math.max(0,s.length-4))+s.slice(-4):s; }
-function staffDesignation(u){ const st=(_staff||[]).find(x=>x.username===u)||{}; return st.designation||getUserRole(u)||''; }
+function staffDesignation(u){ const st=(_staff||[]).find(x=>x.username===u)||{}; return st.designation||roleLabel(getUserRole(u))||''; }
 function f016Gate(){
   if(!currentUser||!_f016Store.loaded) return; if(f016Valid(currentUser)){ const g=el('f016-gate'); if(g) g.remove(); return; }
   const v=formVersion('F016'); let g=el('f016-gate');
@@ -34298,11 +34340,12 @@ function qfHead(g,no,v,p,n){
   const th=`border-top:0.5pt solid #000;border-bottom:0.5pt solid #000;background:${QF_GREY};font:italic bold 8pt/1 ${QF_FONT};text-align:center;vertical-align:middle;padding:0 2pt;text-transform:uppercase;`;
   const td=`border-top:0.5pt solid #000;border-bottom:0.5pt solid #000;font:8pt/1 ${QF_FONT};text-align:center;vertical-align:middle;padding:0 2pt;`;
   const L1='border-left:0.5pt solid #000;border-right:0.5pt solid #000;', RE='border-right:0.5pt solid #000;';
+  const vb=v.contPage?'':'background:#f2f2f2;'; // a continuation page's header values on white, like the form's own header row
   return `<img src="${QF_LOGO}" style="position:absolute;left:${((g.W-85)/2).toFixed(2)}pt;top:0;width:85pt;height:85pt;"/>
   <div style="position:absolute;right:${(g.W-g.R).toFixed(2)}pt;top:74pt;margin-top:-0.16em;font:bold 10pt/1 ${QF_FONT};white-space:nowrap;">LABORATORY MANAGEMENT FORM</div>
   <table style="position:absolute;left:${g.L}pt;top:${g.rows[0]}pt;width:${(g.R-g.L).toFixed(2)}pt;border-collapse:collapse;table-layout:fixed;">${qfCols(g.cols)}
   <tr style="height:${(g.rows[1]-g.rows[0]).toFixed(2)}pt;">${['Document Title','Issue','Revision','Effective Date','Page No.','Location'].map((h,i)=>`<td style="${th}${i===0?L1:i===5?RE:''}">${h}</td>`).join('')}</tr>
-  <tr style="height:${(g.rows[2]-g.rows[1]).toFixed(2)}pt;"><td style="${td}${L1}">${escapeHtml(no)}: ${escapeHtml(v.title||'')}</td><td style="${td}background:#f2f2f2;">${escapeHtml(v.issue||'')}</td><td style="${td}background:#f2f2f2;">${escapeHtml(v.rev||'')}</td><td style="${td}background:#f2f2f2;">${qmsDate(v.effective)}</td><td data-qfpg="1" style="${td}background:#f2f2f2;">${p} of ${n}</td><td style="${td}background:#f2f2f2;${RE}">SAMM</td></tr></table>`;
+  <tr style="height:${(g.rows[2]-g.rows[1]).toFixed(2)}pt;"><td style="${td}${L1}">${escapeHtml(no)}: ${escapeHtml(v.title||'')}</td><td style="${td}${vb}">${escapeHtml(v.issue||'')}</td><td style="${td}${vb}">${escapeHtml(v.rev||'')}</td><td style="${td}${vb}">${qmsDate(v.effective)}</td><td data-qfpg="1" style="${td}${vb}">${p} of ${n}</td><td style="${td}${vb}${RE}">SAMM</td></tr></table>`;
 }
 function qfFoot(g,no,v){
   return `<div style="position:absolute;left:0;width:${g.W}pt;top:${g.foot[0]}pt;margin-top:-0.16em;text-align:center;font:9pt/1 ${QF_FONT};">PRINTED COPIES OF THIS FORM ARE CONTROLLED</div>
@@ -34315,7 +34358,7 @@ function qfPage(g,no,v,p,n,body,extra){ const cf=p===n&&FORM_CLAUSE_FOOT[no]&&!v
 async function qfFlow({g,no,v,blocks,extra}){
   const tw=g.R-g.L, top=g.rows[2], avail=g.max-top;
   const meas=document.createElement('div'); meas.style.cssText=`position:fixed;left:-30000px;top:0;width:${tw}pt;font-family:${QF_FONT};`; document.body.appendChild(meas);
-  const hOf=html=>{ meas.innerHTML=`<div>${html}</div>`; return meas.firstElementChild.getBoundingClientRect().height*0.75; };
+  const hOf=html=>{ meas.innerHTML=`<div>${html}</div>`; pdfNoHyphenBreak(meas); return meas.firstElementChild.getBoundingClientRect().height*0.75; };
   const pages=[[]]; let used=0, last=null;
   try{ for(const b of blocks){
       if(b.fill){ const room=Math.floor(((b.fill.until-top)-used)/b.fill.h+0.01); for(let i=0;i<room;i++){ pages[pages.length-1].push(`<div style="margin-top:-0.5pt;">${b.fill.html}</div>`); used+=b.fill.h-0.5; } last=null; continue; }
@@ -34351,7 +34394,7 @@ async function qfFitPages(pages,{landscape,no,v,renumber}={}){
   if(!renumber&&!pages.some(h=>String(h).includes('data-qfit')||String(h).includes('data-qc'))) return pages;
   const box=document.createElement('div'); box.style.cssText='position:fixed;left:-40000px;top:0;'; document.body.appendChild(box);
   try{
-    const doms=pages.map(h=>{ const d=document.createElement('div'); d.innerHTML=h; box.appendChild(d); return d; });
+    const doms=pages.map(h=>{ const d=document.createElement('div'); d.innerHTML=h; box.appendChild(d); pdfNoHyphenBreak(d); return d; });
     const ok=e=>e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth;
     const over=[];
     doms.forEach((d,pi)=>d.querySelectorAll('[data-qfit]').forEach(e=>{ const mn=Math.max(8,+e.dataset.qmin||8); let sz=Math.max(mn,+e.dataset.qs||9);
@@ -34380,7 +34423,14 @@ async function qfFitPages(pages,{landscape,no,v,renumber}={}){
 // the original layouts were measured with; grown rows (qfGrowTable) add 1.2 pt) and wraps only between words
 // (or at the natural break points of an e-mail / link / code) — never inside a word (Jay, 27 Oct 2026). lw: line thickness (pt) — the
 // original form's own (0.48 pt on most layouts, 0.5 pt on others); lines are drawn once when the PDF is made (pdfCrispLines).
-function qfRow(xs,cells,{h,font,bg,valign,pad,vpad,lw}={}){ const B=lw?`border:${lw}pt solid #000;`:QF_B;
+// A row that has to grow for its text (more lines than the form's row height) gets at least 1.5 pt above and below its text, and every
+// cell at least 2 pt at the sides, so the text never touches a line (Jay, 27 Oct 2026); rows that fit keep the form's height.
+function qfRow(xs,cells,{h,font,bg,valign,pad,vpad,lw}={}){ pad=Math.max(2,pad??5.4);
+  const one=qfRow1(xs,cells,{h,font,bg,valign,pad,vpad,lw}); if(!(+h>0)||+(vpad||0)>=1.5||!cells.some(c=>{ const t=Array.isArray(c)?c[0]:c; return t!=null&&t!==''; })) return one;
+  if(!_qftMeas||!_qftMeas.isConnected){ _qftMeas=document.createElement('div'); _qftMeas.style.cssText='position:fixed;left:-40000px;top:0;'; document.body.appendChild(_qftMeas); }
+  _qftMeas.innerHTML=one; pdfNoHyphenBreak(_qftMeas); const tr=_qftMeas.querySelector('tr'), rh=tr?tr.getBoundingClientRect().height*0.75:0; _qftMeas.innerHTML='';
+  return rh>+h+0.3?qfRow1(xs,cells,{h,font,bg,valign,pad,vpad:1.5,lw}):one; }
+function qfRow1(xs,cells,{h,font,bg,valign,pad,vpad,lw}={}){ const B=lw?`border:${lw}pt solid #000;`:QF_B;
   vpad=+(+(vpad||0)).toFixed(2); return `<table style="width:${(xs[xs.length-1]-xs[0]).toFixed(2)}pt;border-collapse:collapse;table-layout:fixed;${xs[0]!==72?`margin-left:${(xs[0]-72).toFixed(2)}pt;`:''}">${qfCols(xs)}<tr style="height:${h}pt;">${cells.map(c=>{ const [t,al,st]=Array.isArray(c)?c:[c,'left','']; return `<td data-qc="1" style="${B}font:${font};text-align:${al};vertical-align:${valign||'middle'};padding:${vpad??0}pt ${pad??5.4}pt;${bg?`background:${bg};`:''}overflow-wrap:normal;word-break:normal;${st||''}">${qfNatHtml(t)}</td>`; }).join('')}</tr></table>`; }
 // The ruled rows of a table on an original form layout, redrawn so that they grow with their values (Jay, 27 Oct 2026: 8 pt minimum —
 // a value that does not fit wraps in its cell and the row grows, up to maxLines lines; only what still does not fit is continued).
@@ -34399,8 +34449,8 @@ function qfGrowTable({xs,top,bottom,rows,minH,maxLines=4,size=8,align,label,pad=
 const qfE=v=>escapeHtml(v==null?'':String(v));
 // Natural line-break points for a printed value (Jay, 27 Oct 2026: never split a word): an e-mail, link, file name or long code may
 // break after "@", "/", "-" or "_" and before a "." inside it — no hyphen is added. Ordinary words are never split. s: escaped text.
-function qfNat(s){ return String(s==null?'':s).replace(/[^\s<>]+/g,t=>(/[@_\/]/.test(t)&&!/^[\d\/.:-]{1,12}$/.test(t))||t.length>=16?t.replace(/([@_\/-])(?=[^\s])/g,'$1<wbr>').replace(/([A-Za-z0-9])\.(?=[A-Za-z0-9])/g,'$1<wbr>.'):t); }
-function qfNatHtml(h){ h=String(h==null?'':h); return h.indexOf('<wbr>')>=0||!/[@_\/]|[^\s<>]{16}/.test(h)?h:h.split(/(<[^>]*>)/).map(x=>x[0]==='<'?x:qfNat(x)).join(''); }
+function qfNat(s){ return String(s==null?'':s).replace(/[^\s<>]+/g,t=>(/[@_\/]/.test(t)&&!/^[\d\/.:-]{1,12}$/.test(t))||(t.length>=16&&/\d/.test(t))?t.replace(/([@_\/-])(?=[^\s])/g,'$1<wbr>').replace(/([A-Za-z0-9])\.(?=[A-Za-z0-9])/g,'$1<wbr>.'):t.length>=16?pdfWJ(t).replace(/([A-Za-z0-9])\.(?=[A-Za-z0-9])/g,'$1<wbr>.'):pdfWJ(t)); }
+function qfNatHtml(h){ h=String(h==null?'':h); return h.indexOf('<wbr>')>=0||!/[@_\/]|[^\s<>]{16}|[A-Za-z0-9]-[A-Za-z]/.test(h)?h:h.split(/(<[^>]*>)/).map(x=>x[0]==='<'?x:qfNat(x)).join(''); }
 // splits a text over n ruled lines at word boundaries (about cpl characters a line); the last line takes the rest (it is fitted / continued)
 const qfWrapLines=(t,n,cpl)=>{ const out=[]; let cur=''; String(t||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean).forEach(x=>{ if(out.length<n-1&&cur&&(cur+' '+x).length>cpl){ out.push(cur); cur=x; } else cur=cur?cur+' '+x:x; }); out.push(cur); return out; };
 // a date in a narrow table cell: on one line, shrunk to fit the cell down to 8 pt; narrower than that, it wraps after the month
@@ -35467,7 +35517,7 @@ function asMarks(r,k){ const m=sectionMarks(r,k); return qfRow(cX,['','<b>Obtain
 const asBlank=()=>qfRow([72,770.9],[''],{h:15.6,font:F12});
 async function assessPdf(id,returnBlob){
   const r=(_assessStore.data||[]).find(x=>x.id===id); if(!r||r.paper) return; const g=QF_LS, no=r.form, fv=formVersion(no); const v={...fv,title:fv.title||(no==='F034'?'Approved Signatory Evaluation Checklist':'Competency Checklist')};
-  const U=(t,w)=>`<span style="display:inline-block;min-width:${w}pt;border-bottom:0.6pt solid #000;line-height:12pt;padding:0 2pt;">${qfE(t)||'&nbsp;'}</span>`; const T='position:relative;top:-0.16em;';
+  const U=(t,w)=>`<span style="display:inline-block;min-width:${w}pt;border-bottom:0.6pt solid #000;line-height:12pt;padding:0 2pt 2pt;">${qfE(t)||'&nbsp;'}</span>`; /* the line runs under the letters' tails (g, y, p), not through them */ const T='position:relative;top:-0.16em;';
   const act=compAct(r.activityId)?.title||''; const types=no==='F034'?['Initial (Authorization)','Periodic (Monitoring)','Retraining / Extension of Scope']:['Initial (Authorization)','Periodic (Monitoring)','Retraining'];
   const box=x=>`<span style="font-size:12pt;">${x?'☒':'☐'}</span>`; const sc=assessScore(r);
   const guide=['*Scoring 2 = Fully Competent (demonstrates consistently, perform task independently, correctly, and safety without supervision)','*Scoring 1= Partially Competent (Perform task with minimal guidance/supervision, understand the theory but needs practice)','*Scoring 0= Not Competent (Unable to perform task correctly or requires constant supervision, does not understand the requirement)','*Scoring N/A= Not Applicable to this specific role or assessment.','*Minimum Passing Requirement: 80% of Total Points','*Assessment Methods: O=Observation | D= Document/Record Review | Q=Oral/Written/Questioning | S=Simulation/Case Study'];
@@ -36118,14 +36168,18 @@ async function exportF023Pdf(id,month){ const r=eqRef(id); if(!r) return; month=
       +[['visual','Visual<br/>Inspection'],['functional','Functional<br/>Check'],['by','Check By']].map(([k,l])=>R(0,qfRow(xs,[[`<b>${l}</b>`,lbl],...d.map(x=>x?cell(x,k):['','center'])],{h:29.8,font:B12,pad:4}))).join('')
       +R(0,qfRow(xs,Array(17).fill(''),{h:29.8,font:B12})); };
   const late=Object.values(log).filter(m=>m.late);
-  const body=qfAbs(0,125.4,'Equipment Maintenance Form',`width:${g.W}pt;text-align:center;font:bold 12pt/1 ${QF_FONT};`)+qfAbs(340.4,150.4,`For Month of: <span style="font-weight:normal;">${envMonthLabel(month)}</span>`,`font:bold 12pt/1 ${QF_FONT};white-space:nowrap;`)
-    +qfAbs(72,175.3,`Equipment Name: <span style="display:inline-block;min-width:170pt;border-bottom:0.6pt solid #000;">${qfE(r.name)}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)+qfAbs(474,175.3,`Serial No.: <span style="display:inline-block;min-width:150pt;border-bottom:0.6pt solid #000;">${qfE(r.serial||'')}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)
-    +qfAbs(72,201.4,`(Tick ✓ and write the name of person who performs the check)`,`font:italic 10pt/1 ${QF_FONT};`)
-    +qfAbs(468.1,200.1,`Equipment ID / Control No. (F024): <span style="display:inline-block;min-width:80pt;border-bottom:0.6pt solid #000;">${qfE(r.id)}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)
-    +`<div style="position:absolute;left:72pt;top:221.5pt;">${block([...Array(16)].map((_,i)=>i+1),'left',true)}${block([...Array(15)].map((_,i)=>i+17),'center')}</div>`
-    +`<div style="position:absolute;left:72.25pt;top:491.3pt;width:697.5pt;height:18.7pt;border:0.5pt solid #000;box-sizing:border-box;padding:2.6pt 5.6pt;font:12pt/1 ${QF_FONT};white-space:nowrap;overflow:hidden;"><b>Remarks / abnormality found:</b></div>${(()=>{ const t=Object.values(log).filter(m=>m.visual===false||m.functional===false).map(m=>`${+String(m.date).slice(8,10)}: ${m.notes||(m.visual===false?'visual':'functional')+' check failed'}`).join('; '); return t?qftTxt(230,495.4,t,{w:534,h:11,size:9,label:'Remarks / abnormality found'}):''; })()}`
-    +((()=>{ const t=[qfIniLegend(ini),late.length?`* late entry recorded by the TM / MD with reason (${late.map(m=>`${+String(m.date).slice(8,10)}: ${m.late.reason}`).join('; ')})`:''].filter(Boolean).join('   ·   '); return t?qftTxt(72,511.6,t,{w:540,size:8,label:'Initials / late entries'}):''; })())
-    +qfAbs(0,512.3,qfE(v.clauses||'Clause 6.4.3, 6.4.13(g), 7.7.1(c)'),`width:${g.R}pt;text-align:right;font:10pt/1 ${QF_FONT};`);
+  // the initials legend / late-entry note gets its own line under the Remarks bar, clear of the footer: when there is one, everything
+  // below the title moves up 8 pt to make room for it (R5-11)
+  const grid=block([...Array(16)].map((_,i)=>i+1),'left',true)+block([...Array(15)].map((_,i)=>i+17),'center'); // built first: it collects the initials for the legend
+  const legT=[qfIniLegend(ini),late.length?`* late entry recorded by the TM / MD with reason (${late.map(m=>`${+String(m.date).slice(8,10)}: ${m.late.reason}`).join('; ')})`:''].filter(Boolean).join('   ·   '), up=legT?8:0;
+  const body=qfAbs(0,125.4,'Equipment Maintenance Form',`width:${g.W}pt;text-align:center;font:bold 12pt/1 ${QF_FONT};`)+qfAbs(340.4,150.4-up,`For Month of: <span style="font-weight:normal;">${envMonthLabel(month)}</span>`,`font:bold 12pt/1 ${QF_FONT};white-space:nowrap;`)
+    +qfAbs(72,175.3-up,`Equipment Name: <span style="display:inline-block;min-width:170pt;border-bottom:0.6pt solid #000;">${qfE(r.name)}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)+qfAbs(474,175.3-up,`Serial No.: <span style="display:inline-block;min-width:150pt;border-bottom:0.6pt solid #000;">${qfE(r.serial||'')}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)
+    +qfAbs(72,201.4-up,`(Tick ✓ and write the name of person who performs the check)`,`font:italic 10pt/1 ${QF_FONT};`)
+    +qfAbs(468.1,200.1-up,`Equipment ID / Control No. (F024): <span style="display:inline-block;min-width:80pt;border-bottom:0.6pt solid #000;">${qfE(r.id)}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)
+    +`<div style="position:absolute;left:72pt;top:${221.5-up}pt;">${grid}</div>`
+    +`<div style="position:absolute;left:72.25pt;top:${491.3-up}pt;width:697.5pt;height:18.7pt;border:0.5pt solid #000;box-sizing:border-box;padding:2.6pt 5.6pt;font:12pt/1 ${QF_FONT};white-space:nowrap;overflow:hidden;"><b>Remarks / abnormality found:</b></div>${(()=>{ const t=Object.values(log).filter(m=>m.visual===false||m.functional===false).map(m=>`${+String(m.date).slice(8,10)}: ${m.notes||(m.visual===false?'visual':'functional')+' check failed'}`).join('; '); return t?qftTxt(230,495.4-up,t,{w:534,h:11,size:9,label:'Remarks / abnormality found'}):''; })()}`
+    +(legT?qftTxt(72,503.6,legT,{w:536,h:9.2,size:8,label:'Initials / late entries'}):'') // its own line between the Remarks bar and the footer
+    +qfAbs(0,512.3-up,qfE(v.clauses||'Clause 6.4.3, 6.4.13(g), 7.7.1(c)'),`width:${g.R}pt;text-align:right;font:10pt/1 ${QF_FONT};`);
   await qfExport([qfPage(g,no,v,1,1,body)],{landscape:true,no,v,filename:`F023_${safeFileName(r.id)}_${month}.pdf`,label:'F023 Equipment Maintenance Form'}); }
 // F024 — values at 8 pt (never smaller); a row grows to as many lines as its longest value needs (up to 4 lines, beyond that the
 // rest goes on a continuation page); rows run onto as many pages as needed. Every page has the standard form header with
@@ -36218,7 +36272,7 @@ async function westlabQtLetterhead(){
   return `<div style="display:flex;align-items:center;">
       <img src="${logo}" crossorigin="anonymous" style="width:88px;height:auto;margin-left:18px;"/>
       <div style="flex:1;text-align:center;margin-right:106px;font-family:'Times New Roman',Times,serif;font-size:15px;line-height:1.3;">
-        <div><span style="font-size:23px;font-weight:bold;">${esc(labName)}</span> <span style="font-size:10px;">(${esc(regNo)})</span></div>
+        <div><span style="font-size:23px;font-weight:bold;">${esc(labName)}</span> <span style="font-size:11px;">(${esc(regNo)})</span></div>
         <div style="white-space:nowrap;">${addressHtml}</div>
         <div>Phone: ${esc(phone)}&nbsp;&nbsp;&nbsp;email: ${esc(email)}</div>
         <div>(TIN No: ${esc(tin)})</div>
@@ -36758,13 +36812,13 @@ async function poDelete(id){
   if(parts.length===3){
     const [prefix,yymm,seqStr]=parts; const seqNum=parseInt(seqStr,10);
     wasHighest=!(_purchaseOrders||[]).some(o=>{ if(o.id===id) return false; const p2=String(o.poNumber||'').split('-'); return p2.length===3&&p2[0]===prefix&&p2[1]===yymm&&parseInt(p2[2],10)>seqNum; });
-    if(wasHighest&&!live) rb=await tryRollbackSequence(`${prefix}_${yymm}`,seqNum); // a PO that was approved/sent keeps its number retired
   }
   if(live&&!po.revisedFrom){ try{ await patchSettings(st=>{ st.retiredPoNumbers=[...new Set([...(st.retiredPoNumbers||[]),String(po.poNumber).replace(/-R\d+$/,'')])]; },{silent:true}); }catch(e){} }
   let restored=null;
   try{ await patchPurchaseOrders(arr=>{ const i=arr.findIndex(x=>x.id===id); if(i>-1){ const gone=arr[i]; arr.splice(i,1);
       if(gone.revisedFrom){ const o=arr.find(x=>x.poNumber===gone.revisedFrom&&x.status==='Superseded'); if(o){ o.status=o.statusBeforeSupersede||'Approved'; delete o.supersededBy; delete o.supersededAt; o.deliveryOrders=gone.deliveryOrders||[]; restored=o.poNumber; } } } }); }
   catch(e){ showToast('❌ '+e.message,'error',6000); return; }
+  if(wasHighest&&!live&&parts.length===3) rb=await tryRollbackSequence(`${parts[0]}_${parts[1]}`,parseInt(parts[2],10)); // handed back only once the delete is saved; a PO that was approved/sent keeps its number retired
   if(restored){ await poRelink(po.poNumber,restored); renderPurchaseOrdersPage(); addAudit('🗑️',`Revision ${po.poNumber} deleted — ${restored} is current again (${escapeHtml(why.trim())})`); showToast(`${po.poNumber} deleted — ${restored} is current again`,'success',4000); return; }
   // nothing may keep pointing at a PO that no longer exists
   try{
@@ -37381,13 +37435,13 @@ async function poDoDelete(poId,doNumber){
   if(parts.length===3){
     const seqNum=parseInt(parts[2],10);
     wasHighest=!docAllDoNumbers().some(no=>{ if(no===doNumber) return false; const p2=String(no).split('-'); return p2.length===3&&p2[0]===parts[0]&&p2[1]===parts[1]&&parseInt(p2[2],10)>seqNum; });
-    if(wasHighest) rb=await tryRollbackSequence(`${parts[0]}_${parts[1]}`,seqNum);
   }
   try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===poId); if(p) p.deliveryOrders=(p.deliveryOrders||[]).filter(d=>d.doNumber!==doNumber); }); }
   catch(e){ showToast('❌ '+e.message,'error',6000); return; }
   // items that went out on this DO are not at the vendor any more as far as the records go — back to "to send"
   for(const j of (_jobs||[]).filter(j=>(j.items||[]).some(it=>it.outsourceDo===doNumber))) try{ await updateJob(j.jobNo,jj=>{ (jj.items||[]).forEach(it=>{ if(it.outsourceDo===doNumber&&it.status==='Outsourced'&&['at-vendor','back'].includes(it.outsourceStage)){ it.outsourceStage='to-send'; delete it.outsourceDo; delete it.outsourceSentAt; delete it.outsourceBackAt; } });
       (jj.history=jj.history||[]).push({action:`🗑️ Delivery Order ${doNumber} deleted — item(s) back to "to send"`,by:currentUser,time:new Date().toISOString()}); }); }catch(e){ console.warn(e); }
+  if(wasHighest) rb=await tryRollbackSequence(`${parts[0]}_${parts[1]}`,parseInt(parts[2],10)); // handed back only once the DO is off the PO and the jobs (the server refuses a number still on a record)
   renderPurchaseOrdersPage(); docDeleteToast(doNumber,wasHighest,rb); addAudit('🗑️',`Delivery Order ${doNumber} deleted`); try{ if(el('dor-search')||window._dorKind) renderDoRegister(); }catch(e){}
 }
 
@@ -37422,7 +37476,7 @@ async function exportPurchaseOrderPdf(poId){
           <div>${esc(po.supplierName)}</div>
           ${po.supplierAddress?`<div style="white-space:pre-line;">${esc(po.supplierAddress)}</div>`:''}
           <div>Attn : ${esc(po.supplierContact||'')}</div>
-          <div style="display:flex;"><span style="width:58%;">TEL : ${esc(po.supplierPhone||'')}</span><span>FAX : ${esc(po.supplierFax||sup.fax||'')}</span></div>
+          <div style="display:flex;flex-wrap:wrap;"><span style="flex:none;min-width:58%;padding-right:8px;box-sizing:border-box;">TEL : ${esc(po.supplierPhone||'')}</span><span>FAX : ${esc(po.supplierFax||sup.fax||'')}</span></div>
         </div></div>
       <div style="width:43%;padding-left:1%;">
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
@@ -37457,11 +37511,11 @@ async function exportPurchaseOrderPdf(poId){
   const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;display:flex;justify-content:space-between;align-items:center;gap:14px;">
       <div style="font-size:11px;">${esc(PO_CURRENCIES[po.currency||'MYR']||po.currency)} : ${esc(amountInWordsMYR(t.total,po.currency))}</div>
       <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;"><b>Total (${esc(po.currency||'MYR')})</b><span style="border:1px solid #000;min-width:100px;padding:2px 6px;text-align:right;font-weight:bold;">${money(t.total)}</span></div></div>
-    <div style="font-size:10.5px;color:#444;margin-top:10px;">Please quote this PO number on all delivery orders, invoices and correspondence.</div>
+    <div style="font-size:11px;color:#444;margin-top:10px;">Please quote this PO number on all delivery orders, invoices and correspondence.</div>
     <div style="margin-top:46px;width:200px;">
       <div style="height:44px;display:flex;align-items:flex-end;justify-content:center;">${apprSigRes.data?`<img src="${apprSigRes.data}" style="max-height:42px;max-width:180px;"/>`:''}</div>
       <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;text-align:center;">Authorised Signature</div>
-      ${approved?`<div style="font-size:10.5px;text-align:center;">${esc(staffNameOf(po.approvedBy))}</div>`:''}</div>`;
+      ${approved?`<div style="font-size:11px;text-align:center;">${esc(staffNameOf(po.approvedBy))}</div>`:''}</div>`;
   await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${po.poNumber}${safeFileName(po.supplierName)?'_'+safeFileName(po.supplierName):''}.pdf`,label:'Purchase Order',count:(po.items||[]).length,letterhead,pinFooter:true});
 }
 // From a PO line's description, keep only what identifies the item (Brand/Model, S/N, Tag);
@@ -37497,7 +37551,7 @@ async function exportSupplierDoPdf(poId,doNumber){
         <div>${esc(po.supplierName)}</div>
         ${po.supplierAddress?`<div style="white-space:pre-line;">${esc(po.supplierAddress)}</div>`:''}
         <div>Attn : ${esc(po.supplierContact||'')}</div>
-        <div style="display:flex;"><span style="width:58%;">TEL : ${esc(po.supplierPhone||'')}</span><span>FAX : ${esc(po.supplierFax||sup.fax||'')}</span></div>
+        <div style="display:flex;flex-wrap:wrap;"><span style="flex:none;min-width:58%;padding-right:8px;box-sizing:border-box;">TEL : ${esc(po.supplierPhone||'')}</span><span>FAX : ${esc(po.supplierFax||sup.fax||'')}</span></div>
       </div></div>
       <div style="width:43%;padding-left:1%;"><table style="border-collapse:collapse;font-size:12.5px;line-height:1.75;">
         ${[['Your Ref.',po.poNumber],['From Doc No',po.requisitionNo||''],['Terms',po.paymentTerms||''],['Date',new Date(d.date||d.createdAt||Date.now()).toLocaleDateString('en-GB')],...(d.expectedBack?[['Expected back',new Date(d.expectedBack+'T00:00:00').toLocaleDateString('en-GB')]]:[]),['Page',`${pageNo} of ${pageCount}`]]
@@ -37524,7 +37578,7 @@ async function exportSupplierDoPdf(poId,doNumber){
     <div style="display:flex;justify-content:space-between;margin-top:46px;">
       <div style="width:200px;"><div style="height:44px;display:flex;align-items:flex-end;justify-content:center;">${issSig?`<img src="${issSig}" style="max-height:42px;max-width:180px;"/>`:''}</div>
         <div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;text-align:center;">Authorised Signature</div>
-        ${d.createdBy?`<div style="font-size:10.5px;text-align:center;">${esc(staffNameOf(d.createdBy))}</div>`:''}</div>
+        ${d.createdBy?`<div style="font-size:11px;text-align:center;">${esc(staffNameOf(d.createdBy))}</div>`:''}</div>
       <div style="width:200px;"><div style="height:44px;"></div><div style="border-top:1px solid #000;padding-top:3px;font-weight:bold;font-size:11.5px;">Received By :</div></div>
     </div>`;
   await pdfPaginateDoc({topBlock,colsHtml,headRow,rows,footerBlock,filename:`${d.doNumber}${safeFileName(po.supplierName)?'_'+safeFileName(po.supplierName):''}.pdf`,label:'Delivery Order',count:items.length,letterhead,pinFooter:true});
