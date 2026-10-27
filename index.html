@@ -1996,6 +1996,13 @@ textarea.form-control{resize:vertical;min-height:70px;}
             <div class="form-group"><label class="form-label">Fax No.</label><input id="set-fax" class="form-control" placeholder="e.g. +603-6157 0706"/></div>
             <div class="form-group"><label class="form-label">Email</label><input id="set-email" class="form-control" type="email" placeholder="info@westlab.com"/></div>
           </div>
+          <div style="font-size:12.5px;font-weight:700;margin:6px 0 2px;">Printed on documents</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Shown on the quotation, invoice, delivery order, credit note, statement of account, statement of conformity, payslip, work order, receipts and the other documents. Only the Managing Director / Admin can change them.</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Company Tel (documents)</label><input id="set-doc-tel" class="form-control" placeholder="0162589602"/></div>
+            <div class="form-group"><label class="form-label">Company Email (documents)</label><input id="set-doc-email" class="form-control" type="email" placeholder="sales@westlab.com.my"/></div>
+            <div class="form-group"><label class="form-label">Company TIN</label><input id="set-tin" class="form-control" placeholder="C60571616010"/></div>
+          </div>
         </div>
       </div>
 
@@ -3946,6 +3953,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
       <span class="modal-title">📄 Certificate Page 1 — Preview</span>
       <button class="modal-close" onclick="closeModal('modal-cert-preview')">✕</button>
     </div>
+    <div id="cert-preview-notice" style="padding:0 16px;"></div>
     <!-- A4 preview container — scrollable, shows page shadow -->
     <div style="flex:1;overflow-y:auto;background:#e0e0e0;padding:24px;display:flex;justify-content:center;">
       <div id="cert-preview-body" style="width:210mm;min-height:297mm;background:#fff;box-shadow:0 2px 16px rgba(0,0,0,.18);font-family:'Calibri',Arial,sans-serif;position:relative;"></div>
@@ -4269,7 +4277,7 @@ setInterval(()=>{ try{ if(!currentUser||!_authExp||_expiryWarned||_sessionEnding
 async function jobInsertNew(jobNo,job){ let res;
   try{ res=await apiFetch('/api/upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'wl_jobs',id:jobNo,data:job,create:true})}); }
   catch(e){ if(/\(409\)/.test(String(e&&e.message))){ const er=new Error(`Job number ${jobNo} is already in use on the server — nothing was saved. Refresh the page and create the job again (it gets a new number).`); er.userMessage=er.message; throw er; } throw e; }
-  if(res&&res.__v) job.__v=res.__v; return res; }
+  if(res&&res.__v) job.__v=res.__v; if(res&&res.checkCode&&!job.checkCode) job.checkCode=res.checkCode; return res; }
 async function apiFetch(path, opts={}, _isRetry=false){
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),35000); // 35s — generous enough for slower onsite/mobile connections
@@ -4515,7 +4523,40 @@ let _simulatedRole=localStorage.getItem('wl_simulated_role')||null;
 // over real data).
 let _settingsPatchQueue=Promise.resolve();
 // fields of the main settings row the server only lets Admin / MD change (it silently keeps the stored value for anyone else)
-const SETTINGS_SERVER_ADMIN_FIELDS=['username','labName','address','branch','regNo','email','tel','fax','website','logoUrl','publicStatusUrl','feedbackFormUrl','complaintFormUrl','sstEnabled','slaExpress','slaNormal','slaRoutine','slaUrgent','invoiceCfg','testingModeOn','docNumberFloors','officeNet','recordDisposals','limsLive','mailDailyCap','accreditation','soaBank'];
+// company Tel / Email / TIN printed on documents — Settings → Company Information (MD / Admin); defaults = the values used before
+const DOC_CONTACT_DEF={tel:'0162589602',email:'sales@westlab.com.my',tin:'C60571616010'};
+function docContact(st){ st=st||_settings||{}; return {tel:String(st.phone||'').trim()||DOC_CONTACT_DEF.tel,email:String(st.salesEmail||'').trim()||DOC_CONTACT_DEF.email,tin:String(st.tinNo||st.companyTin||'').trim()||DOC_CONTACT_DEF.tin}; }
+// ── job status check code (decision 28): made by the server when the job is created; an older job gets it on first need
+// (POST /api/job-check-code). Printed next to the job number on the receipt and carried in the QR / status link.
+function jobCheckCodeOk(c){ return /^[A-Z0-9]{4,8}$/.test(String(c||'')); }
+async function jobCheckCode(jobNo){ const L=[typeof getJob==='function'?getJob(jobNo):null,typeof _jobsCache!=='undefined'?_jobsCache[jobNo]:null].filter(Boolean);
+  const have=L.find(x=>jobCheckCodeOk(x.checkCode)); if(have) return have.checkCode;
+  try{ const r=await apiFetch('/api/job-check-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobNo})});
+    if(r&&jobCheckCodeOk(r.checkCode)){ L.forEach(x=>{ x.checkCode=r.checkCode; if(r.__v&&(!x.__v||x.__v===r.prevV)) x.__v=r.__v; }); return r.checkCode; } }
+  catch(e){ console.warn('check code',jobNo,e); } return ''; }
+async function ensureCheckCodes(jobs){ for(const j of (jobs||[])){ if(j&&j.jobNo&&!jobCheckCodeOk(j.checkCode)){ const c=await jobCheckCode(j.jobNo); if(c) j.checkCode=c; } } }
+function jobStatusLink(jobNo,code){ const base=_settings.publicStatusUrl?_settings.publicStatusUrl.replace(/\/$/,''):`${window.location.origin}${window.location.pathname}`;
+  return `${base}?job=${encodeURIComponent(jobNo)}${code?`&code=${encodeURIComponent(code)}`:''}`; }
+async function showJobCheckCode(jobNo){ const c=await jobCheckCode(jobNo); if(!c){ showToast('Could not get the check code — try again.','error',3500); return; } const b=el('jd-check-code'); if(b) b.innerHTML=`<b style="font-family:monospace;letter-spacing:1px;">${escapeHtml(c)}</b>`; }
+// ISO/IEC 17025 7.8.8: an issued certificate / invoice keeps the customer details it was issued with. When the customer record changed
+// since then, office staff see a small notice (amend the certificate / re-issue the invoice if needed). Returns the changed fields.
+function custNorm(v){ return String(v||'').toUpperCase().replace(/SDN\.?\s*BHD\.?/g,'SDN BHD').replace(/[^A-Z0-9]+/g,' ').trim(); }
+function custRecFor(id,name){ const C=_customers||[]; return (id&&C.find(c=>c.id===id))||C.find(c=>custNorm(c.company||c.name)===custNorm(name))||null; }
+function custChangedFields(rec,snap){ if(!rec||!snap) return []; const out=[];
+  if(snap.name!=null&&custNorm(snap.name)&&custNorm(rec.company||rec.name)!==custNorm(snap.name)) out.push('name');
+  if(snap.address!=null&&custNorm(snap.address)&&custNorm(rec.address)&&custNorm(rec.address)!==custNorm(snap.address)) out.push('address');
+  if(snap.attention!=null&&custNorm(snap.attention)&&custNorm(rec.attention)&&custNorm(rec.attention)!==custNorm(snap.attention)) out.push('attention');
+  if(snap.email!=null&&String(snap.email||'').trim()&&String(rec.email||'').trim()&&String(rec.email).trim().toLowerCase()!==String(snap.email).trim().toLowerCase()) out.push('email');
+  return out; }
+function custNoticeRole(u){ return ['Admin','Managing Director','Coordinator','Sales','Manager','Quality Manager'].includes(getUserRole(u||currentUser)); }
+function custChangedSinceCert(j,it){ if(!j||!it||!custNoticeRole()) return []; const cd=it.calData||{}; if(it.status!=='Completed'||!cd.issued_to) return [];
+  const eu=!!j.endUserName&&custNorm(cd.issued_to)===custNorm(j.endUserName); const rec=eu?custRecFor(j.endUserId||null,j.endUserName):custRecFor(j.custId,cd.issued_to);
+  return custChangedFields(rec,{name:cd.issued_to,address:cd.cust_addr||''}); }
+function custChangedSinceInvoice(inv){ if(!inv||!custNoticeRole()||(typeof invCancelled==='function'&&invCancelled(inv))) return [];
+  return custChangedFields(custRecFor(inv.custId,inv.custName),{name:inv.custName,address:inv.address||'',attention:inv.attention||'',email:inv.email||''}); }
+function custChangedNoticeHtml(f,what){ if(!f||!f.length) return '';
+  return `<div class="cust-chg-note" style="margin:0;font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:4px 8px;">ℹ️ Customer details changed since this was issued (${f.join(', ')}) — ${what==='invoice'?'re-issue (credit note + new invoice) if needed':'amend the certificate if needed (ISO/IEC 17025 7.8.8)'}.</div>`; }
+const SETTINGS_SERVER_ADMIN_FIELDS=['phone','salesEmail','tinNo','companyTin','username','labName','address','branch','regNo','email','tel','fax','website','logoUrl','publicStatusUrl','feedbackFormUrl','complaintFormUrl','sstEnabled','slaExpress','slaNormal','slaRoutine','slaUrgent','invoiceCfg','testingModeOn','docNumberFloors','officeNet','recordDisposals','limsLive','mailDailyCap','accreditation','soaBank'];
 async function patchSettings(mutator,opts={}){
   const run=async()=>{
     if(!_settingsLoaded) throw new Error('Saved settings were not loaded on this page, so this change was not saved (to avoid overwriting your existing settings). Please refresh the page and try again.');
@@ -5014,6 +5055,7 @@ function doLogout(){
   if(qrJob){
     openStatusLookup();
     const input=el('lookup-job-input');
+    { const ci=el('lookup-code-input'); if(ci) ci.value=urlParams.get('code')||''; }
     if(input){ input.value=qrJob; lookupJob(); }
     return; // skip login/session restore entirely
   }
@@ -5070,6 +5112,9 @@ function canApprove(u){ const r=getUserRole(u||currentUser); return ['Admin','Ma
 // customer records are added / edited only by the office roles (not Engineer, Driver, Receptionist, HR)
 const CUST_EDIT_MSG='Customer records are added and edited by the Coordinator, Sales, Technical Manager, Quality Manager or Managing Director.';
 function canEditCustomers(u){ const r=getUserRole(u||currentUser); return ['Admin','Managing Director','Coordinator','Sales','Manager','Quality Manager'].includes(r); }
+// Receptionist (at drop-off): may update an existing customer's address, phone numbers and attention / contact person only — no new customers, renames, email or payment terms
+const CUST_RECEP_FIELDS=['attention','address','tel','mobile'];
+function canEditCustomerContact(u){ return canEditCustomers(u)||getUserRole(u||currentUser)==='Receptionist'; }
 // a certificate amendment request is approved only by the MD or the QM (QC before hand-over); one the QM requested only by the MD
 function canApproveAmendment(u,a){ const r=getUserRole(u||currentUser); if(!['Admin','Managing Director','Quality Manager'].includes(r)) return false;
   if(a&&a.requestedBy&&(USERS[a.requestedBy]?.role==='Quality Manager')&&!['Admin','Managing Director'].includes(r)) return false; return true; }
@@ -5288,7 +5333,7 @@ function applyRoleUI(){
   el('nav-my-jobs').classList.toggle('hidden-nav', pureAdmin||coordinator||sales||hr||recep); // shown for Engineer, Manager, and MD (MD also does hands-on calibration)
   el('nav-staff-evaluation').classList.toggle('hidden-nav', !canViewStaffEvaluation(currentUser));
   el('nav-approval').classList.toggle('hidden-nav', !(admin||manager||canSeeApprovalQueue(currentUser)));
-  el('nav-customers').classList.toggle('hidden-nav', hr||recep);
+  el('nav-customers').classList.toggle('hidden-nav', hr); // Receptionist: read the list + update address / phone / attention
   el('nav-ref-eq').classList.toggle('hidden-nav', sales||hr||recep);
   { const nr=el('nav-reception'); if(nr) nr.classList.toggle('hidden-nav',!canReception(currentUser)); }
   { const nt=el('nav-trips'); if(nt) nt.classList.toggle('hidden-nav',!canTrips(currentUser)||(canReception(currentUser)&&!isAdmin(currentUser))); }
@@ -5674,6 +5719,7 @@ function applySettings(s){
     feedbackFormUrl:'set-feedback-form-url', complaintFormUrl:'set-complaint-form-url'
   };
   Object.entries(map).forEach(([k,id])=>{const e=document.getElementById(id);if(e&&s[k]!==undefined)e.value=s[k];});
+  { const dc=docContact(s); [['set-doc-tel',dc.tel],['set-doc-email',dc.email],['set-tin',dc.tin]].forEach(([id,v])=>{ const e=document.getElementById(id); if(e){ e.value=v; e.disabled=!isAdmin(currentUser); } }); }
   const sstEl=document.getElementById('set-sst-enabled'); if(sstEl) sstEl.checked=!!s.sstEnabled;
   if(typeof renderStickerSettingsBody==='function') renderStickerSettingsBody();
   // Show logo if saved
@@ -6044,6 +6090,9 @@ async function saveSettings(){
   s.fax=el('set-fax').value.trim();
   s.email=el('set-email').value.trim();
   s.website=el('set-website').value.trim();
+  if(isAdmin(currentUser)){ const dt=(el('set-doc-tel')?.value||'').trim(), de=(el('set-doc-email')?.value||'').trim(), dn=(el('set-tin')?.value||'').trim().toUpperCase(); // company contact printed on every document (MD / Admin only)
+    if(de&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(de)){ alert('The company email for documents is not a valid email address.'); return; }
+    s.phone=dt||DOC_CONTACT_DEF.tel; s.salesEmail=de||DOC_CONTACT_DEF.email; s.tinNo=dn||DOC_CONTACT_DEF.tin; s.companyTin=s.tinNo; } // companyTin: the server's name for the same field
   s.username=el('set-username').value.trim()||'admin';
   const pw=el('set-password').value;
   // Password is NOT saved directly here — handled via the secure hashing endpoint after the main save below
@@ -7943,7 +7992,7 @@ function generateQRDataUrl(text, size){
 }
 
 function buildReceiptHtml(jobs){
-  const s=_settings;
+  const s=_settings; jobs=(jobs||[]).map(docCustLatest); // the customer's current details
   const labName=s.labName||'Westlab (M) Sdn. Bhd.';
   // our address on 4 lines:  Lot 497, Jalan Perusahaan 3, / Bandar Baru Sungai Buloh, / 47000 Sungai Buloh, Selangor Darul Ehsan, / Malaysia.
   const labAddr=(()=>{ const a=String(s.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor Darul Ehsan, Malaysia').replace(/\bSelangor\b(?!\s*Darul)/,'Selangor Darul Ehsan').replace(/[.\s]+$/,'');
@@ -7958,9 +8007,7 @@ function buildReceiptHtml(jobs){
   // Flatten all items across all jobs for the table
   const allItems=jobs.flatMap(j=>(j.items||[]).map(it=>({...it,jobNo:j.jobNo})));
   // QR code — links directly to the public status lookup page for this job, no login needed
-  const qrTarget=_settings.publicStatusUrl
-    ?`${_settings.publicStatusUrl.replace(/\/$/,'')}?job=${encodeURIComponent(j0.jobNo)}`
-    :`${window.location.origin}${window.location.pathname}?job=${encodeURIComponent(j0.jobNo)}`;
+  const qrTarget=jobStatusLink(j0.jobNo,jobCheckCodeOk(j0.checkCode)?j0.checkCode:''); // the job number AND its check code — the status page needs both
   const qrImg=generateQRDataUrl(qrTarget,220); // higher res since it's shown small (20mm)
 
   const itemRows=allItems.map((it,i)=>`
@@ -7986,7 +8033,7 @@ function buildReceiptHtml(jobs){
       <div style="text-align:right;">
         <div style="font-size:13pt;font-weight:700;border:1.5pt solid #111;padding:3mm 6mm;">JOB RECEIPT</div>
         ${qrImg?`<img src="${qrImg}" style="width:20mm;height:20mm;margin:2mm 0 1mm auto;display:block;"/>
-        <div style="font-size:6.5pt;color:#888;">Scan to check status</div>`:''}
+        <div style="font-size:6.5pt;color:#888;">Scan to check status</div>`:''}${jobCheckCodeOk(j0.checkCode)?`<div style="font-size:6.5pt;color:#888;">or enter the Job No. and check code</div>`:''}
         <div style="font-size:8pt;color:#555;margin-top:1.5mm;">Date: ${now.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})}</div>
       </div>
     </div>
@@ -8009,7 +8056,7 @@ function buildReceiptHtml(jobs){
       </div>`:''}
       <div style="flex:1;">
         <div style="font-size:8pt;color:#555;margin-bottom:1mm;">Details</div>
-        <div style="font-size:8.5pt;">Job No.: <strong>${j0.jobNo}</strong></div>
+        <div style="font-size:8.5pt;">Job No.: <strong>${j0.jobNo}</strong>${jobCheckCodeOk(j0.checkCode)?` &nbsp;·&nbsp; Check code: <strong style="font-family:Consolas,'Courier New',monospace;letter-spacing:0.5pt;">${escapeHtml(j0.checkCode)}</strong>`:''}</div>
         <div style="font-size:8.5pt;">Receive Date: <strong>${fmtDt(j0.receiveDate)}</strong></div>
         ${j0.promisedDate?`<div style="font-size:8.5pt;">Promised Ready: <strong style="color:#1a7a3c;">${fmtDt(j0.promisedDate)}</strong></div>`:''}
         <div style="font-size:8.5pt;">Priority: <strong>${j0.priority}</strong></div>
@@ -8046,7 +8093,7 @@ function buildReceiptHtml(jobs){
       </div>
     </div>
     <div style="margin-top:4mm;font-size:7.5pt;color:#777;text-align:center;border-top:0.3pt solid #ccc;padding-top:2mm;">
-      If this receipt is not signed by the customer, it is deemed accepted upon collection of equipment. Please retain this receipt for your records — contact us with your Job Number for status updates.
+      If this receipt is not signed by the customer, it is deemed accepted upon collection of equipment. Please retain this receipt for your records — check the status online with your Job Number and check code, or contact us.
     </div>
     <div data-pgno="1" style="position:absolute;bottom:6mm;right:16mm;font-size:7pt;color:#999;">Page 1 of 1</div>
   </div>`;
@@ -8088,6 +8135,7 @@ async function printFramePaged(frame,html){ let pages=[html]; try{ pages=(await 
   frame.innerHTML=pages.length>1?pages.map((p,i)=>`<div style="${i<pages.length-1?'break-after:page;page-break-after:always;':''}">${p}</div>`).join(''):html; }
 function printJobReceipt(jobs){ return rpfQueue(()=>printJobReceiptRun(jobs)); }
 async function printJobReceiptRun(jobs){
+  await ensureCheckCodes(jobs);
   const html=buildReceiptHtml(jobs);
   const frame=el('receipt-print-frame');
   // a receipt longer than one A4 page is laid out page by page (each with its margins and "Page x of N")
@@ -8101,7 +8149,8 @@ async function printJobReceiptRun(jobs){
 // WORK ORDER — auto-populated from real job data, matching the official template layout
 // ══════════════════════════════════════════════════
 function buildWorkOrderHTML(job){
-  const s=_settings;
+  const s=_settings; job=docCustLatest(job); // the customer's current details (Jay, 27 Oct 2026)
+  const co=pdfCo(); // company phone / e-mail from Settings → Company Information
   const labName=s.labName||'Westlab (M) Sdn. Bhd.';
   const fmtDate=d=>{
     if(!d)return'—';
@@ -8130,13 +8179,16 @@ function buildWorkOrderHTML(job){
       <td style="padding:5px 4px;border-bottom:0.5pt solid #ccc;text-align:center;vertical-align:top;">${stickerNo}</td>
     </tr>`;
   }).join('');
+  // the top block (letterhead, work order no., customer, job details) is repeated at the top of every page (data-pgrepeat) —
+  // page 2 onwards shows the same details as page 1 before the continuing table (Jay, 27 Oct 2026)
   return `<div style="width:760px;padding:20px;font-family:Arial,sans-serif;background:#fff;color:#111;">
+    <div data-pgrepeat="1">
     <table style="width:100%;margin-bottom:14px;">
       <tr>
         <td style="vertical-align:top;">
           <div style="font-size:13px;font-weight:800;">${labName}${s.regNo?' ('+s.regNo+')':''}</div>
           <div style="font-size:9px;color:#444;">${escapeHtml(s.address||'')}</div>
-          <div style="font-size:9px;color:#444;">${s.tel?'Phone: '+s.tel+' ':''}${s.email?'email: '+s.email:''}</div>
+          <div style="font-size:9px;color:#444;">Phone: ${escapeHtml(co.tel)} email: ${escapeHtml(co.email)}</div>
         </td>
       </tr>
     </table>
@@ -8159,6 +8211,7 @@ function buildWorkOrderHTML(job){
         </td>
       </tr>
     </table>
+    </div>
     <table style="width:100%;border-collapse:collapse;font-size:8.5px;">
       <thead><tr>
         <th style="padding:5px 4px;width:5%;background:#0f1f3d;color:#fff;">No.</th><th style="padding:5px 4px;text-align:left;width:40%;background:#0f1f3d;color:#fff;">Description</th>
@@ -8388,16 +8441,18 @@ async function pdfPaginateHtml(html,{landscape,minScale}={}){
       if(st.position==='absolute'||st.position==='fixed'){ if(parent===root) abs.push(ch); continue; } // decorations placed on the page: kept on page 1
       let rows=ch.tagName==='TABLE'&&ch.tBodies.length?[...ch.tBodies].flatMap(tb=>[...tb.rows]):[];
       const hrow=ch.tagName==='TABLE'&&!ch.tHead&&rows.length>1&&[...rows[0].cells].length&&[...rows[0].cells].every(c=>c.tagName==='TH')?rows[0]:null; if(hrow) rows=rows.slice(1); // a plain first row of headings is repeated like a <thead>
-      if(h>avail*0.6&&rows.length){ const thead=ch.tHead; const hh=thead?thead.getBoundingClientRect().height:hrow?hrow.getBoundingClientRect().height:0; const tb=ext(ch); const cw=colW(ch);
+      if((h>avail*0.6||ch.hasAttribute('data-pgsplit'))&&rows.length){ const thead=ch.tHead; const hh=thead?thead.getBoundingClientRect().height:hrow?hrow.getBoundingClientRect().height:0; const tb=ext(ch); const cw=colW(ch);
         rows.forEach((tr,i)=>{ const r=tr.getBoundingClientRect(); const t=i?r.top-top0:tb.t, b=i===rows.length-1?tb.b:r.bottom-top0; units.push({chain,table:ch,tr,t,b,h:b-t,hh,hrow,cw,first:!i}); }); /* the first row's height includes the table's heading */ }
-      else if(h>avail*0.9&&ch.children.length&&!['TABLE','IMG','SVG','CANVAS'].includes(ch.tagName)&&(!/flex|grid|inline/.test(st.display)||(/^(flex|grid)$/.test(st.display)&&(fr=rowsOf(ch))))) walk(ch,[...chain,ch],fr);
+      else if((h>avail*0.9||ch.hasAttribute('data-pgsplit'))&&ch.children.length&&!['TABLE','IMG','SVG','CANVAS'].includes(ch.tagName)&&(!/flex|grid|inline/.test(st.display)||(/^(flex|grid)$/.test(st.display)&&(fr=rowsOf(ch))))) walk(ch,[...chain,ch],fr);
       else{ const L=h>avail?lines(ch,x):null; if(L) L.forEach(l=>units.push({chain,el:ch,txt:l,t:l.t,b:l.b,h:l.b-l.t})); else units.push({chain,el:ch,t:x.t,b:x.b,h}); } } };
     walk(root,[]);
+    // a block marked data-pgrepeat (e.g. the work order's / payslip's top details) is repeated at the top of every following page
+    const reps=[...root.children].filter(c=>c.hasAttribute('data-pgrepeat')), repH=reps.reduce((t,c)=>{ const x=ext(c); return t+x.b-x.t; },0);
     // greedy pages by position (so gaps between blocks count); a table that continues on a new page repeats its heading row
     const padOf=chain=>chain.reduce((s,a)=>{ const z=getComputedStyle(a); return s+['paddingTop','paddingBottom','borderTopWidth','borderBottomWidth'].reduce((q,k)=>q+(parseFloat(z[k])||0),0); },0);
     const pages=[]; let cur=null;
     units.forEach(u=>{ const hd=pg=>u.table&&!u.first&&!(pg&&pg.tables.has(u.table))?u.hh:0;
-      if(!cur||(cur.us.length&&u.b-cur.start+cur.extra+hd(cur)>avail)){ cur={us:[],start:u.t,extra:padOf(u.chain),tables:new Set()}; pages.push(cur); }
+      if(!cur||(cur.us.length&&u.b-cur.start+cur.extra+hd(cur)>avail)){ cur={us:[],start:u.t,extra:padOf(u.chain)+(pages.length?repH:0),tables:new Set()}; pages.push(cur); }
       cur.extra+=hd(cur); if(u.table) cur.tables.add(u.table); cur.us.push(u); if(u.b-cur.start+cur.extra>avail+1) cur.big=true; });
     const N=pages.length;
     const out=pages.map((pg,pi)=>{ const us=pg.us; const pr=root.cloneNode(false); pr.style.width=RW+'px'; pr.style.maxWidth='none'; pr.style.minHeight=pg.big?pageH+'px':'0'; pr.style.height=pg.big?'auto':pageH+'px'; pr.style.boxSizing='border-box'; pr.style.overflow=pg.big?'visible':'hidden'; pr.style.position='relative'; // a block taller than a page: its page is shrunk to fit the sheet
@@ -8409,6 +8464,7 @@ async function pdfPaginateHtml(html,{landscape,minScale}={}){
         else if(u.txt){ const s=u.el.textContent.slice(u.txt.from,u.txt.to); let c=xmap.get(u.el); if(!c){ c=u.el.cloneNode(false); if(u.txt.from>0){ c.style.marginTop='0'; c.style.paddingTop='0'; } c.textContent=u.txt.from>0?s.replace(/^\s+/,''):s; par.appendChild(c); xmap.set(u.el,c); } else c.textContent+=s; if(u.txt.to<u.el.textContent.length){ c.style.marginBottom='0'; c.style.paddingBottom='0'; } else{ c.style.marginBottom=u.el.style.marginBottom; c.style.paddingBottom=u.el.style.paddingBottom; } }
         else par.appendChild(u.el.cloneNode(true)); });
       if(!pi) abs.forEach(a=>pr.appendChild(a.cloneNode(true)));
+      if(pi) reps.slice().reverse().forEach(c=>pr.insertBefore(c.cloneNode(true),pr.firstChild));
       if(own){ const o=own.cloneNode(true); o.textContent=`Page ${pi+1} of ${N}`; pr.appendChild(o); }
       else if(N>1){ const d=document.createElement('div'); d.style.cssText=`position:absolute;right:${parseFloat(cs.paddingRight)||16}px;bottom:${Math.max(4,padB/2-6)}px;font:10px Arial,sans-serif;color:#555;`; d.textContent=`Page ${pi+1} of ${N}`; pr.appendChild(d); }
       return pr.outerHTML; });
@@ -8434,6 +8490,55 @@ async function exportHtmlAsPdf(html,filename,auditLabel,rowCount,previewMode=tru
 let _rpfQ=Promise.resolve();
 function rpfQueue(fn){ const run=_rpfQ.then(fn,fn); _rpfQ=run.catch(()=>{}); return run; }
 function exportPagedPdf(...a){ return rpfQueue(()=>exportPagedPdfRun(...a)); }
+// Table lines exactly as on the original forms (Jay, 27 Oct 2026 — "don't make table borders ugly"). The picture maker draws every
+// table cell's own border separately, so two neighbouring cells (and two stacked rows) gave a doubled, thick line. Before a page is
+// drawn, every solid border on it is measured as laid out and redrawn once as a plain line of the same thickness and colour — the
+// way the original form layouts draw their lines; lines that fall on the same place are drawn once. The page layout is unchanged
+// (the borders stay, transparent). Rounded, dotted and dashed borders are left as they are.
+function pdfCrispLines(root){
+  try{
+    if(!root||!root.getBoundingClientRect().width) return;
+    const segs=[], done=[], clips=new Map(), INF=1e9;
+    const clipOf=e=>{ const p=e.parentElement; if(!p||e===root) return {l:-INF,t:-INF,r:INF,b:INF}; if(clips.has(p)) return clips.get(p);
+      let c=clipOf(p); const s=getComputedStyle(p); if(s.overflowX!=='visible'||s.overflowY!=='visible'){ const q=p.getBoundingClientRect(); c={l:Math.max(c.l,q.left),t:Math.max(c.t,q.top),r:Math.min(c.r,q.right),b:Math.min(c.b,q.bottom)}; }
+      clips.set(p,c); return c; };
+    const SIDES=['Top','Right','Bottom','Left'];
+    for(const e of [root,...root.querySelectorAll('*')]){
+      if(e instanceof SVGElement) continue;
+      const s=getComputedStyle(e); if(s.display==='none'||s.display==='inline'||s.display==='contents'||s.visibility==='hidden') continue;
+      // the thickness as written (e.g. 0.5 pt): the browser rounds a thin border up to a whole screen pixel when it lays the page out
+      const spec=k=>{ const v=String(e.style['border'+k+'Width']||'').trim(), m=v.match(/^([\d.]+)(pt|px|mm)$/); return m?+m[1]*({pt:4/3,px:1,mm:96/25.4}[m[2]]):null; };
+      const W=SIDES.map(k=>{ const c=parseFloat(s['border'+k+'Width'])||0, sp=spec(k); return c>0&&sp>0?Math.min(c,sp):c; }), C=SIDES.map(k=>s['border'+k+'Color']);
+      const on=SIDES.map((k,i)=>W[i]>0&&s['border'+k+'Style']==='solid'&&!/^transparent$|rgba\([^)]*,\s*0\)$/.test(C[i]));
+      if(!on.some(Boolean)) continue;
+      if(['TopLeft','TopRight','BottomLeft','BottomRight'].some(k=>parseFloat(s['border'+k+'Radius'])>0)) continue;
+      const r=e.getBoundingClientRect(); if(r.width<=0||r.height<=0) continue;
+      const k=e.offsetWidth?r.width/e.offsetWidth:1, w=W.map(x=>x*k);
+      // collapsed table borders lie centred on the grid lines (the cells' edges); a collapsed table's own border on its outer grid lines
+      let box=r, mid=false;
+      if(e.tagName==='TABLE'&&s.borderCollapse==='collapse'){ const cs=[...e.querySelectorAll('td,th')].filter(c=>c.closest('table')===e).map(c=>c.getBoundingClientRect()).filter(q=>q.width>0); if(!cs.length) continue;
+        box={left:Math.min(...cs.map(q=>q.left)),top:Math.min(...cs.map(q=>q.top)),right:Math.max(...cs.map(q=>q.right)),bottom:Math.max(...cs.map(q=>q.bottom))}; mid=true; }
+      else if(/^(TD|TH|TR|THEAD|TBODY|TFOOT)$/.test(e.tagName)){ const t=e.closest('table'); mid=!!(t&&getComputedStyle(t).borderCollapse==='collapse'); }
+      const clip=clipOf(e), add=(o,c,a,b,wd,col)=>segs.push({o,c,a,b,w:wd,col,clip});
+      if(on[0]) add('h',mid?box.top:box.top+w[0]/2,box.left-(mid?w[3]/2:0),box.right+(mid?w[1]/2:0),w[0],C[0]);
+      if(on[2]) add('h',mid?box.bottom:box.bottom-w[2]/2,box.left-(mid?w[3]/2:0),box.right+(mid?w[1]/2:0),w[2],C[2]);
+      if(on[3]) add('v',mid?box.left:box.left+w[3]/2,box.top-(mid?w[0]/2:0),box.bottom+(mid?w[2]/2:0),w[3],C[3]);
+      if(on[1]) add('v',mid?box.right:box.right-w[1]/2,box.top-(mid?w[0]/2:0),box.bottom+(mid?w[2]/2:0),w[1],C[1]);
+      done.push([e,on]); }
+    if(!segs.length) return;
+    const lines=[];
+    ['h','v'].forEach(o=>{ const byCol={}; segs.filter(x=>x.o===o).forEach(x=>{ const cl=x.clip; const [lo,hi,a0,a1]=o==='h'?[cl.t,cl.b,cl.l,cl.r]:[cl.l,cl.r,cl.t,cl.b];
+        if(x.c<lo-0.01||x.c>hi+0.01) return; const a=Math.max(x.a,a0), b=Math.min(x.b,a1); if(b-a<0.05) return; (byCol[x.col]=byCol[x.col]||[]).push({...x,a,b}); });
+      Object.entries(byCol).forEach(([col,L])=>{ L.sort((p,q)=>p.c-q.c); const groups=[];
+        L.forEach(x=>{ const g=groups[groups.length-1]; if(g&&Math.abs(x.c-g.c)<=Math.max(x.w,g.w)/2+0.15){ g.items.push(x); if(x.w>g.w){ g.w=x.w; g.c=x.c; } } else groups.push({c:x.c,w:x.w,items:[x]}); });
+        groups.forEach(g=>{ const sp=g.items.map(x=>[x.a,x.b]).sort((p,q)=>p[0]-q[0]); let cur=null; sp.forEach(([a,b])=>{ if(cur&&a<=cur[1]+0.6) cur[1]=Math.max(cur[1],b); else{ cur=[a,b]; lines.push({o,c:g.c,w:g.w,col,s:cur}); } }); }); }); });
+    const ov=document.createElement('div'); ov.setAttribute('data-crisp','1'); ov.style.cssText='position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;';
+    root.appendChild(ov); const O=ov.getBoundingClientRect();
+    ov.innerHTML=lines.map(l=>{ const [x,y,wd,ht]=l.o==='h'?[l.s[0]-O.left,l.c-l.w/2-O.top,l.s[1]-l.s[0],l.w]:[l.c-l.w/2-O.left,l.s[0]-O.top,l.w,l.s[1]-l.s[0]];
+      return `<div style="position:absolute;left:${x.toFixed(3)}px;top:${y.toFixed(3)}px;width:${wd.toFixed(3)}px;height:${ht.toFixed(3)}px;background:${l.col};"></div>`; }).join('');
+    done.forEach(([e,on])=>on.forEach((v,i)=>{ if(v) e.style.setProperty('border-'+SIDES[i].toLowerCase()+'-color','transparent','important'); }));
+  }catch(err){ console.warn('pdfCrispLines',err); }
+}
 async function exportPagedPdfRun(pagesHtml,filename,auditLabel,rowCount,previewMode=false,opts={}){ // opts.landscape: A4 landscape · opts.returnBlob: give the PDF back (to keep it in the LIMS) instead of showing it
   const frame=el('receipt-print-frame');
   try{
@@ -8445,6 +8550,7 @@ async function exportPagedPdfRun(pagesHtml,filename,auditLabel,rowCount,previewM
       frame.innerHTML=pageHtml;
       await new Promise(res=>setTimeout(res,120));
       const target=frame.firstElementChild||frame;
+      await filesSettle(); pdfCrispLines(target); // each table line drawn once, as thin as on the original form
       const canvas=await (await filesSettle(),html2canvas)(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
       const imgBytes=await fetch(canvas.toDataURL('image/jpeg',0.92)).then(x=>x.arrayBuffer());
       const img=await pdf.embedJpg(imgBytes);
@@ -8529,6 +8635,7 @@ async function generateReceiptPdfBase64(jobs){
       console.warn('PDF libraries not loaded yet — skipping receipt attachment');
       return null;
     }
+    await ensureCheckCodes(jobs);
     const html=buildReceiptHtml(jobs);
     // real A4 pages (a long receipt continues on page 2 with "Page x of N") instead of one tall page
     const {pages}=await pdfPaginateHtml(html,{landscape:false});
@@ -9151,7 +9258,7 @@ function buildAbnormalReportHtml(r){
       </tr></table>
     </div>
     <div style="text-align:center;font-size:7.5pt;color:#555;margin-top:10px;border-top:0.5pt solid #ccc;padding-top:6px;">
-      <b>${escapeHtml(_settings.labName||'WESTLAB (M) SDN. BHD.')}</b><br/>${escapeHtml(_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor')}<br/>Tel: ${escapeHtml(_settings.phone||'016-258 9602')} | Website: ${escapeHtml(_settings.website||'www.westlab.com.my')}
+      <b>${escapeHtml(_settings.labName||'WESTLAB (M) SDN. BHD.')}</b><br/>${escapeHtml(_settings.address||'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor')}<br/>Tel: ${escapeHtml(pdfCo('016-258 9602').tel)} | Website: ${escapeHtml(_settings.website||'www.westlab.com.my')}
     </div>
   </div>`;
 }
@@ -9506,6 +9613,15 @@ document.addEventListener('click',e=>{
     if(box) box.style.display='none';
   }
 });
+// ISO/IEC 17025 7.8 — certificate page 1 must show every field in full: certPage1Overflow(item, job) (next to buildCertPage1HTML)
+// lists what does not fit its place on the layout. Warning at submit, hard block at approval / amended-certificate issue.
+function certP1Problems(item,job){ try{ if(typeof certPage1Overflow!=='function'||!item) return []; const r=certPage1Overflow(item,job||null); if(!r) return [];
+    return (Array.isArray(r)?r:[r]).map(x=>typeof x==='string'?x:(x&&(x.msg||x.message||x.text))||(x&&x.label?`${x.label} too long for the certificate${x.max?` (max ${x.max} characters)`:''}`:'')).filter(Boolean); }
+  catch(e){ console.warn('certPage1Overflow',e); return []; } }
+function certP1Html(L,mode){ if(!L||!L.length) return ''; const block=mode==='block';
+  return `<div class="cert-p1-ov" style="background:${block?'#fef2f2':'#fffbeb'};border:1px solid ${block?'#fca5a5':'#fcd34d'};border-radius:8px;padding:8px 12px;margin:0 0 10px;font-size:12.5px;color:${block?'#991b1b':'#92400e'};">
+    <b>${block?'⛔ Certificate page 1 — text does not fit, approval is blocked':'⚠️ Certificate page 1 — text does not fit'}</b><ul style="margin:4px 0 0 18px;padding:0;">${L.map(t=>`<li>${escapeHtml(t)}</li>`).join('')}</ul>
+    <div style="margin-top:4px;font-size:11.5px;">${block?'Fix it first (reject / send back so the job or certificate details are shortened) — the certificate layout stays as it is.':'Fix it before the signatory approves — otherwise approval is blocked.'}</div></div>`; }
 async function submitCalibration(){
   { const it0=getJob(calJobNo)?.items?.[calItemIdx]; if(it0&&['Pending Approval','Completed','Returned - Abnormal','Deleted'].includes(it0.status)){ alert(`This item is ${it0.status==='Pending Approval'?'already waiting for approval — recall it first to change it':it0.status.toLowerCase()} (maybe changed in another tab). Nothing was submitted.`); return; } }
   const approvedByUsername=el('cal-approved-by').value;
@@ -9614,6 +9730,8 @@ async function submitCalibration(){
       submittedAt:new Date().toISOString()
     };
 
+    { const ov=certP1Problems({...(item||{}),calData},j); // caught early: the signatory cannot approve until it fits
+      if(ov.length&&!confirm(`⚠️ Certificate page 1 — some text does not fit its place on the certificate:\n\n• ${ov.join('\n• ')}\n\nThe signatory cannot approve the certificate until this is fixed. Press Cancel to correct it now, or OK to submit anyway.`)) return; }
     if(submitBtn) submitBtn.textContent='⏳ Saving…';
 
     // Upload PDF — NO base64 fallback (it bloats Supabase rows)
@@ -9832,6 +9950,8 @@ function openApproveItemModal(jobNo, itemIdx){
   const reqs=itemRequirementList(item), rq=el('approve-reqs');
   if(rq){ rq.style.display=reqs.length||item.remarks?'block':'none'; rq.innerHTML=`${reqs.length?`<strong>📋 Customer requirements:</strong> ${reqs.map(escapeHtml).join(' · ')}`:''}${item.remarks?`${reqs.length?'<br/>':''}<strong>📝 Item remark:</strong> ${escapeHtml(item.remarks)}`:''}`; }
   const checks=reviewChecks(j,item); window._reviewChecks=checks; window._reviewOpenedAt=new Date().toISOString(); renderReviewChecklist(checks);
+  { const ov=certP1Problems(item,j); const b=el('approve-checklist'); if(b&&ov.length) b.insertAdjacentHTML('afterbegin',certP1Html(ov,'block'));
+    const rs=el('approve-check-reasons'); if(rs&&ov.length) rs.insertAdjacentHTML('afterbegin',ov.map(t=>`<button class="btn btn-outline btn-sm" style="border-color:#fca5a5;" onclick="addRejectReason(this.dataset.r)" data-r="${escapeHtml(t)}">❌ ${escapeHtml(t.length>60?t.slice(0,58)+'…':t)}</button>`).join('')); }
   el('approve-cert-summary').innerHTML=certSummaryHtml(j,item)+socReviewPanelHtml(jobNo,itemIdx);
   if(item.excelFile){
     el('approve-excel-section').style.display='block';
@@ -10101,6 +10221,7 @@ async function approveJob(){
   }
   if(el('approve-verified')&&!el('approve-verified').checked){ alert('Tick "I have checked the calculations and the data transferred to the certificate" before approving (LQP 7.11 6.6).'); return; }
   { const ap=compApproveProblem(itemForCheck,currentUser); if(ap){ alert('⛔ '+ap); return; } if(!compRestrictionOk([itemForCheck],currentUser)) return; }
+  { const ov=certP1Problems(itemForCheck,jForCheck); if(ov.length){ alert(`⛔ The certificate cannot be approved — some text does not fit page 1 of the certificate:\n\n• ${ov.join('\n• ')}\n\nReject it so it is corrected (the job / item details are shortened), then approve the resubmitted certificate.`); return; } }
   { const cdA=itemForCheck?.calData||{}; if(certIsAccredited(cdA)&&!itemIsExternal(itemForCheck)){ const m=scopeMatch(itemForCheck); if(m.state==='in'&&!(m.line.signatories||[]).includes(currentUser)){ alert(`This is an ACCREDITED certificate (${m.line.instrument} up to ${m.line.max} ${m.line.unit}).\n\nOnly the approved signatories listed on that scope line can approve it: ${(m.line.signatories||[]).map(staffNameOf).join(', ')||'none listed'}.`); return; } } }
   const fails=(window._reviewChecks||[]).filter(x=>x.level==='fail');
   let overrideNote='';
@@ -10133,7 +10254,8 @@ async function approveJob(){
       // not be silently overwritten here by whoever happens to click Approve.
       j.history.push({action:`✅ Item ${item.itemNo} (${escapeHtml(item.eqName)}) approved`,by:currentUser,time:new Date().toISOString(),note:comments});
       allDone=allItemsCompleted(j); // an abnormal item counts as finished too
-      if(allDone&&!j.billed) j.billed=false; // the completion history / audit / tracker sync are done in updateJob
+      // (billing fields are left alone here: the signatory may be an Engineer, and only the Coordinator / MD / Admin change billing — an unbilled job is simply !j.billed)
+      // the completion history / audit / tracker sync are done in updateJob
     });
     closeModal('modal-approve-job');
     await refreshJobs().catch(()=>{}); // a failed refresh keeps the jobs on screen
@@ -10352,7 +10474,7 @@ function renderEquipmentTable(){
           <td></td><td></td>
           <td style="padding:5px 8px;font-size:11px;white-space:nowrap;">${item.promisedDate&&item.promisedDate!==j.promisedDate?fmtDateShort(item.promisedDate):''}</td>
           <td style="padding:5px 8px;font-size:11.5px;">${assignedName}</td>
-          <td style="padding:5px 8px;"><span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">${item.status}</span>${item.status==='Outsourced'||item.outsourceStage==='review'?`<div style="font-size:10.5px;color:#7c2d12;margin-top:2px;white-space:normal;max-width:220px;">${escapeHtml(outsourceStageText(item)||'')}${item.outsourcedTo?' · '+escapeHtml(item.outsourcedTo):''}</div>`:''}${item.status==='Completed'&&item.vendorCertNo?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">Vendor cert ${escapeHtml(item.vendorCertNo)}</div>`:''}</td>
+          <td style="padding:5px 8px;"><span class="badge ${STATUS_BADGE[item.status]||'badge-slate'}" style="font-size:10px;white-space:nowrap;">${item.status}</span>${item.status==='Outsourced'||item.outsourceStage==='review'?`<div style="font-size:10.5px;color:#7c2d12;margin-top:2px;white-space:normal;max-width:220px;">${escapeHtml(outsourceStageText(item)||'')}${item.outsourcedTo?' · '+escapeHtml(item.outsourcedTo):''}</div>`:''}${item.outsourceVendorId||item.outsourceApproval?osaSummaryHtml(j,idx):''}${item.status==='Completed'&&item.vendorCertNo?`<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">Vendor cert ${escapeHtml(item.vendorCertNo)}</div>`:''}${(()=>{ const f=custChangedSinceCert(j,item); return f.length?`<div style="font-size:10.5px;color:#92400e;margin-top:2px;white-space:normal;max-width:220px;" title="An issued certificate keeps the details it was issued with (ISO/IEC 17025 7.8.8)">ℹ️ Customer ${f.join(', ')} changed since issue — amend if needed</div>`:''; })()}</td>
           <td style="padding:5px 8px;white-space:nowrap;text-align:right;">${actions}</td>
         </tr>`);
       });
@@ -10468,6 +10590,7 @@ async function showCertForItem(jobNo, itemIdx){
     const calStaff=_staff&&_staff.find(x=>x.username===cd.calibratedByUsername);
     if(calStaff) cd.calibrated_by=calStaff.certName||calStaff.name||cd.calibrated_by;
   }
+  { const nb=el('cert-preview-notice'); if(nb) nb.innerHTML=custChangedNoticeHtml(custChangedSinceCert(j,item)).replace('margin:0','margin:10px 0 0'); }
   try{
     el('cert-preview-body').innerHTML=buildCertPage1HTML(cd,s);
   }catch(err){
@@ -13128,7 +13251,7 @@ async function respondQuotationV2(quotationId,accepted){
 // box and "Page X of Y" repeat on every page, totals + signatures sit at the bottom of the last
 // item page, and the Terms & Conditions follow on their own page.
 async function exportQuotationV2Pdf(quotationId,opts){
-  const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
+  const q=docCustLatest(_quotationsV2.find(x=>x.id===quotationId)); if(!q)return; // the customer's current details (not issued & controlled)
   const s=_settings;
   const items=(q.items||[]).filter(it=>it&&it.eqName);
   const subtotal=Math.round(qtGrandTotal(q,items)*100)/100;
@@ -13148,7 +13271,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
   const labName=(s.labName||'Westlab (M) Sdn Bhd').replace(/\./g,'').toUpperCase();
   const regNo=[s.regNo,s.regNoSecondary].filter(Boolean).join(' ')||'202601005304 (1667402-A)';
   const addressHtml=s.address?addressLines(s.address).map(esc).join('<br/>'):'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh,<br/>47000 Sungai Buloh, Selangor.';
-  const phone=s.phone||'0162589602', email=s.salesEmail||'sales@westlab.com.my', tin=s.tinNo||'C60571616010';
+  const {tel:phone,email,tin}=pdfCo(); // Settings → Company Information (defaults = the values printed before)
   const symOn=typeof qtSymbolOn==='function'&&qtSymbolOn();
   const letterhead=`<div style="display:flex;align-items:center;">
       <img src="${logo}" crossorigin="anonymous" style="width:88px;height:auto;margin-left:18px;"/>
@@ -14123,7 +14246,7 @@ function westlabLetterheadHeader(){
       <div style="font-family:'Times New Roman',Times,serif;color:#000;line-height:1.25;">
         <div style="font-size:23px;font-weight:bold;color:#2f4f7f;letter-spacing:.2px;">WESTLAB (M) SDN. BHD. <span style="font-size:15px;">(1667402-A)</span></div>
         <div style="font-size:10.5px;font-weight:bold;">LOT 497, JALAN PERUSAHAAN 3, BANDAR BARU SUNGAI BULOH,<br/>47000 SUNGAI BULOH, SELANGOR DARUL EHSAN, MALAYSIA.</div>
-        <div style="font-size:10.5px;">Tel: 016-258 9602<span style="display:inline-block;width:92px;"></span>Email: sales@westlab.com.my</div>
+        <div style="font-size:10.5px;">Tel: ${escapeHtml(pdfCo('016-258 9602').tel)}<span style="display:inline-block;width:92px;"></span>Email: ${escapeHtml(pdfCo().email)}</div>
         <div style="font-size:10.5px;">&nbsp;Website: www.westlab.com.my</div>
       </div>
     </div>
@@ -14133,7 +14256,7 @@ function westlabLetterheadHeader(){
 function westlabLetterheadFooter(){
   return `<div style="position:absolute;left:72px;right:72px;bottom:22px;border-top:1px solid #ccc;padding-top:5px;text-align:center;font:9px 'Times New Roman',Times,serif;color:#666;line-height:1.4;">
     Registration No: 202601005304 &nbsp;|&nbsp; Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh, 47000 Sungai Buloh, Selangor, Malaysia<br/>
-    Tel: +60 16-258 9602 &nbsp;|&nbsp; Email: sales@westlab.com.my &nbsp;|&nbsp; www.westlab.com.my
+    Tel: ${escapeHtml(pdfCo('+60 16-258 9602').tel)} &nbsp;|&nbsp; Email: ${escapeHtml(pdfCo().email)} &nbsp;|&nbsp; www.westlab.com.my
   </div>`;
 }
 // ── CONTRACT REVIEW FORM — controlled record F033 (ISO/IEC 17025 clause 7.1) ──
@@ -16160,6 +16283,7 @@ async function exportTrackerPdf(type){
     frame.style.display='block'; frame.style.position='fixed'; frame.style.left='-9999px';
     try{ await new Promise(res=>setTimeout(res,150));
     const target=frame.firstElementChild||frame;
+    await filesSettle(); pdfCrispLines(target); // each table line drawn once (see exportPagedPdfRun)
     return await (await filesSettle(),html2canvas)(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
     }finally{ frame.style.display='none'; frame.style.position=''; frame.style.left=''; } });
     const imgData=canvas.toDataURL('image/jpeg',0.92);
@@ -18050,15 +18174,18 @@ function payslipHtml(run,l,lh){
   const Y=k=>r2(ytd.reduce((s,x)=>s+(Number(x[k])||0),0)).toFixed(2);
   const earn=[['Basic salary'+(l.eligibleDays<l.monthDays?` (${l.eligibleDays}/${l.monthDays} days)`:''),l.basic],...(l.allowances||[]).map(a=>[a.name+(a.type==='travel'?' (travelling)':''),a.amount]),l.ot?[`Overtime (${l.otEq} hour-pay × ${l.otRate})`,l.ot]:null,l.commission?['Commission',l.commission]:null,l.bonus?['Bonus',l.bonus]:null,l.otherEarn?['Other: '+escapeHtml(l.otherEarnNote||''),l.otherEarn]:null].filter(Boolean);
   const ded=[['EPF (employee)',l.epfEe],['SOCSO (employee)',l.socsoEe],['EIS (employee)',l.eisEe],['PCB (income tax)',l.pcb],l.otherDed?['Other: '+escapeHtml(l.otherDedNote||''),l.otherDed]:null].filter(Boolean);
-  return `<div class="pdf-doc" style="width:794px;min-height:1123px;padding:30px 38px 40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;font-size:12px;background:#fff;color:#000;">${lh}
+  // top block (letterhead, month, employee details) repeated at the top of page 2 onwards (data-pgrepeat); a payslip from a run not
+  // yet marked Paid carries a "DRAFT — not yet paid" band on every page (Jay, 27 Oct 2026)
+  const draftBand=run.status!=='Paid'?`<div style="margin:0 0 10px;padding:5px 8px;border:1.5px solid #b91c1c;background:#fde8e8;color:#b91c1c;text-align:center;font-size:13px;font-weight:bold;letter-spacing:.5px;">DRAFT — NOT YET PAID</div>`:'';
+  return `<div class="pdf-doc" style="width:794px;min-height:1123px;padding:30px 38px 40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;font-size:12px;background:#fff;color:#000;"><div data-pgrepeat="1">${lh}
     <div style="text-align:center;font-size:16px;font-weight:bold;margin:14px 0 4px;">PAYSLIP — ${escapeHtml((ymLabel?ymLabel(run.month):run.month).toUpperCase())}</div>
-    <div style="text-align:center;font-size:11px;margin-bottom:12px;">Pay date: ${fmtDateShort(run.payDate||'')}</div>
+    <div style="text-align:center;font-size:11px;margin-bottom:12px;">Pay date: ${fmtDateShort(run.payDate||'')}</div>${draftBand}
     <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;border:1px solid #999;"><tr><td style="padding:5px 8px;width:50%;"><b>Name:</b> ${escapeHtml(l.name)}<br/><b>IC No.:</b> ${escapeHtml(l.ic||'—')}<br/><b>Designation:</b> ${escapeHtml(l.designation||'')}</td>
-      <td style="padding:5px 8px;"><b>EPF No.:</b> ${escapeHtml(l.epfNo||'—')}<br/><b>SOCSO No.:</b> ${escapeHtml(l.socsoNo||'—')}<br/><b>Income Tax No.:</b> ${escapeHtml(l.taxNo||'—')}<br/><b>Bank:</b> ${escapeHtml(l.bank||'')} ${escapeHtml(l.bankAcc||'')}</td></tr></table>
+      <td style="padding:5px 8px;"><b>EPF No.:</b> ${escapeHtml(l.epfNo||'—')}<br/><b>SOCSO No.:</b> ${escapeHtml(l.socsoNo||'—')}<br/><b>Income Tax No.:</b> ${escapeHtml(l.taxNo||'—')}<br/><b>Bank:</b> ${escapeHtml(l.bank||'')} ${escapeHtml(l.bankAcc||'')}</td></tr></table></div>
     <div style="display:flex;gap:14px;">
       <div style="flex:1;"><div style="font-weight:bold;background:#e8edf5;padding:4px 6px;">EARNINGS (RM)</div><table style="width:100%;border-collapse:collapse;">${earn.map(([a,b])=>row(a,r2(b).toFixed(2))).join('')}<tr style="border-top:1px solid #999;font-weight:bold;"><td style="padding:4px 6px;">Gross pay</td><td style="padding:4px 6px;text-align:right;">${r2(l.gross).toFixed(2)}</td></tr></table></div>
       <div style="flex:1;"><div style="font-weight:bold;background:#e8edf5;padding:4px 6px;">DEDUCTIONS (RM)</div><table style="width:100%;border-collapse:collapse;">${ded.map(([a,b])=>row(a,r2(b).toFixed(2))).join('')}<tr style="border-top:1px solid #999;font-weight:bold;"><td style="padding:4px 6px;">Total deductions</td><td style="padding:4px 6px;text-align:right;">${r2(l.totalDed).toFixed(2)}</td></tr></table></div></div>
-    ${l.claimsTotal?`<div style="margin-top:10px;"><div style="font-weight:bold;background:#e8edf5;padding:4px 6px;">CLAIMS REIMBURSED (RM) — not wages</div><table style="width:100%;border-collapse:collapse;">${(l.claims||[]).map(c=>row(escapeHtml(c.desc),r2(c.amount).toFixed(2))).join('')}</table></div>`:''}
+    ${l.claimsTotal?`<div data-pgsplit="1" style="margin-top:10px;"><table data-pgsplit="1" style="width:100%;border-collapse:collapse;"><tr><th colspan="2" style="font-weight:bold;background:#e8edf5;padding:4px 6px;text-align:left;">CLAIMS REIMBURSED (RM) — not wages</th></tr>${(l.claims||[]).map(c=>row(escapeHtml(c.desc),r2(c.amount).toFixed(2))).join('')}</table></div>`:''}
     <div style="margin-top:12px;padding:8px 10px;border:2px solid #1f3864;display:flex;justify-content:space-between;font-size:15px;font-weight:bold;"><span>NET PAY</span><span>RM ${r2(l.net).toFixed(2)}</span></div>
     <div style="display:flex;gap:14px;margin-top:12px;">
       <div style="flex:1;"><div style="font-weight:bold;background:#f1f5f9;padding:4px 6px;">EMPLOYER'S CONTRIBUTIONS (RM)</div><table style="width:100%;border-collapse:collapse;">${row('EPF',r2(l.epfEr).toFixed(2))}${row('SOCSO',r2(l.socsoEr).toFixed(2))}${row('EIS',r2(l.eisEr).toFixed(2))}</table></div>
@@ -18996,7 +19123,7 @@ function qftPages(tpl,fv,overlays,pageCount,landscape){ const st=['','font-weigh
 // o.lines: box height in lines · o.min: smallest size · o.pre: keep line breaks · o.label: its name on the continuation page
 // x = null: placed where it stands (e.g. inside a table cell) · o.bottom / o.mid: the text sits at the bottom / in the middle of its box when it needs fewer lines than the box has
 const qftTxt=(x,y,s,o={})=>{ const size=Math.max(8,o.size||9), fit=!o.free&&(o.w||o.mw), h=o.h||(o.w&&!o.free?+((o.lines||1)*size*1.15+0.8).toFixed(2):0);
-  return `<div${fit?` data-qfit="1" data-qs="${size}" data-qmin="${Math.min(size,Math.max(8,o.min||8))}"${o.label?` data-qlab="${qfE(o.label)}"`:''}${o.alt?` data-qalt="${qfE(o.alt)}"`:''}${o.bottom||o.mid?` data-qbot="${o.mid?'m':'1'}"`:''}`:''} style="${x==null?(o.w?'position:relative;':'position:relative;display:inline-block;vertical-align:middle;'):`position:absolute;left:${x}pt;top:${y}pt;`}${o.w?`width:${o.w}pt;overflow-wrap:break-word;${o.pre?'white-space:pre-line;':'white-space:normal;'}`:`white-space:nowrap;${o.mw?`max-width:${o.mw}pt;`:''}`}${o.center?'text-align:center;':''}font:${size}pt/1.15 ${QF_FONT};${o.bold?'font-weight:bold;':''}color:#000;overflow:hidden;${h?`max-height:${h}pt;`:''}">${qfE(s)}</div>`; };
+  return `<div${fit?` data-qfit="1" data-qs="${size}" data-qmin="${Math.min(size,Math.max(8,o.min||8))}"${o.label?` data-qlab="${qfE(o.label)}"`:''}${o.alt?` data-qalt="${qfE(o.alt)}"`:''}${o.bottom||o.mid?` data-qbot="${o.mid?'m':'1'}"`:''}`:''} style="${x==null?(o.w?'position:relative;':'position:relative;display:inline-block;vertical-align:middle;'):`position:absolute;left:${x}pt;top:${y}pt;`}${o.w?`width:${o.w}pt;overflow-wrap:normal;word-break:normal;${o.pre?'white-space:pre-line;':'white-space:normal;'}`:`white-space:nowrap;${o.mw?`max-width:${o.mw}pt;`:''}`}${o.center?'text-align:center;':''}font:${size}pt/1.15 ${QF_FONT};${o.bold?'font-weight:bold;':''}color:#000;overflow:hidden;${h?`max-height:${h}pt;`:''}">${qfNat(qfE(s))}</div>`; };
 // does value s fit a qftTxt box (w × h pt) at `size` pt? — used to give a register row the height its values need
 let _qftMeas=null;
 function qftFits(s,w,h,size,pre){ if(!_qftMeas||!_qftMeas.isConnected){ _qftMeas=document.createElement('div'); _qftMeas.style.cssText='position:fixed;left:-40000px;top:0;'; document.body.appendChild(_qftMeas); }
@@ -19059,7 +19186,7 @@ async function f008Pdf(){ const fv=formVersion('F008'); const T=(await qft('F008
   const rChunks=[rFirst], rRest=R.map((x,i)=>i).slice(rFirst.length);
   const N=chunks.length+rChunks.length; const ov=[];
   const box=on=>`<span style="position:relative;display:inline-block;font:9pt/1 'Segoe UI Symbol','DejaVu Sans','Noto Sans Symbols2',sans-serif;">☐${on?`<span style="position:absolute;left:0.6pt;top:-1.6pt;font:bold 10pt/1 'DejaVu Sans',sans-serif;">✓</span>`:''}</span>`;
-  const stCell=st=>`<div style="font:9pt/1.3 ${QF_FONT};white-space:nowrap;text-align:left;padding-left:4pt;">${box(st==='Active')} Active&nbsp;&nbsp;${box(st==='Removed')} Removed<br/><span style="padding-left:15.5pt;">${box(st==='Suspended')} Suspended</span></div>`;
+  const stCell=st=>`<div style="font:9pt/1.2 ${QF_FONT};white-space:nowrap;text-align:left;padding-left:4pt;">${box(st==='Active')} Active&nbsp;&nbsp;${box(st==='Removed')} Removed<br/><span style="padding-left:15.5pt;">${box(st==='Suspended')} Suspended</span></div>`;
   let lNo=0;
   chunks.forEach((ch,ci)=>{ const F8=`8pt/9.2pt ${QF_FONT}`; let used=0;
     const rowsHtml=ch.map(p=>{ const k=lK[L.indexOf(p)], h=lH(k); used+=h; lNo++; const c=lCells(p);
@@ -19083,7 +19210,7 @@ async function f008Pdf(){ const fv=formVersion('F008'); const T=(await qft('F008
   if(rRest.length){ const F8=`8pt/9.2pt ${QF_FONT}`, F9=`9pt/1.15 ${QF_FONT}`;
     const hd=qfRow(rxs,['No.','Supplier Name','Contact Person','Phone / Email','Product/Service Provided','Date Removed','Reason for Removal / Suspension','Authorized By'].map(t=>[t,'center']),{h:22.4,font:F9,pad:2});
     const blocks=[{mt:12,html:`<div style="font:bold 12pt/1 ${QF_FONT};">Suspended / Removed Suppliers (continued)</div>`},{mt:10,html:hd},
-      ...rRest.map(i=>({hdr:hd,hdrMt:12,mt:-0.5,html:qfRow(rxs,[[String(i+1),'center'],...rCells(R[i]).map((t,c)=>[`<div style="white-space:pre-line;">${qfE(t)}</div>`,c===4||c===6?'center':'left'])],{h:11.52,font:F8,pad:2})}))];
+      ...rRest.map(i=>({hdr:hd,hdrMt:12,mt:-0.5,html:qfRow(rxs,[[String(i+1),'center'],...rCells(R[i]).map((t,c)=>[`<div style="white-space:pre-line;">${qfE(t)}</div>`,c===4||c===6?'center':'left'])],{h:11.52,font:F8,pad:2,vpad:1.1})}))];
     pagesF8.push(...await qfFlow({g:QF_LS,no:'F008',v:{...fv,title:fv.title||'Approved Supplier List'},blocks})); }
   await qfExport(pagesF8,{landscape:true,renumber:true,filename:`F008_Approved_Supplier_List_${today}.pdf`,label:'F008 Approved Supplier List'}); }
 
@@ -19163,7 +19290,40 @@ async function saveCdInform(jobNo,id){ const date=el('cdi-date')?.value, how=el(
   addAudit('📞',`${escapeHtml(jobNo)}: customer informed of the contract change${dec?' — '+dec:''}`); f027Close(); refreshJobViews(jobNo); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); }
 async function cdAck(jobNo,id){ const now=new Date().toISOString(); try{ await updateJob(jobNo,j=>{ const c=(j.contractChanges||[]).find(x=>x.id===id); if(c&&!(c.acks||[]).some(a=>a.by===currentUser)) (c.acks=c.acks||[]).push({by:currentUser,at:now}); }); }catch(e){ alert(e.message||e); return; } refreshJobViews(jobNo); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); }
 // (2) may this item go to an external provider? (customer's approval)
-function outsourceCustomerApproved(j,ix){ const it=j?.items?.[ix]; if(!it) return false; if(it.outsourceApprovedVia) return true;
+// ── customer's approval to use an external provider (ISO/IEC 17025 7.1.1 c, decision 24): recorded on the item by the Coordinator, Sales or the MD
+// with the method, date, contact person, note and the evidence (screenshots / PDFs under jobs/<jobNo>/outsource-approval/) ──
+const OSA_METHODS=['Email','WhatsApp','Phone','Signed PO','Other'];
+function canRecordOsa(u){ return ['Admin','Managing Director','Coordinator','Sales'].includes(getUserRole(u||currentUser)); }
+function osaOk(a){ return !!(a&&OSA_METHODS.includes(a.method)&&/^\d{4}-\d{2}-\d{2}$/.test(String(a.date||''))&&String(a.contact||'').trim()&&(a.files||[]).filter(Boolean).length); }
+function osaSummaryHtml(j,ix,opt){ opt=opt||{}; const it=j?.items?.[ix]; if(!it) return ''; const a=it.outsourceApproval; const J=escapeForJsAttr(j.jobNo);
+  if(osaOk(a)) return `<div style="font-size:10.5px;color:#166534;margin-top:2px;white-space:normal;max-width:${opt.wide?'none':'240px'};">🤝 Customer approved outsourcing — ${escapeHtml(a.method)}, ${fmtDateShort(a.date)}, ${escapeHtml(a.contact)}${a.note?` · ${escapeHtml(a.note)}`:''} · ${a.files.map((f,i)=>`<a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(f.url)}')" title="${escapeHtml(f.name||'')}">📎${a.files.length>1?i+1:' evidence'}</a>`).join(' ')} <span style="color:var(--text-muted);">(recorded by ${escapeHtml(staffNameOf(a.by))})</span></div>`;
+  const via=it.outsourceApprovedVia||(outsourceCustomerApproved(j,ix)?'quotation':'');
+  if(via) return `<div style="font-size:10.5px;color:#166534;margin-top:2px;white-space:normal;max-width:${opt.wide?'none':'240px'};">🤝 Customer approved outsourcing via ${escapeHtml(via)}${canRecordOsa()&&!opt.noBtn?` · <a href="javascript:void(0)" onclick="openOsaRecord('${J}',${ix})">add evidence</a>`:''}</div>`;
+  return `<div style="font-size:10.5px;color:#b45309;margin-top:2px;white-space:normal;max-width:${opt.wide?'none':'240px'};">⚠️ Customer approval for outsourcing not recorded${canRecordOsa()&&!opt.noBtn?` · <a href="javascript:void(0)" onclick="openOsaRecord('${J}',${ix})">record it</a>`:''}</div>`; }
+function openOsaRecord(jobNo,ix){ if(!canRecordOsa()){ alert("The customer's approval for outsourcing is recorded by the Coordinator, Sales or the Managing Director."); return; }
+  const j=getJob(jobNo); const it=j?.items?.[ix]; if(!it) return; const a=it.outsourceApproval||{}; const today=toLocalDateStr(new Date());
+  cOv(`🤝 Customer approval for outsourcing — ${escapeHtml(jobNo)}`,`<div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12.5px;"><b>Item ${escapeHtml(String(it.itemNo||ix+1))} — ${escapeHtml(it.eqName||'')}</b>${it.serial?' ('+escapeHtml(it.serial)+')':''}${it.outsourcedTo?` → ${escapeHtml(it.outsourcedTo)}`:''}<div style="color:var(--text-muted);font-size:11.5px;">The customer agrees that this item is calibrated by an external provider (ISO/IEC 17025 7.1.1 c). Needed before it is sent to the vendor.</div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">How the customer approved <span class="req">*</span></label><select class="form-control" id="osa-method"><option value="">—</option>${OSA_METHODS.map(m=>`<option ${a.method===m?'selected':''}>${m}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Date <span class="req">*</span></label><input class="form-control" type="date" id="osa-date" max="${today}" value="${escapeHtml(a.date||today)}"/></div></div>
+    <div class="form-group"><label class="form-label">Customer's contact person <span class="req">*</span></label><input class="form-control" id="osa-contact" value="${escapeHtml(a.contact||j.attention||j.contactPerson||'')}" placeholder="e.g. Mr Tan (QA)"/></div>
+    <div class="form-group"><label class="form-label">Note</label><input class="form-control" id="osa-note" value="${escapeHtml(a.note||'')}" placeholder="e.g. replied OK on WhatsApp to our message of 25 Oct"/></div>
+    ${(a.files||[]).length?`<div style="font-size:12px;margin-bottom:6px;">Evidence on file: ${a.files.map(f=>`<a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(f.url)}')">${escapeHtml(f.name||'file')}</a>`).join(' · ')}</div>`:''}
+    <div class="form-group"><label class="form-label">Evidence — screenshot(s) / PDF ${(a.files||[]).length?'(adds to the files above)':'<span class="req">*</span>'}</label><input class="form-control" type="file" id="osa-files" accept="image/*,.pdf" multiple/><div style="font-size:11px;color:var(--text-muted);margin-top:3px;">e.g. the WhatsApp screenshot, the customer's email saved as PDF, or the signed PO. Kept in the job's folder.</div></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" id="osa-save" onclick="saveOsaRecord('${escapeForJsAttr(jobNo)}',${ix})">💾 Record approval</button></div>`,560); }
+async function saveOsaRecord(jobNo,ix){ if(!canRecordOsa()) return; const method=el('osa-method')?.value||'', date=el('osa-date')?.value||'', contact=(el('osa-contact')?.value||'').trim(), note=(el('osa-note')?.value||'').trim();
+  const prev=getJob(jobNo)?.items?.[ix]?.outsourceApproval; const files=[...((el('osa-files')&&el('osa-files').files)||[])];
+  if(!OSA_METHODS.includes(method)){ alert('Choose how the customer approved (Email, WhatsApp, Phone, Signed PO or Other).'); return; } if(!date){ alert('Enter the date of the approval.'); return; } if(date>toLocalDateStr(new Date())){ alert('The date cannot be in the future.'); return; }
+  if(!contact){ alert("Enter the customer's contact person who approved."); return; } if(!files.length&&!(prev?.files||[]).length){ alert('Attach the evidence — e.g. the WhatsApp screenshot, the email (PDF) or the signed PO.'); return; }
+  const b=el('osa-save'); if(b){ b.disabled=true; b.textContent='⏳ Uploading…'; }
+  const up=[]; for(const f of files){ if(f.size>15*1024*1024){ alert(`${f.name} is larger than 15 MB.`); if(b){ b.disabled=false; b.textContent='💾 Record approval'; } return; } const url=await prUpload(f,`jobs/${jobNo}/outsource-approval`); if(!url){ alert(`${f.name} could not be uploaded — nothing was saved.`); if(b){ b.disabled=false; b.textContent='💾 Record approval'; } return; } up.push({name:f.name,url}); }
+  const now=new Date().toISOString();
+  try{ await updateJob(jobNo,j=>{ const it=j.items[ix]; if(!it) throw new Error('Item not found — refresh.'); const old=it.outsourceApproval;
+      it.outsourceApproval={method,date,contact,note,files:[...((old&&old.files)||[]),...up],by:currentUser,at:now};
+      if(old) (it.outsourceApprovalLog=it.outsourceApprovalLog||[]).push(old);
+      (j.history=j.history||[]).push({action:`🤝 Customer approval for outsourcing ${old?'updated':'recorded'} — Item ${it.itemNo||ix+1} (${escapeHtml(it.eqName||'')})${it.outsourcedTo?' → '+escapeHtml(it.outsourcedTo):''}: ${method}, ${fmtDateShort(date)}, ${escapeHtml(contact)}${note?' — '+escapeHtml(note):''} (${it.outsourceApproval.files.length} file${it.outsourceApproval.files.length>1?'s':''})`,by:currentUser,time:now}); }); }
+  catch(e){ alert(e.message||e); if(b){ b.disabled=false; b.textContent='💾 Record approval'; } return; }
+  addAudit('🤝',`${escapeHtml(jobNo)}: customer approval for outsourcing recorded (${method}, ${escapeHtml(contact)})`); f027Close(); showToast('🤝 Customer approval recorded','success',2500); refreshJobViews(jobNo); if(typeof refreshAllBadges==='function') refreshAllBadges(); }
+function outsourceCustomerApproved(j,ix){ const it=j?.items?.[ix]; if(!it) return false; if(it.outsourceApprovedVia||osaOk(it.outsourceApproval)) return true;
   const q=(_quotationsV2||[]).find(x=>x.quotationNo===it.fromQuotation); const qi=q&&it.quotationItemIdx!=null?q.items?.[it.quotationItemIdx]:null; if(qi&&(qi.outsourceVendorId||qi.outsourced||qi.capabilityVerdict==='Can Do (External)')) return true;
   return cdOf(j).some(c=>c.status==='Closed'&&c.outsource&&['Proceed','Amend'].includes(c.decision?.choice)&&(c.items||[]).includes(ix)); }
 // ── the job's contract & contact section (job detail) ──
@@ -19827,18 +19987,25 @@ function canIssueAmd(u,it){ return !amdIssueProblem(it,u); }
 function openAmdIssue(jobNo,ix,amdId){ const it=getJob(jobNo)?.items?.[ix]; { const pb=amdIssueProblem(it,currentUser); if(pb){ alert('⛔ '+pb); return; } } const a=(it?.amendments||[]).find(x=>x.id===amdId); if(!a||a.reissue?.status!=='Prepared') return;
   const cd=it.calData||{}, d=a.reissue.draft; const next=amdBaseNo(it)+amdLetter(amdIssuedCount(it)+1); const lbl=k=>(AMD_FIELDS.find(f=>f[0]===k)||[,k])[1];
   _amdShown={key:jobNo+'|'+ix+'|'+amdId,d:JSON.stringify(d||null),next}; // what the approver sees is exactly what gets issued
+  const _ovA=certP1Problems(amdIssueItem(it,a,next),getJob(jobNo));
   cOv(`✅ Issue amended certificate ${escapeHtml(next)}`,`<div style="font-size:12.5px;margin-bottom:8px;"><b>Amendment ${a.amendmentNo}:</b> ${escapeHtml(a.description)} — ${escapeHtml(a.reason)}</div>
     <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:8px;"><tr style="color:var(--text-muted);"><td>Field</td><td>On ${escapeHtml(it.certNo)}</td><td>On ${escapeHtml(next)}</td></tr>${Object.entries(d.cd||{}).map(([k,v])=>`<tr style="border-top:1px solid var(--border);"><td>${escapeHtml(lbl(k))}</td><td>${escapeHtml(cd[k]??'')}</td><td><b>${escapeHtml(v)}</b></td></tr>`).join('')}${d.excelFile?`<tr style="border-top:1px solid var(--border);"><td>Data pages</td><td>${escapeHtml(it.excelFile?.name||'')}</td><td><b>${escapeHtml(d.excelFile.name)}</b></td></tr>`:''}</table>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Prepared by ${escapeHtml(staffNameOf(d.by))}. ${escapeHtml(it.certNo)} is kept on record as superseded.</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Prepared by ${escapeHtml(staffNameOf(d.by))}. ${escapeHtml(it.certNo)} is kept on record as superseded.</div>${certP1Html(_ovA,'block').replace('approval is blocked','it cannot be issued').replace('Fix it first (reject / send back so the job or certificate details are shortened)','Send it back to the preparer to shorten the text')}
     <div style="font-size:12.5px;margin-bottom:8px;">Issued and signed by <b>${escapeHtml(amdSignName(currentUser))}</b> (approved signatory) — your name and signature go on ${escapeHtml(next)}${cd.approved_by&&cd.approvedByUsername!==currentUser?`, in place of ${escapeHtml(cd.approved_by)} on ${escapeHtml(it.certNo)}`:''}.</div>
     <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-outline" style="color:#b91c1c;" onclick="amdSendBack('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">↩️ Back to preparer</button><button class="btn btn-primary" onclick="saveAmdIssue('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">✅ Issue ${escapeHtml(next)}</button></div>`,700); }
 async function amdSendBack(jobNo,ix,amdId){ const why=prompt('What needs changing?'); if(!why||!why.trim()) return;
   try{ await updateJob(jobNo,j=>{ const a=(j.items[ix].amendments||[]).find(y=>y.id===amdId); if(a&&a.reissue){ a.reissue.status='To prepare'; a.reissue.sentBack={by:currentUser,at:new Date().toISOString(),why:why.trim()}; } }); }catch(e){ alert(e.message||e); return; } f027Close(); refreshJobViews(jobNo); }
 let _amdShown=null;
+// the item as the amended certificate will show it (draft changes + amendment remark) — for the page-1 fit check
+function amdIssueItem(it,a,next){ if(!it||!a) return it; const d=(a.reissue&&a.reissue.draft)||{}; const c=JSON.parse(JSON.stringify(it));
+  c.calData={...(it.calData||{}),...(d.cd||{}),cert_no:next||it.certNo,amended:{no:next,supersedes:it.certNo,supersededIssue:it.calData?.issue_date||'',amendmentNo:a.amendmentNo,what:a.description,why:a.reason,issuedBy:currentUser},approved_by:amdSignName(currentUser),approvedByUsername:currentUser};
+  { const M={eq_name:'eqName',serial:'serial',model:'model',brand:'brand',range:'range',tag_no:'tagNo'}; Object.entries(M).forEach(([ck,ik])=>{ const v=(d.cd||{})[ck]; if(v!==undefined&&v!=='') c[ik]=v; }); }
+  if(next) c.certNo=next; return c; }
 function amdSignName(u){ const s=(_staff||[]).find(x=>x.username===u); return (s&&(s.certName||s.name))||USERS[u]?.name||u; }
 async function saveAmdIssue(jobNo,ix,amdId){ const it0=getJob(jobNo)?.items?.[ix]; const a0=(it0?.amendments||[]).find(x=>x.id===amdId);
   { const pb=amdIssueProblem(it0,currentUser); if(pb){ alert('⛔ '+pb); return; } }
   const shown=_amdShown&&_amdShown.key===jobNo+'|'+ix+'|'+amdId?_amdShown:null; if(!shown){ alert('Open the amended certificate again (✅ Issue amended certificate) to check it before issuing.'); return; }
+  { const ov=a0?.reissue?.draft?certP1Problems(amdIssueItem(it0,a0,shown.next),getJob(jobNo)):[]; if(ov.length){ alert(`⛔ The amended certificate cannot be issued — some text does not fit page 1 of the certificate:\n\n• ${ov.join('\n• ')}\n\nSend it back to the preparer (↩️ Back to preparer) to shorten it.`); return; } }
   if(a0?.reissue?.draft?.by===currentUser&&!confirm('You prepared this amended certificate yourself — issue it anyway?')) return;
   const now=new Date().toISOString(); const today=toLocalDateStr(new Date()); let newNo='', changed=null;
   try{ await updateJob(jobNo,j=>{ changed=null; const it=j.items[ix]; const a=(it.amendments||[]).find(y=>y.id===amdId); if(!a||a.reissue?.status!=='Prepared') throw new Error('Not prepared any more — refresh.');
@@ -20089,18 +20256,22 @@ async function saveF013(act){ const r=_f013Draft; const now=new Date().toISOStri
 async function f013Pdf(id){ const r=h79Fb().find(x=>x.id===id); if(!r) return; const a=r.auto||f013Auto(r.from,r.to); const T=(await qft('F013')); const B=qftBoxes(T); const ov=[0,1,2,3].map(()=>({html:''})); const add=(p,h)=>{ ov[p].html+=h; };
   const bx=(pg,i)=>B.filter(b=>b[0]===pg)[i]; const tick=(pg,i)=>{ const b=bx(pg,i); if(b) add(pg,qftTick(b[1],b[2],10)); }; const bl=T.blanks; const BL=(k,s)=>{ const b=bl[k]; if(b) add(b[0],h79T(b[1]+2,b[2]-1.5,s,{w:Math.max(30,b[3]),h:11.7,size:9.5,min:6.5,label:k})); }; // one line on the blank
   const D=(y,s)=>add(0,h79T(205,y-1,s,{w:315})); D(165.23,r.refNo); D(179.75,`${qmsDateLong(r.from)} – ${qmsDateLong(r.to)}`); D(194.27,staffNameOf(r.evaluator)); D(208.79,r.designation); D(223.31,qmsDateLong(r.date)); (r.forms||[]).forEach(i=>tick(0,i));
-  const cols=[[100,171],[171,242],[242,312.8],[312.8,383.7],[383.7,440.4],[440.4,522.9]]; const rowsY=[333.74,346.46,359.18,371.9,384.62];
+  // Section A complaints table: the Root Cause Category column is widened (taken from the columns with spare room) so the normal
+  // category wording fits in its cell; the table is redrawn over the form's own with the same line thickness, 8 pt values, a row
+  // growing to the lines its values need. The rows that do not fit above "Total Received" continue in a table with the same columns
+  // on the page(s) after page 1, with the form's header and footer (Jay, 27 Oct 2026)
   const C13H=['Complaint Ref. No.','Date Received','Severity','Resolution Status','Date Closed','Root Cause Category'], c13=c=>[c.ncNo,qfDmy(c.date),c.sev,c.status,qfDmy(c.closed),c.cat];
-  a.complaints.slice(0,5).forEach((c,ri)=>{ c13(c).forEach((t,ci)=>add(0,h79T(cols[ci][0]+2,rowsY[ri]-0.5,t||'',{w:cols[ci][1]-cols[ci][0]-4,size:8,h:11,center:ci<5,label:`Complaint ${ri+1} — ${C13H[ci]}`}))); });
-  // more than five complaints: all of them are printed — the rest in a continuation table with the same columns on the page(s)
-  // after page 1, with the form's header and footer (Jay, 27 Oct 2026)
-  let cont13=[];
-  if(a.complaints.length>5){ const xs=[72.02,99.98,171.02,241.97,312.79,383.71,440.38,522.94], F9=`9pt/10.6pt ${QF_FONT}`;
-    const hd=qfRow(xs,['No.',...C13H].map(t=>[`<span style="font:10pt/1.15 ${QF_FONT};">${t}</span>`,'center']),{h:24.84,font:F9,pad:2});
+  const X13=[72.02,99.98,162.5,216.5,264.5,323,375,522.94]; await qfFonts();
+  const hd13=h=>qfRow(X13,['No.',...C13H].map(t=>[`<span style="font:10pt/1.15 ${QF_FONT};">${t}</span>`,'center']),{h,font:`10pt/1.15 ${QF_FONT}`,bg:QF_GREY2,pad:2,lw:0.48});
+  const rows13=a.complaints.map((c,i)=>[`${i+1}.`,...c13(c)]);
+  const GT13=qfGrowTable({xs:X13,top:331.13,bottom:394.73,rows:rows13,minH:12.72,maxLines:4,size:8,align:c=>c<6?'center':'left',label:(i,c)=>`Complaint ${i+1} — ${['No.',...C13H][c]}`});
+  add(0,`<div style="position:absolute;left:71.6pt;top:306.6pt;width:451.8pt;height:24.6pt;background:#fff;"></div><div style="position:absolute;left:72pt;top:306.79pt;"><div style="margin-top:-0.5pt;">${hd13(24.84)}</div></div>`+GT13[0].html);
+  let cont13=[]; const n1=GT13[0].idx.length;
+  if(a.complaints.length>n1){ const F8=`8pt/9.2pt ${QF_FONT}`, hd=hd13(24.84);
     const blocks=[{mt:14,html:`<div style="text-align:center;font:bold 12pt/1 ${QF_FONT};">SECTION A – CUSTOMER COMPLAINTS REVIEW (continued)</div>`},{mt:10,html:hd},
-      ...a.complaints.slice(5).map((c,i)=>({hdr:hd,hdrMt:14,mt:-0.5,html:qfRow(xs,[[`${i+6}.`,'center'],...c13(c).map((t,ci)=>[qfE(t||''),ci<5?'center':'left'])],{h:12.72,font:F9,pad:3})}))];
+      ...rows13.slice(n1).map((r,i)=>({hdr:hd,hdrMt:14,mt:-0.5,html:qfRow(X13,r.map((t,ci)=>[qfE(t||''),ci<6?'center':'left']),{h:12.72,font:F8,pad:2,vpad:1.4,lw:0.48})}))];
     cont13=await qfFlow({g:QF_P,no:'F013',v:{...formVersion('F013'),title:formVersion('F013').title||'Feedback Evaluation Form'},blocks});
-    add(0,h79T(78,395,`Complaints 6–${a.complaints.length}: continued in the table on page${cont13.length>1?`s 2–${cont13.length+1}`:' 2'}`,{w:440,size:9}));  }
+    add(0,h79T(78,398,`Complaints ${n1+1}–${a.complaints.length}: continued in the table on page${cont13.length>1?`s 2–${cont13.length+1}`:' 2'}`,{w:440,h:10.5,size:8.5}));  }
   BL('Total Received',String(a.total)); BL('Total Resolved',String(a.resolved)); BL('Total Pending',String(a.pending)); BL('Avg. Resolution Time',a.avgDays!=null?String(a.avgDays):'—');
   const box=(pg,y0,y1,s,label)=>add(pg,h79T(78,y0+3,s||'',{w:440,h:y1-y0-5,size:8.5,label}));
   box(0,456.8,506.1,r.A.findings,'Complaint Trend Analysis & Key Findings'); box(0,518.8,555.9,a.top3.map((t,i)=>`${i+1}. ${t}`).join('   '),'Top 3 Recurring Complaint Categories'); box(0,568.6,630.2,r.A.ca,'Corrective Actions Implemented');
@@ -21095,9 +21266,9 @@ async function f020Pdf(){
   const fv=formVersion('F020'), v={...fv,title:fv.title||'Master List of Documents'};
   const g={...QF_LS,L:31.15,R:804.2,cols:[31.15,386.5,450,514,610,706,804.2]};
   const xs=[31.15,127.4,353.5,401.7,449.8,559.5,685.5,745.7,804.2].map(x=>+(x-31.15+72).toFixed(2)), F8=`8pt/9.2pt ${QF_FONT}`, RH=10.49; await qfFonts(); // qfRow places tables from x 72 = the page's left edge g.L here
-  const hdr=qfRow(xs,['Doc. No.','Description','Rev.','Last Update','Location','Retention Time','Internal (I) / External (E)','Obsolete (OBS)'].map(t=>[`<b>${t}</b>`,'center']),{h:RH,font:F8,bg:QF_GREY,pad:2});
-  const row=r=>qfRow(xs,r.map((t,c)=>[qfE(t),c>=2&&c!==4&&c!==5?'center':'left']),{h:RH,font:F8,pad:2});
-  const blank=qfRow(xs,Array(8).fill(''),{h:RH,font:F8,pad:2});
+  const hdr=qfRow(xs,['Doc. No.','Description','Rev.','Last Update','Location','Retention Time','Internal (I) / External (E)','Obsolete (OBS)'].map(t=>[`<b>${t}</b>`,'center']),{h:RH,font:F8,bg:QF_GREY,pad:3,vpad:1});
+  const row=r=>qfRow(xs,r.map((t,c)=>[qfE(t),c>=2&&c!==4&&c!==5?'center':'left']),{h:RH,font:F8,pad:3,vpad:0.6}); // a row that wraps keeps space from its lines
+  const blank=qfRow(xs,Array(8).fill(''),{h:RH,font:F8,pad:3});
   const lab=(x,t,val)=>`<div style="position:absolute;left:${(x-31.15).toFixed(2)}pt;top:0;white-space:nowrap;font:8pt/1 ${QF_FONT};"><b>${t}</b>&nbsp;&nbsp;&nbsp;&nbsp;${qfE(val)}</div>`;
   const sign=`<div style="position:relative;height:22pt;">${lab(85.5,'Updated by:',staffNameOf(currentUser))}${lab(301,'Date:',qfDmy(toLocalDateStr(new Date())))}${lab(485.2,'Approved by:',last?staffNameOf(last.approvedBy):'')}<div style="position:absolute;right:0;top:12pt;font:8pt/1 ${QF_FONT};">${qfE(fv.clauses||'Clause 8.3.1')}</div></div>`;
   const SIGN_H=22, SIGN_MT=12;
@@ -21527,7 +21698,12 @@ function iaGet(id){ return iaList().find(x=>x.id===id)||null; }
 // internal auditors: only MD, QM and TM staff — plus external auditors on the register
 const IA_AUD_ROLES=['Managing Director','Quality Manager','Manager'];
 function iaStaffAuditorOk(u){ const s=(_staff||[]).find(x=>x.username===u); return IA_AUD_ROLES.includes((s&&s.role)||USERS[u]?.role); }
-function iaAuditorPickable(x){ return !x.username||iaStaffAuditorOk(x.username); }
+function iaAuditorPickable(x){ return x.username?iaStaffAuditorOk(x.username):iaExtComplete(x); }
+// an external auditor is assignable once the register holds the company, qualification and the signed independence declaration (LQP 8.8 6.2.1 a)
+function iaExtComplete(x){ return !!(x&&!x.username&&String(x.name||'').trim()&&String(x.org||'').trim()&&String(x.qual||'').trim()&&x.independence&&x.independence.declared); }
+function iaExtMissing(x){ if(!x||x.username) return []; const m=[]; if(!String(x.org||'').trim()) m.push('company'); if(!String(x.qual||'').trim()) m.push('qualification'); if(!(x.independence&&x.independence.declared)) m.push('independence declaration'); return m; }
+function iaIsExt(id){ const a=iaGet(id); return !!(a&&!a.username); }
+function iaEvidence(a){ const L=Array.isArray(a&&a.evidenceFiles)?a.evidenceFiles.slice():[]; if(a&&a.evidence&&!L.some(f=>f.url===a.evidence)) L.unshift({url:a.evidence,name:'certificate'}); return L; }
 function iaCanManage(u){ return canSeeQms(u||currentUser); }
 function iaCanApprove(u){ const r=getUserRole(u||currentUser); return isAdmin(u||currentUser)||r==='Quality Manager'; }
 function iaIsTm(u){ const r=getUserRole(u||currentUser); return isAdmin(u||currentUser)||r==='Manager'; }
@@ -21570,18 +21746,36 @@ async function iaPlanApprove(Y){ if(!iaCanApprove()) return; const p=iaPlan(Y); 
 // ── Auditor register (6.2.1 a: trained, qualified, independent) ──
 function iaRenderAuditors(){ const box=el('ia-tab'); const L=iaAuditors(true);
   box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12.5px;color:var(--text-muted);">Only auditors on this list can be assigned: the Managing Director, Quality Manager or Technical Manager, or an external auditor. Each must be trained / qualified, and is never assigned to audit their own work (LQP 8.8 6.2.1 a).</span>${iaCanApprove()?`<button class="btn btn-primary" onclick="iaAuditorOpen()">+ Auditor</button>`:''}</div>
-    <div class="card"><div class="table-wrap"><table><thead><tr><th>Auditor</th><th>Internal / external</th><th>Qualification / training</th><th>Status</th><th></th></tr></thead><tbody>
-    ${L.map(a=>`<tr><td><b>${escapeHtml(iaAudName(a.id))}</b></td><td>${a.username?'Westlab staff':'External'+(a.org?' — '+escapeHtml(a.org):'')}</td><td style="font-size:12px;">${escapeHtml(a.qual||'')}${a.evidence?` · <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(a.evidence)}')">certificate</a>`:''}</td><td>${a.active===false?'<span class="badge badge-slate">Removed</span>':!iaAuditorPickable(a)?'<span class="badge badge-amber" title="Internal auditors are the Managing Director, Quality Manager or Technical Manager">Not assignable</span>':'<span class="badge badge-green">Active</span>'}</td>
-      <td>${iaCanApprove()&&a.active!==false?`<button class="btn btn-outline btn-sm" onclick="iaAuditorRemove('${a.id}')">Remove</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--text-muted);padding:14px;">No auditors yet — add the trained internal auditor(s), internal or external.</td></tr>'}</tbody></table></div></div>`; }
-function iaAuditorOpen(){ cOv('+ Internal auditor',`<div class="form-group"><label class="form-label">Westlab staff member — Managing Director, Quality Manager or Technical Manager (leave empty for an external auditor)</label><select class="form-control" id="iau-u"><option value="">— External auditor —</option>${(_staff||[]).filter(s=>s.active!==false&&iaStaffAuditorOk(s.username)).map(s=>`<option value="${escapeHtml(s.username)}">${escapeHtml(s.name||s.username)}</option>`).join('')}</select></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">External auditor name</label><input class="form-control" id="iau-n"/></div><div class="form-group"><label class="form-label">Company</label><input class="form-control" id="iau-o"/></div></div>
-    <div class="form-group"><label class="form-label">Qualification / training <span class="req">*</span></label><input class="form-control" id="iau-q" placeholder="e.g. ISO/IEC 17025:2017 Internal Audit course, 2 days, 2026"/></div>
-    <div class="form-group"><label class="form-label">Training certificate (optional)</label><input class="form-control" type="file" id="iau-f" accept=".pdf,image/*"/></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" onclick="iaAuditorSave()">Save</button></div>`,560); }
-async function iaAuditorSave(){ const u=el('iau-u').value, n=(el('iau-n').value||'').trim(), q=(el('iau-q').value||'').trim(); if(!u&&!n){ alert('Choose a staff member or enter the external auditor\'s name.'); return; } if(!q){ alert('Enter the qualification / training.'); return; }
-  const f=el('iau-f').files&&el('iau-f').files[0]; let ev=''; if(f){ ev=await prUpload(f,'qms/auditors'); if(!ev){ alert('The file could not be uploaded — nothing was saved.'); return; } } const now=new Date().toISOString();
-  try{ await _iaStore.patch(arr=>{ arr.push({id:'IAU-'+Date.now(),type:'auditor',username:u,name:u?'':n,org:u?'':(el('iau-o').value||'').trim(),qual:q,evidence:ev,active:true,by:currentUser,at:now}); }); }catch(e){ alert(e.message||e); return; }
-  addAudit('🧑‍⚖️',`Internal auditor added: ${escapeHtml(u?staffNameOf(u):n)}`); f027Close(); iaRenderAuditors(); }
+    <div class="card"><div class="table-wrap"><table><thead><tr><th>Auditor</th><th>Internal / external</th><th>Qualification / training</th><th>Independence</th><th>Evidence</th><th>Status</th><th></th></tr></thead><tbody>
+    ${L.map(a=>{ const ev=iaEvidence(a), miss=iaExtMissing(a); return `<tr><td><b>${escapeHtml(iaAudName(a.id))}</b></td><td>${a.username?'Westlab staff':'External'+(a.org?' — '+escapeHtml(a.org):'')}</td><td style="font-size:12px;">${escapeHtml(a.qual||'')}</td>
+      <td style="font-size:12px;">${a.username?'<span style="color:var(--text-muted);">— (not an auditee of own work)</span>':a.independence?.declared?`✅ Declared ${a.independence.date?qmsDate(a.independence.date):''}`:'<span style="color:#b45309;">Not declared</span>'}</td>
+      <td style="font-size:12px;">${ev.map(f=>`<a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(f.url)}')">${escapeHtml(f.name||'file')}</a>`).join('<br>')||'—'}</td>
+      <td>${a.active===false?'<span class="badge badge-slate">Removed</span>':!iaAuditorPickable(a)?`<span class="badge badge-amber" title="${a.username?'Internal auditors are the Managing Director, Quality Manager or Technical Manager':'Missing: '+escapeHtml(miss.join(', '))}">Not assignable${a.username?'':' — '+escapeHtml(miss.join(', '))+' missing'}</span>`:'<span class="badge badge-green">Active</span>'}</td>
+      <td style="white-space:nowrap;">${iaCanApprove()&&a.active!==false?`${a.username?'':`<button class="btn btn-outline btn-sm" onclick="iaAuditorOpen('${a.id}')">✏️ Edit</button> `}<button class="btn btn-outline btn-sm" onclick="iaAuditorRemove('${a.id}')">Remove</button>`:''}</td></tr>`; }).join('')||'<tr><td colspan="7" style="color:var(--text-muted);padding:14px;">No auditors yet — add the trained internal auditor(s), internal or external.</td></tr>'}</tbody></table></div></div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">An external auditor has no LIMS login: the QM records the findings in the LIMS from the auditor's signed checklist, which is attached to the audit.</div>`; }
+const IA_INDEP_TEXT='I am independent of the laboratory activities I audit: I have not performed, supervised or been responsible for them, and I have no commercial, financial or other interest that could affect my judgement (ISO/IEC 17025 4.1, LQP 8.8 6.2.1 a).';
+function iaAuditorOpen(id){ const x=id?iaGet(id):null; if(id&&(!x||x.username)) return; const v=t=>escapeHtml(t==null?'':String(t)); const ind=x?.independence||{};
+  cOv(x?`✏️ External auditor — ${v(x.name)}`:'+ Internal auditor',`${x?'':`<div class="form-group"><label class="form-label">Westlab staff member — Managing Director, Quality Manager or Technical Manager (leave empty for an external auditor)</label><select class="form-control" id="iau-u" onchange="el('iau-ext').style.display=this.value?'none':''"><option value="">— External auditor —</option>${(_staff||[]).filter(s=>s.active!==false&&iaStaffAuditorOk(s.username)).map(s=>`<option value="${escapeHtml(s.username)}">${escapeHtml(s.name||s.username)}</option>`).join('')}</select></div>`}
+    <div id="iau-ext"><div class="form-row"><div class="form-group"><label class="form-label">External auditor name <span class="req">*</span></label><input class="form-control" id="iau-n" value="${v(x?.name)}"/></div><div class="form-group"><label class="form-label">Company <span class="req">*</span></label><input class="form-control" id="iau-o" value="${v(x?.org)}"/></div></div>
+    <div style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:10px;"><label style="display:flex;gap:8px;align-items:flex-start;font-weight:normal;font-size:12.5px;cursor:pointer;"><input type="checkbox" id="iau-ind" ${ind.declared?'checked':''} style="margin-top:3px;"/><span><b>Independence declaration signed by the auditor</b><br><span style="color:var(--text-muted);">"${v(IA_INDEP_TEXT)}"</span></span></label>
+      <div class="form-row" style="margin-top:6px;"><div class="form-group"><label class="form-label">Signed on</label><input class="form-control" type="date" id="iau-ind-d" max="${toLocalDateStr(new Date())}" value="${v(ind.date||'')}"/></div><div class="form-group" style="flex:2;"><label class="form-label">Note (optional)</label><input class="form-control" id="iau-ind-n" value="${v(ind.note||'')}" placeholder="e.g. no consultancy to Westlab in the last 2 years"/></div></div>
+      <div style="font-size:11.5px;color:var(--text-muted);">Attach the signed declaration below with the qualification evidence.</div></div></div>
+    <div class="form-group"><label class="form-label">Qualification / training <span class="req">*</span></label><input class="form-control" id="iau-q" value="${v(x?.qual)}" placeholder="e.g. ISO/IEC 17025:2017 Internal Audit course, 2 days, 2026"/></div>
+    ${x&&iaEvidence(x).length?`<div style="font-size:12px;margin-bottom:6px;">On file: ${iaEvidence(x).map(f=>`<a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(f.url)}')">${v(f.name||'file')}</a>`).join(' · ')}</div>`:''}
+    <div class="form-group"><label class="form-label">Evidence — training certificate, signed independence declaration (PDF / photos, one or more)</label><input class="form-control" type="file" id="iau-f" accept=".pdf,image/*" multiple/></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close();${x?'iaRenderAuditors()':''}">Cancel</button><button class="btn btn-primary" onclick="iaAuditorSave(${x?`'${x.id}'`:''})">Save</button></div>`,600); }
+async function iaAuditorSave(id){ if(!iaCanApprove()){ alert('The auditor register is kept by the Quality Manager / MD.'); return; } const x0=id?iaGet(id):null;
+  const u=x0?'':(el('iau-u')?.value||''), n=(el('iau-n').value||'').trim(), o=(el('iau-o').value||'').trim(), q=(el('iau-q').value||'').trim();
+  const ind=!!el('iau-ind')?.checked, indD=el('iau-ind-d')?.value||'', indN=(el('iau-ind-n')?.value||'').trim();
+  if(!u&&!n){ alert('Choose a staff member or enter the external auditor\'s name.'); return; } if(!q){ alert('Enter the qualification / training.'); return; }
+  if(!u){ if(!o){ alert('Enter the external auditor\'s company.'); return; } if(!ind){ alert('Record the independence declaration signed by the external auditor (tick it and enter the date) — an external auditor is assigned only with it (LQP 8.8 6.2.1 a).'); return; } if(!indD){ alert('Enter the date the independence declaration was signed.'); return; }
+    if(!((el('iau-f')&&el('iau-f').files.length)||iaEvidence(x0).length)){ alert('Attach the evidence — the signed independence declaration and the qualification / training certificate.'); return; } }
+  const files=[...((el('iau-f')&&el('iau-f').files)||[])]; const up=[]; for(const f of files){ const url=await prUpload(f,'qms/auditors'); if(!url){ alert(`${f.name} could not be uploaded — nothing was saved.`); return; } up.push({url,name:f.name,by:currentUser,at:new Date().toISOString()}); }
+  const now=new Date().toISOString();
+  try{ await _iaStore.patch(arr=>{ let x=id&&arr.find(y=>y.id===id); if(!x){ x={id:'IAU-'+Date.now(),type:'auditor',username:u,active:true,by:currentUser,at:now}; arr.push(x); } else { x.updatedBy=currentUser; x.updatedAt=now; }
+      if(u){ x.name=''; x.org=''; } else { x.name=n; x.org=o; x.independence=ind?{declared:true,date:indD,note:indN,text:IA_INDEP_TEXT,recordedBy:currentUser,recordedAt:(x.independence&&x.independence.declared&&x.independence.date===indD)?x.independence.recordedAt:now}:null; }
+      x.qual=q; const ev=(Array.isArray(x.evidenceFiles)?x.evidenceFiles:(x.evidence?[{url:x.evidence,name:'certificate'}]:[])).concat(up); x.evidenceFiles=ev; if(!x.evidence&&ev[0]) x.evidence=ev[0].url; }); }catch(e){ alert(e.message||e); return; }
+  addAudit('🧑‍⚖️',`${id?'External auditor updated':'Internal auditor added'}: ${escapeHtml(u?staffNameOf(u):n)}${!u?' ('+escapeHtml(o)+')':''}`); f027Close(); iaRenderAuditors(); }
 async function iaAuditorRemove(id){ if(!confirm('Remove this auditor from the list? Past audits keep their name.')) return; try{ await _iaStore.patch(arr=>{ const x=arr.find(y=>y.id===id); if(x){ x.active=false; x.removedBy=currentUser; x.removedAt=new Date().toISOString(); } }); }catch(e){ alert(e.message||e); return; } iaRenderAuditors(); }
 // ── Audits ──
 function iaRenderList(){ const box=el('ia-tab'); const L=iaAudits().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
@@ -21604,7 +21798,7 @@ function iaOpenNew(id){ const a=id?iaGet(id):null; const A=iaAuditors(); if(!A.f
 async function iaSaveNew(id){ const cl=[...document.querySelectorAll('.ian-cl:checked')].map(x=>x.value), ae=[...document.querySelectorAll('.ian-ae:checked')].map(x=>x.value); const area=(el('ian-area').value||'').trim(), date=el('ian-date').value, lead=el('ian-lead').value, a2=el('ian-aud2').value;
   if(!cl.length||!area||!date||!lead||!ae.length){ alert('Choose the clauses, area, date, lead auditor and auditees.'); return; } if(a2&&a2===lead){ alert('Choose a different second auditor.'); return; }
   const clash=[lead,a2].filter(Boolean).map(x=>iaGet(x)).filter(x=>x&&x.username&&ae.includes(x.username)); if(clash.length){ alert(`⛔ ${clash.map(x=>staffNameOf(x.username)).join(', ')} cannot be both auditor and auditee — auditors must be independent of the area they audit (LQP 8.8 6.2.1 a).`); return; }
-  { const was=id?iaGet(id):null, prevA=was?[was.lead,...(was.auditors||[])]:[]; const bad=[lead,a2].filter(Boolean).filter(x=>!prevA.includes(x)).map(iaGet).filter(x=>x&&!iaAuditorPickable(x)); if(bad.length){ alert(`${bad.map(x=>iaAudName(x.id)).join(', ')} cannot be assigned — internal auditors are the Managing Director, Quality Manager or Technical Manager (or an external auditor from the register).`); return; } }
+  { const was=id?iaGet(id):null, prevA=was?[was.lead,...(was.auditors||[])]:[]; const bad=[lead,a2].filter(Boolean).filter(x=>!prevA.includes(x)).map(iaGet).filter(x=>x&&!iaAuditorPickable(x)); if(bad.length){ alert(`${bad.map(x=>iaAudName(x.id)+(x.username?'':` (external — missing on the register: ${iaExtMissing(x).join(', ')})`)).join(', ')} cannot be assigned — internal auditors are the Managing Director, Quality Manager or Technical Manager, or an external auditor whose company, qualification and independence declaration are on the register.`); return; } }
   const now=new Date().toISOString(); const old=id?iaGet(id):null; let no='';
   if(old&&old.notice&&old.date!==date){ alert('The notice was already issued — use "Change date" on the audit so the change is recorded.'); return; }
   try{ await _iaStore.patch(arr=>{ let x=id&&arr.find(y=>y.id===id);
@@ -21631,6 +21825,9 @@ function openIa(id){ const a=iaGet(id); if(!a) return; const st=iaStatus(a); con
       <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;"><button class="btn btn-outline btn-sm" onclick="iaSaveAttendance('${a.id}')">💾 Save attendance</button>${att.opening?.date?`<button class="btn btn-outline btn-sm" onclick="f003Pdf('${a.id}')">📄 F003</button>`:''}</div>`)}
     ${sec('3 · Checklist (F004) and findings (F005)',`<div style="font-size:12.5px;">${Object.values(a.checklist||{}).filter(x=>x&&x.c).length} item(s) assessed · ${Object.values(a.checklist||{}).filter(x=>x&&x.c==='N').length} not complying · ${N.length} F005 raised (${N.filter(n=>!iaObs(n)).length} NC, ${N.filter(iaObs).length} observation)</div>
       ${N.map(n=>`<div style="font-size:12px;"><a href="javascript:void(0)" onclick="f027Close();openNcrDetail('${n.id}')">${v(n.ncNo)}</a> · Cat ${v(n.category||'—')} · ${v(n.clause||'')} · ${n.status==='Closed'?'✅ closed':v(n.status)}</div>`).join('')}
+      ${iaAuditExt(a)?`<div style="font-size:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin-top:6px;"><b>External auditor:</b> ${[a.lead,...(a.auditors||[])].filter(iaIsExt).map(x=>v(iaAudName(x))+(iaGet(x)?.org?' ('+v(iaGet(x).org)+')':'')).join(', ')} — the QM records the findings here from the auditor's signed checklist.
+        <div style="margin-top:4px;">${(a.signedChecklists||[]).map(f=>`📎 <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(f.url)}')">${v(f.name||'signed checklist')}</a> <span style="color:var(--text-muted);">· ${v(staffNameOf(f.by))} ${qmsDate(f.at)}</span>`).join('<br>')||'<span style="color:#b45309;">Signed checklist not attached yet.</span>'}</div>
+        ${iaCanApprove()?`<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap;"><input type="file" id="ia-sc-f" accept=".pdf,image/*" multiple style="font-size:12px;max-width:260px;"/><button class="btn btn-outline btn-sm" onclick="iaSignedChecklistAdd('${a.id}')">📎 Attach signed checklist</button></div>`:''}</div>`:''}
       <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="iaChecklistOpen('${a.id}')">📝 Open checklist</button><button class="btn btn-outline btn-sm" onclick="f004Pdf('${a.id}')">📄 F004</button></div>`)}
     ${sec('4 · Summary report (F006)',`${a.report?.submitted?`<div style="font-size:12.5px;">Submitted by ${v(staffNameOf(a.report.submitted.by))} on ${qmsDate(a.report.submitted.at)}${a.report.compiled?` · compiled by ${v(staffNameOf(a.report.compiled.by))} on ${qmsDate(a.report.compiled.at)}`:' · waiting for the TM to compile'}.</div>`:''}
       <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;">${!a.report?.compiled?`<button class="btn btn-primary btn-sm" onclick="iaReportOpen('${a.id}')">📝 ${a.report?'Edit':'Write'} report</button>`:''}${a.report?.submitted&&!a.report.compiled&&tm?`<button class="btn btn-success btn-sm" onclick="iaCompile('${a.id}')">✅ Compiled (TM)</button>`:''}${a.report?`<button class="btn btn-outline btn-sm" onclick="f006Pdf('${a.id}')">📄 F006</button>`:''}</div>`)}
@@ -21657,6 +21854,11 @@ async function iaSaveAttendance(id){ const a=iaGet(id); const od=el('ia-od').val
   if(await iaPatch(id,(x,now)=>{ x.attendance=x.attendance||{}; x.attendance.purpose=(el('ia-purp').value||'').trim(); if(od) x.attendance.opening={date:od,present:op}; else delete x.attendance.opening; if(cd) x.attendance.closing={date:cd,present:cp}; else delete x.attendance.closing; (x.history=x.history||[]).push({at:now,by:currentUser,action:'Attendance updated'}); })) { showToast('Saved — attendees confirm in the LIMS','success',2500); openIa(id); } }
 async function iaConfirm(id,k){ const a=iaGet(id); if(!a) return; { const d=a.attendance?.[k]?.date; if(!d||d>toLocalDateStr(new Date())){ alert(`The ${k} meeting${d?' is on '+qmsDate(d):' has no date yet'} — attendance can be confirmed once it has been held.`); return; } } if(!confirm(`Confirm that you attended the ${k} meeting of internal audit ${a.no} on ${qmsDate(a.attendance?.[k]?.date)}? Your saved signature goes on the attendance list (F003).`)) return;
   if(await iaPatch(id,(x,now)=>{ x.attendance=x.attendance||{}; x.attendance.confirms=x.attendance.confirms||{}; x.attendance.confirms[currentUser]={...(x.attendance.confirms[currentUser]||{}),[k]:now}; })) { showToast('✅ Attendance confirmed','success',2000); if(typeof renderDashboard==='function') renderDashboard(); } }
+// an external auditor has no login: the QM records the findings from the auditor's signed checklist, attached to the audit (F004 / F006 then say "signed checklist attached")
+function iaAuditExt(a){ return !!a&&[a.lead,...(a.auditors||[])].filter(Boolean).some(iaIsExt); }
+async function iaSignedChecklistAdd(id){ if(!iaCanApprove()){ alert('The Quality Manager attaches the signed checklist.'); return; } const a=iaGet(id); if(!a) return; const files=[...((el('ia-sc-f')&&el('ia-sc-f').files)||[])]; if(!files.length){ alert('Choose the scanned signed checklist (PDF or photos).'); return; }
+  const up=[]; for(const f of files){ const url=await prUpload(f,'qms/auditors/'+String(a.no||a.id).replace(/[^A-Za-z0-9_-]/g,'_')); if(!url){ alert(`${f.name} could not be uploaded — nothing was saved.`); return; } up.push({url,name:f.name,by:currentUser,at:new Date().toISOString()}); }
+  if(await iaPatch(id,(x,now)=>{ x.signedChecklists=[...(x.signedChecklists||[]),...up]; (x.history=x.history||[]).push({at:now,by:currentUser,action:`Signed checklist of the external auditor attached (${up.map(f=>f.name).join(', ')})`}); },`Internal audit ${escapeHtml(a.no)}: external auditor's signed checklist attached`)){ showToast('📎 Signed checklist attached','success',2500); openIa(id); } }
 // checklist
 let _iaAll=false;
 function iaChecklistOpen(id){ const a=iaGet(id); const R=iaRows(); const C=a.checklist||{}; const cl=new Set(a.clauses||[]); const N=iaNcs(a);
@@ -24450,7 +24652,8 @@ async function viewJobDetail(jobNo){
         ${r('Assigned To',it.assignedTo?USERS[it.assignedTo]?.name||it.assignedTo:'Unassigned')}
         ${it.certNo?r('Certificate No.',it.certNo):''}
       </table>
-      ${it.remarks?`<div style="margin-top:8px;padding:8px 10px;background:#fff;border-radius:6px;font-size:12px;"><strong>Remarks:</strong> ${escapeHtml(it.remarks)}</div>`:''}`;
+      ${it.remarks?`<div style="margin-top:8px;padding:8px 10px;background:#fff;border-radius:6px;font-size:12px;"><strong>Remarks:</strong> ${escapeHtml(it.remarks)}</div>`:''}
+      ${it.outsourceVendorId||it.outsourceApproval?`<div style="margin-top:8px;padding:6px 10px;background:#fff;border-radius:6px;">${osaSummaryHtml(j,idx,{wide:true}).replace(/onclick="openOsaRecord/g,'onclick="closeModal(\'modal-view-job\');openOsaRecord').replace('font-size:10.5px','font-size:12px')}</div>`:''}`;
     if(it.calData){
       block+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
         <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:4px;">🔬 Calibration Data</div>
@@ -24494,6 +24697,7 @@ async function viewJobDetail(jobNo){
       ${r('Email',j.email)}${r('PO No.',j.po)}
       ${r('Priority','<span class="badge '+(PB[j.priority]||'badge-slate')+'">'+j.priority+'</span>')}
       ${r('Received',qmsDate(j.receiveDate))}
+      ${r('Status check code',`<span id="jd-check-code">${jobCheckCodeOk(j.checkCode)?`<b style="font-family:monospace;letter-spacing:1px;">${escapeHtml(j.checkCode)}</b>`:`<a href="javascript:void(0)" onclick="showJobCheckCode('${escapeForJsAttr(j.jobNo)}')">show</a>`}</span> <span style="font-size:11px;color:var(--text-muted);">— the customer checks the status online with the job no. + this code (on the receipt)</span>`)}
       ${j.promisedDate?r('Promised Ready',`<strong style="color:${new Date(j.promisedDate+'T00:00:00')<new Date()?'var(--red)':'var(--green)'}">${qmsDate(j.promisedDate)}</strong>`):''}
     </table>
     <div class="form-section-title">🔩 Item${items.length!==1?'s':''} (${items.length})</div>
@@ -24867,7 +25071,7 @@ async function updateJobOnce(jobNo,fn,fresh){
     if(!j.history.slice(-3).some(h=>/All items completed/.test(h.action||''))) j.history.push({action:jobNotBillable(j)?'✅ All items done — nothing to bill (returned abnormal); hand back to the customer':'✅ All items completed — job ready for billing',by:currentUser,time:now});
     var _completedNow=true;
   }
-  try{ const res=await apiFetch('/api/upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'wl_jobs',id:jobNo,data:j})}); if(res&&res.__v) j.__v=res.__v; }
+  try{ const res=await apiFetch('/api/upsert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'wl_jobs',id:jobNo,data:j})}); if(res&&res.__v) j.__v=res.__v; if(res&&res.checkCode) j.checkCode=res.checkCode; }
   catch(e){ if(/\(409\)/.test(String(e&&e.message))) return 'conflict'; return e; }
   if(typeof _completedNow!=='undefined'&&_completedNow) setTimeout(()=>{ syncTrackerFromJobs(jobNo,`Job ${jobNo} completed`); try{ addAudit('✅',`Job <strong>${jobNo}</strong> fully completed`); }catch(e){} },0); // only once the save has landed
   cacheFullJob(j);
@@ -25455,6 +25659,32 @@ function dashTimeAgo(iso){
   return fmtDateShort(iso);
 }
 // Every number here counts ITEMS (one calibration / one certificate each), so they all agree.
+// KPI tiles for the non-lab roles (null = the lab tiles). Each tile opens the page where the work is done.
+function dashRoleKpis(kpi){ const r=getUserRole(currentUser); const today=toLocalDateStr(new Date()), ym=today.slice(0,7); const A=v=>Array.isArray(v)?v:[];
+  try{
+  if(r==='HR'){ const pl=A(typeof _leaveRecords!=='undefined'?_leaveRecords:[]).filter(x=>x&&x.status==='Pending').length, pc=A(typeof _claims!=='undefined'?_claims:[]).filter(x=>x&&x.status==='Pending').length, po=A(typeof _overtime!=='undefined'?_overtime:[]).filter(x=>x&&x.status==='Pending').length;
+    const run=typeof payRunOf==='function'?payRunOf(ym):null; const st=run?run.status:'Not started'; const pd=typeof payLastWorkingDay==='function'?payLastWorkingDay(ym):'';
+    const mn=new Date().toLocaleDateString('en-GB',{month:'long'});
+    const pay=`<button class="dash-kpi${st==='Paid'?' zero':''}" style="--k:#0f766e;" onclick="_payMonth='${ym}';_payTab='run';showView('payroll')"><div class="dash-kpi-label">Payroll — ${mn}</div><div class="dash-kpi-num" style="font-size:22px;">${escapeHtml(st)}</div><div class="dash-kpi-sub">${st==='Paid'?'paid':'pay day '+(pd?fmtDateShort(pd):'end of month')}</div></button>`;
+    return kpi('Pending leave',pl,'leave requests waiting for a decision','#d97706',"showView('leave')")+kpi('Pending claims',pc,'claims waiting for a decision','#2563eb',"showView('claims')")+kpi('Pending overtime',po,'overtime claims waiting for a decision','#7c3aed',"showView('attendance')")+pay; }
+  if(r==='Receptionist'){ const T=A(typeof _trips!=='undefined'?_trips:[]); const J=A(_jobs).filter(j=>j&&j.status!=='Deleted');
+    const qs=A(typeof _quotationsV2!=='undefined'?_quotationsV2:[]).filter(q=>q.status==='Accepted'&&typeof qtUnreceived==='function'&&qtUnreceived(q).some(x=>!(typeof rcpLoggedUnits==='function'&&rcpLoggedUnits(q.id).has(x.i+':'+x.u))));
+    const come=T.filter(t=>['pickup','from-vendor'].includes(t.kind)&&((t.status==='Planned'&&t.date===today)||(t.status==='Done'&&!t.logged))).length+qs.length;
+    const waiting=J.reduce((n,j)=>n+(j.items||[]).filter(it=>typeof rackOf==='function'&&rackOf(j,it)==='incoming').length,0);
+    const ready=typeof rcpReadyJobs==='function'?rcpReadyJobs().length:0;
+    const trips=T.filter(t=>['pickup','deliver','from-vendor','to-vendor','other'].includes(t.kind||'other')&&((t.status==='Planned'&&t.date===today)||t.status==='Requested')).length;
+    return kpi('To receive today',come,'customer items expected / brought back','#2563eb',"_rcpTab='move';showView('reception')")+kpi('Waiting at reception',waiting,'items on the incoming rack','#d97706',"_rcpTab='move';showView('reception')")
+      +kpi('Ready for collection',ready,'finished jobs to hand over','#16a34a',"_rcpTab='move';showView('reception')")+kpi('Deliveries / pick-ups',trips,'trips today or to plan','#7c3aed',"_rcpTab='trips';showView('reception')"); }
+  if(r==='Driver'){ const T=A(typeof _trips!=='undefined'?_trips:[]).filter(t=>t.driver===currentUser);
+    const td=T.filter(t=>t.status==='Planned'&&t.date&&t.date<=today).length, done=T.filter(t=>t.status==='Done'&&String(t.done?.at||'').slice(0,10)===today).length, next=T.filter(t=>t.status==='Planned'&&t.date>today).length;
+    return kpi("Today's trips",td,'to do today','#2563eb',"showView('trips')")+kpi('Done today',done,'trips completed','#16a34a',"showView('trips')")+kpi('Coming up',next,'trips planned for later days','#64748b',"showView('trips')"); }
+  if(r==='Sales'){ const Q=A(typeof _quotationsV2!=='undefined'?_quotationsV2:[]), E=A(typeof _salesTracker!=='undefined'?_salesTracker:[]);
+    const open=Q.filter(q=>['Draft','Sent'].includes(q.status)).length, wait=Q.filter(q=>q.status==='Sent').length, fu=Q.filter(q=>typeof qtNeedsFollowUp==='function'&&qtNeedsFollowUp(q)).length;
+    const enq=E.filter(e=>e&&e.type==='sales'&&!e.lostAt&&['Enquiry Received','Pending Technical Review','Checking External Capability'].includes(e.status)&&!e.linkedQuotationId).length;
+    return kpi('Open quotations',open,'drafts and sent, not decided','#2563eb',"showView('quotations-v2')")+kpi('Waiting for PO',wait,fu?`sent — ${fu} due a follow-up`:'sent, no PO yet','#d97706',"showView('quotations-v2')")
+      +kpi('Enquiries to follow up',enq,'not quoted yet','#7c3aed',"_stTab='open';showView('sales-tracker')"); }
+  }catch(e){ console.warn('dashRoleKpis',e); }
+  return null; }
 function renderDashboard(){
   try{
   if(typeof renderNeedsAttention==='function') renderNeedsAttention();
@@ -25475,7 +25705,9 @@ function renderDashboard(){
   const monthName=new Date().toLocaleDateString('en-GB',{month:'long'});
   const kpi=(label,n,sub,color,onclick)=>`<button class="dash-kpi${n?'':' zero'}" style="--k:${color};" onclick="${onclick}"><div class="dash-kpi-label">${label}</div><div class="dash-kpi-num">${n}</div><div class="dash-kpi-sub">${sub}</div></button>`;
   const grid=el('dash-stats-grid');
-  if(grid) grid.innerHTML=
+  const roleKpis=dashRoleKpis(kpi); // HR / Receptionist / Driver / Sales get the tiles for their own work; the lab roles keep the lab tiles
+  if(grid&&roleKpis!==null) grid.innerHTML=roleKpis;
+  else if(grid) grid.innerHTML=
       kpi('Waiting to assign',unassigned,'items not yet assigned','#d97706',"dashOpenStatus('Unassigned')")
      +kpi('In progress',inprog,'items being calibrated','#2563eb',"dashOpenStatus('In Progress')")
      +kpi('Awaiting approval',approval,'certificates to approve','#7c3aed',"dashOpenStatus('Pending Approval')")
@@ -25750,6 +25982,7 @@ function previewCertPage1(){
     calibrated_by:el('cal-calibrated-by').value||'—'
   };
   el('cert-preview-body').innerHTML=buildCertPage1HTML(cd,s);
+  { const nb=el('cert-preview-notice'); if(nb){ const it0=getJob(calJobNo)?.items?.[calItemIdx]; nb.innerHTML=it0?certP1Html(certP1Problems({...it0,calData:cd},getJob(calJobNo)),'warn').replace('margin:0 0 10px','margin:10px 0 0'):''; } }
   openModal('modal-cert-preview');
 }
 async function printCertificate(){
@@ -26071,6 +26304,56 @@ function buildCertPage1HTML(cd,s){
 }
 
 
+// Certificate page 1 overflow check (Jay, 27 Oct 2026 — decision 11). certPage1Overflow(item, job) lays page 1 out exactly as
+// buildCertPage1HTML does (same HTML, same fonts, off screen) and returns the list of page-1 fields that do not fit their place:
+// [] when everything fits, otherwise [{field, label, msg, max}] — msg is the text to show the signatory / engineer, max the most
+// characters that fit (when that applies). item: the job item (its calData is what is printed — pass a copy with draft / amendment
+// changes merged in); job: the job (for the job number). The certificate layout itself is not changed. Synchronous; for an exact
+// result with the uploaded certificate font, await certFontReady() once before calling.
+function certPage1Overflow(item,job){
+  const cd={...((item&&item.calData)||(job&&job.calData)||{})}; if(!cd.job_no&&job) cd.job_no=job.jobNo||'';
+  const box=document.createElement('div'); box.style.cssText='position:fixed;left:-30000px;top:0;width:210mm;visibility:hidden;pointer-events:none;';
+  box.innerHTML=buildCertPage1HTML(cd,_settings||{}); document.body.appendChild(box);
+  const out=[];
+  try{
+    const root=box.querySelector('.wlcert'); if(!root) return out; const R0=root.getBoundingClientRect(); const PX=4/3;
+    const divAt=(y,x)=>[...root.children].find(d=>d.tagName==='DIV'&&Math.abs(parseFloat(d.style.top)-y)<0.06&&Math.abs(parseFloat(d.style.left)-x)<0.06);
+    const textRects=d=>{ const r=document.createRange(); r.selectNodeContents(d); return [...r.getClientRects()].filter(q=>q.width>0.5); };
+    const natW=d=>{ const ws=d.style.whiteSpace, w=d.style.width, rt=d.style.right; d.style.whiteSpace='nowrap'; d.style.width='auto'; d.style.right='auto'; const rs=textRects(d); const v=rs.length?(Math.max(...rs.map(q=>q.right))-Math.min(...rs.map(q=>q.left)))/PX:0; d.style.whiteSpace=ws; d.style.width=w; d.style.right=rt; return v; };
+    const len=d=>(d.textContent||'').replace(/\s+/g,' ').trim().length;
+    const maxCh=(d,avail)=>{ const n=len(d), w=natW(d); return w>0?Math.max(1,Math.floor(n*avail/w)):n; };
+    const add=(field,label,where,max,extra)=>out.push({field,label,max,msg:extra||`${label} too long for the certificate — shorten it ${where}${max?` (max ${max} characters)`:''}`});
+    // one-line values after a label (wrap inside 171 pt … page right − 40 pt: a second line would run into the next row)
+    const ROWS=[[252.2,'eq_name','Equipment name','in the job item'],[264.4,'brand','Brand / manufacturer','in the job item'],[276.7,'model','Model / type','in the job item'],
+      [288.9,'serial','Serial number','in the job item'],[301.2,'tag_no','Tag number','in the job item'],[313.4,'range','Range / capacity','on the calibration form'],
+      [325.6,'resolution','Resolution / readability','on the calibration form'],[435.8,'cond_before','Condition before calibration','on the calibration form'],
+      [448.0,'cond_after','Condition after calibration (with its remark)','on the calibration form'],[484.8,'location','Location of calibration','on the calibration form'],
+      [497.0,'procedure','Calibration procedure','on the calibration form'],[509.2,'sticker_no','Calibration sticker no.','on the calibration form'],
+      [546.0,'temp','Temperature','on the calibration form'],[558.2,'humidity','Relative humidity','on the calibration form'],[570.4,'pressure','Atmospheric pressure','on the calibration form']];
+    ROWS.forEach(([y,f,label,where])=>{ const d=divAt(y,171); if(!d) return; const tops=new Set(textRects(d).map(q=>Math.round(q.top))); if(tops.size>1) add(f,label,where,maxCh(d,(R0.width/PX)-40-171)); });
+    // values that stay on one line: they must end before the next column
+    const ONE=[[117.6,157.8,'job_no','Job number','in the job',313.2],[142.0,157.8,'issue_date','Date of issue','on the calibration form',313.2],[166.5,157.8,'issued_to','Customer name (Issued To)','in the job',313.2],
+      [117.6,408.6,'cert_no','Certificate number','',572],[142.0,408.6,'page','Page','',572],[166.5,408.6,'lab_name','Laboratory name','in Settings → Company Information',572]];
+    ONE.forEach(([y,x,f,label,where,lim])=>{ const d=divAt(y,x); if(!d) return; const w=natW(d); if(x+w>lim+0.5) add(f,label,where,maxCh(d,lim-x)); });
+    // the customer's address (Issued To): up to 5 lines, each ending before the "Issued By" column; the laboratory address likewise
+    const custL=(typeof addressLinesPo==='function'?addressLinesPo(cd.cust_addr||''):String(cd.cust_addr||'').split(/\n+/)).map(x=>String(x).trim()).filter(Boolean);
+    if(custL.length>5) add('cust_addr','Customer address','in the job',0,`Customer address too long for the certificate — it takes ${custL.length} lines and page 1 has room for 5; shorten it in the job`);
+    for(let i=0;i<Math.min(5,custL.length);i++){ const d=divAt(+(166.5+12.2*(i+1)).toFixed(1),157.8); if(!d) continue; const w=natW(d); if(157.8+w>313.7) add('cust_addr',`Customer address line ${i+1}`,'in the job',maxCh(d,313.2-157.8),`Customer address line ${i+1} too long for the certificate — shorten it in the job (max ${maxCh(d,313.2-157.8)} characters a line, 5 lines)`); }
+    for(let i=0;i<5;i++){ const d=divAt(+(166.5+12.2*(i+1)).toFixed(1),408.6); if(!d) continue; const w=natW(d); if(408.6+w>572.5) add('lab_addr',`Laboratory address line ${i+1}`,'in Settings → Company Information',maxCh(d,572-408.6)); }
+    // remark (amendment / deviation): must end before "Ambient Condition during Calibration"
+    { const d=divAt(521.6,71.9); if(d){ const b=(d.getBoundingClientRect().bottom-R0.top)/PX; if(b>533.7-0.3){ const h=(d.getBoundingClientRect().height)/PX, n=len(d); add('remark','Remark (amendment / deviation text)','',Math.floor(n*(533.7-521.6)/Math.max(h,1)*0.95),`Remark on page 1 (amendment / deviation text) too long for the certificate — shorten the amendment or deviation text (max about ${Math.floor(n*(533.7-521.6)/Math.max(h,1)*0.95)} characters in all)`); } } }
+    // metrological traceability: each value on one line in its column, and the rows must end above the traceability remark
+    { const tb=root.querySelector('table'); if(tb){ const heads=['Reference instrument','Serial no.','Certificate no.','Source of traceability','Calibration due date'];
+      const b=(tb.getBoundingClientRect().bottom-R0.top)/PX, room=Math.floor((703.2-619.45)/12.2);
+      if(b>703.2-0.3){ const wrapped=[]; [...tb.rows].forEach((tr,ri)=>{ [...tr.cells].filter((c,ci)=>ci%2===0).forEach((c,k)=>{ if(new Set(textRects(c).map(q=>Math.round(q.top))).size>1) wrapped.push({ri,k,max:maxCh(c,c.getBoundingClientRect().width/PX)}); }); });
+        if(tb.rows.length>room) add('traceRows','Metrological traceability table','',0,`Too many reference instruments for page 1 — the traceability table has room for ${room} rows (${tb.rows.length} given); list fewer reference instruments`);
+        else add('traceRows','Metrological traceability table','',wrapped.length?Math.min(...wrapped.map(w=>w.max)):0,`Traceability table too tall for page 1 — ${wrapped.length?wrapped.map(w=>`row ${w.ri+1} ${heads[w.k]} (max ${w.max} characters)`).join(', ')+' take two lines; shorten them in the reference equipment record':'shorten the reference instrument details'}`); } } }
+    // the names under the signatures (centred on the signature line)
+    [[123.1,228.8,'calibrated_by','Name under "Calibrated By"'],[400.3,506.0,'approved_by','Name under "Approved By"']].forEach(([x1,x2,f,label])=>{ const d=divAt(753.1,x1); if(!d) return; const w=natW(d); if(w>x2-x1+0.5) add(f,label,'',maxCh(d,x2-x1),`${label} too long for the certificate — use a shorter certificate name in Personnel (max ${maxCh(d,x2-x1)} characters)`); });
+  }catch(e){ console.warn('certPage1Overflow',e); }
+  finally{ box.remove(); }
+  return out;
+}
 // ── UPDATED APPROVAL MODAL ──
 // (replaces openApproveModal to show cert page 1 details + download link)
 function exportMasterlistExcel(){
@@ -27225,6 +27508,7 @@ async function showCertFromJob(jobNo){
 
 function openAddCustomerModal(){
   if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'warn',4000); return; }
+  custApplyRoleLock(false);
   _custModalContext='main';
   const titleEl=document.getElementById('customer-modal-title');
   if(titleEl) titleEl.textContent='🏢 Add Customer';
@@ -27252,7 +27536,7 @@ function checkCustTypeConflict(){
 }
 
 async function openEditCustomerModal(custId){
-  if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'warn',4000); return; }
+  if(!canEditCustomerContact()){ showToast(CUST_EDIT_MSG,'warn',4000); return; }
   // open on the LATEST saved copy (the list may be stale), so the "what changed" snapshot below matches the server
   try{ const f=await SB.get(CUST_TABLE,custId); if(f&&typeof f==='object'&&!Array.isArray(f)&&f.id===custId){ delete f.__v; const i=_customers.findIndex(x=>x.id===custId); if(i>-1) _customers[i]=f; else _customers.push(f); } }catch(e){}
   const c=_customers.find(x=>x.id===custId); if(!c)return;
@@ -27279,8 +27563,16 @@ async function openEditCustomerModal(custId){
   el('cust-payment-terms').value=c.paymentTerms||'credit'; el('cust-payment-terms').disabled=!canSetPaymentTerms(); el('cust-payment-terms').title=canSetPaymentTerms()?'':'Set by Admin / MD / Coordinator after the customer evaluation';
   el('cust-notes').value=c.notes||'';
   try{ _custOpened={id:custId,v:JSON.parse(JSON.stringify(custFormRead()))}; }catch(e){ _custOpened=null; }
+  custApplyRoleLock(!canEditCustomers());
   openModal('modal-add-customer');
 }
+// partial edit (Receptionist): everything except attention / address / tel / mobile is read-only; the full form for the office roles
+function custApplyRoleLock(partial){ const m=el('modal-add-customer'); if(!m) return; const ok=['cust-attention','cust-address','cust-tel','cust-mobile'];
+  m.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea, .modal-body button, #cust-contacts input, #cust-sites button').forEach(x=>{ if(ok.includes(x.id)) { x.disabled=false; return; }
+    if(partial){ if(!x.dataset.rlk){ x.dataset.rlk=x.disabled?'1':'0'; } x.disabled=true; if(x.classList.contains('form-control')) x.style.background='#f1f5f9'; } else if(x.dataset.rlk!=null){ x.disabled=x.dataset.rlk==='1'; delete x.dataset.rlk; if(x.classList.contains('form-control')) x.style.background=''; } });
+  if(!partial){ const pt=el('cust-payment-terms'); if(pt) pt.disabled=!canSetPaymentTerms(); }
+  let n=el('cust-recep-note'); if(!n){ const host=el('cust-company')?.closest('.form-group'); if(host){ n=document.createElement('div'); n.id='cust-recep-note'; n.style.cssText='font-size:12px;color:#1e40af;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:6px 10px;margin-bottom:8px;'; host.parentElement.insertBefore(n,host); } }
+  if(n){ n.style.display=partial?'block':'none'; n.textContent='As Receptionist you can update the address, phone numbers and attention / contact person. The name, email, payment terms and other details are changed by the office (Coordinator / Sales).'; } }
 
 // what the customer form holds (also taken when the edit form opens, so a save writes only the fields this user changed)
 let _custOpened=null;
@@ -27293,7 +27585,7 @@ function custFormRead(){ const t=id=>(el(id)?.value||'').trim(), types=[];
     attention:t('cust-attention'), address:t('cust-address'), tel:t('cust-tel'), mobile:t('cust-mobile'), fax:t('cust-fax'), tin:t('cust-tin'), brn:t('cust-brn'), email:t('cust-email'),
     contacts:custReadContacts(), paymentTerms:el('cust-payment-terms')?.value||'', notes:t('cust-notes') }; }
 async function saveCustomer(){
-  if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'error',4000); return; }
+  if(!canEditCustomers()){ if(canEditCustomerContact()&&(document.getElementById('cust-edit-id')?.value||'')) return saveCustomerContact(); showToast(CUST_EDIT_MSG,'error',4000); return; }
   const saveBtn=document.querySelector('#modal-add-customer .btn-primary');
   const saveBtnText=saveBtn?saveBtn.textContent:'';
   if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Saving…';}
@@ -27377,6 +27669,16 @@ async function saveCustomer(){
   }
 }
 
+// Receptionist save: only attention / address / tel / mobile that changed since the form opened
+async function saveCustomerContact(){ const id=document.getElementById('cust-edit-id')?.value||''; if(!id) return; const c0=(_customers||[]).find(x=>x.id===id);
+  const fv=custFormRead(); const op=(_custOpened&&_custOpened.id===id)?_custOpened.v:null; const chg=CUST_RECEP_FIELDS.filter(k=>!op||String(fv[k]||'')!==String(op[k]||''));
+  if(!chg.length){ closeModal('modal-add-customer'); return; }
+  const saveBtn=document.querySelector('#modal-add-customer .btn-primary'); const t0=saveBtn?saveBtn.textContent:''; if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='⏳ Saving…'; }
+  try{ const saved=await updateCustomer(id,x=>{ chg.forEach(k=>{ x[k]=fv[k]; }); x.id=id; }); const i=_customers.findIndex(x=>x.id===id); if(i>=0) _customers[i]=saved||{...(_customers[i]||{}),...Object.fromEntries(chg.map(k=>[k,fv[k]]))};
+    closeModal('modal-add-customer'); renderCustomerTable(); showToast(`✅ ${c0?.company||'Customer'} — ${chg.map(k=>({attention:'attention',address:'address',tel:'tel',mobile:'mobile'})[k]).join(', ')} updated`,'success',3000);
+    addAudit('🏢',`Customer <strong>${escapeHtml(c0?.company||id)}</strong> contact details updated (${chg.join(', ')})`); }
+  catch(e){ showToast('❌ Save failed: '+e.message,'error',6000); }
+  finally{ if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent=t0; } } }
 async function deleteCustomer(custId){
   try{
   if(!isAdmin(currentUser)){showToast('❌ Only Admin/MD can delete a customer record.','error',4000);return;}
@@ -27437,7 +27739,7 @@ function renderCustomerTable(){
       <td><span class="badge badge-blue">${jobCount} job${jobCount!==1?'s':''}</span></td>
       <td style="white-space:nowrap;">
         <button class="btn btn-outline btn-sm" onclick="viewCustomerDetail('${c.id}')">👁 View</button>
-        ${canEditCustomers()?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditCustomerModal('${c.id}')">✏️</button>`:''}
+        ${canEditCustomerContact()?`<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="openEditCustomerModal('${c.id}')" title="${canEditCustomers()?'Edit customer':'Update address / phone / attention'}">✏️</button>`:''}
         ${isAdmin(currentUser)?`<button class="btn btn-danger btn-sm" style="margin-left:4px;" onclick="deleteCustomer('${c.id}')">🗑</button>`:''}
       </td>
     </tr>`;
@@ -29311,6 +29613,7 @@ function hideCustBadge(){
 
 function prefillNewCustomerModal(name, context='main'){
   if(!canEditCustomers()){ showToast(CUST_EDIT_MSG,'warn',4000); return; }
+  custApplyRoleLock(false);
   el('customer-suggestions').style.display='none';
   el('end-user-suggestions')?.style.setProperty('display','none');
   _custModalContext=context;
@@ -30268,7 +30571,7 @@ async function prepareDeliveryOrder(jobNo){
   try{ await exportDeliveryOrderPdf(jobNo); }catch(e){ console.warn('DO pdf',e); }
 }
 async function exportDeliveryOrderPdf(jobNo){
-  const j=getJob(jobNo); if(!j||!j.doNumber){alert('No Delivery Order has been prepared for this job yet.');return;}
+  const j=docCustLatest(getJob(jobNo)); if(!j||!j.doNumber){alert('No Delivery Order has been prepared for this job yet.');return;}
   // Same layout as the supplier DO (D/ORDER template): letterhead, bracketed address, ref table, item code / identity lines
   const esc=v=>escapeHtml(v==null?'':String(v));
   const cust=(_customers||[]).find(x=>x.id===j.custId)||(_customers||[]).find(x=>(x.company||x.name)===j.custName)||{};
@@ -30497,7 +30800,7 @@ function renderInvoicesPage(){
   box.innerHTML=customerCreditsHtml()+list.map(inv=>`<div class="card" style="padding:14px 16px;margin-bottom:10px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px 12px;flex-wrap:wrap;">
       <div style="flex:1 1 240px;min-width:0;">
-        <div style="font-weight:700;font-size:13px;">${inv.invoiceNo} — ${escapeHtml(inv.custName)}</div>
+        <div style="font-weight:700;font-size:13px;">${inv.invoiceNo} — ${escapeHtml(inv.custName)}</div>${(()=>{ const f=custChangedSinceInvoice(inv); return f.length?custChangedNoticeHtml(f,'invoice').replace('margin:0','margin:4px 0 0'):''; })()}
         <div style="font-size:11.5px;color:${inv.sentAt||invCancelled(inv)?'var(--green)':'#b45309'};margin-top:2px;">${invCancelled(inv)?'':inv.sentAt?`✉️ Invoice emailed ${fmtDateShort(inv.sentAt)}`:(inv.paymentStatus==='Paid'||String(inv.createdAt||'')<'2026-10-07')?'':'✉️ Invoice not emailed to the customer yet'}</div>
         <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Job ${invJobs(inv).join(' + ')} · RM ${Number(inv.totalAmount||0).toFixed(2)}${inv.amountPaid>0?` (RM ${Number(inv.amountPaid||0).toFixed(2)} paid)`:''} · Due ${fmtDateShort(inv.dueDate)}</div>
         ${invLiveCns(inv).map(n=>`<div style="font-size:11px;color:#15803d;margin-top:2px;">🧾 Credit note ${escapeHtml(n.cnNo)} — RM ${n.amount.toFixed(2)} (${escapeHtml(n.reason)}) · ${fmtDateShort(n.date)} <a href="javascript:void(0)" onclick="exportCreditNotePdf('${inv.id}','${escapeForJsAttr(n.cnNo)}')">PDF</a>${isAdmin(currentUser)&&n.toCredit>0.004&&!n.creditId?` · <a href="javascript:void(0)" style="color:#b45309;font-weight:700;" onclick="retryCnCredit('${inv.id}','${escapeForJsAttr(n.cnNo)}')">⚠️ add the RM ${n.toCredit.toFixed(2)} credit</a>`:''}${isAdmin(currentUser)?` · <a href="javascript:void(0)" style="color:#b42318;" onclick="cancelCreditNote('${inv.id}','${escapeForJsAttr(n.cnNo)}')">cancel</a>`:''}</div>`).join('')}
@@ -32565,7 +32868,7 @@ function filterAuditLog(){
 // ── JOB STATUS LOOKUP ──
 function openStatusLookup(){
   el('status-lookup-screen').style.display='flex';
-  el('lookup-job-input').value='';
+  el('lookup-job-input').value=''; if(el('lookup-code-input')) el('lookup-code-input').value='';
   el('lookup-result').style.display='none';
   const lln=el('lookup-lab-name');
   if(lln) lln.textContent=_settings.labName||'Westlab (M) Sdn. Bhd.';
@@ -32575,18 +32878,21 @@ function closeStatusLookup(){
 }
 async function lookupJob(){
   const raw=el('lookup-job-input').value.trim().toUpperCase();
+  const code=String(el('lookup-code-input')?.value||'').trim().toUpperCase().replace(/[\s-]/g,'');
   if(!raw){return;}
+  if(!_authToken&&!code){ const res0=el('lookup-result'); res0.style.display='block'; res0.innerHTML='<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px;text-align:center;font-size:13px;color:#92400e;">Enter the check code printed next to the job number on your receipt.</div>'; return; }
   // Signed in: from memory (exact, then partial). Customers (not signed in): the public status endpoint,
   // which only returns what this page shows.
   let j=(_jobs||[]).find(x=>x.jobNo.toUpperCase()===raw)||(_jobs||[]).find(x=>x.jobNo.toUpperCase().includes(raw));
-  if(!j&&!_authToken){ try{ const r=await fetch(API+'/api/public/job-status?jobNo='+encodeURIComponent(raw),{cache:'no-store'}); const d=r.ok?await r.json():null; if(d&&d.found) j=d.job; }catch(e){} }
+  let tooMany=false;
+  if(!j&&!_authToken){ try{ const r=await fetch(API+'/api/public/job-status?jobNo='+encodeURIComponent(raw)+'&code='+encodeURIComponent(code),{cache:'no-store'}); tooMany=r.status===429; const d=r.ok?await r.json():null; if(d&&d.found) j=d.job; }catch(e){} }
   const res=el('lookup-result');
   if(!j||j.status==='Deleted'){
     res.style.display='block';
     res.innerHTML=`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:16px;text-align:center;">
       <div style="font-size:20px;margin-bottom:8px;">❌</div>
       <div style="font-size:14px;font-weight:600;color:#991b1b;">Job not found</div>
-      <div style="font-size:12px;color:#555;margin-top:4px;">Please check the job number on your receipt and try again.</div>
+      <div style="font-size:12px;color:#555;margin-top:4px;">${tooMany?'Too many lookups — please wait 10 minutes and try again.':'Please check the job number and the check code on your receipt and try again.'}</div>
     </div>`;
     return;
   }
@@ -32668,9 +32974,11 @@ el('dash-date').textContent='Week of '+new Date().toLocaleDateString('en-MY',{da
       <div style="font-size:13px;color:#555;margin-top:4px;">Job Status Lookup</div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <input id="lookup-job-input" class="form-control" placeholder="Enter Job Number (e.g. WL26-00001)" style="flex:1;" onkeydown="if(event.key==='Enter')lookupJob()"/>
+      <input id="lookup-job-input" class="form-control" placeholder="Job Number (e.g. WL2600001)" style="flex:2;min-width:0;" onkeydown="if(event.key==='Enter')lookupJob()"/>
+      <input id="lookup-code-input" class="form-control" placeholder="Check code" maxlength="8" autocomplete="off" style="flex:1;min-width:0;text-transform:uppercase;" onkeydown="if(event.key==='Enter')lookupJob()"/>
       <button class="btn btn-primary" onclick="lookupJob()">Search</button>
     </div>
+    <div style="font-size:11.5px;color:#64748b;margin:-4px 0 10px;">Both are printed on your job receipt (or scan its QR code).</div>
     <div id="lookup-result" style="display:none;"></div>
     <div style="text-align:center;margin-top:20px;">
       <button onclick="closeStatusLookup()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:12px;">← Back to login</button>
@@ -34033,8 +34341,14 @@ async function qfExport(pages,{landscape,filename,label,returnBlob,no,v,renumber
 // end, which carry the form's standard header and footer. All pages are then renumbered "x of N".
 function qfSplitText(t){ const out=[]; String(t||'').split(/\n/).forEach(par=>{ let p=par; while(p.length>1400){ let k=p.lastIndexOf('. ',1400); if(k<600) k=p.lastIndexOf(' ',1400); if(k<600) k=1400; out.push(p.slice(0,k+1)); p=p.slice(k+1).replace(/^\s+/,''); } out.push(p); }); return out; }
 function qfFitBottom(doms){ doms.forEach(d=>d.querySelectorAll('[data-qbot]').forEach(e=>{ const hpt=parseFloat(e.style.maxHeight)||0; const used=e.scrollHeight*0.75; if(hpt>used+0.5) e.style.top=(parseFloat(e.style.top)+(hpt-used)*(e.dataset.qbot==='m'?0.5:1)).toFixed(2)+'pt'; })); }
+// A table cell whose value has a word longer than the cell is wide (e.g. a long code): its text is made smaller step by step, not
+// below 8 pt; only if it still cannot fit is the word broken (no hyphen added) — the text never runs over the cell's line.
+function qfCellFit(doms){ doms.forEach(d=>d.querySelectorAll('td[data-qc]').forEach(td=>{ if(td.scrollWidth<=td.clientWidth+1) return;
+  const els=[td,...td.querySelectorAll('*')].filter(e=>e.childNodes.length&&[...e.childNodes].some(n=>n.nodeType===3&&n.textContent.trim()));
+  for(let k=0;k<12&&td.scrollWidth>td.clientWidth+1;k++){ let ch=false; els.forEach(e=>{ const pt=parseFloat(getComputedStyle(e).fontSize)*0.75; if(pt>8.01){ e.style.fontSize=Math.max(8,pt-0.5)+'pt'; ch=true; } }); if(!ch) break; }
+  if(td.scrollWidth>td.clientWidth+1){ td.style.overflowWrap='anywhere'; console.warn('qfCellFit: a word broken to stay inside its cell —',td.textContent.slice(0,60)); } })); }
 async function qfFitPages(pages,{landscape,no,v,renumber}={}){
-  if(!renumber&&!pages.some(h=>String(h).includes('data-qfit'))) return pages;
+  if(!renumber&&!pages.some(h=>String(h).includes('data-qfit')||String(h).includes('data-qc'))) return pages;
   const box=document.createElement('div'); box.style.cssText='position:fixed;left:-40000px;top:0;'; document.body.appendChild(box);
   try{
     const doms=pages.map(h=>{ const d=document.createElement('div'); d.innerHTML=h; box.appendChild(d); return d; });
@@ -34044,47 +34358,62 @@ async function qfFitPages(pages,{landscape,no,v,renumber}={}){
       while(!ok(e)&&sz>mn){ sz=Math.max(mn,+(sz-0.25).toFixed(2)); e.style.fontSize=sz+'pt'; }
       if(!ok(e)&&e.dataset.qalt){ e.textContent=e.dataset.qalt; e.style.whiteSpace='pre-line'; sz=+e.dataset.qs||9; e.style.fontSize=sz+'pt'; while(!ok(e)&&sz>mn){ sz=Math.max(mn,+(sz-0.25).toFixed(2)); e.style.fontSize=sz+'pt'; } } // o.alt: the value written over two lines (e.g. a date "26/10/" "2026") when one line does not fit at 8 pt
       if(!ok(e)) over.push({e,page:pi+1,label:e.dataset.qlab||'',text:e.textContent}); }));
-    if(!over.length){ qfFitBottom(doms); if(renumber){ const N=doms.length; doms.forEach((d,i)=>d.querySelectorAll('[data-qfpg]').forEach(x=>{ x.textContent=`${x.dataset.qfpgpre||''}${i+1} of ${N}`; })); } return doms.map(d=>d.innerHTML); }
+    if(!over.length){ qfCellFit(doms); qfFitBottom(doms); if(renumber){ const N=doms.length; doms.forEach((d,i)=>d.querySelectorAll('[data-qfpg]').forEach(x=>{ x.textContent=`${x.dataset.qfpgpre||''}${i+1} of ${N}`; })); } return doms.map(d=>d.innerHTML); }
     const fv=v||formVersion(no||''), g=landscape?QF_LS:QF_P; const blocks=[];
     const groups=[]; over.forEach(o=>{ const gr=groups.find(x=>x.text===o.text); if(gr) gr.items.push(o); else groups.push({text:o.text,items:[o]}); }); // the same text cut in several places is printed once
     groups.forEach((gr,k)=>{ const pg=[...new Set(gr.items.map(o=>o.page))], labs=[...new Set(gr.items.map(o=>o.label).filter(Boolean))];
       let shown=[], len=0; for(const l of labs){ if(shown.length&&(len+l.length>220||shown.length>=6)) break; shown.push(l); len+=l.length; } const head=`Continued from page${pg.length>1?'s':''} ${pg.join(', ')}${shown.length?' — '+shown.join('; ')+(labs.length>shown.length?` and ${labs.length-shown.length} more`:''):''}`; // a short heading even when many places share the text
-      qfSplitText(gr.text).forEach((t,j)=>blocks.push({mt:j?2:10,html:`${j?'':`<div data-qcont="${k}" style="font:bold 9pt/1.3 ${QF_FONT};margin-bottom:2pt;">${qfE(head)}</div>`}<div style="font:9pt/1.3 ${QF_FONT};white-space:pre-wrap;overflow-wrap:break-word;">${qfE(t)}</div>`})); });
+      qfSplitText(gr.text).forEach((t,j)=>blocks.push({mt:j?2:10,html:`${j?'':`<div data-qcont="${k}" style="font:bold 9pt/1.3 ${QF_FONT};margin-bottom:2pt;">${qfE(head)}</div>`}<div style="font:9pt/1.3 ${QF_FONT};white-space:pre-wrap;overflow-wrap:break-word;">${qfNat(qfE(t))}</div>`})); });
     const extra=await qfFlow({g,no:no||fv.no||'',v:{...fv,contPage:true},blocks});
     extra.forEach((h,i)=>{ (h.match(/data-qcont="\d+"/g)||[]).forEach(m=>{ groups[+m.match(/\d+/)[0]].items.forEach(o=>{ o.cp=pages.length+i+1; }); }); });
     over.forEach(o=>{ const e=o.e, t=o.text, suf=`… (cont. p.${o.cp})`; let pos=[]; t.replace(/\s+/g,(m,i)=>{ pos.push(i); return m; }); pos.push(t.length); if(pos.length<3) pos=Array.from({length:t.length+1},(_,i)=>i);
       let lo=0, hi=pos.length-1, best=-1; while(lo<=hi){ const mid=(lo+hi)>>1; e.textContent=t.slice(0,pos[mid]).replace(/[\s,;:.\-–—]+$/,'')+suf; if(ok(e)){ best=mid; lo=mid+1; } else hi=mid-1; }
       e.textContent=best>=0?t.slice(0,pos[best]).replace(/[\s,;:.\-–—]+$/,'')+suf:`(cont. p.${o.cp})`; });
     extra.forEach(h=>{ const d=document.createElement('div'); d.innerHTML=h; box.appendChild(d); doms.push(d); });
-    qfFitBottom(doms);
+    qfCellFit(doms); qfFitBottom(doms);
     const N=doms.length; doms.forEach((d,i)=>d.querySelectorAll('[data-qfpg]').forEach(x=>{ x.textContent=`${x.dataset.qfpgpre||''}${i+1} of ${N}`; }));
     return doms.map(d=>d.innerHTML);
   }finally{ box.remove(); }
 }
 // one table row (own table, so rows can flow across pages); cells: [html, align]
-function qfRow(xs,cells,{h,font,bg,valign,pad}={}){ return `<table style="width:${(xs[xs.length-1]-xs[0]).toFixed(2)}pt;border-collapse:collapse;table-layout:fixed;${xs[0]!==72?`margin-left:${(xs[0]-72).toFixed(2)}pt;`:''}">${qfCols(xs)}<tr style="height:${h}pt;">${cells.map(c=>{ const [t,al,st]=Array.isArray(c)?c:[c,'left','']; return `<td style="${QF_B}font:${font};text-align:${al};vertical-align:${valign||'middle'};padding:0 ${pad??5.4}pt;${bg?`background:${bg};`:''}word-wrap:break-word;overflow-wrap:anywhere;${st||''}">${t}</td>`; }).join('')}</tr></table>`; }
+// Text stays inside its cell with space from the lines (pad left and right; vpad above and below — default 0 keeps the row heights
+// the original layouts were measured with; grown rows (qfGrowTable) add 1.2 pt) and wraps only between words
+// (or at the natural break points of an e-mail / link / code) — never inside a word (Jay, 27 Oct 2026). lw: line thickness (pt) — the
+// original form's own (0.48 pt on most layouts, 0.5 pt on others); lines are drawn once when the PDF is made (pdfCrispLines).
+function qfRow(xs,cells,{h,font,bg,valign,pad,vpad,lw}={}){ const B=lw?`border:${lw}pt solid #000;`:QF_B;
+  vpad=+(+(vpad||0)).toFixed(2); return `<table style="width:${(xs[xs.length-1]-xs[0]).toFixed(2)}pt;border-collapse:collapse;table-layout:fixed;${xs[0]!==72?`margin-left:${(xs[0]-72).toFixed(2)}pt;`:''}">${qfCols(xs)}<tr style="height:${h}pt;">${cells.map(c=>{ const [t,al,st]=Array.isArray(c)?c:[c,'left','']; return `<td data-qc="1" style="${B}font:${font};text-align:${al};vertical-align:${valign||'middle'};padding:${vpad??0}pt ${pad??5.4}pt;${bg?`background:${bg};`:''}overflow-wrap:normal;word-break:normal;${st||''}">${qfNatHtml(t)}</td>`; }).join('')}</tr></table>`; }
 // The ruled rows of a table on an original form layout, redrawn so that they grow with their values (Jay, 27 Oct 2026: 8 pt minimum —
 // a value that does not fit wraps in its cell and the row grows, up to maxLines lines; only what still does not fit is continued).
 // rows: arrays of cell values (a string, or {html} for e.g. a signature). Returns one overlay per page: a white cover over the form's
 // own fixed rows, then the rows, ruled down to `bottom` with empty rows like the paper form. xs: column edges (page x, pt).
-function qfGrowTable({xs,top,bottom,rows,minH,maxLines=4,size=8,align,label,pad=2}){
+// rows overlap by 0.75 pt (a 0.5 pt line is laid out 1 px = 0.75 pt thick), so each row takes exactly its height and the lines fall
+// on the form's own ruling
+function qfGrowTable({xs,top,bottom,rows,minH,maxLines=4,size=8,align,label,pad=2,lw=0.48}){
   const cw=i=>+(xs[i+1]-xs[i]-2*pad-1).toFixed(2), H=k=>+Math.max(minH,k*size*1.15+2.5).toFixed(2), room=bottom-top+0.5, F=`${size}pt/${(size*1.15).toFixed(2)}pt ${QF_FONT}`;
   const txt=t=>t!=null&&t!==''&&typeof t!=='object';
   const ks=rows.map(c=>{ for(let k=1;k<=maxLines;k++){ if(c.every((t,i)=>!txt(t)||qftFits(String(t),cw(i),H(k)-1.5,size,true))) return k; } return maxLines; });
   const chunks=[[]]; let used=0; rows.forEach((c,i)=>{ const h=H(ks[i]); if(chunks[chunks.length-1].length&&used+h>room){ chunks.push([]); used=0; } chunks[chunks.length-1].push(i); used+=h; });
-  return chunks.map(ch=>{ let u=0; const out=ch.map(i=>{ const h=H(ks[i]); u+=h; return `<div style="margin-top:-0.5pt;">${qfRow(xs,rows[i].map((t,ci)=>{ const al=(align&&align(ci))||'left'; return [t&&typeof t==='object'?(t.html||''):txt(t)?qftTxt(null,null,String(t),{w:cw(ci),h:+(h-1.5).toFixed(2),size,pre:true,center:al==='center',label:label?label(i,ci):''}):'',al]; }),{h,font:F,pad})}</div>`; });
-    while(u+minH<=room){ out.push(`<div style="margin-top:-0.5pt;">${qfRow(xs,xs.slice(1).map(()=>''),{h:minH,font:F,pad})}</div>`); u+=minH; }
-    return {idx:ch,html:`<div style="position:absolute;left:${(xs[0]-0.4).toFixed(2)}pt;top:${(top+0.3).toFixed(2)}pt;width:${(xs[xs.length-1]-xs[0]+0.8).toFixed(2)}pt;height:${(bottom-top+0.4).toFixed(2)}pt;background:#fff;"></div><div style="position:absolute;left:72pt;top:${(top+0.5).toFixed(2)}pt;">${out.join('')}</div>`}; }); }
+  return chunks.map(ch=>{ let u=0; const out=ch.map(i=>{ const h=H(ks[i]); u+=h; return `<div style="margin-top:-0.75pt;">${qfRow(xs,rows[i].map((t,ci)=>{ const al=(align&&align(ci))||'left'; return [t&&typeof t==='object'?(t.html||''):txt(t)?qftTxt(null,null,String(t),{w:cw(ci),h:+(h-1.5).toFixed(2),size,pre:true,center:al==='center',label:label?label(i,ci):''}):'',al]; }),{h,font:F,pad,lw,vpad:1.2})}</div>`; });
+    while(u+minH<=room){ out.push(`<div style="margin-top:-0.75pt;">${qfRow(xs,xs.slice(1).map(()=>''),{h:minH,font:F,pad,lw})}</div>`); u+=minH; }
+    return {idx:ch,html:`<div style="position:absolute;left:${(xs[0]-0.4).toFixed(2)}pt;top:${(top+0.3).toFixed(2)}pt;width:${(xs[xs.length-1]-xs[0]+0.8).toFixed(2)}pt;height:${(bottom-top+0.4).toFixed(2)}pt;background:#fff;"></div><div style="position:absolute;left:72pt;top:${(top+0.75-0.375+0.24).toFixed(2)}pt;">${out.join('')}</div>`}; }); }
 const qfE=v=>escapeHtml(v==null?'':String(v));
+// Natural line-break points for a printed value (Jay, 27 Oct 2026: never split a word): an e-mail, link, file name or long code may
+// break after "@", "/", "-" or "_" and before a "." inside it — no hyphen is added. Ordinary words are never split. s: escaped text.
+function qfNat(s){ return String(s==null?'':s).replace(/[^\s<>]+/g,t=>(/[@_\/]/.test(t)&&!/^[\d\/.:-]{1,12}$/.test(t))||t.length>=16?t.replace(/([@_\/-])(?=[^\s])/g,'$1<wbr>').replace(/([A-Za-z0-9])\.(?=[A-Za-z0-9])/g,'$1<wbr>.'):t); }
+function qfNatHtml(h){ h=String(h==null?'':h); return h.indexOf('<wbr>')>=0||!/[@_\/]|[^\s<>]{16}/.test(h)?h:h.split(/(<[^>]*>)/).map(x=>x[0]==='<'?x:qfNat(x)).join(''); }
 // splits a text over n ruled lines at word boundaries (about cpl characters a line); the last line takes the rest (it is fitted / continued)
 const qfWrapLines=(t,n,cpl)=>{ const out=[]; let cur=''; String(t||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean).forEach(x=>{ if(out.length<n-1&&cur&&(cur+' '+x).length>cpl){ out.push(cur); cur=x; } else cur=cur?cur+' '+x:x; }); out.push(cur); return out; };
 // a date in a narrow table cell: on one line, shrunk to fit the cell down to 8 pt; narrower than that, it wraps after the month
 // ("26/10/" over "2026") — never split inside a number, never below 8 pt (Jay, 27 Oct 2026)
 const qfDateCell=(d,w,size)=>{ const t=qfDmy(d); return t?qftTxt(null,null,t,{mw:+(w).toFixed(2),size:size||9,alt:t.replace(/\/(\d{4})$/,'/\n$1')}):''; };
-// a word too long for a narrow cell at `size` pt, broken over lines with a hyphen ("Muham-" / "mad") — used as qftTxt's o.alt, so a
-// name keeps 8 pt and stays whole instead of being shrunk (Jay, 27 Oct 2026)
-function qfHyph(t,wpt,size){ const c=qfHyph.c||(qfHyph.c=document.createElement('canvas').getContext('2d')); c.font=`${size||8}pt ${QF_FONT}`; const fit=x=>c.measureText(x).width<=wpt*96/72;
-  const out=[]; String(t||'').split(/\s+/).filter(Boolean).forEach(wd=>{ while(!fit(wd)&&wd.length>2){ let k=wd.length-1; while(k>1&&!fit(wd.slice(0,k)+'-')) k--; out.push(wd.slice(0,k)+'-'); wd=wd.slice(k); } out.push(wd); }); return out.join('\n'); }
+// A person's name in a narrow grid cell (e.g. F023 "Check By"): written as it is when it fits the cell on one line at `size` pt;
+// otherwise the person's initials ("MHAR" for Muhammad Hafiz bin Abdullah Rahman — bin / binti / a/l / a/p are left out), and the
+// initials are listed in a legend under the table (qfIniLegend). A word is never split (Jay, 27 Oct 2026).
+function qfTextW(t,size,bold){ const c=qfTextW.c||(qfTextW.c=document.createElement('canvas').getContext('2d')); c.font=`${bold?'bold ':''}${size||8}pt ${QF_FONT}`; return c.measureText(String(t||'')).width*72/96; }
+function qfInitials(full){ return String(full||'').split(/\s+/).filter(w=>w&&!/^(bin|binti|bte|bt|b\.|a\/l|a\/p|s\/o|d\/o|al|ap|@)$/i.test(w)).map(w=>(w.match(/[A-Za-z0-9]/)||[''])[0].toUpperCase()).join(''); }
+function qfNameCell(full,short,wpt,size,legend,suffix){ short=short==null?full:short; suffix=suffix||''; if(qfTextW(short+suffix,size)<=wpt) return short+suffix;
+  const ini=qfInitials(full)||short; if(legend) legend.set(ini,full); return ini+suffix; }
+const qfIniLegend=m=>m&&m.size?'Initials: '+[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([i,n])=>`${i} = ${n}`).join('; '):'';
 const qfShort=(v,n)=>{ const t=String(v||'').replace(/\s+/g,' ').trim(); if(t.length<=n) return t; const k=t.lastIndexOf(' ',n); return t.slice(0,k>n/2?k:n).replace(/[\s,;:.]+$/,'')+'…'; }; // a short name for a continuation-page heading
 // signature block: labels at x 0 and xb; signature image sits on the line
 // a signature centred on its signature line: box spans the line (left x, width w), image sits on the line
@@ -35190,7 +35519,7 @@ async function exportF025Pdf(){ const g=QF_P, fv=formVersion('F025'); const v={.
   for(const grp of groups){ const cols=[0,1,2].map(i=>grp[i]);
     const hdr=qfRow(xs,[['<b>Calibration / Test Title</b>','center'],...cols.map(s=>[`<b style="font-size:9pt;">${qfE(s?s.name:'')}</b>`,'center']),['<b>Supervise and Authorized By</b>','center'],['<b>Date</b>','center']],{h:27.2,font:F11,bg:QF_GREY,pad:3});
     const rows=compActs().map(a=>{ const gs=cols.map(s=>s?authGrant(s.username,a.id):null); const latest=gs.filter(Boolean).sort((x,y)=>String(y.date).localeCompare(String(x.date)))[0];
-      return {mt:-0.5,html:qfRow(xs,[`${qfE(a.title)}${(a.lines||[]).map(l=>'<br/>'+qfE(l)).join('')}`,...gs.map(gg=>[`<b style="font-size:14pt;">${gg?gg.level:''}</b>${gg&&grantRestrictLabel(gg)?`<div style="font:8pt/9pt ${QF_FONT};margin-top:2pt;">Restricted: ${qfE(grantRestrictLabel(gg))}</div>`:''}`,'center']),[latest?qfE(staffNameOf(latest.by)):'','center'],[latest?qfDateCell(latest.date,xs[6]-xs[5]-12,9):'','center']],{h:67.7,font:F11,pad:5.7,valign:'top'})}; });
+      return {mt:-0.5,html:qfRow(xs,[`${qfE(a.title)}${(a.lines||[]).map(l=>'<br/>'+qfE(l)).join('')}`,...gs.map(gg=>[`<b style="font-size:14pt;">${gg?gg.level:''}</b>${gg&&grantRestrictLabel(gg)?`<div style="font:8pt/9pt ${QF_FONT};margin-top:2pt;">Restricted: ${qfE(grantRestrictLabel(gg))}</div>`:''}`,'center']),[latest?qfE(staffNameOf(latest.by)):'','center'],[latest?qfDateCell(latest.date,xs[6]-xs[5]-12,9):'','center']],{h:67.7,font:F11,pad:5.7,vpad:2,valign:'top'})}; });
     const blocks=[{mt:125-109.8,html:`<div style="text-align:center;font:bold 11pt/1 ${QF_FONT};${T}">F025: Organization Competence and Authorization Matrix</div>`},{mt:11,html:`<div style="font:italic 8pt/1 ${QF_FONT};${T}">*Instructions: “A” is authorized to supervise and sign (Approved Signatory); “T” is authorized to perform, requires review (Training)</div>`},{mt:9,html:hdr},...rows,{mt:20,html:`<div style="text-align:right;font:8pt/1 ${QF_FONT};color:#a5a5a5;">${qfE(v.clauses||'Clause 6.2.3 & 6.2.6')}</div>`}];
     pages.push(...await qfFlow({g,no:'F025',v,blocks})); }
   const n=pages.length; const fixed=pages.map((h,i)=>h.replace(/(\d+) of (\d+)<\/td><td style="[^"]*">SAMM/,(m)=>m.replace(/\d+ of \d+/,`${i+1} of ${n}`)));
@@ -35777,20 +36106,25 @@ function openF023Pick(id){ const r=eqRef(id); const months=[...new Set((r?.daily
 async function exportF023Pdf(id,month){ const r=eqRef(id); if(!r) return; month=month||eqToday().slice(0,7); const g=QF_LS, no='F023', fv=formVersion(no); const v={...fv,title:fv.title||'Equipment Maintenance Form'};
   const log={}; (r.dailyMaintenanceLog||[]).filter(m=>String(m.date).startsWith(month)).forEach(m=>{ log[+String(m.date).slice(8,10)]=m; });
   const xs=[72.25,154.35,193.25,231.95,270.75,309.55,347.55,385.6,423.65,461.7,499.75,538.5,577.25,616.05,654.85,693.55,732.35,769.75];
-  const B12=`bold 12pt/14.6pt ${QF_FONT}`;
-  const cell=(d,k)=>{ const m=log[d]; if(!m) return ['','center']; if(k==='by'){ const nm=(staffNameOf(m.checkedBy)||'').split(' ')[0]+(m.late?'*':''); return [qftTxt(null,null,nm,{mw:31,size:8,alt:qfHyph(nm,30.5,8),label:`Day ${d} — Check By`}),'center']; } /* 8 pt: a name too long for the cell is broken with a hyphen over 2–3 lines, never shrunk */ const ok=m[k]!==false; return [`<span style="font:12pt/1 'Segoe UI Symbol',${QF_FONT};${ok?'':'color:#c00;'}">${ok?'✓':'✗'}</span>`,'center']; };
-  const block=(days,lbl)=>{ const d=days.concat(Array(16-days.length).fill(null));
-    return qfRow(xs,[[`<b>Date</b>`,'center'],...d.map(x=>[x?`<b>${x}</b>`:'','center'])],{h:15.1,font:B12,pad:2})
-      +[['visual','Visual<br/>Inspection'],['functional','Functional<br/>Check'],['by','Check By']].map(([k,l])=>`<div style="margin-top:-0.5pt;">${qfRow(xs,[[`<b>${l}</b>`,lbl],...d.map(x=>x?cell(x,k):['','center'])],{h:29.8,font:B12,pad:4,valign:k==='by'?'top':'middle'})}</div>`).join('')
-      +`<div style="margin-top:-0.5pt;">${qfRow(xs,Array(17).fill(''),{h:29.8,font:B12})}</div>`; };
+  const B12=`bold 12pt/13.8pt ${QF_FONT}`; // two-line labels (e.g. "Visual / Inspection") keep space from the lines in the 29.8 pt rows
+  const ini=new Map(); await qfFonts();
+  // Check By: the first name at 8 pt when it fits the cell; otherwise the person's initials, explained in a legend under the table
+  // (Jay, 27 Oct 2026 — a name is never split over lines)
+  const cell=(d,k)=>{ const m=log[d]; if(!m) return ['','center']; if(k==='by'){ const full=staffNameOf(m.checkedBy)||''; const nm=qfNameCell(full,full.split(' ')[0],30.2,8,ini,m.late?'*':''); return [qftTxt(null,null,nm,{mw:31,size:8,label:`Day ${d} — Check By`}),'center']; } const ok=m[k]!==false; return [`<span style="font:12pt/1 'Segoe UI Symbol',${QF_FONT};${ok?'':'color:#c00;'}">${ok?'✓':'✗'}</span>`,'center']; };
+  // the two halves of the month form one grid, as on the original form (rows 15.1 / 29.8 pt apart, the Remarks bar right under it):
+  // every row after the first overlaps the one above by its line, so the lines fall on the same place and are drawn once
+  const block=(days,lbl,first)=>{ const d=days.concat(Array(16-days.length).fill(null)); const R=(h,html)=>`<div style="margin-top:-0.75pt;">${html}</div>`; // a 0.5 pt line is laid out 1 px (0.75 pt) thick
+    return (first?qfRow(xs,[[`<b>Date</b>`,'center'],...d.map(x=>[x?`<b>${x}</b>`:'','center'])],{h:15.1,font:B12,pad:2}):R(0,qfRow(xs,[[`<b>Date</b>`,'center'],...d.map(x=>[x?`<b>${x}</b>`:'','center'])],{h:15.1,font:B12,pad:2})))
+      +[['visual','Visual<br/>Inspection'],['functional','Functional<br/>Check'],['by','Check By']].map(([k,l])=>R(0,qfRow(xs,[[`<b>${l}</b>`,lbl],...d.map(x=>x?cell(x,k):['','center'])],{h:29.8,font:B12,pad:4}))).join('')
+      +R(0,qfRow(xs,Array(17).fill(''),{h:29.8,font:B12})); };
   const late=Object.values(log).filter(m=>m.late);
   const body=qfAbs(0,125.4,'Equipment Maintenance Form',`width:${g.W}pt;text-align:center;font:bold 12pt/1 ${QF_FONT};`)+qfAbs(340.4,150.4,`For Month of: <span style="font-weight:normal;">${envMonthLabel(month)}</span>`,`font:bold 12pt/1 ${QF_FONT};white-space:nowrap;`)
     +qfAbs(72,175.3,`Equipment Name: <span style="display:inline-block;min-width:170pt;border-bottom:0.6pt solid #000;">${qfE(r.name)}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)+qfAbs(474,175.3,`Serial No.: <span style="display:inline-block;min-width:150pt;border-bottom:0.6pt solid #000;">${qfE(r.serial||'')}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)
     +qfAbs(72,201.4,`(Tick ✓ and write the name of person who performs the check)`,`font:italic 10pt/1 ${QF_FONT};`)
     +qfAbs(468.1,200.1,`Equipment ID / Control No. (F024): <span style="display:inline-block;min-width:80pt;border-bottom:0.6pt solid #000;">${qfE(r.id)}</span>`,`font:12pt/1 ${QF_FONT};white-space:nowrap;`)
-    +`<div style="position:absolute;left:72pt;top:221.85pt;">${block([...Array(16)].map((_,i)=>i+1),'left')}</div><div style="position:absolute;left:72pt;top:356.15pt;">${block([...Array(15)].map((_,i)=>i+17),'center')}</div>`
-    +`<div style="position:absolute;left:72pt;top:490.3pt;width:697.5pt;height:19.7pt;border:0.5pt solid #000;box-sizing:border-box;padding:3pt 5.6pt;font:12pt/1 ${QF_FONT};white-space:nowrap;overflow:hidden;"><b>Remarks / abnormality found:</b></div>${(()=>{ const t=Object.values(log).filter(m=>m.visual===false||m.functional===false).map(m=>`${+String(m.date).slice(8,10)}: ${m.notes||(m.visual===false?'visual':'functional')+' check failed'}`).join('; '); return t?qftTxt(230,493.4,t,{w:534,h:14,size:9,label:'Remarks / abnormality found'}):''; })()}`
-    +(late.length?qftTxt(72,511.6,`* late entry recorded by the TM / MD with reason (${late.map(m=>`${+String(m.date).slice(8,10)}: ${m.late.reason}`).join('; ')})`,{w:540,size:7,min:6,label:'Late entries'}):'')
+    +`<div style="position:absolute;left:72pt;top:221.5pt;">${block([...Array(16)].map((_,i)=>i+1),'left',true)}${block([...Array(15)].map((_,i)=>i+17),'center')}</div>`
+    +`<div style="position:absolute;left:72.25pt;top:491.3pt;width:697.5pt;height:18.7pt;border:0.5pt solid #000;box-sizing:border-box;padding:2.6pt 5.6pt;font:12pt/1 ${QF_FONT};white-space:nowrap;overflow:hidden;"><b>Remarks / abnormality found:</b></div>${(()=>{ const t=Object.values(log).filter(m=>m.visual===false||m.functional===false).map(m=>`${+String(m.date).slice(8,10)}: ${m.notes||(m.visual===false?'visual':'functional')+' check failed'}`).join('; '); return t?qftTxt(230,495.4,t,{w:534,h:11,size:9,label:'Remarks / abnormality found'}):''; })()}`
+    +((()=>{ const t=[qfIniLegend(ini),late.length?`* late entry recorded by the TM / MD with reason (${late.map(m=>`${+String(m.date).slice(8,10)}: ${m.late.reason}`).join('; ')})`:''].filter(Boolean).join('   ·   '); return t?qftTxt(72,511.6,t,{w:540,size:8,label:'Initials / late entries'}):''; })())
     +qfAbs(0,512.3,qfE(v.clauses||'Clause 6.4.3, 6.4.13(g), 7.7.1(c)'),`width:${g.R}pt;text-align:right;font:10pt/1 ${QF_FONT};`);
   await qfExport([qfPage(g,no,v,1,1,body)],{landscape:true,no,v,filename:`F023_${safeFileName(r.id)}_${month}.pdf`,label:'F023 Equipment Maintenance Form'}); }
 // F024 — values at 8 pt (never smaller); a row grows to as many lines as its longest value needs (up to 4 lines, beyond that the
@@ -35860,13 +36194,27 @@ function amountInWordsCurMY(n){
   const v=Math.round((parseFloat(n)||0)*100); const rm=Math.floor(v/100), sen=v%100;
   return `${words(rm)}${sen?` AND CENTS ${words(sen)}`:''} ONLY`;
 }
+// Company Tel / Email / TIN printed on documents — Settings → Company Information (MD / Admin; keys phone, salesEmail, tinNo).
+// Until they are edited the documents print exactly what they printed before (Jay, 27 Oct 2026). fmtTel: how a document wrote the
+// default number (e.g. "016-258 9602"), used only while no number is set.
+const PDF_CO_DEF={tel:'0162589602',email:'sales@westlab.com.my',tin:'C60571616010'};
+function pdfCo(fmtTel){ const st=_settings||{}; const tel=String(st.phone||'').trim(), email=String(st.salesEmail||'').trim(), tin=String(st.tinNo||'').trim();
+  return {tel:tel||fmtTel||PDF_CO_DEF.tel,email:email||PDF_CO_DEF.email,tin:tin||PDF_CO_DEF.tin}; }
+// Customer details on a document = the LATEST customer record when the document is made (Jay, 27 Oct 2026) — for documents not yet
+// issued and controlled (quotation, DO, work order, job receipt). An issued certificate / invoice keeps the details it was issued with.
+// o: a job or quotation; returns a copy with the customer's current name, address, phone, fax, e-mail; the attention person chosen on
+// the job is kept when he / she is still one of the customer's contacts, otherwise the customer's current main contact.
+function docCustLatest(o){ if(!o) return o; const C=_customers||[]; const rec=(o.custId&&C.find(x=>x.id===o.custId))||(!o.custId&&C.find(x=>(x.company||x.name)===o.custName))||null; if(!rec) return o;
+  const people=[{name:rec.attention,email:rec.email,mobile:rec.mobile},...(rec.contacts||[])].filter(c=>c&&c.name), keep=o.attention&&people.find(c=>c.name===o.attention);
+  const v=(a,b)=>String(a||'').trim()?a:b;
+  return {...o,custName:v(rec.company,o.custName),address:v(rec.address,o.address),attention:keep?o.attention:v(rec.attention,o.attention),email:v(keep&&keep.email,v(rec.email,o.email)),tel:v(rec.tel,o.tel),mobile:v(keep&&keep.mobile,v(rec.mobile,o.mobile)),fax:v(rec.fax,o.fax)}; }
 // The quotation-style letterhead (logo, company name + reg. no., address, phone / email, TIN, rule)
 async function westlabQtLetterhead(){
   const s=_settings; const esc=v=>escapeHtml(v==null?'':String(v)); const logo=await pdfLogoDataUrl();
   const labName=(s.labName||'Westlab (M) Sdn Bhd').replace(/\./g,'').toUpperCase();
   const regNo=[s.regNo,s.regNoSecondary].filter(Boolean).join(' ')||'202601005304 (1667402-A)';
   const addressHtml=s.address?addressLines(s.address).map(esc).join('<br/>'):'Lot 497, Jalan Perusahaan 3, Bandar Baru Sungai Buloh,<br/>47000 Sungai Buloh, Selangor.';
-  const phone=s.phone||'0162589602', email=s.salesEmail||'sales@westlab.com.my', tin=s.tinNo||'C60571616010';
+  const {tel:phone,email,tin}=pdfCo(); // Settings → Company Information (defaults = the values printed before)
   return `<div style="display:flex;align-items:center;">
       <img src="${logo}" crossorigin="anonymous" style="width:88px;height:auto;margin-left:18px;"/>
       <div style="flex:1;text-align:center;margin-right:106px;font-family:'Times New Roman',Times,serif;font-size:15px;line-height:1.3;">
@@ -36552,6 +36900,7 @@ function openSendToVendor(jobNo){
   if(!rows.length){ alert(`Nothing on ${jobNo} is waiting to go to a vendor.`); return; }
   for(const o of rows){ const m=cdHoldMsg(j,o.ix,'send'); if(m){ alert('⏸ '+m); return; } }
   { const na=rows.filter(o=>!outsourceCustomerApproved(j,o.ix)); if(na.length){ const msg=`⛔ The customer has not approved sending ${na.map(o=>o.it.eqName).join(', ')} to an external provider — it was not marked (*) on the accepted quotation (ISO/IEC 17025 7.1.1 c).\n\nThe TM records a contract deviation; the MD gets the customer's approval; then it can go.`;
+      if(canRecordOsa()){ if(confirm(`⛔ The customer's approval to send ${na.map(o=>o.it.eqName).join(', ')} to an external provider is not recorded (ISO/IEC 17025 7.1.1 c).\n\nOK = record the customer's approval now (method, date, contact person, evidence)`)) openOsaRecord(jobNo,na[0].ix); return; }
       if(canCdRecord()&&confirm(msg+'\n\nRecord the contract deviation now?')) openCdNew(jobNo,na[0].ix,{outsource:true}); else if(!canCdRecord()) alert(msg); return; } }
   const groups={}; rows.forEach(o=>{ const k=o.it.outsourceVendorId||'—'; (groups[k]=groups[k]||[]).push(o); });
   const vid=Object.keys(groups)[0]; const list=groups[vid]; const vname=list[0].it.outsourcedTo||'the vendor';
