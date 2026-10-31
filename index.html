@@ -123,7 +123,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .qt-note.warn{background:#fff7e6;border-left:4px solid #d98e04;color:#7a4f01;} .qt-note.info{background:#eef5ff;border-left:4px solid #3b82f6;color:#1e3a8a;}
 .qt-footer{position:sticky;bottom:-30px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;background:#fff;border-top:1px solid var(--border);border-radius:0 0 16px 16px;box-shadow:0 -6px 16px rgba(15,31,61,.06);margin-top:14px;}
 /* phone: wide approval tables scroll sideways instead of being cut off (Approve / Status stay reachable) */
-@media(max-width:768px){ #view-claims .card,#view-leave .card,#view-attendance .card,#view-my-requests .card,#view-approval .card{overflow-x:auto!important;-webkit-overflow-scrolling:touch;} #view-claims .card table,#view-leave .card table,#view-attendance .card table,#view-my-requests .card table{min-width:560px;} }
+@media(max-width:768px){ #view-claims .card,#view-leave .card,#view-attendance .card,#view-my-requests .card,#view-approval .card{overflow-x:auto!important;-webkit-overflow-scrolling:touch;} #view-claims .card table:not(.m-cards),#view-leave .card table:not(.m-cards),#view-attendance .card table:not(.m-cards),#view-my-requests .card table:not(.m-cards){min-width:560px;} }
 @media(max-width:768px){ .qt-grid{grid-template-columns:1fr 1fr!important;} .qt-price{grid-template-columns:1fr 1fr;} }
 .dash-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px;}
 .dash-kpi{text-align:left;background:var(--bg-card,#fff);border:1px solid var(--border);border-top:3px solid var(--k);border-radius:12px;padding:14px 16px;cursor:pointer;font-family:inherit;color:inherit;transition:box-shadow .12s,transform .12s;}
@@ -1744,8 +1744,8 @@ html.wl-test #sidebar{top:22px;} html.wl-test #main{padding-top:22px;}
         <select class="form-control" id="claims-filter-month" onchange="renderClaims()" style="width:160px;">
           <option value="">All Months</option>
         </select>
-        <button class="btn btn-outline btn-sm" onclick="markFilteredClaimsPaid()">💵 Mark approved as paid…</button>
-        <button class="btn btn-outline btn-sm" onclick="exportClaimsSummary()">📊 Monthly summary</button>
+        <span id="claims-hr-btns" style="display:contents;"><button class="btn btn-outline btn-sm" onclick="markFilteredClaimsPaid()">💵 Mark approved as paid…</button>
+        <button class="btn btn-outline btn-sm" onclick="exportClaimsSummary()">📊 Monthly summary</button></span>
       </div>
 
       <!-- Claims summary (admin only) -->
@@ -3207,7 +3207,7 @@ html.wl-test #sidebar{top:22px;} html.wl-test #main{padding-top:22px;}
       <div class="form-group" id="edit-eq-soc-section"></div>
       <!-- Price Reference (Admin only - hidden via JS) -->
       <div class="form-group" id="edit-price-group" style="display:none;background:#fff3e0;border-radius:8px;padding:12px 14px;border:1px solid #ffb74d;">
-        <label class="form-label" style="color:#c84b00;">💰 Price Quoted (RM) <span style="font-size:11px;font-weight:400;">— Admin only, not visible to staff</span></label>
+        <label class="form-label" style="color:#c84b00;">💰 Price Quoted (RM) <span style="font-size:11px;font-weight:400;">— MD, Admin and Coordinator only; not shown to other staff</span></label>
         <input class="form-control" id="edit-eq-price" type="number" min="0" step="0.01" placeholder="e.g. 350.00"/>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="edit-price-history"></div>
       </div>
@@ -3482,7 +3482,7 @@ html.wl-test #sidebar{top:22px;} html.wl-test #main{padding-top:22px;}
       <div id="clock-in-time-display" style="text-align:center;font-size:28px;font-weight:800;color:var(--navy);margin-bottom:12px;"></div>
       <!-- Selfie for office clock-in (Level 4 optional) -->
       <div class="form-group">
-        <label class="form-label">Selfie <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+        <label class="form-label">Selfie <span id="att-selfie-req" style="font-size:11px;color:var(--text-muted);">(needed only for a remote clock-in)</span></label>
         <div id="att-selfie-area">
           <video id="att-selfie-video" style="display:none;width:100%;border-radius:8px;max-height:180px;" autoplay playsinline></video>
           <canvas id="att-selfie-canvas" style="display:none;"></canvas>
@@ -5087,6 +5087,7 @@ function setCurrentUser(username){
   renderRefEqTable();
   renderDashboard();
   refreshAllBadges();
+  try{ if(typeof qbarRender==='function') qbarRender(); }catch(e){} // R21: phone bottom bar right after sign-in
   // Show notification bell
   const bell=el('notif-bell'); if(bell) bell.style.display='flex';
   // Seed notifications for current user on login
@@ -6786,8 +6787,9 @@ async function openNewJobModal(){
         const attEl=el('eq-attention'); if(attEl) attEl.value=quo.attention||'';
         const addrEl=el('eq-address'); if(addrEl) addrEl.value=quo.address||'';
         const emailEl=el('eq-email'); if(emailEl) emailEl.value=quo.email||'';
-        const telElQ=el('eq-tel'); if(telElQ) telElQ.value=quo.tel||'';
-        const mobileElQ=el('eq-mobile'); if(mobileElQ) mobileElQ.value=quo.mobile||'';
+        const cuQ=(_customers||[]).find(c=>c&&(c.id===quo.custId||String(c.company||'').trim().toLowerCase()===String(quo.custName||'').trim().toLowerCase()))||{}; // R21: the customer record fills what the quotation left blank
+        const telElQ=el('eq-tel'); if(telElQ) telElQ.value=quo.tel||cuQ.tel||cuQ.phone||'';
+        const mobileElQ=el('eq-mobile'); if(mobileElQ) mobileElQ.value=quo.mobile||cuQ.mobile||'';
         const faxElQ=el('eq-fax'); if(faxElQ) faxElQ.value=quo.fax||'';
         const poElQ=el('eq-po'); if(poElQ) poElQ.value=quo.poNumber||''; // the customer's PO captured when the quotation was accepted
         if(quo.endUserName){
@@ -7090,7 +7092,7 @@ async function saveEquipment(printReceipt=false){
   const jobType=anyOnsite?'Onsite':'Lab';
 
   const custInfo={
-    company, custName:company,
+    company, custName:company, custId:(custRecFor(null,company)||{}).id||null, // R21: link the job (and its invoices) to the customer record
     address:el('eq-address')?.value.trim()||'',
     attention:el('eq-attention')?.value.trim()||'',
     tel:el('eq-tel')?.value.trim()||'', mobile:el('eq-mobile')?.value.trim()||'',
@@ -9406,7 +9408,8 @@ async function submitCannotCalibrate(){
   // abnormal items are not billed (an abnormal report goes back instead) — no attempt-fee review
 }
 
-function buildAbnormalReportHtml(r,sigV){ // sigV: the verifying signatory's signature (data URL) — R12 decision 12
+function buildAbnormalReportHtml(r,sigV,sigC){ // R21 sigC: the checking engineer's signature (the version valid when the report was submitted)
+ // sigV: the verifying signatory's signature (data URL) — R12 decision 12
   const chk=(list,val)=>list.includes(val)?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>';
   const chkOne=(val,expected)=>val===expected?'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;text-align:center;line-height:10px;font-size:9pt;font-weight:700;margin-right:4px;">X</span>':'<span style="display:inline-block;width:11px;height:11px;border:1.2pt solid #333;margin-right:4px;"></span>';
   const logoUrl=_pdfLogoData||(_settings.logoUrl&&!_settings.logoUrl.startsWith('data:')?_settings.logoUrl:'')||WESTLAB_LETTERHEAD_LOGO;
@@ -9463,7 +9466,7 @@ function buildAbnormalReportHtml(r,sigV){ // sigV: the verifying signatory's sig
       <div style="margin-bottom:14px;">
         <table style="width:100%;font-size:9pt;">${[['Return without calibration','Replacement recommended'],['Proceed with calibration (limited / conditional)','Further Investigation required'],['Repair required','']].map(([a,b])=>`<tr><td style="width:55%;padding:2px 0;">${chkOne(r.recommendation,a)}${a}</td><td style="padding:2px 0;">${b?chkOne(r.recommendation,b)+b:''}</td></tr>`).join('')}</table>
       </div>
-      <table style="width:100%;font-size:9pt;margin-top:20px;">${r.status?`<tr><td style="height:42px;"></td><td style="height:42px;text-align:center;vertical-align:bottom;padding-bottom:2px;">${r.status==='Verified'&&sigV?`<img src="${sigV}" style="max-height:40px;max-width:170px;"/>`:''}</td></tr>`:''}<tr>
+      <table style="width:100%;font-size:9pt;margin-top:20px;">${r.status?`<tr><td style="height:42px;text-align:center;vertical-align:bottom;padding-bottom:2px;">${sigC?`<img src="${sigC}" style="max-height:40px;max-width:170px;"/>`:''}</td><td style="height:42px;text-align:center;vertical-align:bottom;padding-bottom:2px;">${r.status==='Verified'&&sigV?`<img src="${sigV}" style="max-height:40px;max-width:170px;"/>`:''}</td></tr>`:''}<tr>
         <td style="width:50%;text-align:center;">
           <div style="border-top:1pt solid #333;padding-top:4px;margin:0 20px;">${escapeHtml(r.checkedByName||'')}</div>
         </td>
@@ -9500,7 +9503,8 @@ async function generateAbnormalReportPdfBase64(r){
     await pdfLogoDataUrl();
     if(typeof html2canvas==='undefined'||typeof PDFLib==='undefined')return null;
     let sigV=''; if(r.status==='Verified'&&r.verifiedBy){ try{ sigV=(r.verifiedSigUrl?await pdfSigDataUrl(r.verifiedSigUrl):await pdfStaffSignature(r.verifiedBy,r.verifiedAt)).data||''; }catch(e){ console.warn('abnormal report signature',e); } }
-    const html=buildAbnormalReportHtml(r,sigV);
+    let sigC=''; if(r.status&&r.checkedBy){ try{ sigC=(r.checkedSigUrl?await pdfSigDataUrl(r.checkedSigUrl):await pdfStaffSignature(r.checkedBy,r.submittedAt||r.createdAt)).data||''; }catch(e){ console.warn('abnormal report checked-by signature',e); } }
+    const html=buildAbnormalReportHtml(r,sigV,sigC);
     const {pages}=await pdfPaginateHtml(html,{landscape:false}); // real A4 pages
     const blob=await exportPagedPdf(pages,`${r.reportNo}_Abnormal_Report.pdf`,'Abnormal report',pages.length,false,{returnBlob:true}); if(!blob) return null;
     const bytes=new Uint8Array(await blob.arrayBuffer());
@@ -12260,7 +12264,7 @@ async function restoreFinish(bk,summary){
     <div style="font-weight:700;margin-bottom:4px;">🔢 Number counters</div>
     ${cerr?`<div class="qt-note warn" style="margin-bottom:10px;">❌ The counters could not be checked (${escapeHtml(cerr)}). Check Settings → Document Numbering before anyone issues a new number.</div>`
       :`<div style="font-size:12.5px;margin-bottom:10px;">${ch.length?`${ch.length} counter${ch.length>1?'s were':' was'} raised so no number is issued twice:<div style="max-height:160px;overflow:auto;margin-top:4px;">${ch.map(r=>`<div style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(r.id)}: ${r.before} → <b>${r.after}</b> <span style="color:var(--text-muted);">(backup ${r.backup??'—'}, highest in use ${r.inUse??'—'})</span></div>`).join('')}</div>`:`All ${rows.length} counters were already at or above the backup and the highest number in use — nothing changed.`}</div>`}
-    <div class="qt-note warn" style="margin-bottom:6px;"><b>⚠️ Every staff password must be reset now.</b> Passwords are not restored from a backup — reset each person's password (Settings → Staff → 🔑 Reset password) and give it to them. ${np.size?`<b>${np.size}</b> of them cannot sign in at all until you do (marked ⛔).`:''}</div>
+    <div class="qt-note warn" style="margin-bottom:6px;"><b>⚠️ Every staff password must be reset now.</b> Passwords are not restored from a backup — reset each person's password (Administration → Personnel → ⋯ → 🔑 Reset password) and give it to them. ${np.size?`<b>${np.size}</b> of them cannot sign in at all until you do (marked ⛔).`:''}</div>
     <div style="max-height:200px;overflow:auto;font-size:12.5px;">${all.map(x=>`<div style="padding:2px 0;border-top:1px solid var(--border);">${np.has(x.username)?'⛔ ':'• '}<b>${escapeHtml(x.name||x.username)}</b> <span style="color:var(--text-muted);">${escapeHtml(x.username)}${x.role?' · '+escapeHtml(x.role):''}</span></div>`).join('')||'<div style="color:var(--text-muted);">No staff records found.</div>'}</div>
     <div style="display:flex;justify-content:flex-end;margin-top:12px;"><button class="btn btn-primary" onclick="location.reload()">OK — reload the LIMS</button></div>`;
   cOv('♻️ Restore finished — next steps',html,560); }
@@ -12400,8 +12404,8 @@ function openPriceRefEditor(id){
              <div class="form-group"><label class="form-label">Lab / On-site</label><select class="form-control" id="pr-edit-cal">${[['Lab','Lab'],['Onsite','On-site']].map(([k,l])=>`<option value="${k}" ${(p.calType||'Lab')===k?'selected':''}>${l}</option>`).join('')}</select></div></div>
            <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px;">Not used on any quotation or job yet, so the service can still be corrected.</div>`)
           +(fam.length?`<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">Same equipment, other services: ${fam.map(o=>`<b>${v(o.itemCode)}</b> ${v(qtServiceTag(o).replace(/[\[\]]/g,''))}`).join(' · ')}</div>`:''); })()}
-      <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="pr-edit-name" value="${v(p.eqName)}"/></div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:-4px 0 10px;cursor:pointer;"><input type="checkbox" id="pr-edit-keep-old" checked/> Keep the old name “${v(p.eqName)}” as another name (so items typed that way still match)</label>
+      <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="pr-edit-name" value="${v(p.eqName)}" oninput="{ const k=el('pr-edit-keep-lab'); if(k) k.style.display=qtNameKey(this.value)!==qtNameKey(this.defaultValue)?'flex':'none'; }"/></div>
+      <label id="pr-edit-keep-lab" style="display:none;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:-4px 0 10px;cursor:pointer;"><input type="checkbox" id="pr-edit-keep-old" checked/> Keep the old name “${v(p.eqName)}” as another name (so items typed that way still match)</label>
       <div class="form-group"><label class="form-label">Also known as <span style="font-weight:normal;color:var(--text-muted);">(comma-separated)</span></label><textarea class="form-control" id="pr-edit-aliases" rows="2" >${v((p.aliases||[]).join(', '))}</textarea></div>
       ${stdFamily(p).length?`<label style="display:flex;align-items:flex-start;gap:6px;font-size:12px;font-weight:normal;margin:-6px 0 12px;cursor:pointer;"><input type="checkbox" id="pr-edit-share" checked style="margin-top:2px;"/> Also add new “also known as” names to ${stdFamily(p).map(o=>v(o.itemCode)).join(', ')}</label>`:''}
 
@@ -13496,7 +13500,7 @@ function renderQuotationsV2Page(){
         <td style="text-align:center;">${(q.items||[]).length}</td>
         <td style="text-align:right;">${total.toFixed(2)}${(()=>{ const po=qtPoValue(q); return po!=null&&Math.abs(po-total)>0.004?`<div style="font-size:11px;color:#9a5b00;">PO RM ${po.toFixed(2)} (${po>total?'more than quoted':'partial'})</div>`:''; })()}</td>
         <td>${statusBadge(q.status)}${fuNote}${capReq}</td>
-        <td style="font-size:11.5px;color:var(--text-muted);">${fmtDateShort(q.createdAt)}<br/>by ${USERS[q.createdBy]?.name||q.createdBy||''}${q.issueDate?`<br/>dated <b>${fmtDateShort(q.issueDate)}</b>${ddAdjNote(q,'issueDate')}`:''}${ddAdjBtn('quote',q.id)}</td>
+        <td style="font-size:11.5px;color:var(--text-muted);">${fmtDateShort(q.createdAt)}<br/>by ${USERS[q.createdBy]?.name||q.createdBy||''}${q.issueDate?`<br/>dated <b>${fmtDateShort(q.issueDate)}</b>${ddAdjNote(q,'issueDate')}`:''}${(q.status||'Draft')!=='Draft'?ddAdjBtn('quote',q.id):''}</td>
         <td style="font-size:11px;">${q.poNumber?`📎 ${escapeHtml(q.poNumber)}${q.poDocUrl?` — <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(q.poDocUrl)}')">view</a>`:''}`:'—'}</td>
         <td>
           <div style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -14183,7 +14187,7 @@ function openReceiveFromQuotation(qid,rcId){
     </div></div>`;
   window._rcvUnits=units; ov.style.display='flex';
   if(rc){ units.forEach((x,k)=>{ const u=rcU(x); if(!u) return; const c=document.querySelector(`.rcv-cond[data-k="${k}"]`); if(c){ if(['Good','Fair','Damaged'].includes(u.condition)) c.value=u.condition; else if(u.condition){ c.value='Others'; const o=c.parentElement.querySelector('.rcv-cond-o'); if(o){ o.style.display=''; o.value=u.condition; } } } });
-    if(rc.note){ const n=el('rcv-note'); if(n) n.value=rc.note; } }
+    if(rc.note){ const n=el('rcv-note'); if(n&&n.parentElement){ const d=document.createElement('div'); d.style.cssText='font-size:12px;margin:0 0 4px;padding:6px 8px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;'; d.textContent='Reception note: '+rc.note; n.parentElement.insertBefore(d,n); } } } // R21: shown to the TM, not copied onto every item
   if(typeof populateUserDropdown==='function') populateUserDropdown('rcv-assign',false,true);
 }
 async function saveReceiveItems(qid){
@@ -14733,7 +14737,7 @@ function renderPrSections(){
     const po=prLivePo(r); const poOk=po&&!['Draft','Pending Approval','Rejected'].includes(po.status);
     const quoting=(r.suppliers||[]).length>0;
     const steps=[['Request',r.createdAt],['Quotes',r.selected?(r.selected.at||r.createdAt):null],['PO',poOk?(po.approvedAt||po.createdAt):null],['Received',prFullyReceived(r)&&(!prNeedsVerify(r)||r.verified)?((r.receipts||[]).slice(-1)[0]?.date):null],['Paid',r.paidAt]];
-    const cur=['Cancelled','Rejected'].includes(r.status)?-1:steps.findIndex(x=>!x[1]);
+    const cur=['Cancelled','Rejected'].includes(r.status)?-1:(i=>i<0?steps.length:i)(steps.findIndex(x=>!x[1])); // R21: all steps done (Paid) is not "cancelled" (red)
     const chip=([lab,at],i)=>{ const done=!!at, now=i===cur; const col=done?'#15803d':(now?'#b45309':'#94a3b8');
       return `<div style="background:${done?'#ecfdf5':(now?'#fffbeb':'#f8fafc')};border:1px solid ${done?'#bbf7d0':(now?'#fde68a':'#e2e8f0')};border-radius:6px;padding:3px 2px;text-align:center;min-width:0;">
         <div style="font-size:11px;line-height:1.1;color:${col};">${done?'✓':(now?'⏳':'○')}</div>
@@ -17804,6 +17808,7 @@ function openClockInModal(){
   el('clock-in-override-reason').value=''; if(el('clock-in-forgot')){ el('clock-in-forgot').checked=false; el('clock-in-forgot-div').style.display='none'; el('clock-in-forgot-time').value=''; el('clock-in-forgot-reason').value=''; }
   el('clock-in-override-div').style.display='none';
   el('clock-in-confirm-btn').disabled=true;
+  { const t=el('clock-in-modal-title'); if(t) t.textContent='📍 Clock In'; const st=el('clock-in-location-status'); if(st) delete st.dataset.remote; const sl=el('att-selfie-req'); if(sl){ sl.textContent='(needed only for a remote clock-in)'; sl.style.color=''; } } // R21
   stopAttSelfie();
   const vid=el('att-selfie-video'); if(vid) vid.style.display='none';
   const prev=el('att-selfie-preview'); if(prev){prev.style.display='none';prev.src='';}
@@ -17844,7 +17849,7 @@ function openClockInModal(){
   },err=>{
     statusEl.innerHTML=`<span style="color:#c84b00;">⚠️ Could not get location: ${err.message}</span>`;
     _clockInFlagged=true;
-    el('clock-in-override-div').style.display='block';
+    el('clock-in-override-div').style.display='block'; attOnsitePicked();
     el('clock-in-confirm-btn').disabled=false;
   },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
 }
@@ -17888,7 +17893,12 @@ function stopAttSelfie(resetPreview=true){
 
 // on-site jobs the person is assigned to today (going straight from home to the customer's site)
 function attOnsiteJobsToday(u){ const td=toLocalDateStr(new Date()); return (_jobs||[]).filter(j=>!['Completed','Deleted'].includes(j.status)&&siteItemsOf(j,u).length&&visitDaysOf(j,'appointmentDate','visitEndDate').includes(td)); }
-function attOnsitePicked(){ const on=!!el('clock-in-onsite')?.value; const od=el('clock-in-override-div'); if(od) od.style.display=on||!_clockInFlagged?'none':'block'; }
+function attOnsitePicked(){ const on=!!el('clock-in-onsite')?.value; const od=el('clock-in-override-div'); if(od) od.style.display=on||!_clockInFlagged?'none':'block';
+  // R21: an on-site job is not a remote clock-in — title, location note and selfie label follow the choice
+  const t=el('clock-in-modal-title'), st=el('clock-in-location-status'), sl=el('att-selfie-req');
+  if(t) t.textContent=on?'📍 Clock In (On-site)':_clockInFlagged?'📍 Clock In (Remote)':'📍 Clock In';
+  if(st&&_clockInFlagged){ if(st.dataset.remote==null) st.dataset.remote=st.innerHTML; st.innerHTML=on?'<span style="color:#2e7d32;">✅ On-site job chosen — your check-in at the customer\'s site is the proof. Not a remote clock-in.</span>':st.dataset.remote; }
+  if(sl){ const req=_clockInFlagged&&!on; sl.textContent=req?'* required — remote clock-in':'(needed only for a remote clock-in)'; sl.style.color=req?'#c84b00':''; } }
 // was there a site check-in by this person on that job that day (current visit or earlier visits)?
 function attSiteCheckedIn(jobNo,u,ds){ const j=getJob(jobNo); if(!j) return false;
   return siteItemsOf(j,u).some(({it,i})=>{ const cd=getCheckinData(jobNo,i)||{}; return [...(it.visitHistory||[]),...(cd.visitHistory||[]),{checkinTime:cd.checkinTime||it.checkinTime}].some(v=>v&&v.checkinTime&&toLocalDateStr(new Date(v.checkinTime))===ds); }); }
@@ -18548,7 +18558,7 @@ function attReportData(){
     Compensation:o.status==='Approved'?o.compensation+(o.compensation==='Replacement Leave'?` (${o.rlDays} day)`:''):'Prefers '+(o.requestedComp||o.compensation||'Cash'),Status:o.status+(o.paidAt?' — paid '+(o.paidMonth||''):''),Reason:o.reason||''}; });
   const people=[...new Set([...att.map(r=>r.Staff),...ot.map(r=>r.Staff)])].sort();
   const sum=people.map(n=>{ const A=att.filter(r=>r.Staff===n), O=ot.filter(r=>r.Staff===n&&/^Approved/.test(r.Status));
-    return {Staff:n,'Days present':A.length,'Late':A.filter(r=>/Late/.test(r.Status)).length,'Remote':A.filter(r=>/Remote/.test(r.Status)).length,'No clock-out':A.filter(r=>/No clock-out/.test(r.Status)).length,
+    return {Staff:n,'Days present':A.length,'Late':A.filter(r=>/(^|, )Late \d+ min(?! —)/.test(r.Status)).length,'Remote':A.filter(r=>/Remote/.test(r.Status)).length,'No clock-out':A.filter(r=>/No clock-out/.test(r.Status)).length,
       'Hours worked':Math.round(A.reduce((x,r)=>x+(Number(r.Hours)||0),0)*10)/10,'OT hour-pay (approved)':Math.round(O.reduce((x,r)=>x+(Number(r['Hour-pay'])||0),0)*100)/100,'RL days earned':O.reduce((x,r)=>x+(parseFloat((/\(([\d.]+) day\)/.exec(r.Compensation)||[])[1])||0),0)}; });
   return {month,staff:filterStaff?nm(filterStaff):'All staff',att,ot,sum};
 }
@@ -18953,7 +18963,7 @@ function renderReception(){
   if(_rcpGoto){ const want=_rcpGoto; _rcpGoto=''; const d=_rcpTab==='move'?[...box.querySelectorAll('details')].find(x=>(x.querySelector('summary')?.textContent||'').includes(want)):null;
     if(d){ d.open=true; setTimeout(()=>{ try{ d.scrollIntoView({block:'start'}); }catch(e){} },60); } } }
 function rcpReceiveHtml(){
-  const qs=(_quotationsV2||[]).filter(q=>q.status==='Accepted'&&qtUnreceived(q).length).map(q=>({q,open:qtUnreceived(q).filter(x=>!rcpLoggedUnits(q.id).has(x.i+':'+x.u))})).filter(x=>x.open.length)
+  const qs=(_quotationsV2||[]).filter(q=>q.status==='Accepted'&&qtUnreceived(q).length).map(q=>({q,open:qtUnreceived(q).filter(x=>(x.it.calType||'Lab')!=='Onsite'&&!rcpLoggedUnits(q.id).has(x.i+':'+x.u))})).filter(x=>x.open.length)
     .sort((a,b)=>String(a.q.custName).localeCompare(String(b.q.custName)));
   return `<div class="qt-note info" style="margin-bottom:10px;">Customer brought or couriered items: find the customer's accepted quotation, tick what arrived, photo each item. The Technical Manager then creates the job and assigns the engineer.</div>
     <input class="form-control" id="rcp-q-search" placeholder="Search customer, quotation or PO…" oninput="document.querySelectorAll('.rcp-q').forEach(c=>c.style.display=c.dataset.k.includes(this.value.toLowerCase())?'':'none')" style="margin-bottom:10px;"/>
@@ -18963,7 +18973,7 @@ function rcpReceiveHtml(){
       <button class="btn btn-primary btn-sm" onclick="openRcpLog('${escapeForJsAttr(q.id)}')">📥 Log arrival</button></div>`).join('')||'<div class="empty-state"><p>No accepted quotation is waiting for items.</p></div>'}
     <div style="margin-top:12px;"><button class="btn btn-outline btn-sm" onclick="openRcpNoQuote()">➕ Items arrived without a quotation</button></div>`; }
 function openRcpLog(qid,tripId){ window._rcpTrip=tripId||null;
-  const q=(_quotationsV2||[]).find(x=>x.id===qid); if(!q) return; const logged=rcpLoggedUnits(qid); const units=qtUnreceived(q).filter(x=>!logged.has(x.i+':'+x.u)); if(!units.length) return;
+  const q=(_quotationsV2||[]).find(x=>x.id===qid); if(!q) return; const logged=rcpLoggedUnits(qid); const units=qtUnreceived(q).filter(x=>(x.it.calType||'Lab')!=='Onsite'&&!logged.has(x.i+':'+x.u)); if(!units.length) return;
   window._rcpUnits=units; let ov=document.getElementById('rcp-overlay'); if(ov) ov.remove(); ov=document.createElement('div'); ov.id='rcp-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:20px 8px;overflow-y:auto;';
   ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:720px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);"><div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;">📥 Log arrival — ${escapeHtml(q.custName||'')} · ${escapeHtml(q.quotationNo||'')}</div>
@@ -19004,7 +19014,7 @@ async function rcpPrintSlipRun(rec){ const co=pdfCo(), E=escapeHtml;
     <div>${E(rec.custName||rec.supplier||'')} · ${E(rec.quotationNo||rec.poNo||'')}</div><div>${new Date(rec.at).toLocaleString('en-GB')} · ${E(staffNameOf(rec.by))}</div>
     ${units.length?`<table style="width:100%;border-collapse:collapse;margin-top:6px;"><thead><tr><th style="${th}">Item</th><th style="${th}">Serial No.</th><th style="${th}">Condition</th></tr></thead><tbody>${units.map(u=>`<tr><td style="${td}">${E(u.eqName)}</td><td style="${td}">${E(u.serial||'—')}</td><td style="${td}">${E(u.condition||'')}</td></tr>`).join('')}</tbody></table>`
       :`<div style="margin-top:6px;border-bottom:1px solid #ccc;padding:2px 4px;white-space:pre-wrap;">${E(rec.items||'')}</div>`}
-    <div style="margin-top:8px;">Waiting for job number — do not calibrate yet.</div>
+    <div style="margin-top:8px;">${rec.kind==='supplier'?'Supplier delivery — for the person who ordered it (check before use).':'Waiting for job number — do not calibrate yet.'}</div>
     <div data-pgno="1" style="position:absolute;right:6mm;bottom:4mm;font-size:11px;color:#444;">Page 1 of 1</div></div>`;
   let pages=[html]; try{ pages=(await pdfPaginateHtml(html,{landscape:false})).pages; }catch(e){ console.warn('slip pagination',e); }
   const f=document.createElement('iframe'); f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;'; document.body.appendChild(f); const w=f.contentWindow;
@@ -19060,7 +19070,10 @@ function rcpAttentionItems(){ const out=[]; if(typeof _receipts==='undefined') r
   if(canCreateJobs(currentUser)){ L.filter(r=>r.kind==='customer').forEach(r=>out.push({icon:'📥',level:'high',text:`${(r.units||[]).length} item(s) received at reception for ${escapeHtml(r.custName||'')} (${escapeHtml(r.quotationNo||'')}) — create the job and assign the engineer`,onclick:`openReceiveFromQuotation('${escapeForJsAttr(r.quotationId)}','${escapeForJsAttr(r.id)}')`}));
     const nq=L.filter(r=>r.kind==='noq'); if(nq.length) out.push({icon:'📥',level:'high',text:`${nq.length} arrival${nq.length>1?'s':''} without an accepted quotation (${nq.map(r=>escapeHtml(r.custName||'')).join(', ')}) — check with the customer`,onclick:`_rcpTab='log';showView('reception')`}); }
   if(canUsePurchasingTracker(currentUser)){ const sp=L.filter(r=>r.kind==='supplier'); if(sp.length) out.push({icon:'📦',level:'high',text:`${sp.length} supplier deliver${sp.length>1?'ies':'y'} logged at reception (${sp.map(r=>escapeHtml(r.supplier||'')).join(', ')}) — record on the purchase request / PO`,onclick:`_rcpTab='log';showView('reception')`}); }
-  if(isReceptionist()){ const n=rcpReadyJobs().filter(j=>!codUnpaid(j)||j.codOverride).length; if(n) out.push({icon:'🤝',text:`${n} finished job${n>1?'s':''} waiting for the customer to collect`,onclick:`_rcpTab='move';showView('reception')`}); }
+  if(isReceptionist()){ const R=rcpReadyJobs().filter(j=>!codUnpaid(j)||j.codOverride); const ok=j=>j.billed||(billingOnHold(j)&&!jobIsCod(j))||jobNotBillable(j); // R21: as on the hand-over list
+    const n=R.filter(ok).length, w=R.length-n;
+    if(n) out.push({icon:'🤝',text:`${n} finished job${n>1?'s':''} waiting for the customer to collect`,onclick:`_rcpTab='move';showView('reception')`});
+    if(w) out.push({icon:'🧾',text:`${w} finished job${w>1?'s':''} waiting for billing (the Coordinator prepares the invoice first)`,onclick:`_rcpTab='move';showView('reception')`}); }
   return out; }
 
 // ═══ MOVEMENTS & TRANSPORT ═══ Everything that comes in or goes out of the lab, in one live board for reception and the
@@ -19197,7 +19210,7 @@ function tripCardHtml(t,opts){ opts=opts||{}; const today=toLocalDateStr(new Dat
   if(!opts.driver&&isAdmin(currentUser)) btns.push(`<button class="btn btn-outline btn-sm" style="color:var(--red);" title="Delete (MD)" onclick="tripDelete('${t.id}')">🗑️</button>`);
   const d=t.done; const proof=d?[...(d.photos||[]).map(p=>`<a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(p.url)}')">📷</a>`),d.signature?`<a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(d.signature)}')">✍️</a>`:''].join(' '):'';
   return `<div class="card" style="padding:10px 12px;margin-bottom:8px;font-size:12.5px;"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:flex-start;">
-    <div style="min-width:0;flex:1;"><b>${escapeHtml(tripLabel(t))}</b> · <b>${escapeHtml(t.party||'')}</b> ${st}${t.mode==='courier'?` <span class="badge badge-slate">📦 ${escapeHtml(t.courier?.company||'courier')}${t.courier?.tracking?' '+escapeHtml(t.courier.tracking):''}</span>`:''}
+    <div style="min-width:0;flex:1 1 220px;"><b>${escapeHtml(tripLabel(t))}</b> · <b>${escapeHtml(t.party||'')}</b> ${st}${t.mode==='courier'?` <span class="badge badge-slate">📦 ${escapeHtml(t.courier?.company||'courier')}${t.courier?.tracking?' '+escapeHtml(t.courier.tracking):''}</span>`:''}
       <div style="color:var(--text-muted);margin-top:2px;">${escapeHtml(t.items||'')}${t.jobNo?' · '+escapeHtml(t.jobNo):''}${t.doNumber?' · '+escapeHtml(t.doNumber):''}${t.quotationNo?' · '+escapeHtml(t.quotationNo):''}</div>
       <div style="margin-top:2px;">${t.driver?'🚐 '+escapeHtml(staffNameOf(t.driver))+' · ':''}${tripWhen(t)}${t.contact?' · '+escapeHtml(t.contact):''} ${tel} ${map}</div>
       ${t.address?`<div style="color:var(--text-muted);white-space:pre-line;">${escapeHtml(t.address)}</div>`:''}
@@ -19236,7 +19249,7 @@ function rcpMovementsHtml(){ const today=toLocalDateStr(new Date()); const J=esc
     <span style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="openTripRequest()">🚐 ${canPlanTrips()?'New trip':'Request transport'}</button><button class="btn btn-outline btn-sm" onclick="rcpSimpleForm('supplier','📦 Supplier delivery',[['supplier','Supplier / courier','text'],['poNo','PO / DO no. on the parcel','text'],['items','What arrived (items, quantity)','textarea'],['cond','Condition','text']],'Photograph the goods and the delivery order.')">📦 Supplier delivery</button><button class="btn btn-outline btn-sm" onclick="openRcpNoQuote()">➕ Items without a quotation</button></span></div>`;
   h+=movSection('🚐 Transport — to plan / today',req.length+todayT.length,(req.concat(todayT)).map(t=>tripCardHtml(t)).join('')||'<div style="font-size:12px;color:var(--text-muted);padding-top:6px;">Nothing to plan, no trips today.</div>');
   // incoming
-  const qs=(_quotationsV2||[]).filter(q=>q.status==='Accepted'&&qtUnreceived(q).length).map(q=>({q,open:qtUnreceived(q).filter(x=>!rcpLoggedUnits(q.id).has(x.i+':'+x.u))})).filter(x=>x.open.length).sort((a,b)=>String(a.q.custName).localeCompare(String(b.q.custName)));
+  const qs=(_quotationsV2||[]).filter(q=>q.status==='Accepted'&&qtUnreceived(q).length).map(q=>({q,open:qtUnreceived(q).filter(x=>(x.it.calType||'Lab')!=='Onsite'&&!rcpLoggedUnits(q.id).has(x.i+':'+x.u))})).filter(x=>x.open.length).sort((a,b)=>String(a.q.custName).localeCompare(String(b.q.custName))); // R21: on-site units never come in
   const pk=movPickupsToLog(), fv=movFromVendorDone(), outV=movPoDosOut();
   let inc=pk.map(t=>movRow(`🚐 <b>Collected by driver</b> — ${escapeHtml(t.party)}`,`${escapeHtml(t.items||'')} · ${fmtDateShort(isoDay(t.done?.at||''))}${t.quotationNo?' · '+escapeHtml(t.quotationNo):''}`,
       `${t.quotationId?`<button class="btn btn-primary btn-sm" onclick="openRcpLog('${J(t.quotationId)}','${t.id}')">📥 Log arrival</button>`:`<button class="btn btn-primary btn-sm" onclick="openRcpNoQuote('${t.id}')">📥 Log arrival</button>`}<button class="btn btn-outline btn-sm" onclick="tripMarkLogged('${t.id}')">✔ Already logged</button>`)).join('');
@@ -19578,7 +19591,7 @@ function f010RenderV1(){ const e=_f010Draft; const ro=!f010Editable(e); const p=
     ${e.review?`<div style="font-weight:700;margin:10px 0 4px;">Annual performance review <span style="font-weight:normal;font-size:12px;color:var(--text-muted);">(${fmtDateShort(e.review.from)} – ${fmtDateShort(e.review.to)} · suggested from the LIMS records — check them)</span></div>
       ${F010_PERF.map((c,i)=>`<div class="f010-row" style="display:grid;grid-template-columns:1fr 70px 1.3fr;gap:6px;align-items:center;font-size:12.5px;padding:2px 0;border-top:1px solid var(--border);"><span>${c}</span>${sel('review.ratings.'+i,e.review.ratings?.[i]||'',['','1','2','3','4','5'])}<input class="form-control" ${dis} value="${v(e.review.comments?.[i])}" oninput="f010Set('review.comments.${i}',this.value)" style="font-size:12px;"/></div>`).join('')}
       <div class="form-row" style="margin-top:4px;"><div class="form-group"><label class="form-label">Overall performance rating</label><input class="form-control" value="${f010ReviewAvg(e)}" disabled/></div><div class="form-group"><label class="form-label">Recommend for next year</label>${sel('review.recommend',e.review.recommend||'',['','Yes','Yes, with conditions','No'])}</div></div>`:''}
-    <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">${e.evaluated?`Evaluated by ${escapeHtml(staffNameOf(e.evaluated.by))} (TM) ${fmtDateShort(isoDay(e.evaluated.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'evaluated','at','',`openF010('${e.id}')`):''}`:'Evaluated by the TM'} · ${e.approved?`${e.status==='Rejected'?'Rejected':'Approved'} by ${escapeHtml(staffNameOf(e.approved.by))} (MD) ${fmtDateShort(isoDay(e.approved.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'approved','at','',`openF010('${e.id}')`):''}`:'approved by the MD'}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">${e.evaluated?`Evaluated by ${escapeHtml(staffNameOf(e.evaluated.by))} (TM) ${fmtDateShort(isoDay(e.evaluated.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'evaluated','at','',`openF010('${e.id}')`):''}`:'waiting for TM evaluation'} · ${e.approved?`${e.status==='Rejected'?'Rejected':'Approved'} by ${escapeHtml(staffNameOf(e.approved.by))} (MD) ${fmtDateShort(isoDay(e.approved.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'approved','at','',`openF010('${e.id}')`):''}`:'waiting for MD approval'}</div>
     <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="btn btn-outline" onclick="f027Close()">Close</button>${e.status!=='Draft'||(_f010||[]).some(x=>x.id===e.id)?`<button class="btn btn-outline" onclick="f010Pdf('${e.id}')">📄 F010 (PDF)</button>`:''}
       ${f010Editable(e)?`<button class="btn btn-outline" onclick="f010Save('draft')">💾 Save draft</button><button class="btn btn-primary" onclick="f010Save('submit')">✅ Evaluated — send to MD</button>`:''}
       ${e.status==='Submitted'&&canF010Approve()?`<button class="btn btn-outline" style="color:var(--red);" onclick="f010Save('return')">↩️ Return</button><button class="btn btn-primary" onclick="f010Save('approve')">✅ MD decision: ${escapeHtml((F010_DECISIONS.find(x=>x[0]===(e.decision||f010Suggest(sc.all.pct)))||[])[1]||'')}</button>`:''}
@@ -19696,7 +19709,7 @@ function f010RenderV2(){ const e=_f010Draft; const ro=!f010Editable(e); const p=
       <div class="form-group"><label class="form-label">Re-evaluation</label><select class="form-control" ${dis} onchange="f010Set('freq',this.value,true)">${F010V_FREQ.map(f=>`<option ${(e.freq||'Annual')===f?'selected':''}>${f}</option>`).join('')}</select>${(e.freq==='Other')?`<input class="form-control" ${dis} placeholder="months" value="${v(e.freqOther)}" oninput="f010Set('freqOther',this.value)" style="margin-top:4px;"/>`:''}</div>
       <div class="form-group"><label class="form-label">Next due</label><input class="form-control" value="${fmtDateShort(f010NextDate({...e,decision:dec},e.approved?isoDay(e.approved.at):undefined))}" disabled/></div></div>
     ${dec!=='Approved'?`<div class="form-group"><label class="form-label">Conditions / corrective actions required</label><textarea class="form-control" rows="2" ${dis} oninput="f010Set('conditions',this.value)">${v(e.conditions)}</textarea></div>`:''}
-    <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">${e.evaluated?`Evaluated by ${escapeHtml(staffNameOf(e.evaluated.by))} (TM) ${fmtDateShort(isoDay(e.evaluated.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'evaluated','at','',`openF010('${e.id}')`):''}`:'Evaluated by the TM'} · ${e.approved?`${e.status==='Rejected'?'Rejected':'Approved'} by ${escapeHtml(staffNameOf(e.approved.by))} (MD) ${fmtDateShort(isoDay(e.approved.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'approved','at','',`openF010('${e.id}')`):''}`:'approved by the MD'}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">${e.evaluated?`Evaluated by ${escapeHtml(staffNameOf(e.evaluated.by))} (TM) ${fmtDateShort(isoDay(e.evaluated.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'evaluated','at','',`openF010('${e.id}')`):''}`:'waiting for TM evaluation'} · ${e.approved?`${e.status==='Rejected'?'Rejected':'Approved'} by ${escapeHtml(staffNameOf(e.approved.by))} (MD) ${fmtDateShort(isoDay(e.approved.at))}${(_f010||[]).some(x=>x.id===e.id)?sgAdjBtn('f010',e.id,'approved','at','',`openF010('${e.id}')`):''}`:'waiting for MD approval'}</div>
     <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="btn btn-outline" onclick="f027Close()">Close</button>${e.status!=='Draft'||(_f010||[]).some(x=>x.id===e.id)?`<button class="btn btn-outline" onclick="f010Pdf('${e.id}')">📄 F010 (PDF)</button>`:''}
       ${f010Editable(e)?`<button class="btn btn-outline" onclick="f010Save('draft')">💾 Save draft</button><button class="btn btn-primary" onclick="f010Save('submit')">✅ Evaluated — send to MD</button>`:''}
       ${e.status==='Submitted'&&canF010Approve()?`<button class="btn btn-outline" style="color:var(--red);" onclick="f010Save('return')">↩️ Return</button><button class="btn btn-primary" onclick="f010Save('approve')">✅ MD decision: ${escapeHtml((F010_DECISIONS.find(x=>x[0]===dec)||[])[1]||'')}</button>`:''}
@@ -20604,7 +20617,7 @@ async function saveMuReview(id){ const tpl=(el('mu-tpl')?.value||'').trim(), not
   try{ await _methStore.patch(arr=>{ if(!arr.length) METH_SEED().forEach(x=>arr.push(x)); const x=arr.find(y=>y.id===id); if(x) (x.muReviews=x.muReviews||[]).push(rec); }); }catch(e){ alert(e.message||e); return; }
   addAudit('📏',`${escapeHtml(m.code)} uncertainty budget reviewed`); f027Close(); renderMethods(); refreshAllBadges(); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); openMethDetail(id); }
 function muDetailHtml(m){ const l=muLast(m); const need=muNeed(m);
-  return `<div style="font-weight:700;margin:10px 0 4px;">📏 Uncertainty budget (7.6)</div><div style="font-size:12.5px;">${l?`${escapeHtml(l.template)}${l.version?' v'+escapeHtml(l.version):''} · reviewed ${qmsDate(isoDay(l.at))} by ${escapeHtml(staffNameOf(l.by))} — ${escapeHtml(l.note)}`:'Not recorded yet.'}${need?` <span class="badge badge-amber">review needed: ${escapeHtml(need)}</span>`:''}
+  return `<div style="font-weight:700;margin:10px 0 4px;">📏 Uncertainty budget (7.6)</div><div style="font-size:12.5px;">${l?`${escapeHtml(l.template)}${l.version?(/^\d/.test(String(l.version))?' v':' ')+escapeHtml(l.version):''} · reviewed ${qmsDate(isoDay(l.at))} by ${escapeHtml(staffNameOf(l.by))} — ${escapeHtml(l.note)}`:'Not recorded yet.'}${need?` <span class="badge badge-amber">review needed: ${escapeHtml(need)}</span>`:''}
     ${canEditMethods()&&!m.withdrawn?` <button class="btn btn-outline btn-sm" onclick="openMuReview('${m.id}')">📏 Record review</button>`:''}</div>`; }
 function muAttentionItems(){ const out=[]; if(!canEditMethods()||!_methStore.loaded) return out; methList().forEach(m=>{ const n=muNeed(m); if(n) out.push({icon:'📏',text:`${escapeHtml(m.code)}: review the uncertainty budget — ${escapeHtml(n)}`,onclick:`openMuReview('${m.id}')`}); }); return out; }
 
@@ -20925,13 +20938,13 @@ function openF013(id){ if(!canSeeQms(currentUser)) return; const ex=id?h79Fb().f
     <div id="f13-auto" style="background:var(--bg);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:8px;"></div>
     <div style="font-weight:700;">Section A — Customer complaints</div>${ta('aFind','Complaint trend analysis & key findings',r.A.findings)}${ta('aCa','Corrective actions implemented (summary)',r.A.ca)}
     <div style="font-weight:700;">Section B — Customer feedback</div>${ta('bThemes','Summary of key themes',r.B.themes)}${ta('bPos','Positive feedback highlights',r.B.positive)}${ta('bCon','Recurring concerns',r.B.concerns)}${ta('bImp','Recommended service improvements',r.B.improve)}
-    <details ${(r.forms||[]).includes(2)?'open':''}><summary style="font-weight:700;cursor:pointer;">Section C — Staff personnel feedback (manual until F029 is in Microsoft Forms)</summary>
+    <details ${(r.forms||[]).includes(2)?'open':''}><summary style="font-weight:700;cursor:pointer;">Section C — Staff personnel feedback (from the F029 round — Management Review → Staff feedback (F029) → Results)</summary>
       <div class="form-row"><div class="form-group"><label class="form-label">No. of forms</label><input class="form-control" id="f13-cN" value="${v(r.C.count)}" ${dis}/></div><div class="form-group"><label class="form-label">Submission period</label><input class="form-control" id="f13-cP" value="${v(r.C.period)}" ${dis}/></div><div class="form-group"><label class="form-label">Participation rate</label><input class="form-control" id="f13-cR" value="${v(r.C.rate)}" ${dis}/></div><div class="form-group"><label class="form-label">Overall</label><select class="form-control" id="f13-cS" ${dis}><option value="-1">—</option>${F12_SAT.map((s,i)=>`<option value="${i}" ${+r.C.sat===i?'selected':''}>${s}</option>`).join('')}</select></div></div>
       ${['A – Leadership & Management','B – Work Environment & Resources','C – Training, Growth & Development','D – Teamwork, Culture & Communication'].map((l,i)=>`<div class="form-row"><div class="form-group" style="flex:2;"><label class="form-label">${l} — average (of 5)</label><input class="form-control" id="f13-cA${i}" value="${v(r.C.rows?.[i]?.avg)}" ${dis}/></div><div class="form-group"><label class="form-label">Trend</label><select class="form-control" id="f13-cT${i}" ${dis}><option value="">—</option>${['Improved','Same','Declined'].map(t=>`<option ${r.C.rows?.[i]?.trend===t?'selected':''}>${t}</option>`).join('')}</select></div><div class="form-group" style="flex:3;"><label class="form-label">Notable observation</label><input class="form-control" id="f13-cO${i}" value="${v(r.C.rows?.[i]?.obs)}" ${dis}/></div></div>`).join('')}
       ${ta('cPos','Most common positive themes',r.C.positive)}${ta('cCon','Most common concerns',r.C.concerns)}${ta('cAct','Management actions planned',r.C.actions)}</details>
     <div style="font-weight:700;margin-top:6px;">Section D — Conclusions &amp; improvement plan</div>${ta('dFind','Key cross-cutting findings',r.D.findings)}${ta('dAct','Priority improvement actions',r.D.actions)}${ta('dPer','Persons responsible & target dates',r.D.persons)}<div class="form-row"><div class="form-group"><label class="form-label">Follow-up review date</label><input class="form-control" type="date" id="f13-dFol" value="${v(r.D.followUp)}" ${dis}/></div></div>${ta('dOut','Overall evaluation outcome',r.D.outcome)}
     <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline" onclick="f027Close()">Close</button>${r.id&&ex?`<button class="btn btn-outline" onclick="f013Pdf('${r.id}')">📄 F013</button>`:''}
-      ${!lock?`<button class="btn btn-outline" onclick="saveF013('draft')">💾 Save draft</button><button class="btn btn-primary" onclick="saveF013('submit')">📤 Submit to the MD</button>`:''}${r.status==='Submitted'&&isAdmin(currentUser)?`<button class="btn btn-primary" onclick="saveF013('approve')">✅ Approve</button>`:''}</div>`,880);
+      ${!lock?`<button class="btn btn-outline" onclick="saveF013('draft')">💾 Save draft</button>${r.status==='Submitted'&&isAdmin(currentUser)?'':`<button class="btn btn-primary" onclick="saveF013('submit')">📤 Submit to the MD</button>`}`:''}${r.status==='Submitted'&&isAdmin(currentUser)?`<button class="btn btn-primary" onclick="saveF013('approve')">✅ Approve</button>`:''}</div>`,880);
   f013Refresh(); }
 function f013Refresh(){ const r=_f013Draft; const a=r.status==='Approved'&&r.auto?r.auto:f013Auto(r.from,r.to); const box=el('f13-auto'); if(!box) return;
   box.innerHTML=`<b>From the LIMS for ${fmtDateShort(r.from)} – ${fmtDateShort(r.to)}:</b> complaints received ${a.total}, resolved ${a.resolved}, pending ${a.pending}${a.avgDays!=null?`, average ${a.avgDays} days to resolve`:''}${a.top3.length?` · top categories: ${a.top3.map(escapeHtml).join('; ')}`:''}<br/>feedback forms ${a.fbCount}${a.avg!=null?`, average rating ${a.avg} / 5`:''}${a.sat>=0?`, overall: ${F12_SAT[a.sat]}`:''}${a.hi?` · highest: ${escapeHtml(a.hi)} · lowest: ${escapeHtml(a.lo)}`:''}`; }
@@ -21395,7 +21408,8 @@ async function saveAccStatus(){ if(!isAdmin(currentUser)) return; const a0=accSt
 // ── signatories (AP 4) ──
 function sigEffective(l){ return (l.signatories||[]).filter(u=>{ const s=(_staff||[]).find(x=>x.username===u); return s&&s.active!==false&&s.approvedSignatory; }); }
 function sigResident(u){ return (persOf(u).sigResident||'Resident')==='Resident'; }
-function sigQualProblems(u){ const s=(_staff||[]).find(x=>x.username===u)||{}; const p=persOf(u); const out=[]; const ex=parseFloat(p.experience); const q=p.qualification||'';
+function sigQualProblems(u,over){ const s={...((_staff||[]).find(x=>x.username===u)||{}),...(over||{})}; // R21: `over` = the values typed in the staff window (a new account is not in _staff yet)
+  const p=persOf(u); const out=[]; const ex=parseFloat(p.experience); const q=p.qualification||'';
   const need={SPM:8,STPM:3,Diploma:3,Degree:0.5}[q];
   if(!q) out.push('qualification not recorded in the competence file'); else if(need==null) out.push(`qualification "${q}" — AP 4 4.11.2 needs SPM (8 yrs), STPM / Diploma (3 yrs) or a Degree (6 months)`);
   else if(!(ex>=need)) out.push(`${q} needs at least ${need===0.5?'6 months':need+' years'} relevant experience (recorded: ${isFinite(ex)?ex+' yrs':'none'})`);
@@ -22305,7 +22319,7 @@ function openImp(id){ const x=id?impGet(id):null; const md=impIsMd(); const v=s=
       <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" style="color:var(--red);" onclick="impDecide('${x.id}',false)">✕ Not selected</button><button class="btn btn-success" onclick="impDecide('${x.id}',true)">✅ Select &amp; assign</button></div></div>`;
   else if(x.status==='Accepted'&&impCanDo(x)) act=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;"><b>Record what was done</b>
       <div class="form-group" style="margin-top:6px;"><label class="form-label">What was done <span class="req">*</span></label><textarea class="form-control" id="im-done" rows="2"></textarea></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Completed on</label><input class="form-control" type="date" id="im-dd" value="${today}"/></div><div class="form-group"><label class="form-label">Evidence (record / file / link)</label><input class="form-control" id="im-ev"/></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Completed on</label><input class="form-control" type="date" id="im-dd" max="${today}" value="${today}"/></div><div class="form-group"><label class="form-label">Evidence (record / file / link)</label><input class="form-control" id="im-ev"/></div></div>
       <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" onclick="impDone('${x.id}')">Done — send to the MD</button></div></div>`;
   else if(x.status==='Done'&&md) act=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;"><b>Effectiveness (LQP 8.6 6.3.2)</b>${x.criteria?`<div style="font-size:12.5px;">Criteria: ${v(x.criteria)}</div>`:''}
       <div class="form-group" style="margin-top:6px;"><label class="form-label">Result / evidence <span class="req">*</span></label><input class="form-control" id="im-eff"/></div>
@@ -22331,7 +22345,7 @@ async function impDecide(id,ok){ if(!impIsMd()) return; const plan=(el('im-plan'
   else { note=prompt('Why is it not selected?',''); if(!note||!note.trim()) return; }
   const x0=impGet(id); await impPatch(id,(x,now)=>{ x.decision={ok,by:currentUser,at:now,note:note.trim?note.trim():''}; if(ok){ Object.assign(x,{status:'Accepted',plan,owner,due,criteria:crit}); } else x.status='Rejected';
     (x.history=x.history||[]).push({at:now,by:currentUser,action:ok?`Selected — owner ${staffNameOf(owner)}, due ${due}`:`Not selected — ${note.trim()}`}); },`Improvement ${escapeHtml(x0.no)} ${ok?'selected — owner '+escapeHtml(staffNameOf(owner)):'not selected'}`); }
-async function impDone(id){ const n=(el('im-done')?.value||'').trim(); if(!n){ alert('Say what was done.'); return; } const d=el('im-dd').value||toLocalDateStr(new Date()), ev=(el('im-ev')?.value||'').trim(); const x0=impGet(id);
+async function impDone(id){ const n=(el('im-done')?.value||'').trim(); if(!n){ alert('Say what was done.'); return; } const d=el('im-dd').value||toLocalDateStr(new Date()), ev=(el('im-ev')?.value||'').trim(); if(d>toLocalDateStr(new Date())){ alert('“Completed on” cannot be a future date.'); return; } // R21 const x0=impGet(id);
   await impPatch(id,(x,now)=>{ x.status='Done'; x.done={note:n,date:d,evidence:ev,by:currentUser,at:now}; (x.history=x.history||[]).push({at:now,by:currentUser,action:'Done — '+n}); },`Improvement ${escapeHtml(x0.no)} done — ${escapeHtml(n)}`); }
 async function impEff(id,ok){ if(!impIsMd()) return; const n=(el('im-eff')?.value||'').trim(); if(!n){ alert('Give the result / evidence.'); return; } const nd=el('im-nd')?.value||''; if(!ok&&!nd){ alert('Set a new due date.'); return; } const x0=impGet(id);
   await impPatch(id,(x,now)=>{ x.effChecks=[...(x.effChecks||[]),{result:ok?'Effective':'Not effective',note:n,by:currentUser,at:now}];
@@ -22858,8 +22872,14 @@ function f029Render(){ const box=el('mr-tab'); const md=isQmOrMd(); const R=f029
     <div class="card"><div class="table-wrap"><table class="m-cards"><thead><tr><th>Round</th><th>Open until</th><th>Submitted</th><th>Status</th><th></th></tr></thead><tbody>
     ${R.map(r=>`<tr><td data-l="Round" style="font-weight:700;">${escapeHtml(r.period)}</td><td data-l="Open until">${qmsDate(r.until)}</td><td data-l="Submitted">${f029Done(r.id).length} of ${(_staff||[]).filter(s=>s.active!==false).length} staff</td><td data-l="Status">${r.closed?'<span class="badge badge-green">Closed</span>':'<span class="badge badge-amber">Open</span>'}</td>
       <td><div style="display:flex;gap:4px;justify-content:flex-end;">${!r.closed&&md?`<button class="btn btn-outline btn-sm" onclick="f029Close('${r.id}')">Close round</button>`:''}${r.closed?`<button class="btn btn-outline btn-sm" onclick="f029Results('${r.id}')">Results</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--text-muted);padding:14px;">No feedback round yet.</td></tr>'}</tbody></table></div></div>`; }
-async function f029NewRound(){ const p=prompt('Name of the round (e.g. 2026):',String(new Date().getFullYear())); if(!p||!p.trim()) return; const u=prompt('Open until (YYYY-MM-DD):',toLocalDateStr(new Date(Date.now()+21*864e5))); if(!u||!/^\d{4}-\d{2}-\d{2}$/.test(u)) return;
-  try{ await _f029Store.patch(a=>{ a.push({id:'F29R-'+Date.now(),type:'round',period:p.trim(),until:u,by:currentUser,at:new Date().toISOString()}); }); }catch(e){ alert(e.message||e); return; } addAudit('🗳️',`F029 staff feedback round ${escapeHtml(p.trim())} opened until ${u}`); renderMReview(); }
+// R21: a small window (date picker) instead of browser prompts; an invalid / past date is refused with a message
+function f029NewRound(){ const t=toLocalDateStr(new Date()); cOv('🗳️ Open an F029 staff feedback round',`<div class="form-row"><div class="form-group"><label class="form-label">Name of the round <span class="req">*</span></label><input class="form-control" id="f29n-p" value="${new Date().getFullYear()}" placeholder="e.g. 2026"/></div>
+    <div class="form-group"><label class="form-label">Open until <span class="req">*</span></label><input class="form-control" type="date" id="f29n-u" min="${t}" value="${toLocalDateStr(new Date(Date.now()+21*864e5))}"/></div></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" onclick="f029NewRoundSave()">Open the round</button></div>`,480); }
+async function f029NewRoundSave(){ const p=(el('f29n-p')?.value||'').trim(), u=el('f29n-u')?.value||'';
+  if(!p){ alert('Give the round a name (e.g. 2026).'); return; } if(!/^\d{4}-\d{2}-\d{2}$/.test(u)){ alert('Choose the date the round stays open until.'); return; } if(u<toLocalDateStr(new Date())){ alert('“Open until” cannot be in the past.'); return; }
+  f027Close();
+  try{ await _f029Store.patch(a=>{ a.push({id:'F29R-'+Date.now(),type:'round',period:p.trim(),until:u,by:currentUser,at:new Date().toISOString()}); }); }catch(e){ alert(e.message||e); return; } addAudit('🗳️',`F029 staff feedback round ${escapeHtml(p.trim())} opened until ${escapeHtml(qmsDate(u))}`); renderMReview(); }
 async function f029Close(rid){ const r=f029Rounds().find(x=>x.id===rid); const n=f029Resp(rid).length; if(!confirm(`Close round ${r.period}? ${n} response(s).${n<3?' Fewer than 3 responses — individual answers may be recognisable.':''}`)) return;
   try{ await _f029Store.patch(a=>{ const x=a.find(y=>y.id===rid); if(x){ x.closed=true; x.closedAt=new Date().toISOString(); x.closedBy=currentUser; } }); }catch(e){ alert(e.message||e); return; } renderMReview(); }
 function f029Fill(){ const r=f029Open(); if(!r) return; if(f029Done(r.id).some(x=>x.username===currentUser)){ alert('You have already submitted your feedback for this round — thank you.'); return; }
@@ -23240,7 +23260,7 @@ function openReviewLeave(leaveId){
     <table style="width:100%;font-size:13px;">
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;white-space:nowrap;">Staff</td><td><strong>${escapeHtml(staffName)}</strong></td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Leave Type</td><td><strong>${escapeHtml(r.type)}${r.halfDayPeriod?' ('+escapeHtml(r.halfDayPeriod)+')':''}</strong></td></tr>
-      <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Dates</td><td>${escapeHtml(r.start)}${r.end!==r.start?' to '+escapeHtml(r.end):''}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Dates</td><td>${escapeHtml(fmtDateShort(r.start))}${r.end!==r.start?' to '+escapeHtml(fmtDateShort(r.end)):''}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Duration</td><td><strong style="color:var(--blue);">${escapeHtml(r.days)} day${r.days!==1?'s':''}</strong></td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Reason</td><td>${escapeHtml(r.reason)}</td></tr>
       ${(()=>{ const rep=leavePhCredits({...r,status:'Approved'}); return rep.length?`<tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;vertical-align:top;">Public holiday</td><td>${rep.map(c=>`${fmtDateShort(c.date)}${c.name?' '+escapeHtml(c.name):''}${c.days!==1?` (${c.days} day — first Saturday)`:''}`).join('; ')} — not deducted; on approval <strong>+${leavePhDaysTxt(rep.reduce((a,c)=>a+c.days,0))} Replacement Leave</strong> is credited</td></tr>`:''; })()}
@@ -23326,7 +23346,7 @@ function renderLeave(){
 
   const statusBadge={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red',Cancelled:'badge-slate'};
   const typeColor={'Annual Leave':'badge-blue','Medical Leave':'badge-red','Hospitalisation Leave':'badge-red','Emergency Leave':'badge-amber','Replacement Leave':'badge-purple','Unpaid Leave':'badge-slate','Maternity Leave':'badge-purple','Paternity Leave':'badge-blue','Half Day':'badge-teal'};
-  container.innerHTML=`<table style="width:100%;border-collapse:collapse;">
+  container.innerHTML=`<table class="m-cards" style="width:100%;border-collapse:collapse;">
     <thead><tr style="background:var(--bg);">
       ${admin?'<th style="padding:10px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border);">Staff</th>':''}
       <th style="padding:10px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border);">Type</th>
@@ -23545,6 +23565,7 @@ function renderClaims(){
   const summaryRow=el('claims-summary-row');
   if(adminFilter) adminFilter.style.display=admin?'flex':'none';
   if(summaryRow) summaryRow.style.display=isHrOrAdmin(currentUser)?'flex':'none'; // company claim totals: MD / HR
+  { const hb=el('claims-hr-btns'); if(hb) hb.style.display=isHrOrAdmin(currentUser)?'contents':'none'; } // R21: paying / payroll summary = HR / MD / Admin
 
   // Populate staff filter
   const staffSel=el('claims-filter-staff');
@@ -23595,7 +23616,7 @@ function renderClaims(){
 
   const statusBadge={Pending:'badge-amber',Approved:'badge-green',Rejected:'badge-red',Paid:'badge-blue'};
   filtered=filtered.map(c=>claimSt(c)!==c.status?{...c,status:claimSt(c)}:c); // shown as paid (a copy, for this list only)
-  container.innerHTML=`<table style="width:100%;border-collapse:collapse;">
+  container.innerHTML=`<table class="m-cards" style="width:100%;border-collapse:collapse;">
     <thead><tr style="background:var(--bg);">
       ${admin?'<th style="padding:10px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border);">Staff</th>':''}
       <th style="padding:10px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border);">Date</th>
@@ -23637,7 +23658,7 @@ function openReviewClaim(claimId){
   if(body) body.innerHTML=`
     <table style="width:100%;font-size:13px;">
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;white-space:nowrap;">Staff</td><td><strong>${escapeHtml(staffName)}</strong></td></tr>
-      <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Date</td><td>${escapeHtml(c.date)}</td></tr>
+      <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Date</td><td>${escapeHtml(fmtDateShort(c.date))}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Type</td><td>${escapeHtml(c.type)}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Amount</td><td><strong style="color:var(--blue);font-size:16px;">RM ${parseFloat(c.amount).toFixed(2)}</strong></td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px 4px 0;">Description</td><td>${escapeHtml(c.description)}</td></tr>
@@ -24314,7 +24335,7 @@ async function confirmConditionCapture(){
     console.error('confirmConditionCapture error:',e);
     showToast('❌ Failed to save condition: '+e.message,'error',4000);
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='✅ Save Condition';}
+    if(btn){btn.disabled=false;btn.textContent='✅ Save Details';}
   }
 }
 
@@ -25122,7 +25143,7 @@ function renderMyJobs(){
   const todayCk=toLocalDateStr(new Date());
   myItems.forEach(({job:j,item,idx})=>{
     if(item.calType!=='Onsite')return;
-    if(item.status==='Completed'||item.status==='Returned - Abnormal')return;
+    if(item.status==='Completed'||item.status==='Returned - Abnormal'||item.status==='Pending Approval')return; // R21: submitted — nothing to check in to
     if(onsiteJobsSeen.has(j.jobNo))return;
     onsiteJobsSeen.add(j.jobNo);
     // checked in = ANY of my on-site items on this job has an open check-in from today; an open one from an earlier day
@@ -25130,7 +25151,8 @@ function renderMyJobs(){
     const mine=(j.items||[]).map((it,i)=>({it,i})).filter(x=>x.it.calType==='Onsite'&&x.it.assignedTo===currentUser);
     const open=mine.map(x=>({i:x.i,cd:getCheckinData(j.jobNo,x.i)})).filter(x=>x.cd.checkinTime&&!x.cd.checkoutTime);
     const openToday=open.find(x=>toLocalDateStr(new Date(x.cd.checkinTime))===todayCk), stale=!openToday&&open[0];
-    checkinStripJobs.push({jobNo:j.jobNo,custName:j.custName,itemIdx:openToday?openToday.i:idx,checkedIn:!!openToday,stale:stale?toLocalDateStr(new Date(stale.cd.checkinTime)):''});
+    const outToday=!openToday&&mine.map(x=>getCheckinData(j.jobNo,x.i)).filter(cd=>cd.checkoutTime&&toLocalDateStr(new Date(cd.checkoutTime))===todayCk).map(cd=>cd.checkoutTime).sort().pop()||''; // R21
+    checkinStripJobs.push({jobNo:j.jobNo,custName:j.custName,itemIdx:openToday?openToday.i:idx,checkedIn:!!openToday,outToday,stale:stale?toLocalDateStr(new Date(stale.cd.checkinTime)):''});
   });
   const stripEl=el('my-jobs-checkin-strip');
   if(stripEl){
@@ -25142,6 +25164,7 @@ function renderMyJobs(){
           <div><strong style="font-size:12px;">${s.jobNo}</strong><br/><span style="font-size:11px;color:var(--text-muted);">${escapeHtml(s.custName)}</span>${s.stale?`<br/><span style="font-size:11px;color:#b45309;">⚠️ No check-out on ${fmtDateShort(s.stale)}</span>`:''}</div>
           ${s.checkedIn
             ?`<button class="btn btn-outline btn-sm" onclick="openSiteReport('${s.jobNo}')">📝 Today's site report</button> <button class="btn btn-outline btn-sm" style="background:#2e7d32;color:#fff;border:none;" onclick="openCheckoutModal('${s.jobNo}',${s.itemIdx})">🏁 Check Out</button>`
+            :s.outToday?`<span class="badge badge-green" style="font-size:11px;">✅ Checked out ${new Date(s.outToday).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span> <button class="btn btn-outline btn-sm" onclick="openCheckinModal('${s.jobNo}',${s.itemIdx})" title="Only if you go back to the site today">📍 Check in again</button>`
             :`<button class="btn btn-outline btn-sm" style="background:#006064;color:#fff;border:none;" onclick="openCheckinModal('${s.jobNo}',${s.itemIdx})">📍 Check In</button>`}
         </div>`).join('')}
       </div>`;
@@ -25167,7 +25190,7 @@ function renderMyJobs(){
       const kivDaysUsed=countWorkingDays(item.kivStartDate,tdy);
       const kivDaysLeft=Math.max(0,7-kivDaysUsed);
       const tatRemaining=item.kivTATRemaining||0;
-      slaHtml=`<span class="badge badge-orange" style="margin-left:6px;">⏸ KIV: ${kivDaysLeft}d left (TAT: ${tatRemaining}d frozen)</span>`;
+      slaHtml=item.kivHold?`<span class="badge badge-orange" style="margin-left:6px;">⏸ KIV until the decision (TAT: ${tatRemaining}d frozen)</span>`:`<span class="badge badge-orange" style="margin-left:6px;">⏸ KIV: ${kivDaysLeft}d left (TAT: ${tatRemaining}d frozen)</span>`; // R21: a decision hold never expires
     } else if(j.promisedDate&&item.status!=='Completed'&&item.status!=='Pending Approval'&&item.status!=='Returned - Abnormal'){
       const diff=Math.round((new Date(j.promisedDate+'T00:00:00')-today)/(1000*60*60*24));
       if(diff<0) slaHtml=`<span class="badge badge-red" style="margin-left:6px;">🚨 ${Math.abs(diff)}d overdue</span>`;
@@ -25177,7 +25200,7 @@ function renderMyJobs(){
     }
     const histId=`hist-${j.jobNo.replace(/[^a-z0-9]/gi,'_')}_${idx}`;
     const histRows=(j.history||[]).filter(h=>h.action&&h.action.includes(`Item ${item.itemNo}`)).slice(-5).reverse()
-      .map(h=>`<div style="font-size:11px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid var(--border);"><span style="color:var(--navy);font-weight:600;">${safeHtml(h.action)}</span> — ${escapeHtml(h.by||'')} <span style="float:right;">${h.time?isoDay(h.time):''}</span></div>`).join('');
+      .map(h=>`<div style="font-size:11px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid var(--border);"><span style="color:var(--navy);font-weight:600;">${safeHtml(h.action)}</span> — ${escapeHtml(h.by?staffNameOf(h.by):'')} <span style="float:right;">${h.time?fmtDateShort(h.time):''}</span></div>`).join(''); // R21: names, app date format
     return `<div class="mj-item" style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;${isOverdue?'border-left:3px solid var(--red);padding-left:8px;':''}">
       <div class="approval-card-header">
         <span class="approval-card-title">Item ${item.itemNo}: ${escapeHtml(item.eqName)} ${slaHtml}</span>
@@ -25203,7 +25226,7 @@ function renderMyJobs(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         ${item.status==='KIV'?`
           <span class="badge badge-orange" style="font-size:11px;padding:5px 8px;">🔶 KIV: "${(item.kivReason||'').substring(0,40)}${(item.kivReason||'').length>40?'…':''}"</span>
-          <button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">✅ Remove KIV</button>`:''}
+          ${item.kivHold?'':`<button class="btn btn-outline btn-sm" style="background:#fff3e0;color:#c84b00;border-color:#ffb74d;" onclick="openKIVModal('${j.jobNo}',${idx})">✅ Remove KIV</button>`}`:''}
         ${item.status==='Customer Not Ready'?`
           <span class="badge badge-red" style="font-size:11px;padding:5px 8px;">⚠️ Customer Not Ready — awaiting reschedule by the office</span>`:''}
         ${item.calType==='Onsite'&&item.status!=='Completed'&&item.status!=='Returned - Abnormal'?`
@@ -26528,9 +26551,9 @@ function dashRoleKpis(kpi){ const r=getUserRole(currentUser); const today=toLoca
     const run=typeof payRunOf==='function'?payRunOf(ym):null; const st=run?run.status:'Not started'; const pd=typeof payLastWorkingDay==='function'?payLastWorkingDay(ym):'';
     const mn=new Date().toLocaleDateString('en-GB',{month:'long'});
     const pay=`<button class="dash-kpi${st==='Paid'?' zero':''}" style="--k:#0f766e;" onclick="_payMonth='${ym}';_payTab='run';showView('payroll')"><div class="dash-kpi-label">Payroll — ${mn}</div><div class="dash-kpi-num" style="font-size:22px;">${escapeHtml(st)}</div><div class="dash-kpi-sub">${st==='Paid'?'paid':'pay day '+(pd?fmtDateShort(pd):'end of month')}</div></button>`;
-    return kpi('Pending leave',pl,'leave requests waiting for the TM / MD','#d97706',"showView('leave')")+kpi('Pending claims',pc,'claims waiting for the TM / MD','#2563eb',"showView('claims')")+kpi('Pending overtime',po,'overtime claims waiting for the TM / MD','#7c3aed',"showView('attendance')")+pay; }
+    return kpi('Pending leave',pl,'leave requests waiting for the TM / MD','#d97706',"showView('leave')")+kpi('Pending claims',pc,'claims waiting for the TM / MD','#2563eb',"showView('claims')")+kpi('Pending overtime',po,'overtime records waiting for TM / MD approval','#7c3aed',"showView('attendance')")+pay; }
   if(r==='Receptionist'){ const T=A(typeof _trips!=='undefined'?_trips:[]); const J=A(_jobs).filter(j=>j&&j.status!=='Deleted');
-    const qs=A(typeof _quotationsV2!=='undefined'?_quotationsV2:[]).filter(q=>q.status==='Accepted'&&typeof qtUnreceived==='function'&&qtUnreceived(q).some(x=>!(typeof rcpLoggedUnits==='function'&&rcpLoggedUnits(q.id).has(x.i+':'+x.u))));
+    const qs=A(typeof _quotationsV2!=='undefined'?_quotationsV2:[]).filter(q=>q.status==='Accepted'&&typeof qtUnreceived==='function'&&qtUnreceived(q).some(x=>(x.it.calType||'Lab')!=='Onsite'&&!(typeof rcpLoggedUnits==='function'&&rcpLoggedUnits(q.id).has(x.i+':'+x.u))));
     const come=T.filter(t=>['pickup','from-vendor'].includes(t.kind)&&((t.status==='Planned'&&t.date===today)||(t.status==='Done'&&!t.logged))).length+qs.length;
     const incL=typeof rcpIncomingList==='function'?rcpIncomingList():[], readyL=typeof rcpReadyList==='function'?rcpReadyList():[]; // the same lists as the Reception page (round 8)
     const waiting=incL.length, ready=readyL.length; const ji=l=>typeof rcpJobsItems==='function'?rcpJobsItems(l):String(l.length);
@@ -27638,6 +27661,8 @@ function renderRefEqTable(){
       availBadge=`<span class="badge badge-purple">🔧 Under Cal. (${escapeHtml(r.calibrationType||'—')})</span>`;
     } else if(avail==='AwaitingVerification'){
       availBadge=`<span class="badge badge-amber">↩️ Returned — F030 verification</span>`;
+    } else if(EQ_OOS.includes(r.lifecycleStatus)||r.rawCalStatus==='Quarantine'){ // R21: out of service is not "Available"
+      availBadge=`<span class="badge badge-red">⛔ Not available — ${escapeHtml(EQ_OOS.includes(r.lifecycleStatus)?r.lifecycleStatus:'Quarantine')}</span>`;
     } else {
       availBadge=`<span class="badge badge-green">✅ Available</span>`;
     }
@@ -27655,7 +27680,7 @@ function renderRefEqTable(){
     const checkedChip=doneToday?`<div style="font-size:11px;color:var(--green);margin-top:2px;" title="${escapeHtml(doneToday.notes||'')}">✅ Checked today by ${escapeHtml(USERS[doneToday.checkedBy]?.name||doneToday.checkedBy)}</div>`:'';
     const fmtD=x=>x?fmtDateShort(x):'—';
     return `<tr>
-    <td style="white-space:nowrap;"><span style="font-family:'DM Mono';font-size:12px;font-weight:600;">${escapeHtml(r.id)}</span></td>
+    <td style="white-space:nowrap;"><span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;">${escapeHtml(r.id)}</span></td>
     <td><strong>${escapeHtml(r.name||'')}</strong>
       <div style="font-size:11.5px;color:var(--text-muted);">${[[r.brand,r.model].filter(Boolean).join(' / '),r.serial?'S/N '+r.serial:'',r.location||''].filter(Boolean).map(escapeHtml).join(' · ')}</div>${checkedChip}</td>
     <td style="font-size:12px;">${escapeHtml(r.traceability||'—')}</td>
@@ -28348,7 +28373,7 @@ function refEqMenu(ev,id){
     h+=stMenuItem('✏️ Edit',`openEditRefEqModal(${q})`);
     if(avail==='Available'&&!EQ_OOS.includes(r.lifecycleStatus)) h+=stMenuItem('🔧 Send for calibration',`openSendForCalModal(${q})`);
     else if(avail==='UnderCalibration'&&r.calibrationType==='External') h+=stMenuItem('✅ Received back (F030 Part B)',`openConfirmCalReceivedModal(${q})`);
-    h+='<hr/>'+stMenuItem('🗑 Delete',`deleteRefEq(${q})`,{danger:true});
+    if(isAdmin(currentUser)) h+='<hr/>'+stMenuItem('🗑 Delete',`deleteRefEq(${q})`,{danger:true}); // R21: delete = Admin / MD only
   }
   stShowMenu(ev.currentTarget,h);
 }
@@ -32849,7 +32874,7 @@ async function saveStaff(){
     if(pw.length<6){alert('Password must be at least 6 characters.');return;}
   }
   const existing=_staff.find(s=>s.username===(isEdit?editUsername:username));
-  if(el('staff-approved-signatory')?.checked&&!existing?.approvedSignatory&&typeof sigQualProblems==='function'&&typeof _persStore!=='undefined'&&_persStore.loaded){ const pr=sigQualProblems(username); if(pr.length){ alert('⛔ Approved signatory (AP 4 4.11) — not met yet:\n\n• '+pr.join('\n• ')+'\n\nRecord the qualification and experience in the competence file first.'); return; } }
+  if(el('staff-approved-signatory')?.checked&&!existing?.approvedSignatory&&typeof sigQualProblems==='function'&&typeof _persStore!=='undefined'&&_persStore.loaded){ const pr=sigQualProblems(username,{joinDate:el('staff-join-date')?.value||existing?.joinDate||''}); if(pr.length){ alert('⛔ Approved signatory (AP 4 4.11) — not met yet:\n\n• '+pr.join('\n• ')+'\n\nRecord the qualification and experience in the competence file first.'); return; } }
   // Upload signature to Storage if a new one was selected
   let sigUrl=existing?.signature||'';
   if(_staffSigData&&_staffSigData.startsWith('data:')){
@@ -37535,7 +37560,7 @@ async function printPersFile(u){ if(!(canSeeComp(currentUser)||u===currentUser))
   const sub=`${escapeHtml(s.name||u)} · ${escapeHtml(p.position||roleLabel(s.role)||'')}${s.joinDate?' · joined '+qmsDate(s.joinDate):''}${p.qualification?' · '+escapeHtml(p.qualification)+(p.field?' ('+escapeHtml(p.field)+')':''):''}`;
   return bundleFilePdf(bundleCoverHtml('Personnel File',sub,docs,pfRecordsHtml(u,true)),docs,`Personnel_File_${String(s.name||u).replace(/[^A-Za-z0-9]+/g,'_')}_${toLocalDateStr(new Date())}.pdf`,`Personnel file — ${s.name||u}`); }
 function pfTrainRows(){ const t=_pfDraft.t; return (t.rows||[]).map((r,i)=>`<tr><td>${i+1}.</td><td>${i<F018_SUBJECTS.length&&r.subject===F018_SUBJECTS[i]?escapeHtml(r.subject):`<input class="form-control" data-k="subject" data-i="${i}" value="${escapeHtml(r.subject||'')}"/>`}</td>
-  <td><select class="form-control" data-k="status" data-i="${i}">${['','Completed','In progress','Not started','N/A'].map(x=>`<option ${r.status===x?'selected':''}>${x}</option>`).join('')}</select></td><td><input class="form-control" type="date" data-k="date" data-i="${i}" value="${escapeHtml(r.date||'')}"/></td>
+  <td><select class="form-control" data-k="status" data-i="${i}" style="min-width:118px;">${['','Completed','In progress','Not started','N/A'].map(x=>`<option ${r.status===x?'selected':''}>${x}</option>`).join('')}</select></td><td><input class="form-control" type="date" data-k="date" data-i="${i}" value="${escapeHtml(r.date||'')}"/></td>
   <td><input class="form-control" data-k="trainer" data-i="${i}" value="${escapeHtml(r.trainer||'')}"/></td><td><input class="form-control" type="number" step="0.5" min="0" data-k="hours" data-i="${i}" value="${escapeHtml(String(r.hours||''))}" style="width:80px;"/></td><td><input class="form-control" data-k="remarks" data-i="${i}" value="${escapeHtml(r.remarks||'')}"/></td></tr>`).join(''); }
 function pfCollect(){ document.querySelectorAll('#pf-train [data-k]').forEach(x=>{ const r=_pfDraft.t.rows[+x.dataset.i]; if(r) r[x.dataset.k]=x.value.trim(); }); }
 function pfAddTrain(){ pfCollect(); _pfDraft.t.rows.push({subject:'',status:'',date:'',trainer:'',remarks:'',hours:''}); document.querySelector('#pf-train tbody').innerHTML=pfTrainRows(); }
@@ -37982,7 +38007,7 @@ function openEnvReview(id){ const r=id?JSON.parse(JSON.stringify(envRecs('review
   const ms=envRecs('month').filter(m=>m.month>=qmsAddDays(r.date,-365).slice(0,7));
   cOv(`🏢 Facility review${r.id?' — '+qmsDate(r.date):''}`,`<div class="form-group"><label class="form-label">Date</label><input class="form-control" type="date" id="er-date" value="${escapeHtml(r.date)}" ${lock?'disabled':''}/></div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Monthly records in the last 12 months: ${ms.length}; with readings out of limits: ${ms.filter(m=>m.exCount).length}.</div>
-    <div class="table-wrap"><table class="m-cards"><thead><tr><th>Measure</th><th>Result</th><th>Notes</th></tr></thead><tbody>${ENV_REVIEW_ITEMS.map(([k,d],i)=>{ const x=r.items[i]||{}; return `<tr><td><b>${escapeHtml(k)}</b><div style="font-size:11.5px;color:var(--text-muted);">${escapeHtml(d)}</div></td><td><select class="form-control er-r" data-i="${i}" ${lock?'disabled':''}>${['','OK','Not OK','N/A'].map(o=>`<option ${x.r===o?'selected':''}>${o}</option>`).join('')}</select></td><td><input class="form-control er-n" data-i="${i}" value="${escapeHtml(x.n||'')}" ${lock?'disabled':''}/></td></tr>`; }).join('')}</tbody></table></div>
+    <div class="table-wrap"><table class="m-cards"><thead><tr><th>Measure</th><th>Result</th><th>Notes</th></tr></thead><tbody>${ENV_REVIEW_ITEMS.map(([k,d],i)=>{ const x=r.items[i]||{}; return `<tr><td><b>${escapeHtml(k)}</b><div style="font-size:11.5px;color:var(--text-muted);">${escapeHtml(d)}</div></td><td><select class="form-control er-r" data-i="${i}" style="min-width:96px;" ${lock?'disabled':''}>${['','OK','Not OK','N/A'].map(o=>`<option ${x.r===o?'selected':''}>${o}</option>`).join('')}</select></td><td><input class="form-control er-n" data-i="${i}" value="${escapeHtml(x.n||'')}" ${lock?'disabled':''}/></td></tr>`; }).join('')}</tbody></table></div>
     <div class="form-group"><label class="form-label">Actions</label><textarea class="form-control" id="er-act" rows="2" ${lock?'disabled':''}>${escapeHtml(r.actions||'')}</textarea></div>
     ${r.id?`<div style="font-size:12.5px;">Reviewed by ${escapeHtml(staffNameOf(r.by))} ${qmsDate(r.at)}${r.signed?` · signed off by ${escapeHtml(staffNameOf(r.signed.by))} ${qmsDate(r.signed.at)}`:''}</div>`:''}
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;"><button class="btn btn-outline" onclick="f027Close()">Close</button>${!lock?`<button class="btn btn-primary" onclick="saveEnvReview()">Submit to MD</button>`:''}${lock&&!r.signed&&md?`<button class="btn btn-primary" onclick="signEnvReview('${r.id}')">✅ Sign off</button>`:''}</div>`,820); }
@@ -38899,7 +38924,8 @@ async function savePurchaseOrder(submit){
       const newer=(_purchaseOrders||[]).some(o=>docNoAfter(xp,o.poNumber,true));
       if(!newer){ const r=await tryRollbackSequence(xp.seqId,seqNum);
         showToast(r==='freed'?`✏️ ${exNo} → ${renameTo}. ${exNo} is free again — the next PO will use it.`:`✏️ PO number changed to ${renameTo}.`,'success',5000); } } }
-  if(window._prPoCtx&&saved){ const pr=_prs.find(x=>x.id===window._prPoCtx.id); window._prPoCtx=null; if(pr){ if(pr.poNumber&&pr.poNumber!==saved.poNumber) (pr.oldPoNumbers=pr.oldPoNumbers||[]).push({no:pr.poNumber,gone:'replaced',at:new Date().toISOString()}); pr.poNumber=saved.poNumber; delete pr.poGoneNote; await savePrs(); addAudit('🧾',`${pr.no}: PO ${saved.poNumber} raised`); } }
+  if(window._prPoCtx&&saved){ const pr=_prs.find(x=>x.id===window._prPoCtx.id); window._prPoCtx=null; if(pr){ if(pr.poNumber&&pr.poNumber!==saved.poNumber) (pr.oldPoNumbers=pr.oldPoNumbers||[]).push({no:pr.poNumber,gone:'replaced',at:new Date().toISOString()}); pr.poNumber=saved.poNumber; delete pr.poGoneNote; await savePrs(); addAudit('🧾',`${pr.no}: PO ${saved.poNumber} raised`);
+    try{ const o=document.getElementById('pr-overlay'); if(o&&o.style.display!=='none') openPr(pr.id); renderPrSections(); }catch(e){} } } // R21: the open PR window shows the new PO
   if(window._osPoCtx&&saved){ const cx=window._osPoCtx; window._osPoCtx=null; // link the vendor PO back to the quotation + request
     const q=_quotationsV2.find(x=>x.id===cx.qid); if(q){ q.outsourcePos={...(q.outsourcePos||{}),[cx.vendorId]:saved.poNumber}; await saveQuotationsV2();
       const osrIds=[...new Set((q.items||[]).filter(it=>it.outsourceVendorId===cx.vendorId).map(it=>it.outsourceOsrId).filter(Boolean))];
@@ -39469,7 +39495,7 @@ function openVendorCertReview(jobNo,ix){
         ${can?`<div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-danger" onclick="decideVendorCert('${escapeForJsAttr(jobNo)}',${ix},false)">↩️ Send back — ask vendor to correct</button>
           <button class="btn btn-success" id="vcr-ok" onclick="decideVendorCert('${escapeForJsAttr(jobNo)}',${ix},true)">✓ Verified — complete item</button></div>`
-        :`<div class="qt-note warn">Reviewed by the Technical Manager, Quality Manager or MD.</div>`}
+        :`<div class="qt-note warn">Reviewed by the Technical Manager (or the MD).</div>`}
       </div>
       <div style="border-left:1px solid var(--border);">
         <div style="padding:8px 12px;background:#f8fafc;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:700;">📄 Vendor certificate <a href="${it.vendorCertUrl}" target="_blank" class="btn btn-outline btn-sm" style="font-weight:normal;">⬇ Open in new tab</a></div>
