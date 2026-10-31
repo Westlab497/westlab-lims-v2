@@ -709,6 +709,7 @@ textarea.form-control{resize:vertical;min-height:70px;}
     <button class="nav-item" id="nav-payslips" onclick="showView('payslips')" data-label="My Payslips"><span class="nav-icon"><i class="ti ti-cash"></i></span><span class="nav-label">My Payslips</span></button>
     <button class="nav-item" id="nav-wi" onclick="showView('wi')" data-label="Working Instructions"><span class="nav-icon"><i class="ti ti-book-2"></i></span><span class="nav-label">Working Instructions</span></button>
     <button class="nav-item" id="nav-my-requests" onclick="showView('my-requests')" data-label="My Requests"><span class="nav-icon"><i class="ti ti-list-check"></i></span><span class="nav-label">My Requests</span></button>
+    <button class="nav-item" id="nav-mypwd" onclick="openChangeOwnPassword()" data-label="Change password"><span class="nav-icon"><i class="ti ti-key"></i></span><span class="nav-label">Change password</span></button>
     <button class="nav-item" id="nav-datamgmt" onclick="showView('datamgmt')" data-label="LIMS &amp; Data"><span class="nav-icon"><i class="ti ti-database"></i></span><span class="nav-label">LIMS &amp; Data</span></button>
 
     <div class="nav-section-label" id="nav-admin-section">Administration</div>
@@ -13799,9 +13800,16 @@ function qtUnits(q){ // every unit the customer ordered, with whether it has bee
   const out=[]; (q.items||[]).forEach((it,i)=>{ if(!it||!String(it.eqName||'').trim()||it.poAccepted===false) return;
     const n=Math.max(1,parseInt(it.poQty)||parseInt(it.quantity)||1);
     for(let u=0;u<n;u++){ const un=(it.units||[])[u]||{}; const rj=un.receivedJobNo?getJob(un.receivedJobNo):null; // a unit on a deleted job is not "received"
-      out.push({i,u,it,unit:un,received:un.receivedJobNo&&!(rj&&rj.status==='Deleted')?un.receivedJobNo:null}); } });
+      out.push({i,u,it,unit:un,received:un.receivedJobNo&&!(rj&&rj.status==='Deleted')?un.receivedJobNo:(qtJobUnitIdx()[q.quotationNo+'#'+i+'#'+u]||null)}); } });
   return out;
 }
+// R14: a unit is also "received" when a (not deleted) job item was made from it (fromQuotation + item/unit index) — heals
+// quotations whose receipt was not written back to units[] (stale save before R14), so they never show as "to receive" again
+let _qtJuIdx=null,_qtJuAt=0,_qtJuRef=null,_qtJuN=-1;
+function qtJobUnitIdx(){ const J=(typeof _jobs!=='undefined'&&_jobs)||[]; const t=Date.now();
+  if(_qtJuIdx&&_qtJuRef===J&&_qtJuN===J.length&&t-_qtJuAt<1500) return _qtJuIdx;
+  const m={}; J.forEach(j=>{ if(!j||j.status==='Deleted') return; (j.items||[]).forEach(ji=>{ if(ji&&ji.fromQuotation&&ji.quotationItemIdx!=null&&ji.quotationUnitIdx!=null){ const k=ji.fromQuotation+'#'+ji.quotationItemIdx+'#'+ji.quotationUnitIdx; if(!m[k]) m[k]=j.jobNo; } }); });
+  _qtJuIdx=m; _qtJuAt=t; _qtJuRef=J; _qtJuN=J.length; return m; }
 function qtUnreceived(q){ return qtUnits(q).filter(x=>!x.received); }
 function openReceiveItems(){
   if(isReceptionist()){ _rcpTab='move'; showView('reception'); return; }
@@ -13891,7 +13899,7 @@ function openReceiveFromQuotation(qid,rcId){
   if(typeof populateUserDropdown==='function') populateUserDropdown('rcv-assign',false,true);
 }
 async function saveReceiveItems(qid){
-  const q=(_quotationsV2||[]).find(x=>x.id===qid); const units=window._rcvUnits||[]; if(!q) return;
+  let q=(_quotationsV2||[]).find(x=>x.id===qid); const units=window._rcvUnits||[]; if(!q) return;
   const val=(cls,k)=>(document.querySelector(`.${cls}[data-k="${k}"]`)?.value||'').trim();
   const picked=units.map((x,k)=>({x,k})).filter(o=>document.querySelector(`.rcv-on[data-k="${o.k}"]`)?.checked);
   if(!picked.length){ alert('Tick at least one unit that has arrived.'); return; }
@@ -13956,9 +13964,15 @@ async function saveReceiveItems(qid){
   try{ await _rcvExtras(); }catch(e){ console.warn('job extras',e); try{ await new Promise(r=>setTimeout(r,800)); await _rcvExtras(); }catch(e2){ alert(`⚠️ Job ${jobNo} was created, but some item details from the quotation could not be saved (${e2.message||e2}).\n\nOpen the job and check: outsourcing vendor, handling instructions and any receipt doubt — before assigning the items.`); } }
   if(rows.some(r=>r.extra.handling)) try{ openReceivingLabelsPrompt(getJob(jobNo)); }catch(e){} // labels again, now with the handling instructions
   // mark the units received; keep the quotation's first job as its main link
-  rows.forEach(r=>{ const it=q.items[r.o.x.i]; it.units=it.units||[]; while(it.units.length<=r.o.x.u) it.units.push({}); it.units[r.o.x.u].receivedJobNo=jobNo; if(!it.units[r.o.x.u].serial&&r.base.serial) it.units[r.o.x.u].serial=r.base.serial; });
-  q.createdJobNos=[...new Set([...prevJobs,...(q.createdJobNos||[]),jobNo])]; q.createdJobNo=q.createdJobNos[0];
-  await saveQuotationsV2();
+  // R14: the job save above re-reads the quotation list (saveList refreshes _quotationsV2 in place), so `q` is now a stale copy —
+  // write onto the CURRENT record, and redo it if someone else saved the quotation at the same moment
+  let _qSaved=false, _qErr=null;
+  for(let _t=0;_t<4&&!_qSaved;_t++){ const fq=(_quotationsV2||[]).find(x=>x.id===qid); if(!fq){ _qErr=new Error('quotation not found'); break; }
+    rows.forEach(r=>{ const it=fq.items[r.o.x.i]; if(!it) return; it.units=it.units||[]; while(it.units.length<=r.o.x.u) it.units.push({}); it.units[r.o.x.u].receivedJobNo=jobNo; if(!it.units[r.o.x.u].serial&&r.base.serial) it.units[r.o.x.u].serial=r.base.serial; });
+    fq.createdJobNos=[...new Set([...prevJobs,...(fq.createdJobNos||[]),jobNo])]; fq.createdJobNo=fq.createdJobNos[0];
+    try{ await saveQuotationsV2(); _qSaved=true; }catch(e){ _qErr=e; await new Promise(r=>setTimeout(r,300+Math.random()*400)); } }
+  if(!_qSaved) alert(`⚠️ Job ${jobNo} was created, but ${q.quotationNo} could not be marked as received (${(_qErr&&(_qErr.message||_qErr))||'save failed'}).\n\nDo NOT receive these items again — the quotation will show them as received once the job list refreshes.`);
+  q=(_quotationsV2||[]).find(x=>x.id===qid)||q;
   if(window._rcvReceipt){ const rc=(_receipts||[]).find(r=>r.id===window._rcvReceipt.id); if(rc){ rc.status='Job created'; rc.jobNo=jobNo; rc.doneBy=currentUser; rc.doneAt=new Date().toISOString(); try{ await saveReceipts(); }catch(e){ console.warn('receipt',e); } } window._rcvReceipt=null; refreshAllBadges(); }
   document.getElementById('rcv-overlay').style.display='none';
   const left=qtUnreceived(q).length;
@@ -14141,6 +14155,37 @@ function prArchiveGonePo(r,why){
 }
 function prLivePo(r){ if(!r.poNumber) return null; const po=prPo(r); return po&&po.status!=='Cancelled'?po:null; }
 function prPoGone(r){ return !!r.poNumber&&!prLivePo(r); }
+// R14: a purchase request and the PO raised from it are ONE purchase — delivery, supplier invoice and payment recorded on either
+// are copied to the other (and existing pairs are healed), so both screens show the same step and nothing is recorded twice
+let _prPoSyncing=false;
+async function prPoSync(only){
+  if(_prPoSyncing||typeof _prs==='undefined'||!canBuy()) return false; _prPoSyncing=true;
+  try{ const poCh={}; let prCh=false;
+    for(const r of (_prs||[])){ if(only&&r.id!==only&&r.poNumber!==only) continue; if(['Cancelled','Rejected'].includes(r.status)) continue;
+      const po=prLivePo(r); if(!po||po.purpose==='outsource'||['Draft','Pending Approval','Rejected','Superseded'].includes(po.status)) continue;
+      const set={}; const rec=r.receipts||[], last=rec.slice(-1)[0];
+      // delivery: PR → PO
+      if(rec.length&&['Approved','Sent'].includes(po.status)){ const at=last.date?last.date+'T12:00:00':new Date().toISOString();
+        if(prFullyReceived(r)){ set.status='Received'; set.receivedAt=at; set.receivedBy=last.by; }
+        else if(po.status==='Approved') set.status='Sent';
+        if(!po.sentAt){ set.sentAt=(rec[0].date?rec[0].date+'T12:00:00':at); set.sentBy=rec[0].by; } }
+      // delivery: PO → PR (all items, as ordered)
+      if(!rec.length&&['Received','Closed'].includes(po.status)){ const lines={}; (r.items||[]).forEach(it=>{ lines[it.key]={qty:parseFloat(it.qty)||1,condition:'OK'}; });
+        r.receipts=[{date:isoDay(po.receivedAt)||toLocalDateStr(new Date()),by:po.receivedBy||currentUser,lines,notes:`Recorded on ${po.poNumber}`,fromPo:true}]; prCh=true; }
+      // supplier invoice + payment: whichever side has it
+      if(r.invoice&&!po.invoice) set.invoice={...r.invoice};
+      else if(po.invoice&&!r.invoice){ r.invoice={...po.invoice}; prCh=true; }
+      if(r.paidAt&&!po.paidAt){ set.paidAt=r.paidAt; set.paidRef=r.paidRef||''; set.paidBy=r.paidBy; }
+      else if(po.paidAt&&!r.paidAt){ r.paidAt=po.paidAt; r.paidRef=po.paidRef||''; r.paidBy=po.paidBy; prCh=true; }
+      if(Object.keys(set).length) poCh[po.id]=set; }
+    if(Object.keys(poCh).length) await patchPurchaseOrders(arr=>{ arr.forEach(p=>{ const c=poCh[p.id]; if(!c) return;
+      if(c.status&&!['Approved','Sent'].includes(p.status)){ delete c.status; delete c.receivedAt; delete c.receivedBy; }
+      ['invoice','paidAt'].forEach(k=>{ if(p[k]){ delete c[k]; if(k==='paidAt'){ delete c.paidRef; delete c.paidBy; } } }); if(p.sentAt){ delete c.sentAt; delete c.sentBy; }
+      Object.assign(p,c); }); });
+    if(prCh) await savePrs();
+    return prCh||Object.keys(poCh).length>0;
+  }catch(e){ console.warn('PR/PO sync',e); return false; }
+  finally{ _prPoSyncing=false; } }
 const prBadge=st=>/waiting for MD|check before use|overdue|draft/i.test(st)?'badge-amber':/Paid|Received$|PO approved/.test(st)?'badge-green':/Rejected|rejected|Cancelled/.test(st)?'badge-red':'badge-blue';
 function prTotal(r){ const s=r.selected&&(r.suppliers||[]).find(x=>x.partnerId===r.selected.partnerId); return (r.items||[]).reduce((a,it)=>a+(parseFloat(s?s.prices[it.key]:it.estPrice)||0)*(parseFloat(it.qty)||1),0); }
 function prOverlay(id,w){ let ov=document.getElementById(id); if(!ov){ ov=document.createElement('div'); ov.id=id; ov.style.cssText='position:fixed;inset:0;background:rgba(15,31,61,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:24px 10px;overflow-y:auto;'; document.body.appendChild(ov); } ov.dataset.w=w; return ov; }
@@ -14225,7 +14270,7 @@ function openPr(id){
       ${r.selected?`<div class="qt-note info" style="margin-top:10px;">✅ <b>${escapeHtml(r.selected.name)}</b> chosen — ${escapeHtml(r.selected.reason)} · ${rm2(prTotal(r))}
         ${r.poGoneNote&&!prLivePo(r)?`<div style="margin-top:4px;color:#b45309;">⚠ ${escapeHtml(r.poGoneNote)}</div>`:''}
         ${prLivePo(r)?(()=>{ const po=prLivePo(r); const st=po.status;
-            return `<div style="margin-top:4px;">PO: <b>${escapeHtml(r.poNumber)}</b> — ${st==='Pending Approval'?'⏳ waiting for MD approval':st==='Approved'||!['Draft','Rejected','Pending Approval'].includes(st)?`✅ approved${po?.approvedBy?' by '+escapeHtml(USERS[po.approvedBy]?.name||po.approvedBy):''} — send it to the supplier`:st==='Rejected'?`❌ rejected${po?.rejectReason?' — '+escapeHtml(po.rejectReason):''}. Revise and resubmit it in Purchase Orders.`:'draft — open it in Purchase Orders and submit it for MD approval'}</div>`; })()
+            return `<div style="margin-top:4px;">PO: <b>${escapeHtml(r.poNumber)}</b> — ${st==='Pending Approval'?'⏳ waiting for MD approval':st==='Sent'?`📤 sent to the supplier${po.sentAt?' '+fmtDateShort(po.sentAt):''}`:['Received','Closed'].includes(st)?`📥 received${po.paidAt?' · paid':po.invoice?' · invoiced':''}`:st==='Approved'||!['Draft','Rejected','Pending Approval'].includes(st)?`✅ approved${po?.approvedBy?' by '+escapeHtml(USERS[po.approvedBy]?.name||po.approvedBy):''} — send it to the supplier`:st==='Rejected'?`❌ rejected${po?.rejectReason?' — '+escapeHtml(po.rejectReason):''}. Revise and resubmit it in Purchase Orders.`:'draft — open it in Purchase Orders and submit it for MD approval'}</div>`; })()
           :(canBuy()?`<div style="margin-top:6px;"><button class="btn btn-primary btn-sm" onclick="prCreatePo('${r.id}')">🧾 Create PO (for MD approval)</button></div>`:'')}</div>`:''}
       ${prLivePo(r)||(r.receipts||[]).length?`<div style="font-weight:700;margin:12px 0 6px;">📦 Receiving</div>
         ${rec.map(x=>`<div style="font-size:12.5px;padding:4px 0;border-top:1px solid var(--border);">${fmtDateShort(x.date)} — ${r.items.map(it=>`${escapeHtml(it.desc)}: ${x.lines[it.key]?.qty??0} ${escapeHtml(x.lines[it.key]?.condition||'')}`).join(' · ')}${x.notes?' · '+escapeHtml(x.notes):''} <span style="color:var(--text-muted);">(${escapeHtml(USERS[x.by]?.name||x.by)})</span></div>`).join('')}
@@ -14345,7 +14390,7 @@ async function savePrReceive(id){
   if(!Object.values(lines).some(l=>l.qty>0)){ alert('Enter the quantity received.'); return; }
   const bad=Object.values(lines).some(l=>l.qty>0&&l.condition!=='OK');
   (r.receipts=r.receipts||[]).push({date:el('prr-date').value||toLocalDateStr(new Date()),by:currentUser,lines,notes:el('prr-notes').value.trim()});
-  await savePrs(); addAudit('📥',`${r.no}: delivery recorded${bad?' — problem noted':''}`);
+  await savePrs(); await prPoSync(r.id); addAudit('📥',`${r.no}: delivery recorded${bad?' — problem noted':''}`);
   if(bad) alert('A delivery problem was recorded. Contact the supplier — and if it affects calibration work, raise an NC.');
   document.getElementById('prrec-overlay').style.display='none'; openPr(id); renderPrSections();
 }
@@ -14386,14 +14431,16 @@ async function savePrInvoice(id){
   if(!no||!(amt>=0)){ alert('Enter the invoice number and amount.'); return; }
   const diff=Math.abs(amt-prTotal(r)); if(diff>0.01&&!confirm(`The invoice (${rm2(amt)}) differs from the PO (${rm2(prTotal(r))}) by ${rm2(diff)}. Save anyway?`)) return;
   const f=el('pri-file').files&&el('pri-file').files[0]; let url=''; if(f){ url=await prUpload(f,`purchasing/${r.no}`); }
-  r.invoice={no,amount:amt,date:el('pri-date').value,dueDate:el('pri-due').value,fileUrl:url,by:currentUser}; await savePrs();
+  { const po=prLivePo(r); if(po&&po.invoice){ alert(`Supplier invoice ${po.invoice.no} is already recorded on ${po.poNumber} — it is shown here now.`); await prPoSync(r.id); document.getElementById('prinv-overlay').style.display='none'; openPr(id); renderPrSections(); return; } }
+  r.invoice={no,amount:amt,date:el('pri-date').value,dueDate:el('pri-due').value,fileUrl:url,by:currentUser}; await savePrs(); await prPoSync(r.id);
   addAudit('🧾',`${r.no}: supplier invoice ${escapeHtml(no)} recorded (${rm2(amt)})`); document.getElementById('prinv-overlay').style.display='none'; openPr(id); renderPrSections();
 }
 async function prMarkPaid(id){ const r=_prs.find(x=>x.id===id); const ref=prompt('Payment reference (e.g. bank transfer ref):',''); if(ref===null) return;
-  r.paidAt=new Date().toISOString(); r.paidRef=ref.trim(); r.paidBy=currentUser; await savePrs(); addAudit('💵',`${r.no}: paid ${rm2(r.invoice?.amount)}`); openPr(id); renderPrSections(); }
+  r.paidAt=new Date().toISOString(); r.paidRef=ref.trim(); r.paidBy=currentUser; await savePrs(); await prPoSync(r.id); addAudit('💵',`${r.no}: paid ${rm2(r.invoice?.amount)}`); openPr(id); renderPrSections(); }
 // ── page sections: spend summary + requests (Purchasing page) and "my requests" (My Requests page) ──
 function renderPrSections(){
   const box=el('pr-section'); const mine=el('my-pr-section');
+  if(box&&!_prPoSyncing&&(_prs||[]).length) prPoSync().then(ch=>{ if(ch){ renderPrSections(); try{ renderPurchaseOrdersPage(); }catch(e){} } }); // R14: heal PR ↔ PO pairs
   const row=r=>{ const st=prStatus(r); const today=toLocalDateStr(new Date());
     const po=prLivePo(r); const poOk=po&&!['Draft','Pending Approval','Rejected'].includes(po.status);
     const quoting=(r.suppliers||[]).length>0;
@@ -19460,7 +19507,7 @@ async function f010Pdf(id){ const e=(_f010||[]).find(x=>x.id===id)||_f010Draft; 
   if(e.risk?.remarks) add(4,qftTxt(400,204,e.risk.remarks,{size:8,w:120,h:80}));
   ['Low','Medium','High'].forEach((o,j)=>{ if(e.risk?.overall===o) tick(B[k+j]); }); k+=3;
   const dec=e.decisionFinal||e.decision; F010_DECISIONS.forEach(([d],j)=>{ if(dec===d) tick(B[k+j]); }); k+=4;
-  const cond=String(e.conditions||''); at('blank#2',cond.slice(0,90),{size:9}); at('blank#2#2',cond.slice(90,180),{size:9});
+  const cond=String(e.conditions||''); const CL=qfWrapLines(cond,2,90); at('blank#2',CL[0],{size:9}); at('blank#2#2',CL[1],{size:9}); // R14: broken at spaces; the 2nd blank holds the rest (it grows in place)
   F010_FREQ.forEach((f,j)=>{ if((e.freq||'Annual')===f) tick(B[k+j]); }); k+=4; if(e.freq==='Other') at('☐ 2 Years  ☐ 3 Years  ☐ Other',(e.freqOther||'')+' months',{size:9});
   at('Next Re-evaluation Date',e.nextDate?qmsDate(e.nextDate):(e.status==='Submitted'?'':''));
   // sign-off (page 5): Evaluated by (TM) · Approved by (MD)
@@ -20309,7 +20356,7 @@ function openAmdIssue(jobNo,ix,amdId){ const it=getJob(jobNo)?.items?.[ix]; { co
     <table style="width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:8px;"><tr style="color:var(--text-muted);"><td>Field</td><td>On ${escapeHtml(it.certNo)}</td><td>On ${escapeHtml(next)}</td></tr>${Object.entries(d.cd||{}).map(([k,v])=>`<tr style="border-top:1px solid var(--border);"><td>${escapeHtml(lbl(k))}</td><td>${escapeHtml(cd[k]??'')}</td><td><b>${escapeHtml(v)}</b></td></tr>`).join('')}${d.excelFile?`<tr style="border-top:1px solid var(--border);"><td>Data pages</td><td>${escapeHtml(it.excelFile?.name||'')}</td><td><b>${escapeHtml(d.excelFile.name)}</b></td></tr>`:''}</table>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Prepared by ${escapeHtml(staffNameOf(d.by))}. ${escapeHtml(it.certNo)} is kept on record as superseded.</div>${certP1Html(_ovA,'block').replace('approval is blocked','it cannot be issued').replace('Fix it first (reject / send back so the job or certificate details are shortened)','Send it back to the preparer to shorten the text')}
     <div style="font-size:12.5px;margin-bottom:8px;">Issued and signed by <b>${escapeHtml(amdSignName(currentUser))}</b> (approved signatory) — your name and signature go on ${escapeHtml(next)}${cd.approved_by&&cd.approvedByUsername!==currentUser?`, in place of ${escapeHtml(cd.approved_by)} on ${escapeHtml(it.certNo)}`:''}.</div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-outline" style="color:#b91c1c;" onclick="amdSendBack('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">↩️ Back to preparer</button><button class="btn btn-primary" onclick="saveAmdIssue('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">✅ Issue ${escapeHtml(next)}</button></div>`,700); }
+    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button>${canApproveAmendment(currentUser,a)?`<button class="btn btn-outline" onclick="openAmdWording('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')" title="Correct the “what” and “why” printed on the amended certificate">✏️ Edit wording</button>`:''}<button class="btn btn-outline" style="color:#b91c1c;" onclick="amdSendBack('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">↩️ Back to preparer</button><button class="btn btn-primary" onclick="saveAmdIssue('${escapeForJsAttr(jobNo)}',${ix},'${amdId}')">✅ Issue ${escapeHtml(next)}</button></div>`,700); }
 async function amdSendBack(jobNo,ix,amdId){ const why=prompt('What needs changing?'); if(!why||!why.trim()) return;
   try{ await updateJob(jobNo,j=>{ const a=(j.items[ix].amendments||[]).find(y=>y.id===amdId); if(a&&a.reissue){ a.reissue.status='To prepare'; a.reissue.sentBack={by:currentUser,at:new Date().toISOString(),why:why.trim()}; } }); }catch(e){ alert(e.message||e); return; } f027Close(); refreshJobViews(jobNo); }
 let _amdShown=null;
@@ -20465,7 +20512,13 @@ function h79Html(n){ const c=n.cx||{}; const f=c.f19||{}; const s6=c.s6||{}; con
       <div><b>2. Progress to complainant</b><br/>${(c.progress||[]).map(p=>`${fmtDateShort(p.date)} · ${v(p.how)}: ${v(p.note)}`).join('<br/>')||'<span style="color:var(--text-muted);">None yet</span>'}${last?`<div style="color:var(--text-muted);">last contact ${fmtDateShort(last)}</div>`:''}${can?` <button class="btn btn-outline btn-sm" onclick="openCxProgress('${n.id}')">+ Update</button>`:''}</div>
       <div><b>3. Formal closure notice</b><br/>${c.closure?`📨 ${fmtDateShort(c.closure.date)} (${v(c.closure.how)})${c.closure.fileUrl?` <a href="javascript:void(0)" onclick="openSignedUrl('${escapeForJsAttr(c.closure.fileUrl)}')">📎</a>`:''}`:'<span style="color:var(--text-muted);">Not sent</span>'}${can&&!c.closure?` <button class="btn btn-outline btn-sm" onclick="openCxClosure('${n.id}')">📨 Record</button>`:''}</div></div>
     <div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">Closing: the QM (or the MD) approves the outcome — never someone who worked on the job (7.9.6).</div></div>`; }
-async function cxPatch(id,fn,label){ const now=new Date().toISOString(); await patchNcrs(arr=>{ const n=arr.find(x=>x.id===id); if(!n) return; n.cx=n.cx||{}; fn(n,now); (n.history=n.history||[]).push({at:now,by:currentUser,action:label}); }); openNcrDetail(id); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); }
+// R14: what was typed on the open NC / complaint window but not saved yet (only fields changed from what was shown) — kept when the window is redrawn
+function ncrDirtySnap(){ const ov=document.getElementById('ncr-overlay'); if(!ov||ov.style.display==='none') return []; const out=[];
+  ov.querySelectorAll('input[id],select[id],textarea[id]').forEach(e=>{ if(e.type==='file'||e.disabled) return;
+    if(e.type==='checkbox'||e.type==='radio'){ if(e.checked!==e.defaultChecked) out.push({id:e.id,checked:e.checked}); return; }
+    const def=e.tagName==='SELECT'?([...e.options].find(o=>o.defaultSelected)||e.options[0]||{}).value:e.defaultValue; if(e.value!==(def??'')) out.push({id:e.id,value:e.value}); }); return out; }
+function ncrDirtyRestore(snap){ (snap||[]).forEach(x=>{ const e=document.getElementById(x.id); if(!e||e.disabled) return; if('checked' in x) e.checked=x.checked; else e.value=x.value; }); }
+async function cxPatch(id,fn,label){ const now=new Date().toISOString(); const dirty=ncrDirtySnap(); await patchNcrs(arr=>{ const n=arr.find(x=>x.id===id); if(!n) return; n.cx=n.cx||{}; fn(n,now); (n.history=n.history||[]).push({at:now,by:currentUser,action:label}); }); openNcrDetail(id); ncrDirtyRestore(dirty); if(dirty.length) showToast('Your unsaved changes are still on the form — press Save to keep them.','info',4000); if(typeof renderNeedsAttention==='function') renderNeedsAttention(); }
 function openCxValidate(id){ cOv('✔ Validate the complaint (7.9.4)',`<div style="font-size:12.5px;margin-bottom:8px;">Gather and verify the information needed to validate the complaint (LQP 7.9 §6.4). Every complaint is treated as valid and acted on.</div>
   <div class="form-group"><label class="form-label">What was checked <span class="req">*</span></label><textarea class="form-control" id="cxv-note" rows="2" placeholder="e.g. certificate WLCS… reviewed, job history and calibration data checked, customer called"></textarea></div>
   <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" onclick="saveCxValidate('${id}')">✔ Validated</button></div>`,560); }
@@ -22007,16 +22060,17 @@ function ncrTakenHtml(n,dis,can){ const v=x=>escapeHtml(x==null?'':String(x)); c
   const prev=(n.caAttempts||[]).map((a,i)=>`<div style="font-size:12px;background:#fef2f2;border-radius:6px;padding:6px 8px;margin-bottom:6px;">❌ Attempt ${i+1} not effective — action: ${v(a.correctiveAction||'—')}${a.caDone?` · done: ${v(a.caDone.note)} (${qmsDate(a.caDone.date)})`:''} · verified ${qmsDate(a.verify?.at)} by ${v(staffNameOf(a.verify?.by))}${a.verify?.note?': '+v(a.verify.note):''}</div>`).join('');
   const own=!can&&n.actionOwner===currentUser&&n.status!=='Closed';
   if(can&&n.status!=='Closed') return `${prev}<div class="form-row"><div class="form-group" style="flex:3;"><label class="form-label">Action taken — what was done</label><textarea class="form-control" id="ncd-taken" rows="2">${v(d?.note)}</textarea></div>
-      <div class="form-group"><label class="form-label">Completed on</label><input class="form-control" type="date" id="ncd-tdate" value="${v(d?.date||'')}"/></div></div>
+      <div class="form-group"><label class="form-label">Completed on</label><input class="form-control" type="date" id="ncd-tdate" max="${today}" value="${v(d?.date||'')}"/></div></div>
     <div class="form-group"><label class="form-label">Evidence (record / file / link)</label><input class="form-control" id="ncd-tev" value="${v(d?.evidence)}"/></div>${d?`<div style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 8px;">Recorded by ${v(staffNameOf(d.by))} on ${qmsDate(d.at)}</div>`:''}`;
   if(own) return `${prev}<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;"><b style="font-size:12.5px;">You are the person in charge — record what was done</b>
       <div class="form-group" style="margin-top:6px;"><textarea class="form-control" id="ncd-o-taken" rows="2" placeholder="What was done">${v(d?.note)}</textarea></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Completed on</label><input class="form-control" type="date" id="ncd-o-date" value="${v(d?.date||today)}"/></div><div class="form-group" style="flex:2;"><label class="form-label">Evidence</label><input class="form-control" id="ncd-o-ev" value="${v(d?.evidence)}"/></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Completed on</label><input class="form-control" type="date" id="ncd-o-date" max="${today}" value="${v(d?.date||today)}"/></div><div class="form-group" style="flex:2;"><label class="form-label">Evidence</label><input class="form-control" id="ncd-o-ev" value="${v(d?.evidence)}"/></div></div>
       <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary btn-sm" onclick="ncrRecordTaken('${n.id}')">Save — tell the TM / QM</button></div></div>`;
   return `${prev}${d?`<div style="font-size:12.5px;margin-bottom:8px;"><b>Action taken:</b> ${v(d.note)} (${qmsDate(d.date)})${d.evidence?' — '+v(d.evidence):''} <span style="color:var(--text-muted);">· ${v(staffNameOf(d.by))}</span></div>`:''}`; }
 function ncrTakenRead(n0){ const t=el('ncd-taken'); if(!t) return {}; const note=t.value.trim(), date=el('ncd-tdate').value, evidence=el('ncd-tev').value.trim(); if(!note) return {caDone:null};
   const o=n0.caDone; if(o&&o.note===note&&o.date===date&&(o.evidence||'')===evidence) return {caDone:o}; return {caDone:{note,date:date||toLocalDateStr(new Date()),evidence,by:currentUser,at:new Date().toISOString()}}; }
 async function ncrRecordTaken(id){ const note=(el('ncd-o-taken')?.value||'').trim(); if(!note){ alert('Say what was done.'); return; } const date=el('ncd-o-date').value||toLocalDateStr(new Date()), evidence=(el('ncd-o-ev')?.value||'').trim(); const now=new Date().toISOString(); const n0=_ncrs.find(x=>x.id===id);
+  if(date>toLocalDateStr(new Date())){ alert('“Completed on” cannot be a future date — enter the day the action was actually done (today or earlier).'); return; } // R14
   try{ await patchNcrs(arr=>{ const n=arr.find(x=>x.id===id); if(!n) return; n.caDone={note,date,evidence,by:currentUser,at:now}; (n.history=n.history||[]).push({at:now,by:currentUser,action:'Action taken recorded — '+note.slice(0,80)}); }); }catch(e){ alert(e.message||e); return; }
   addAudit('🛠️',`${escapeHtml(n0?.ncNo||'')}: corrective action done — ${escapeHtml(note)}`); showToast('Saved — the TM / QM will check whether it was effective','success',3000); openNcrDetail(id); }
 // B — effectiveness review, only after the action is recorded
@@ -28513,7 +28567,7 @@ function renderStickerPage(){
     ${bannerHtml}
     ${confirmReceiptHtml}
     <div style="margin-bottom:16px;">
-      <button class="btn btn-primary" onclick="openCountBasedRequestModal('${type}')">${requestBtnLabel}</button>
+      ${type==='accredited'&&!labAccredited()?`<div class="qt-note warn" style="margin-bottom:6px;">Westlab is not accredited yet — accredited (WS) stickers cannot be requested. Use Non-Accredited stickers.</div>`:`<button class="btn btn-primary" onclick="openCountBasedRequestModal('${type}')">${requestBtnLabel}</button>`}
       ${canApproveStickers(currentUser)?`<button class="btn btn-outline" style="margin-left:6px;" onclick="openStickerBatchPanel('${type}')">🖨️ Printed batches</button>`:''}
     </div>
     ${pendingHtml}
@@ -28565,6 +28619,7 @@ function renderStickerPage(){
 
 function openCountBasedRequestModal(type){
   if(!canPerformCal(currentUser)&&!isAdmin(currentUser)){alert('Only staff who perform calibration can request stickers.');return;}
+  if(type==='accredited'&&!labAccredited()){ alert('⛔ Westlab is not accredited yet — accredited (WS) stickers cannot be requested (LQP 7.8 Attachment 1 §9). Use Non-Accredited stickers.'); return; } // R14
   const pendingAlready=_stickerRequests.find(r=>r.requestedBy===currentUser&&r.status==='Pending'&&r.type===type);
   if(pendingAlready){alert('You already have a pending request for this sticker type awaiting approval.');return;}
   const cfg=STICKER_TYPES[type];
@@ -28590,6 +28645,7 @@ function openCountBasedRequestModal(type){
   ov.style.display='flex';
 }
 async function submitCountBasedRequest(type){
+  if(type==='accredited'&&!labAccredited()){ alert('⛔ Westlab is not accredited yet — accredited (WS) stickers cannot be requested (LQP 7.8 Attachment 1 §9). Use Non-Accredited stickers.'); return; } // R14
   const val=el('count-request-current').value;
   if(val===''||val===null){alert('Please enter how many you currently have.');return;}
   const reportedRemaining=parseInt(val);
@@ -29833,11 +29889,11 @@ function viewCustomerDetail(custId){
         ${c.notes?`<div style="grid-column:1/-1;"><span style="color:var(--text-muted);">Notes:</span> ${escapeHtml(c.notes)}</div>`:''}
       </div>${custSrcHtml(c)}`;
   // Customer Timeline — quotations, jobs, and Sales Tracker entries merged chronologically
-  const custQuotations=(_quotations||[]).filter(q=>q.custName===c.company);
+  const custQuotations=(_quotationsV2||[]).filter(q=>q&&q.status!=='Deleted'&&(q.custId===c.id||String(q.custName||'').trim().toLowerCase()===String(c.company||'').trim().toLowerCase())); // R14: the current quotation store
   const custSalesEntries=(_salesTracker||[]).filter(e=>e.custId===c.id||e.name===c.company);
   const timelineEvents=[];
   jobs.forEach(j=>timelineEvents.push({date:j.receiveDate||'',type:'job',data:j}));
-  custQuotations.forEach(q=>timelineEvents.push({date:q.quotedAt||'',type:'quotation',data:q}));
+  custQuotations.forEach(q=>timelineEvents.push({date:q.quotationDate||q.createdAt||'',type:'quotation',data:q}));
   custSalesEntries.forEach(e=>timelineEvents.push({date:e.createdAt||'',type:'sales',data:e}));
   timelineEvents.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -29859,14 +29915,11 @@ function viewCustomerDetail(custId){
             <span class="badge badge-blue">${e.status}</span>
           </div>`;
         } else {
-          const q=ev.data;
-          const wonCount=q.items.filter(it=>it.status==='Won').length;
-          const lostCount=q.items.filter(it=>it.status==='Lost').length;
-          const pendingCount=q.items.filter(it=>it.status==='Pending').length;
-          const totalVal=q.items.reduce((s,it)=>s+(it.price||0),0);
-          return `<div style="background:#fefce8;border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
-            <span>📋 Quotation · ${q.items.length} item${q.items.length!==1?'s':''}, RM${totalVal.toFixed(0)} <span style="color:var(--text-muted);">· ${fmtDateShort(q.quotedAt)}</span></span>
-            <span style="font-size:11px;">${wonCount?`<span class="badge badge-green">${wonCount} Won</span>`:''}${lostCount?`<span class="badge badge-slate" style="margin-left:3px;">${lostCount} Lost</span>`:''}${pendingCount?`<span class="badge badge-amber" style="margin-left:3px;">${pendingCount} Pending</span>`:''}</span>
+          const q=ev.data; const its=(q.items||[]).filter(it=>it&&String(it.eqName||'').trim()); const totalVal=qtTotalOf(q);
+          const qb=q.status==='Accepted'?'badge-green':(['Rejected','Lost','Expired','Cancelled','Superseded'].includes(q.status)?'badge-slate':(q.status==='Sent'?'badge-blue':'badge-amber'));
+          return `<div style="background:#fefce8;border-radius:6px;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span style="min-width:0;overflow-wrap:anywhere;">📋 <strong>${escapeHtml(q.quotationNo||'Quotation')}</strong> · ${its.length} item${its.length!==1?'s':''}${canViewPriceReference(currentUser)?`, RM${totalVal.toFixed(2)}`:''} <span style="color:var(--text-muted);">· ${fmtDateShort(q.quotationDate||q.createdAt)}</span></span>
+            <span class="badge ${qb}" style="white-space:nowrap;">${escapeHtml(q.status||'')}</span>
           </div>`;
         }
       }).join('')}
@@ -30467,6 +30520,7 @@ function compJobMenu(ev,jobNo,histId){
   }
   if(canRequestAmendment(currentUser)) h+=stMenuItem('📝 Request certificate amendment',`compRequestAmendment(${q})`);
   (j.items||[]).forEach((it,ix)=>(it.amendments||[]).filter(a=>a.status==='Pending Approval'&&canApproveAmendment(currentUser,a)).forEach(a=>{ h+=stMenuItem(`✅ Approve amendment ${a.amendmentNo} — ${escapeHtml(it.certNo||'item '+it.itemNo)}`,`approveAmendment(${q},${ix},'${escapeForJsAttr(a.id)}')`); }));
+  (j.items||[]).forEach((it,ix)=>(it.amendments||[]).filter(a=>a.status==='Approved'&&a.reissue?.status!=='Issued'&&canApproveAmendment(currentUser,a)).forEach(a=>{ h+=stMenuItem(`✏️ Edit wording — amendment ${a.amendmentNo} (${escapeHtml(it.certNo||'item '+it.itemNo)})`,`openAmdWording(${q},${ix},'${escapeForJsAttr(a.id)}')`); })); // R14: QM / MD reach it from the job too, not only My Jobs
   if(isAdmin(currentUser)) h+='<hr/>'+stMenuItem('🗑️ Permanent deletion…',`openRequestPermanentDeletionModal(${q})`,{danger:true});
   stShowMenu(ev.currentTarget,h);
 }
@@ -33573,11 +33627,32 @@ const NAV_CATEGORIES=[
     ['nav-forms','Form templates, issues and revisions (F022)'],['nav-fmea','Risks incl. impartiality — FMEA (F031 / F032)'],['nav-improve','Improvement suggestions and actions (LQP 8.6)'],['nav-audits','Internal audits — plan, notice, checklist, findings, report (F001–F006)'],['nav-mreview','Management review (F007) and anonymous staff feedback (F029)'],['nav-f027','Releasing customer information — needs MD approval (F027)'],['nav-f026','Visitors sign in and out (F026)'],['nav-docs','Master list of documents, controlled copies (F020, 8.3)'],['nav-meetings','Management meeting minutes (F021)'],['nav-qobj','Quality Policy acknowledgement and quality objectives (8.2)'],['nav-validity','Monitoring the validity of results — plan, En / z results, PT / ILC (7.7)'],['nav-methods','Calibration methods — verification (F011), revisions (F014), yearly review (7.2)'],['nav-scope','Accreditation status and scope (Appendix I)'],['nav-competence','Staff competence, training and authorisation (F017 / F018 / F025 / F034)'],['nav-env','Lab environment records, facility review, limits (6.3)'],['nav-capa','Nonconformances and corrective actions'],['nav-feedback','Customer feedback and complaints']]},
   {id:'workspace',label:'My Workspace',icon:'ti-user-circle',color:'#0369a1',sub:'Your own drafts, requests and time',items:[
     ['nav-notices','Quality and operations notices'],['nav-my-drafts','Forms you saved to finish later'],['nav-claims','Expense claims'],['nav-leave','Apply for and track leave'],
-    ['nav-attendance','Clock in, clock out and records'],['nav-payslips','Your monthly payslips'],['nav-wi','Working instructions for the work you are authorised to do'],['nav-my-requests','Status of your requests'],['nav-datamgmt','LIMS user manual, report a system failure (7.11)']]},
+    ['nav-attendance','Clock in, clock out and records'],['nav-payslips','Your monthly payslips'],['nav-wi','Working instructions for the work you are authorised to do'],['nav-my-requests','Status of your requests'],['nav-mypwd','Change your own login password'],['nav-datamgmt','LIMS user manual, report a system failure (7.11)']]},
   {id:'admin',label:'Administration',icon:'ti-settings',color:'#475569',sub:'People, records and system settings',items:[
     ['nav-personnel','Staff accounts, roles and signatures'],['nav-payroll','Monthly payroll, payslips and statutory contributions'],['nav-deleted','Record disposal log — jobs removed for good (LQP 8.4)'],
     ['nav-reports','Reports and the audit trail'],['nav-settings','Company details, numbering and options']]},
 ];
+// R14: staff change their own password (the server asks for the current one — POST /api/set-password, at least 6 characters)
+function openChangeOwnPassword(){ if(!currentUser){ return; }
+  cOv('🔑 Change my password',`<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;">For <b>${escapeHtml(USERS[currentUser]?.name||currentUser)}</b> (${escapeHtml(currentUser)}). Use at least 6 characters, and do not share it. Your other signed-in devices will need to sign in again.</div>
+    <div class="form-group"><label class="form-label">Current password <span class="req">*</span></label><input class="form-control" type="password" id="mypw-cur" autocomplete="current-password"/></div>
+    <div class="form-group"><label class="form-label">New password <span class="req">*</span></label><input class="form-control" type="password" id="mypw-new" autocomplete="new-password" minlength="6"/></div>
+    <div class="form-group"><label class="form-label">Confirm new password <span class="req">*</span></label><input class="form-control" type="password" id="mypw-new2" autocomplete="new-password" minlength="6"/></div>
+    <div id="mypw-msg" style="font-size:12.5px;min-height:18px;margin-bottom:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline" onclick="f027Close()">Cancel</button><button class="btn btn-primary" id="mypw-go" onclick="saveOwnPassword()">🔑 Change password</button></div>`,440);
+  setTimeout(()=>{ try{ el('mypw-cur').focus(); }catch(e){} },50); }
+async function saveOwnPassword(){ const cur=el('mypw-cur').value, nw=el('mypw-new').value, nw2=el('mypw-new2').value; const msg=el('mypw-msg'); const say=(t,ok)=>{ msg.style.color=ok?'#15803d':'#b91c1c'; msg.textContent=t; };
+  if(!cur){ say('Enter your current password.'); return; }
+  if(nw.length<6){ say('The new password must be at least 6 characters.'); return; }
+  if(nw!==nw2){ say('The two new passwords are not the same — type them again.'); return; }
+  if(nw===cur){ say('The new password is the same as the current one.'); return; }
+  const builtIn=isAdmin(currentUser)&&!(_staff||[]).some(x=>x.username===currentUser); // the built-in Admin account (its password is kept with the settings)
+  const b=el('mypw-go'); if(b){ b.disabled=true; b.textContent='⏳ Saving…'; }
+  try{ const pr=await apiFetch('/api/set-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(builtIn?{isAdminSettings:true,newPassword:nw,currentPassword:cur}:{username:currentUser,newPassword:nw,currentPassword:cur})});
+    if(pr&&pr.token){ _authToken=pr.token; if(pr.fileToken) _fileToken=pr.fileToken; if(pr.exp) _authExp=pr.exp; try{ localStorage.setItem('wl_sess',JSON.stringify({user:currentUser,token:_authToken,fileToken:_fileToken,exp:_authExp,time:Date.now()})); }catch(e){} }
+    try{ addAudit('🔑',`${escapeHtml(USERS[currentUser]?.name||currentUser)} changed their own password`); }catch(e){}
+    f027Close(); showToast('✅ Password changed — use the new password next time you sign in.','success',5000); }
+  catch(e){ say('❌ '+((e&&e.userMessage)||'The password was not changed: '+String(e&&e.message||e).replace(/^API error \(\d+\):\s*/,''))); if(b){ b.disabled=false; b.textContent='🔑 Change password'; } } }
 let _navActiveCat='dashboard', _launcherCat=null;
 function navLegacyBtn(id){ return document.getElementById(id); }
 function navAvailable(id){ const b=navLegacyBtn(id); return !!b&&!b.classList.contains('hidden-nav'); }
@@ -33869,6 +33944,7 @@ function openNcrDetail(id){
 }
 async function saveNcrDetail(id,close,quiet){
   const g=k=>el(k)?.value??''; const n0=_ncrs.find(x=>x.id===id); if(!n0) return;
+  { const td=g('ncd-tdate'); if(el('ncd-taken')&&el('ncd-taken').value.trim()&&td&&td>toLocalDateStr(new Date())&&!(n0.caDone&&n0.caDone.date===td)){ alert('“Completed on” cannot be a future date — enter the day the action was actually done (today or earlier).'); return; } } // R14
   const upd={correction:g('ncd-correction').trim(),affectsResults:g('ncd-affects'),customerNotified:g('ncd-notified'),certsRecalled:g('ncd-recall'),workStopped:g('ncd-stopped'),
     impactNotes:g('ncd-impact').trim(),rootCause:g('ncd-cause').trim(),correctiveAction:g('ncd-action').trim(),actionOwner:g('ncd-owner'),actionDue:g('ncd-due'),
     ...(el('ncd-effective')?{effective:g('ncd-effective'),verifyNotes:g('ncd-verify').trim()}:{}),...ncrExtraRead(n0)};
@@ -35209,7 +35285,7 @@ function qfGrowPages(doms,over,{landscape}){
       if(cut.includes(c)){ toTop(R,c); const L=r.l-3, T=r.t-3, W=r.r-r.l+6; const mk=(top,h,off)=>{ const w=document.createElement('div'); w.style.cssText=`position:absolute;left:${L.toFixed(2)}pt;top:${top.toFixed(2)}pt;width:${W.toFixed(2)}pt;height:${h.toFixed(2)}pt;overflow:hidden;`; const k=c.cloneNode(true); k.style.left=(num(c.style.left)-L).toFixed(2)+'pt'; k.style.top=(num(c.style.top)-off).toFixed(2)+'pt'; w.appendChild(k); return w; };
         R.insertBefore(mk(T,y-T,T),c); N.appendChild(mk(TOP+pd,r.b+3-y,y-0)); N.lastChild.firstChild.style.top=(num(c.style.top)-y).toFixed(2)+'pt'; if(/solid/.test(c.style.border)||c.querySelector('table')) cross.push(r); c.remove(); return; }
       if(thinH(c,r)){ if(r.t>=y-1){ if(r.t<=y+1){ const goes=VB.some(v=>v.l<r.r+1&&v.r>r.l-1), closes=VA.some(v=>v.l<r.r+1&&v.r>r.l-1); if(goes&&closes){ const k=c.cloneNode(true); N.appendChild(k); sh(k,dy); } else if(goes||!closes){ N.appendChild(c); sh(c,dy); } } else { N.appendChild(c); sh(c,dy); } } return; } // the line at the cut: closes the table above it and / or opens it again below // the line at the cut opens the table again on the next page only where the table goes on
-      if(r.t>=y-0.3){ N.appendChild(c); sh(c,dy); return; }
+      if(r.t>=y-0.3){ if(!blocking(c)&&r.r-r.l<=1.6&&r.b-r.t<=1.2&&r.t<=y+1.2){ c.remove(); return; } /* R14: the end dot of a side line that stops at the cut is not carried to the next page as a stub */ N.appendChild(c); sh(c,dy); return; }
       if(r.b>y+0.3&&!blocking(c)){ toTop(R,c); const k=c.cloneNode(true); c.style.height=(y+pd-r.t).toFixed(2)+'pt'; k.style.top=TOP.toFixed(2)+'pt'; k.style.height=(r.b-y+pd).toFixed(2)+'pt'; N.appendChild(k); if(r.r-r.l<=1.6) cross.push(r); } });
     // the lines of a row cut across the page are closed at the foot and opened again at the top
     if(cross.length&&!body(R).some(c=>{ const r=rect(R,c); return thinH(c,r)&&Math.abs(r.t+0.24-y)<1; })){ const x0=Math.min(...cross.map(r=>r.l)), x1=Math.max(...cross.map(r=>r.r)); if(x1-x0>3){ R.appendChild(hline(x0,x1,y+pd)); N.appendChild(hline(x0,x1,TOP)); } }
@@ -37237,6 +37313,7 @@ function poEarlierVersions(p){ const out=[]; let cur=p; for(let i=0;i<20&&cur?.r
 function renderPurchaseOrdersPage(){
   const box=el('po-list'); if(!box) return;
   updatePoBadge();
+  if(!_prPoSyncing&&typeof _prs!=='undefined'&&(_prs||[]).length) prPoSync().then(ch=>{ if(ch){ renderPurchaseOrdersPage(); try{ renderPrSections(); }catch(e){} } }); // R14: heal PR ↔ PO pairs recorded on one side only
   if(!canUsePurchasingTracker(currentUser)){ box.innerHTML='<div class="empty-state"><p>You do not have access to this page.</p></div>'; return; }
   const q=(el('po-search')?.value||'').toLowerCase();
   // earlier versions (superseded by a revision) live inside the current version's card
@@ -37601,6 +37678,7 @@ async function poMarkReceived(id){
   if(!confirm(`Mark ${po.poNumber} as received (goods or service delivered)?`)) return;
   const r=await poChange(id,['Sent','Approved'],p=>{ p.status='Received'; p.receivedAt=new Date().toISOString(); p.receivedBy=currentUser; },`📥 ${po.poNumber} marked as received`,`Purchase Order ${po.poNumber} received`);
   if(r) await poAdvanceEntry(r,'Item/Service Delivered',`PO ${r.poNumber} received`);
+  if(r&&await prPoSync(r.poNumber)) renderPurchaseOrdersPage();
 }
 // Pull a PO waiting for approval back to Draft, so it can be corrected and resubmitted
 async function poBackToDraft(id){
@@ -37655,6 +37733,7 @@ async function savePoInvoice(id){
   const inv={no,amount:amt,date:el('poi-date').value,dueDate:el('poi-due').value,fileUrl:url,by:currentUser,checks:warn};
   try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===id); if(p){ p.invoice=inv; (p.vendorDocs||[]).forEach(d=>{ if(d.type==='invoice'&&!d.recorded){ d.recorded=true; d.recordedBy=currentUser; } }); } }); }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
   try{ const r=(typeof _prs!=='undefined'?_prs:[]).find(x=>x.poNumber===po.poNumber); if(r&&!r.invoice){ r.invoice={...inv}; await savePrs(); } }catch(e){}
+  await prPoSync(po.poNumber);
   document.getElementById('poinv-overlay').style.display='none'; renderPurchaseOrdersPage();
   addAudit('🧾',`${po.poNumber}: supplier invoice ${escapeHtml(no)} recorded${warn.length?' — '+escapeHtml(warn.join('; ')):''}`);
 }
@@ -37663,6 +37742,7 @@ async function poMarkPaid(id){
   const ref=prompt(`Mark ${po.poNumber} invoice ${po.invoice?.no||''} as paid — payment reference:`,''); if(ref===null) return; const now=new Date().toISOString();
   try{ await patchPurchaseOrders(arr=>{ const p=arr.find(x=>x.id===id); if(p){ p.paidAt=now; p.paidRef=ref.trim(); p.paidBy=currentUser; } }); }catch(e){ showToast('❌ '+e.message,'error',6000); return; }
   try{ const r=(typeof _prs!=='undefined'?_prs:[]).find(x=>x.poNumber===po.poNumber); if(r&&!r.paidAt){ r.paidAt=now; r.paidRef=ref.trim(); r.paidBy=currentUser; await savePrs(); } }catch(e){}
+  await prPoSync(po.poNumber);
   renderPurchaseOrdersPage(); addAudit('💵',`${po.poNumber}: invoice paid`);
 }
 // ── PO revisions: WPO-…-R1 replaces an approved/sent PO; the original is kept as "Superseded" ──
