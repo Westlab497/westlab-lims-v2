@@ -11425,7 +11425,7 @@ function qtQuoteCharges(q,items){ // extra quotation lines after the items
   const ot=qtOnsiteTopup(q,its); if(ot.amount) out.push({key:'onsiteMin',label:`On-site minimum charge${q.onsiteArea?' ('+q.onsiteArea+')':''} — top-up to RM ${ot.min.toFixed(2)}`,amount:ot.amount});
   return out;
 }
-function qtGrandTotal(q,items){ const its=items||q?.items||[]; return qtQuotationTotal(its)+qtQuoteCharges(q,its).reduce((s2,c)=>s2+c.amount,0); }
+function qtGrandTotal(q,items){ const its=items||q?.items||[]; return qtQuotationTotal(its)+qtQuoteCharges(q,its).reduce((s2,c)=>s2+c.amount,0)+(!items&&typeof qtmxTotal==='function'?qtmxTotal(q):0); } // r22 X: + equipment lines of a mixed quotation (whole value only)
 function qtQuotationTotal(items){ return (items||[]).filter(it=>it&&it.eqName!=='').reduce((sum,it)=>sum+qtLineCalc(it).total,0); }
 // One row of Serial / Tag / Cal Points / Resolution per unit on the line.
 function qtEnsureUnits(it){
@@ -11785,10 +11785,12 @@ function updateQtv2GrandTotal(){
     mn.innerHTML=`T&amp;C 11: minimum per on-site job within the Klang Valley is <b>RM350–RM550</b>, depending on the area; outstation jobs are quoted based on location.${bad?' <b style="color:#b42318;">⚠ This is outside RM350–550.</b>':''}${ot.amount?` <b>Top-up added: RM ${ot.amount.toFixed(2)}</b> (on-site items RM ${ot.onsiteTotal.toFixed(2)}).`:(v&&ot.onsiteTotal>=v?' On-site items already exceed the minimum — no top-up.':'')}`; }
   if(typeof qtv2SurchargeUi==='function') qtv2SurchargeUi();
   const sstQ=!!_settings.sstEnabled&&_qtv2Kind!=='product'; // r16 item 29: never SST on a product sale
-  const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${(sstQ?grand+sstOf(grand):grand).toFixed(2)}`;
+  const mxT=typeof qtmxDraftTotal==='function'?qtmxDraftTotal():0, mxOn=_qtv2Kind==='cal'&&_qtmxLines.some(it=>String(it.eqName||'').trim()); // r22 X: equipment lines — never SST
+  const el2=el('qtv2-grand-total'); if(el2) el2.textContent=`RM ${((sstQ?grand+sstOf(grand):grand)+mxT).toFixed(2)}`;
   const wrap=el('qtv2-grand-wrap');
   if(wrap&&el2){ let pre=wrap.querySelector('.qt-sub'); if(!pre){ pre=document.createElement('span'); pre.className='qt-sub'; wrap.insertBefore(pre,wrap.firstChild); }
-    pre.innerHTML=sstQ?`<span style="color:var(--text-muted);">Subtotal</span> RM ${grand.toFixed(2)} &nbsp;·&nbsp; <span style="color:var(--text-muted);">SST ${sstRate()}%</span> RM ${sstOf(grand).toFixed(2)} &nbsp;·&nbsp; `:''; }
+    pre.innerHTML=mxOn?`<span style="color:var(--text-muted);">Calibration</span> RM ${grand.toFixed(2)} &nbsp;·&nbsp; ${sstQ?`<span style="color:var(--text-muted);">SST ${sstRate()}% (calibration)</span> RM ${sstOf(grand).toFixed(2)} &nbsp;·&nbsp; `:''}<span style="color:var(--text-muted);">🛒 Equipment</span> RM ${mxT.toFixed(2)} &nbsp;·&nbsp; `
+      :sstQ?`<span style="color:var(--text-muted);">Subtotal</span> RM ${grand.toFixed(2)} &nbsp;·&nbsp; <span style="color:var(--text-muted);">SST ${sstRate()}%</span> RM ${sstOf(grand).toFixed(2)} &nbsp;·&nbsp; `:''; }
 }
 const DEFAULT_ENQUIRY_TEMPLATES=[
   {type:'Balance',text:'To prepare a quotation, please provide the following for each balance:\n- Equipment name\n- Brand\n- Model\n- Type: Single-range / Multi-range\n- Serial No.\n- Range/Capacity\n- Resolution\n- Adjustment required: Yes/No\n- Result required: As Found / As Left / Both\n- Specification/Tolerance\n- Calibration Points'},
@@ -13148,6 +13150,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   const fromEntry=prefillEntry||(existing?.linkedSalesTrackerId?_salesTracker.find(e=>e.id===existing.linkedSalesTrackerId):null);
   _qtv2SourceEntry=fromEntry||null;
   _qtv2Kind=existing?(existing.kind==='product'?'product':existing.kind==='training'?'training':'cal'):'cal'; // r16 item 29 · r17 item 12
+  _qtmxLines=existing&&!existing.kind?JSON.parse(JSON.stringify(existing.productLines||[])):[]; // r22 X: equipment lines of a mixed quotation
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:920px;max-width:98vw;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
       <span style="font-weight:700;font-size:15px;">${existing?'✏️ Edit':'+ New'} Quotation ${existing?.quotationNo?'— '+existing.quotationNo:''}${fromEntry?`<span style="display:block;font-weight:500;font-size:12px;color:var(--text-muted);margin-top:2px;">From enquiry: ${escapeHtml(fromEntry.name||'')} · ${(fromEntry.items||[]).length} item${(fromEntry.items||[]).length===1?'':'s'}</span>`:''}</span>
@@ -13194,6 +13197,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
       <div class="qt-sec" style="justify-content:space-between;"><span><span class="qt-sec-n">2</span>Items</span><a href="javascript:void(0)" id="qtv2-foldall" onclick="qtToggleFoldAll()" style="font-size:12px;font-weight:500;"></a></div>
       <div id="qtv2-items-list"></div>
       <button class="btn btn-outline btn-sm" onclick="addQtv2ItemRow()">+ Add Item</button>
+      ${qtmxWrapHtml()}
       <div id="qtv2-sec3" style="${_qtv2Kind==='product'||_qtv2Kind==='training'?'display:none;':''}">
       <div class="qt-sec"><span class="qt-sec-n">3</span>Schedule &amp; site</div>
       <div class="form-row">
@@ -13271,6 +13275,7 @@ function openQuotationV2Modal(quotationId,salesTrackerEntryId){
   ov.style.display='flex';
   _qtv2Folded=new Set(); _qtv2DetailsOpen=new Set();
   renderQtv2ItemsList();
+  qtmxRender(); // r22 X
   qtv2RefreshCustomerView();
   refreshContactSuggestions('qtv2-contact-list',el('qtv2-cust-id')?.value);
 }
@@ -13312,9 +13317,10 @@ function qtv2RefreshCustomerView(forceOpen){
 async function saveQuotationV2(quotationId){
   const custName=el('qtv2-cust-name').value.trim();
   if(!custName){alert('Please enter the customer name.');return;}
-  if(!_qtv2DraftItems.some(it=>it.eqName)){alert('Please add at least one item.');return;}
+  if(!_qtv2DraftItems.some(it=>it.eqName)){alert(_qtv2Kind==='cal'&&_qtmxLines.some(it=>String(it.eqName||'').trim())?'This quotation has equipment lines only — please add at least one calibration item, or choose the 🛒 Product sale type for a quotation of goods only.':'Please add at least one item.');return;}
   if(_qtv2Kind==='product'){ const bad=_qtv2DraftItems.filter(it=>String(it.eqName||'').trim()).find(it=>!(parseFloat(it.quantity)>0)||!(parseFloat(it.unitPrice)>0)); // r16 item 29
     if(bad){ alert(`"${bad.eqName}": every product line needs a quantity and a unit price.`); return; } }
+  { const mxBad=qtmxValidate(); if(mxBad){ alert(mxBad); return; } } // r22 X: equipment lines of a mixed quotation
   if(_qtv2Kind==='training'){ const bad=_qtv2DraftItems.filter(it=>String(it.eqName||'').trim()).find(it=>!it.courseId||!(parseInt(it.participants)>0)||!(parseFloat(it.unitPrice)>0)); // r17 item 12
     if(bad){ alert(`"${bad.eqName}": every training line needs a course, the number of participants and a price.`); return; } }
   let q=quotationId?_quotationsV2.find(x=>x.id===quotationId):null;
@@ -13362,6 +13368,7 @@ async function saveQuotationV2(quotationId){
   q.depositAmount=q.depositRequired?(parseFloat(el('qtv2-deposit-amount').value)||0):0;
   q.linkedSalesTrackerId=el('qtv2-linked-sales-entry')?.value||null;
   if(_qtv2Kind==='product'||_qtv2Kind==='training'){ q.kind=_qtv2Kind; Object.assign(q,{turnaroundRequested:'',turnaroundSurchargePct:null,transportCharge:0,reqDate:'',logistics:'',onsiteArea:'',onsiteMinFee:0,onsiteTransport:0}); } else delete q.kind; // r16 item 29 · r17 item 12
+  qtmxApplyToQuote(q); // r22 X: equipment lines (calibration quotations only)
   await saveQuotationsV2();
   // Complete the bidirectional link, and reflect this real progress in the entry's stage
   // automatically — creating a quotation from a reviewed entry IS reaching "Quotation
@@ -13444,6 +13451,7 @@ async function reviseQuotationV2(id){
   const copy=JSON.parse(JSON.stringify(q)); const now=new Date().toISOString();
   ['sentAt','respondedAt','poNumber','poDocUrl','createdJobNo','createdJobNos','supersededBy','supersededAt','statusBeforeSupersede','followUps','nextFollowUpOn','promisedPayBy','issueDate','issueDateAdj'].forEach(k=>delete copy[k]); // R20: a revision is a new document with its own date
   (copy.items||[]).forEach(it=>{ delete it.poAccepted; delete it.poQty; delete it.poSocUnits; delete it.pricedOutsourced; delete it.units; });
+  (copy.productLines||[]).forEach(it=>{ delete it.poAccepted; delete it.poQty; }); // r22 X
   Object.assign(copy,{id:'QT-'+Date.now(),quotationNo:no,baseNo:base,revision:rev,revisedFrom:q.id,status:'Draft',createdAt:now,createdBy:currentUser});
   q.statusBeforeSupersede=q.status; q.status='Superseded'; q.supersededBy=copy.id; q.supersededAt=now;
   _quotationsV2.push(copy); await saveQuotationsV2();
@@ -13495,9 +13503,9 @@ function renderQuotationsV2Page(){
       const fuNote=q.status==='Sent'?(lf?`<div style="font-size:11px;color:var(--text-muted);">${{email:'✉️',whatsapp:'💬',call:'📞'}[lf.method]||'📞'} followed up ${fmtDateShort(lf.at)}${q.nextFollowUpOn?` · next ${fmtDateShort(q.nextFollowUpOn)}`:''}</div>`:'')+(qtNeedsFollowUp(q)?`<div style="font-size:11px;color:#b45309;font-weight:700;">⏰ follow up due</div>`:''):'';
       const capReq=(q.items||[]).some(it=>it.capCheck&&it.capCheck.status==='Requested')?'<div style="font-size:11px;color:#b45309;">🔍 capability check requested</div>':'';
       return `<tr style="${q.status==='Superseded'?'opacity:.6;':''}">
-        <td style="font-weight:700;">${q.quotationNo}${q.kind==='product'?'<div><span class="badge badge-slate" style="font-weight:600;">🛒 Product sale</span></div>':''}${q.kind==='training'?'<div><span class="badge badge-slate" style="font-weight:600;">🎓 Training</span></div>':''}${sup?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">replaced by ${escapeHtml(sup.quotationNo)}</div>`:''}${q.revision?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">revision ${q.revision}</div>`:''}</td>
+        <td style="font-weight:700;">${q.quotationNo}${q.kind==='product'?'<div><span class="badge badge-slate" style="font-weight:600;">🛒 Product sale</span></div>':''}${q.kind==='training'?'<div><span class="badge badge-slate" style="font-weight:600;">🎓 Training</span></div>':''}${qtmxHas(q)?'<div><span class="badge badge-slate" style="font-weight:600;">🔬 + 🛒 Calibration + equipment</span></div>':''}${sup?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">replaced by ${escapeHtml(sup.quotationNo)}</div>`:''}${q.revision?`<div style="font-size:11px;font-weight:400;color:var(--text-muted);">revision ${q.revision}</div>`:''}</td>
         <td>${escapeHtml(q.custName)}</td>
-        <td style="text-align:center;">${(q.items||[]).length}</td>
+        <td style="text-align:center;">${(q.items||[]).length}${qtmxHas(q)?` + ${qtmxLinesOf(q).length} 🛒`:''}</td>
         <td style="text-align:right;">${total.toFixed(2)}${(()=>{ const po=qtPoValue(q); return po!=null&&Math.abs(po-total)>0.004?`<div style="font-size:11px;color:#9a5b00;">PO RM ${po.toFixed(2)} (${po>total?'more than quoted':'partial'})</div>`:''; })()}</td>
         <td>${statusBadge(q.status)}${fuNote}${capReq}</td>
         <td style="font-size:11.5px;color:var(--text-muted);">${fmtDateShort(q.createdAt)}<br/>by ${USERS[q.createdBy]?.name||q.createdBy||''}${q.issueDate?`<br/>dated <b>${fmtDateShort(q.issueDate)}</b>${ddAdjNote(q,'issueDate')}`:''}${(q.status||'Draft')!=='Draft'?ddAdjBtn('quote',q.id):''}</td>
@@ -13517,7 +13525,7 @@ function renderQuotationsV2Page(){
                  back later, "Mark Accepted" is still right here waiting. -->
             ${q.status==='Accepted'&&qtUnreceived(q).length&&canCreateJobs(currentUser)?`<button class="btn btn-primary btn-sm" onclick="createJobFromQuotationV2('${q.id}')">📥 Receive${(q.createdJobNos||[]).length||q.createdJobNo?' rest':''}</button>`:''}
             ${q.kind==='training'&&q.status==='Accepted'?qtTrainingRowLink(q):''}
-            ${q.kind==='product'&&q.status==='Accepted'?(()=>{ const so=(typeof _salesOrders!=='undefined'?_salesOrders:[]).find(s=>s.quotationId===q.id&&!s.cancelled); return so?`<a href="javascript:void(0)" style="font-size:11.5px;font-weight:600;" onclick="openTradingPage('${escapeForJsAttr(so.id)}')">🛒 ${escapeHtml(so.soNo)}</a>`:(canTradingOffice()?`<button class="btn btn-primary btn-sm" onclick="createSalesOrderFromQuote(_quotationsV2.find(x=>x.id==='${q.id}')).then(()=>renderQuotationsV2Page())">🛒 Create sales order</button>`:''); })():''}
+            ${(q.kind==='product'||qtmxAccepted(q))&&q.status==='Accepted'?(()=>{ const so=(typeof _salesOrders!=='undefined'?_salesOrders:[]).find(s=>s.quotationId===q.id&&!s.cancelled); return so?`<a href="javascript:void(0)" style="font-size:11.5px;font-weight:600;" onclick="openTradingPage('${escapeForJsAttr(so.id)}')">🛒 ${escapeHtml(so.soNo)}</a>`:(canTradingOffice()?`<button class="btn btn-primary btn-sm" onclick="createSalesOrderFromQuote(_quotationsV2.find(x=>x.id==='${q.id}')).then(()=>renderQuotationsV2Page())">🛒 Create sales order</button>`:''); })():''}
             ${(q.createdJobNos||(q.createdJobNo?[q.createdJobNo]:[])).length?`<span style="font-size:11px;color:var(--green);font-weight:600;">✅ ${(q.createdJobNos||[q.createdJobNo]).map(escapeHtml).join(', ')}</span>`:''}
             ${isAdmin(currentUser)?`<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:#fca5a5;" onclick="deleteQuotationV2('${q.id}')">🗑️</button>`:''}
           </div>
@@ -13652,7 +13660,7 @@ function openAcceptQuotationModal(quotationId){
   const q=_quotationsV2.find(x=>x.id===quotationId); if(!q)return;
   _acceptQuotationId=quotationId;
   el('aq-summary').innerHTML=`<strong>${q.quotationNo}</strong> — ${escapeHtml(q.custName)}`;
-  el('aq-items').innerHTML=(q.items||[]).map((it,i)=>{ if(!it.eqName) return ''; const qty=Math.max(1,parseInt(it.quantity)||1);
+  el('aq-items').innerHTML=(qtmxHas(q)?'<div style="font-weight:700;font-size:12px;margin:0 0 4px;">🔬 Calibration — received as a job</div>':'')+(q.items||[]).map((it,i)=>{ if(!it.eqName) return ''; /* r22 X: heading above on a mixed quotation */ const qty=Math.max(1,parseInt(it.quantity)||1);
     // Line 1: tick + item. Line 2: quantities, always in the same place. Line 3: notes (own line, so nothing shifts)
     return `<div style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;font-size:12.5px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;margin:0;">
@@ -13666,7 +13674,7 @@ function openAcceptQuotationModal(quotationId){
         <span></span>
       </div>
       <div id="aq-more-${i}" style="font-size:11.5px;color:#9a5b00;margin:4px 0 0 24px;"></div>
-    </div>`; }).join('')+((q.items||[]).some(it=>it.socRequested)?'<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">SoC units: set to 0 if the customer doesn\'t want the Statement of Conformity.</div>':'');
+    </div>`; }).join('')+((q.items||[]).some(it=>it.socRequested)?'<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">SoC units: set to 0 if the customer doesn\'t want the Statement of Conformity.</div>':'')+qtmxAqHtml(q); // r22 X: + equipment lines
   aqUpdatePoValue();
   el('aq-po-number').value='';
   el('aq-po-file').value='';
@@ -13685,7 +13693,7 @@ function aqUpdatePoValue(){
     const note=el(`aq-more-${i}`); if(note){ note.textContent=n>quoted?`➕ ${n-quoted} more than quoted — charged at the quoted unit price`:''; note.style.display=n>quoted?'':'none'; }
     const sf=document.querySelector(`#aq-items .aq-soc[data-i="${i}"]`); if(sf){ sf.max=String(n); if((parseInt(sf.value)||0)>n) sf.value=String(n); } });
   const sel=aqSelections(); const full=qtGrandTotal(q);
-  const val=qtValueOf(q,qtOrderedItems(q,sel));
+  const val=qtValueOf(q,qtOrderedItems(q,sel))+qtmxAqValue(q); // r22 X: + equipment lines ticked
   box.innerHTML=`PO value: RM ${val.toFixed(2)}${Math.abs(val-full)>0.004?` <span style="font-weight:normal;color:var(--text-muted);">(quotation RM ${full.toFixed(2)} — ${val>full?'more than quoted':'partial'})</span>`:''}`;
 }
 let _acceptQuotationId=null;
@@ -13694,7 +13702,7 @@ async function confirmAcceptQuotation(){
   if(!poNumber){alert("Please enter the customer's PO number.");return;}
   const q=_quotationsV2.find(x=>x.id===_acceptQuotationId); if(!q)return;
   const sel=aqSelections();
-  if(sel.length&&!sel.some(x=>x.on)){ alert("Tick at least one item that's in the customer's PO."); return; }
+  if((sel.length||qtmxAqSel().length)&&!sel.some(x=>x.on)&&!qtmxAqSel().some(x=>x.on)){ alert("Tick at least one item that's in the customer's PO."); return; } // r22 X: + equipment lines
   if(!(el('aq-po-file').files&&el('aq-po-file').files[0])){ alert("Please attach the customer's PO document (PDF or photo). It's kept with the quotation so the PO can be referred to at any time."); return; }
   const btn=document.querySelector('#modal-accept-quotation .btn-primary');
   if(btn){btn.disabled=true;btn.textContent='⏳ Saving…';}
@@ -13713,6 +13721,7 @@ async function confirmAcceptQuotation(){
   }
   sel.forEach(x=>{ const it=q.items[x.i]; if(!it) return; it.poAccepted=x.on; it.poQty=x.on?Math.max(1,x.qty):0;
     if(it.socRequested) it.poSocUnits=x.on?Math.min(x.soc==null?qtSocUnits(it):x.soc,it.poQty):0; });
+  qtmxAqApply(q); // r22 X: equipment lines in the PO
   q.status='Accepted';
   q.respondedAt=new Date().toISOString();
   q.poNumber=poNumber;
@@ -13751,7 +13760,7 @@ async function confirmAcceptQuotation(){
   showToast(`✅ ${q.quotationNo} marked Accepted — PO ${poNumber}`,'success',3500);
   addAudit('📄',`Quotation ${q.quotationNo} marked Accepted — PO ${poNumber}`);
   if(btn){btn.disabled=false;btn.textContent='✅ Confirm Accepted';}
-  if(q.kind==='product'){ const so=await createSalesOrderFromQuote(q); if(so){ showToast(`🛒 Sales order ${so.soNo} created — next: PO to the supplier`,'success',5000); renderQuotationsV2Page(); } } // r16 item 29
+  if(q.kind==='product'||qtmxAccepted(q)){ const so=await createSalesOrderFromQuote(q); if(so){ showToast(`🛒 Sales order ${so.soNo} created${q.kind==='product'?'':' for the equipment lines'} — next: PO to the supplier`,'success',5000); renderQuotationsV2Page(); } } // r16 item 29 · r22 X: + mixed
   if(q.kind==='training'){ const cs=await createTrainingClassesFromQuote(q); if(cs.length){ showToast(`🎓 Training class ${cs.map(c=>c.classNo).join(', ')} created — next: dates, trainer and participants`,'success',5000); renderQuotationsV2Page(); } } // r17 item 12
 }
 async function deleteQuotationV2(quotationId,opts){
@@ -13826,7 +13835,8 @@ async function exportQuotationV2Pdf(quotationId,opts){
   const sstOn=q.kind==='product'?false:(q.sst?!!q.sst.enabled:!!s.sstEnabled); // as it was when the quotation was sent (r16 item 29: never on a product sale)
   const sstPct=q.sst&&q.sst.rate!=null?+q.sst.rate:sstRate(), sstNoQ=q.sst?(q.sst.no||''):(s.sstNo||''); // r16 item 3
   const sstAmount=sstOn?sstOf(subtotal,sstPct):0;
-  const total=Math.round((subtotal+sstAmount)*100)/100;
+  const mxL=qtmxLinesOf(q), mx=mxL.length>0, mxT=qtmxTotalOf(mxL), tcN=mx?2:1; // r22 X: a mixed quotation — equipment section (no SST) + the sales T&C page
+  const total=Math.round((subtotal+sstAmount+mxT)*100)/100;
   const creatorStaff=(_staff||[]).find(x=>x.username===q.createdBy);
   const creatorName=creatorStaff?.name||USERS[q.createdBy]?.name||creatorStaff?.certName||q.createdBy||''; // full name (the certificate name is only for certificates)
   const creatorSigRes=await pdfStaffSignature(q.createdBy,q.createdAt||q.date);
@@ -13925,7 +13935,13 @@ async function exportQuotationV2Pdf(quotationId,opts){
   });
   qtQuoteCharges(q,items).forEach(ch=>groups.push([`<tr><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"><div>${esc(ch.label)}</div></td>
       <td style="${TD}"></td><td style="${TD}"></td><td style="${TD}"></td><td style="${TD}text-align:right;">${money(ch.amount)}</td></tr>`]));
-  const totalsRows=(sstOn?`<tr><td style="padding:2px 8px;font-weight:bold;">Subtotal (MYR)</td><td style="padding:2px 6px;text-align:right;">${subtotal.toFixed(2)}</td></tr>
+  if(mx){ // r22 X: two clearly titled sections, each with its own subtotal (the totals box then gives the grand total)
+    if(groups.length){ groups[0]=[qtmxPdfHead('A. CALIBRATION SERVICES',TD),...groups[0]]; groups[groups.length-1].push(qtmxPdfSub('Subtotal — calibration services (A)',subtotal,TD,money)); }
+    mxL.forEach((it,k)=>{ const r=qtmxPdfRow(it,qtLineCalc(it),items.length+k+1,TD,esc,money); groups.push(k===0?[qtmxPdfHead('B. EQUIPMENT SALE (PRODUCTS)'+(sstOn?' — no SST':''),TD),r]:[r]); });
+    groups[groups.length-1].push(qtmxPdfSub('Subtotal — equipment sale (B)',mxT,TD,money)); }
+  const totalsRows=(mx?`<tr><td style="padding:2px 8px;font-weight:bold;">Calibration services (A)</td><td style="padding:2px 6px;text-align:right;">${subtotal.toFixed(2)}</td></tr>`
+      +(sstOn?`<tr><td style="padding:2px 8px;font-weight:bold;">SST (${sstPct}%) on (A)</td><td style="padding:2px 6px;text-align:right;">${sstAmount.toFixed(2)}</td></tr>`:'')
+      +`<tr><td style="padding:2px 8px;font-weight:bold;">Equipment sale (B)${sstOn?' — no SST':''}</td><td style="padding:2px 6px;text-align:right;">${mxT.toFixed(2)}</td></tr>`:'')+(!mx&&sstOn?`<tr><td style="padding:2px 8px;font-weight:bold;">Subtotal (MYR)</td><td style="padding:2px 6px;text-align:right;">${subtotal.toFixed(2)}</td></tr>
       <tr><td style="padding:2px 8px;font-weight:bold;">SST (${sstPct}%)</td><td style="padding:2px 6px;text-align:right;">${sstAmount.toFixed(2)}</td></tr>`:'')+
     `<tr><td style="padding:2px 8px;font-weight:bold;">Total (MYR)</td><td style="padding:2px 6px;text-align:right;font-weight:bold;border:1px solid #000;min-width:130px;">${total.toFixed(2)}</td></tr>`;
   const siteLines=[
@@ -13937,13 +13953,13 @@ async function exportQuotationV2Pdf(quotationId,opts){
     (q.siteContact||q.siteMobile)?['Site contact',[q.siteContact,q.siteMobile].filter(Boolean).join(' · ')]:null,
     q.siteAccess?['Site access',q.siteAccess.replace(/\n/g,'; ')]:null].filter(Boolean);
   // Compact: label + value side by side, several per line
-  const siteBlock=(reqCommon?`<div style="font-size:11px;margin:0 0 4px;"><b>For all items:</b> ${esc(reqCommon.join(' · '))}</div>`:'')
+  const siteBlock=(reqCommon?`<div style="font-size:11px;margin:0 0 4px;"><b>For all ${mx?'calibration items (A)':'items'}:</b> ${esc(reqCommon.join(' · '))}</div>`:'')
     +(siteLines.length?`<div style="font-size:11px;margin:0 0 6px;line-height:1.45;">${siteLines.map(([k,v])=>`<span style="display:inline-block;margin-right:18px;"><b>${esc(k.replace('Items delivered & returned by','Delivery & return'))}:</b> ${esc(v)}</span>`).join('')}</div>`:'');
   const footerBlock=`<div style="border-top:1px solid #000;padding-top:8px;">${siteBlock}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <table style="border-collapse:collapse;font-size:12.5px;line-height:1.5;">
           <tr><td style="font-weight:bold;width:112px;">Validity</td><td style="font-weight:bold;width:16px;">:</td><td>${q.validityDays?esc(q.validityDays)+' Days':''}</td></tr>
-          <tr><td style="font-weight:bold;">Delivery Term</td><td style="font-weight:bold;">:</td><td>${q.kind==='product'?'Delivered by Westlab':q.kind==='training'?'As per training dates':''}</td></tr>
+          <tr><td style="font-weight:bold;">Delivery Term</td><td style="font-weight:bold;">:</td><td>${q.kind==='product'?'Delivered by Westlab':q.kind==='training'?'As per training dates':mx?'Equipment (B): delivered by Westlab':''}</td></tr>
           <tr><td style="font-weight:bold;">Payment Term</td><td style="font-weight:bold;">:</td><td>30 Days</td></tr>
           ${q.depositRequired?`<tr><td style="font-weight:bold;">Deposit</td><td style="font-weight:bold;">:</td><td>RM ${Number(q.depositAmount||0).toFixed(2)}</td></tr>`:''}
         </table>
@@ -14016,7 +14032,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
   const pageHtml=pages.map((pg,pi)=>{
     const isLast=pi===pageCount-1, tall=isLast&&tallLast;
     return `<div class="pdf-doc" style="${tall?tallStyle:pageStyle}">
-      ${letterhead}${custBlock(pi+1,pageCount+1)}
+      ${letterhead}${custBlock(pi+1,pageCount+tcN)}
       <table style="width:100%;border-collapse:collapse;table-layout:fixed;">${COLS}${tableHead}${pg.rows.join('')}</table>
       ${isLast?(tall?`<div style="margin-top:14px;">${footerBlock}</div>`:`<div style="position:absolute;left:${PX}px;right:${PX}px;bottom:${BOTTOM}px;">${footerBlock}</div>`):''}
     </div>`;
@@ -14026,12 +14042,12 @@ async function exportQuotationV2Pdf(quotationId,opts){
   // the Terms & Conditions page counts as a page: "Page x of N" includes it (Jay, 27 Oct 2026)
   const termsPage=`<div class="pdf-doc" style="${pageStyle}font-size:12px;">
       ${letterhead}
-      <div style="text-align:right;font-size:12.5px;margin:-2px 0 2px;">QUOTATION : ${esc(q.quotationNo)} &nbsp;·&nbsp; Page ${pageCount+1} of ${pageCount+1}</div>
-      <div style="text-align:center;font-weight:bold;font-size:13.5px;margin:4px 0 12px;">Term &amp; Condition</div>
+      <div style="text-align:right;font-size:12.5px;margin:-2px 0 2px;">QUOTATION : ${esc(q.quotationNo)} &nbsp;·&nbsp; Page ${pageCount+1} of ${pageCount+tcN}</div>
+      <div style="text-align:center;font-weight:bold;font-size:13.5px;margin:4px 0 12px;">Term &amp; Condition${mx?' — Calibration Services (A)':''}</div>
       <ol style="padding-left:20px;margin:0;line-height:1.5;">
       <li>This quotation is valid for 30 days from the date of issue</li>
       <li>Payment Term: Net 30 days from invoice date. Interest of 2% per month will be charged on the total amount due for any overdue payment.</li>
-      <li>${sstOn?`Currency: Ringgit Malaysia (MYR). Prices exclude SST; SST is charged at ${sstPct}%${sstNoQ?` (SST Reg. No. ${esc(sstNoQ)})`:''}.`:'Currency: Ringgit Malaysia (MYR).'}</li>
+      <li>${sstOn?`Currency: Ringgit Malaysia (MYR). Prices exclude SST; SST is charged at ${sstPct}%${sstNoQ?` (SST Reg. No. ${esc(sstNoQ)})`:''}${mx?' on calibration services only — no SST on the equipment sale (B)':''}.`:'Currency: Ringgit Malaysia (MYR).'}</li>
       <li>Customer to acknowledge this quotation or provide a Purchase Order before work commences.</li>
       <li>(*) Items marked with an asterisk are subcontracted to a qualified third party due to unavailability of standard or being beyond Westlab's scope of accreditation.</li>
       <li>Completion date for in-house calibration services (excludes delivery/courier time, and assumes item received in good, complete, workable condition):
@@ -14063,7 +14079,7 @@ async function exportQuotationV2Pdf(quotationId,opts){
       <li>Items are calibrated under SAMM accreditation only within Westlab's accredited scope. Items outside this scope, if calibrated, will be issued on a non-accredited basis and clearly indicated as such.</li>
       <li>Westlab agrees not to disclose confidential information obtained from the customer to any third party, except as required by law.</li>
     </ol>
-      ${extraTerms?`<div style="margin-top:10px;"><strong>Additional terms for this quotation:</strong><div style="white-space:pre-line;">${esc(extraTerms)}</div></div>`:''}
+      ${extraTerms&&!mx?`<div style="margin-top:10px;"><strong>Additional terms for this quotation:</strong><div style="white-space:pre-line;">${esc(extraTerms)}</div></div>`:''}
       <div style="text-align:center;font-weight:bold;margin-top:18px;font-size:11.5px;">This is a computer-generated quotation; no signature is required unless otherwise stated.</div>
     </div>`;
   // File name: quotation number + customer, e.g. "WQT-2609-0001_Envirolab Sdn Bhd.pdf"
@@ -14082,7 +14098,15 @@ async function exportQuotationV2Pdf(quotationId,opts){
       ${extraTerms?`<div style="margin-top:10px;"><strong>Additional terms for this quotation:</strong><div style="white-space:pre-line;">${esc(extraTerms)}</div></div>`:''}
       <div style="text-align:center;font-weight:bold;margin-top:18px;font-size:11.5px;">This is a computer-generated quotation; no signature is required unless otherwise stated.</div>
     </div>`:termsPage; // r16 item 29: the sales T&C for a product sale
-  await exportPagedPdf([...pageHtml,termsPage2],`${q.quotationNo}${safeCust?'_'+safeCust:''}.pdf`,'Quotation',items.length,!(opts&&opts.download));
+  const termsPageMx=mx?`<div class="pdf-doc" style="${pageStyle}font-size:12px;">${letterhead}
+      <div style="text-align:right;font-size:12.5px;margin:-2px 0 2px;">QUOTATION : ${esc(q.quotationNo)} &nbsp;·&nbsp; Page ${pageCount+2} of ${pageCount+2}</div>
+      <div style="text-align:center;font-weight:bold;font-size:13.5px;margin:4px 0 4px;">Term &amp; Condition — Sale of Goods (B)</div>
+      <div style="text-align:center;font-size:11.5px;margin:0 0 12px;">These terms apply to the equipment sale (section B). The calibration services (section A) follow the Terms &amp; Conditions on the previous page.</div>
+      <ol style="padding-left:20px;margin:0;line-height:1.5;">${qtSalesTc(q).map(t=>`<li>${esc(t)}</li>`).join('')}</ol>
+      ${extraTerms?`<div style="margin-top:10px;"><strong>Additional terms for this quotation:</strong><div style="white-space:pre-line;">${esc(extraTerms)}</div></div>`:''}
+      <div style="text-align:center;font-weight:bold;margin-top:18px;font-size:11.5px;">This is a computer-generated quotation; no signature is required unless otherwise stated.</div>
+    </div>`:''; // r22 X: a mixed quotation carries both T&C, each clearly headed
+  await exportPagedPdf(mx?[...pageHtml,termsPage,termsPageMx]:[...pageHtml,termsPage2],`${q.quotationNo}${safeCust?'_'+safeCust:''}.pdf`,'Quotation',items.length,!(opts&&opts.download));
 }
 let _startingFromQuotationV2Id=null;
 // ═══ RECEIVE ITEMS ═══ Start a job from an accepted quotation: everything comes from the quotation; the
@@ -15595,7 +15619,7 @@ function qtValueOf(q,list){ const its=list.filter(Boolean); const flagsAll=qtOut
   return qtQuotationTotal(its)+qtQuoteCharges(q,withFlags).reduce((s2,c)=>s2+c.amount,0); }
 function qtPoValue(q){
   if(!q||q.status!=='Accepted'||!(q.items||[]).some(it=>it.poAccepted!==undefined)) return null;
-  return qtValueOf(q,qtOrderedItems(q,null));
+  return qtValueOf(q,qtOrderedItems(q,null))+(typeof qtmxPoValue==='function'?qtmxPoValue(q):0); // r22 X: + equipment lines in the PO
 }
 function stIsLost(e){ const it=e.items||[]; return e.status==='Closed'&&it.length&&it.every(x=>x.outcome==='Lost'); }
 function stStatusStyle(e){
@@ -33667,7 +33691,7 @@ const nextYm=ym=>{ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m,1
 const ymLabel=ym=>{ const [y,m]=ym.split('-').map(Number); return `${wlMon(new Date(y,m-1,1))} ${y}`; };
 const daysBetween=(a,b)=>{ const x=new Date(a), y=new Date(b); return isNaN(x)||isNaN(y)?null:Math.max(0,(y-x)/864e5); };
 const avgOf=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
-function qtTotalOf(q){ try{ return qtQuotationTotal(q.items); }catch(e){ return 0; } }
+function qtTotalOf(q){ try{ return qtQuotationTotal(q.items)+(typeof qtmxTotal==='function'?qtmxTotal(q):0); }catch(e){ return 0; } } // r22 X: sales figures count a mixed quotation's whole value (like a product-sale quotation)
 // ── Sales figures for one month ──
 function salesMonth(ym){
   const live=(_quotationsV2||[]).filter(q=>q.status!=='Superseded');
@@ -40043,9 +40067,9 @@ const DRAFT_FORMS={
     afterRestore:()=>{ const o=el('tk-turnaround-other'); if(o) o.style.display=el('tk-turnaround')?.value==='Other'?'':'none'; if(typeof tkRefreshContactView==='function') tkRefreshContactView(); if(typeof tkRefreshOnsiteBlock==='function') tkRefreshOnsiteBlock(); }},
   quotation:{ title:'Quotation', container:'qtv2-overlay',
     label:()=>draftFieldVal('qtv2-cust-name'),
-    getState:()=>({items:_qtv2DraftItems,kind:_qtv2Kind}),
+    getState:()=>({items:_qtv2DraftItems,kind:_qtv2Kind,mx:_qtmxLines}), // r22 X: + equipment lines
     setState:s=>{ if(s.kind){ _qtv2Kind=s.kind==='product'?'product':s.kind==='training'?'training':'cal'; const k=el('qtv2-kind'); if(k) k.value=_qtv2Kind; const s3=el('qtv2-sec3'); if(s3) s3.style.display=_qtv2Kind==='cal'?'':'none'; } // r16 item 29 · r17 item 12
-      if(s.items){ _qtv2DraftItems=s.items; renderQtv2ItemsList(); } }},
+      if(s.items){ _qtv2DraftItems=s.items; renderQtv2ItemsList(); } if(Array.isArray(s.mx)){ _qtmxLines=s.mx; const w=el('qtmx-wrap'); if(w) w.style.display=_qtv2Kind==='cal'?'':'none'; qtmxRender(); } }},
   capability:{ title:'Capability Review', container:'capability-eval-overlay',
     label:a=>{ const e=_salesTracker.find(x=>x.id===a.args[0]); const it=e?.items?.[a.args[1]]; return [e?.name,it?.eqName].filter(Boolean).join(' — '); }},
   customer:{ title:'Customer', container:'modal-add-customer', label:()=>draftFieldVal('cust-company') },
@@ -40429,8 +40453,8 @@ function qtSalesTc(q){ return [
   "Any calibration service in the same quotation follows Westlab's calibration Terms & Conditions."]; }
 // ── quotation: product lines ──
 function qtv2KindChanged(v){ const was=_qtv2Kind; v=v==='product'?'product':v==='training'?'training':'cal'; if(v===was) return; // r17 item 12: + training
-  if(_qtv2DraftItems.some(it=>String(it.eqName||'').trim())&&!confirm('Changing the quotation type clears the items entered so far. Continue?')){ const s=el('qtv2-kind'); if(s) s.value=was; return; }
-  _qtv2Kind=v; _qtv2DraftItems=[]; addQtv2ItemRow();
+  if((_qtv2DraftItems.some(it=>String(it.eqName||'').trim())||_qtmxLines.some(it=>String(it.eqName||'').trim()))&&!confirm('Changing the quotation type clears the items entered so far. Continue?')){ const s=el('qtv2-kind'); if(s) s.value=was; return; }
+  _qtv2Kind=v; _qtv2DraftItems=[]; addQtv2ItemRow(); qtmxKindSync(v); // r22 X
   const s3=el('qtv2-sec3'); if(s3) s3.style.display=v==='cal'?'':'none'; const tn=el('qtv2-terms-n'); if(tn) tn.textContent=v==='cal'?'4':'3'; }
 function updateQtv2ProductField(idx,f,v){ const it=_qtv2DraftItems[idx]; if(!it) return; it[f]=v;
   const c=qtLineCalc(it); const t=el(`qtv2-pl-total-${idx}`); if(t) t.textContent='RM '+c.total.toFixed(2); updateQtv2GrandTotal(); }
@@ -40455,13 +40479,81 @@ function renderQtv2ProductLines(box){ const v=x=>escapeHtml(x==null?'':String(x)
   const fa=el('qtv2-foldall'); if(fa) fa.textContent='';
   el('qt-item-tabs')?.remove(); // product lines are short — all shown at once, no item tabs
   updateQtv2GrandTotal(); }
+// ══ r22 X (Jay, 31 Oct 2026): product sales step 2 — MIXED quotations: calibration items + equipment (product) lines in ONE quotation ══
+// A calibration quotation (no q.kind) may also carry q.productLines = [{kind:'product',eqName,brand,model,quantity,unit,unitPrice,discount,leadTime,warranty}].
+// They are kept OUT of q.items on purpose: everything calibration (job units / receiving, F033, capability, outsourcing, Urgent/Express surcharge,
+// price history, calibration KPIs, reception's stripped view) reads q.items only — so a mixed quotation is a normal calibration quotation for all of that.
+// Product lines: never SST; printed as their own section + the sales T&C; accepted → a 🛒 Sales Order (r16 flow) and invoiced from the sales order.
+// Training is not mixed in — it is quoted on its own 🎓 Training quotation (classes, its own T&C).
+var _qtmxLines=[];
+function qtmxLinesOf(q){ return q&&!q.kind&&Array.isArray(q.productLines)?q.productLines.filter(it=>it&&String(it.eqName||'').trim()):[]; }
+function qtmxHas(q){ return qtmxLinesOf(q).length>0; }
+function qtmxTotalOf(lines){ return Math.round((lines||[]).filter(it=>it&&String(it.eqName||'').trim()).reduce((s,it)=>s+qtLineCalc(it).total,0)*100)/100; }
+function qtmxTotal(q){ return qtmxTotalOf(qtmxLinesOf(q)); }
+function qtmxAsOrdered(it,n){ const q0=Math.max(1,parseFloat(it.quantity)||1); let d=it.discount; const ds=String(d==null?'':d).trim(); // a fixed RM discount follows the quantity ordered (as for calibration lines)
+  if(ds&&!ds.endsWith('%')&&parseFloat(ds)>0&&n!==q0) d=String(Math.round(parseFloat(ds)*n/q0*100)/100); return {...it,quantity:n,discount:d}; }
+function qtmxPoValue(q){ return qtmxTotalOf(qtmxLinesOf(q).filter(it=>it.poAccepted!==false).map(it=>it.poAccepted===true?qtmxAsOrdered(it,Math.max(1,parseInt(it.poQty)||1)):it)); }
+function qtmxAccepted(q){ return qtmxLinesOf(q).some(it=>it.poAccepted!==false); }
+// ── editor: a second section under the calibration items ──
+function qtmxWrapHtml(){ return `<div id="qtmx-wrap" style="${_qtv2Kind==='cal'?'':'display:none;'}margin-top:14px;">
+    <div class="qt-sec"><span class="qt-sec-n" style="font-size:12px;">🛒</span>Equipment sale (products) <span style="font-weight:normal;font-size:12px;color:var(--text-muted);margin-left:6px;">optional</span></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Equipment we buy in and resell, quoted together with the calibration above. Printed as its own section with its own subtotal · never SST · the sales Terms &amp; Conditions are added. When accepted these lines become a 🛒 Sales Order; the calibration items are received as a job as usual. (Training is quoted on its own 🎓 Training quotation.)</div>
+    <div id="qtmx-list"></div>
+    <button type="button" class="btn btn-outline btn-sm" id="qtmx-add" onclick="qtmxAdd()">+ Add product line</button></div>`; }
+function qtmxAdd(){ _qtmxLines.push({id:'QP-'+Date.now()+'-'+Math.floor(Math.random()*1000),kind:'product',eqName:'',brand:'',model:'',quantity:1,unit:'unit',unitPrice:0,discount:'',leadTime:'',warranty:''}); qtmxRender(); }
+function qtmxRemove(i){ _qtmxLines.splice(i,1); qtmxRender(); }
+function qtmxField(i,f,v){ const it=_qtmxLines[i]; if(!it) return; it[f]=v; const t=el(`qtmx-total-${i}`); if(t) t.textContent='RM '+qtLineCalc(it).total.toFixed(2); updateQtv2GrandTotal(); }
+function qtmxRender(){ const box=el('qtmx-list'); if(!box) return; const v=x=>escapeHtml(x==null?'':String(x)); const L=t=>`<label class="qt-l">${t}</label>`;
+  box.innerHTML=_qtmxLines.map((it,i)=>{ const c=qtLineCalc(it); return `<div class="qt-card qtmx-card"><div class="qt-card-body" style="padding-top:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b>🛒 Product ${i+1}</b><span style="display:flex;gap:10px;align-items:center;"><b id="qtmx-total-${i}">RM ${c.total.toFixed(2)}</b><button type="button" onclick="qtmxRemove(${i})" title="Remove line" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;">✕</button></span></div>
+    <div class="qt-grid" style="grid-template-columns:2fr 1fr 1fr;">
+      <div>${L('Description')}<input class="form-control qtmx-desc" value="${v(it.eqName)}" placeholder="e.g. Analytical balance 220 g / 0.1 mg" oninput="qtmxField(${i},'eqName',this.value)"/></div>
+      <div>${L('Brand')}<input class="form-control" value="${v(it.brand)}" oninput="qtmxField(${i},'brand',this.value)"/></div>
+      <div>${L('Model')}<input class="form-control" value="${v(it.model)}" oninput="qtmxField(${i},'model',this.value)"/></div></div>
+    <div class="qt-grid" style="grid-template-columns:90px 100px 1fr 1fr;">
+      <div>${L('Qty')}<input class="form-control" type="number" min="1" step="1" value="${v(it.quantity||1)}" oninput="qtmxField(${i},'quantity',this.value)"/></div>
+      <div>${L('Unit')}<input class="form-control" value="${v(it.unit||'unit')}" placeholder="unit / set / pc" oninput="qtmxField(${i},'unit',this.value)"/></div>
+      <div>${L('Unit price (RM)')}<input class="form-control" type="number" min="0" step="0.01" value="${v(it.unitPrice||'')}" oninput="qtmxField(${i},'unitPrice',parseFloat(this.value)||0)"/></div>
+      <div>${L('Discount (10% or RM)')}<input class="form-control" placeholder="none" value="${v(it.discount)}" oninput="qtmxField(${i},'discount',this.value)"/></div></div>
+    <div class="qt-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
+      <div>${L('Lead time')}<input class="form-control" value="${v(it.leadTime)}" placeholder="e.g. 4–6 weeks from PO" oninput="qtmxField(${i},'leadTime',this.value)"/></div>
+      <div>${L('Warranty')}<input class="form-control" value="${v(it.warranty)}" placeholder="e.g. 12 months manufacturer's warranty" oninput="qtmxField(${i},'warranty',this.value)"/></div></div>
+  </div></div>`; }).join('');
+  updateQtv2GrandTotal(); }
+function qtmxDraftTotal(){ return _qtv2Kind==='cal'?qtmxTotalOf(_qtmxLines):0; }
+function qtmxKindSync(v){ _qtmxLines=[]; const w=el('qtmx-wrap'); if(w) w.style.display=v==='cal'?'':'none'; qtmxRender(); }
+function qtmxValidate(){ if(_qtv2Kind!=='cal') return '';
+  const bad=_qtmxLines.filter(it=>String(it.eqName||'').trim()).find(it=>!(parseFloat(it.quantity)>0)||!(parseFloat(it.unitPrice)>0));
+  return bad?`"${bad.eqName}": every product line needs a quantity and a unit price.`:''; }
+function qtmxApplyToQuote(q){ if(_qtv2Kind!=='cal'){ delete q.productLines; return; }
+  const pl=_qtmxLines.filter(it=>String(it.eqName||'').trim()).map(it=>({...it,kind:'product',eqName:String(it.eqName).trim()}));
+  if(pl.length) q.productLines=pl; else delete q.productLines; }
+// ── PDF: section headings, the product rows and the two subtotals ──
+function qtmxPdfHead(t,TD){ return `<tr><td colspan="7" style="${TD}padding-top:8px;font-weight:bold;">${t}</td></tr>`; }
+function qtmxPdfSub(t,amt,TD,money){ return `<tr><td colspan="6" style="${TD}text-align:right;font-weight:bold;">${t}</td><td style="${TD}text-align:right;font-weight:bold;border-top:1px solid #000;">${money(amt)||'0.00'}</td></tr>`; }
+function qtmxPdfRow(it,c,n,TD,esc,money){ const subs=[[it.brand||it.model?'Brand / Model':'',[it.brand,it.model].filter(Boolean).join(' / ')],['Lead time',it.leadTime],['Warranty',it.warranty]].filter(([k,v])=>k&&String(v||'').trim());
+  const discP=c.baseDisc?(String(it.discount).trim().endsWith('%')?esc(String(it.discount).trim()):c.baseDisc.toFixed(2)):'';
+  return `<tr><td style="${TD}">${n}</td><td style="${TD}"></td><td style="${TD}"><div>${esc(it.eqName)}</div>${subs.length?`<div style="padding-left:6px;">${subs.map(([k,v])=>`${esc(k)}: ${esc(String(v).trim())}`).join('<br/>')}</div>`:''}</td>
+    <td style="${TD}text-align:center;white-space:nowrap;">${c.qty.toFixed(2)} ${esc(String(it.unit||'unit').toUpperCase())}</td><td style="${TD}">${money(c.price)}</td><td style="${TD}">${discP}</td><td style="${TD}text-align:right;">${money(c.baseNet)}</td></tr>`; }
+// ── accept: the product lines in the customer's PO ──
+function qtmxAqHtml(q){ const pl=(q&&!q.kind&&Array.isArray(q.productLines))?q.productLines:[]; if(!pl.some(it=>it&&String(it.eqName||'').trim())) return '';
+  return `<div style="font-weight:700;font-size:12px;margin:10px 0 4px;">🛒 Equipment sale — becomes a Sales Order</div>`+pl.map((it,k)=>{ if(!it||!String(it.eqName||'').trim()) return ''; const qty=Math.max(1,parseInt(it.quantity)||1);
+    return `<div style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;font-size:12.5px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;margin:0;"><input type="checkbox" class="aq-pitem" data-k="${k}" checked onchange="aqUpdatePoValue()" style="width:16px;height:16px;flex-shrink:0;"/>
+        <span>🛒 ${escapeHtml(it.eqName)}${[it.brand,it.model].filter(Boolean).length?` <span style="color:var(--text-muted);">(${escapeHtml([it.brand,it.model].filter(Boolean).join(' '))})</span>`:''}</span></label>
+      <div style="display:grid;grid-template-columns:auto auto auto 1fr;align-items:center;gap:6px 8px;margin:6px 0 0 24px;">
+        <span style="color:var(--text-muted);white-space:nowrap;">Quoted ${qty} ${escapeHtml(it.unit||'unit')}</span><span style="white-space:nowrap;margin-left:6px;">In PO</span>
+        <input type="number" class="form-control aq-pqty" data-k="${k}" min="1" value="${qty}" oninput="aqUpdatePoValue()" style="width:70px;padding:4px 6px;"/><span></span></div></div>`; }).join(''); }
+function qtmxAqSel(){ return [...document.querySelectorAll('#aq-items .aq-pitem')].map(cb=>{ const k=+cb.dataset.k; const f=document.querySelector(`#aq-items .aq-pqty[data-k="${k}"]`); return {k,on:cb.checked,qty:Math.max(1,parseInt(f&&f.value)||1)}; }); }
+function qtmxAqValue(q){ const pl=(q&&q.productLines)||[]; return qtmxTotalOf(qtmxAqSel().filter(x=>x.on&&pl[x.k]).map(x=>qtmxAsOrdered(pl[x.k],x.qty))); }
+function qtmxAqApply(q){ const pl=(q&&q.productLines)||[]; qtmxAqSel().forEach(x=>{ const it=pl[x.k]; if(!it) return; it.poAccepted=x.on; it.poQty=x.on?x.qty:0; }); }
 // ── numbers: drawn through the shared document numbering (getNextDocNumber('WSO') — WSO-YYWWNNNN once the r16 numbering is in) ──
 async function soNextNumber(){ return {no:await getNextDocNumber('WSO')}; }
 async function soGiveBackNo(no){ const m=/^([A-Z]+)-(\d{4})-?(\d{4})$/.exec(String(no||'')); if(m) await tryRollbackSequence(`${m[1]}_${m[2]}`,parseInt(m[3],10)); } // a number not used after all is handed back
 function soTotal(so){ return Math.round((so.lines||[]).reduce((s,l)=>s+(parseFloat(l.qty)||0)*(parseFloat(l.price)||0),0)*100)/100; }
-function soLinesFromQuote(q){ return (q.items||[]).filter(it=>it&&it.eqName&&it.poAccepted!==false).map(it=>{ const c=qtLineCalc(it); const qty=it.poAccepted===true?Math.max(1,parseInt(it.poQty)||c.qty):c.qty;
+function soLinesFromQuote(q){ return (q.kind==='product'?(q.items||[]):qtmxLinesOf(q)).filter(it=>it&&it.eqName&&it.poAccepted!==false).map(it=>{ const c=qtLineCalc(it); const qty=it.poAccepted===true?Math.max(1,parseInt(it.poQty)||c.qty):c.qty;
   return {desc:it.eqName,brand:it.brand||'',model:it.model||'',qty,unit:it.unit||'unit',price:Math.round(c.netUnitPrice*100)/100,leadTime:it.leadTime||'',warranty:it.warranty||''}; }); }
-async function createSalesOrderFromQuote(q){ if(!q||q.kind!=='product') return null; if(!canTradingOffice()&&!['Manager','Quality Manager'].includes(getUserRole(currentUser))) return null;
+async function createSalesOrderFromQuote(q){ if(!q||(q.kind!=='product'&&!qtmxAccepted(q))) return null; /* r22 X: + mixed quotations */ if(!canTradingOffice()&&!['Manager','Quality Manager'].includes(getUserRole(currentUser))) return null;
   await loadSalesOrders(); const ex=_salesOrders.find(s=>s.quotationId===q.id&&!s.cancelled); if(ex) return ex;
   let n; try{ n=await soNextNumber(); }catch(e){ showToast('❌ No sales order number: '+e.message,'error',6000); return null; }
   const now=new Date().toISOString();
@@ -41131,6 +41223,200 @@ async function createTrainingClassesFromQuote(q){ if(!q||q.kind!=='training'||!c
 function qtTrainingRowLink(q){ const cs=(_trnClasses||[]).filter(c=>c.quotationId===q.id&&!c.cancelled);
   if(cs.length) return cs.map(c=>`<a href="javascript:void(0)" style="font-size:11.5px;font-weight:600;" onclick="openTrainingPage('${escapeForJsAttr(c.id)}')">🎓 ${escapeHtml(c.classNo)}</a>`).join(' ');
   return canTrainingOffice()?`<button class="btn btn-primary btn-sm" onclick="createTrainingClassesFromQuote(_quotationsV2.find(x=>x.id==='${q.id}')).then(()=>renderQuotationsV2Page())">🎓 Create class</button>`:''; }
+</script>
+
+<script>
+// ═══ R22-O (Jay, 31 Oct 2026): 🤖 ASSISTANTS (Level 1) + 🏢 LIVE OFFICE ═══
+// The rules run on the server (one engine for the dashboard card, the 8 am / 2 pm emails and the Live Office) — GET /api/assistants
+// gives each person only their own list; the Live Office (GET /api/live-office) is MD / Admin only, money figures MD / Admin only
+// and never on the TV. The office layout is ONE config object (LIVE_OFFICE_LAYOUT) — change it when Jay sends the floor plan.
+const LIVE_OFFICE_LAYOUT={
+  tile:[72,36], wallH:100, grid:[13,9],
+  rooms:[ // x / y / w / h in floor tiles (x runs down-right, y down-left from the back corner); label / people area / robot slots in the same tiles
+    {id:'lab',label:'Westlab Laboratory',x:0,y:0,w:7,h:5,floor:'#dbeafe',edge:'#93c5fd',view:'equipment',lab:[3.45,4.88],people:[1.8,1.75,4.6,3.25],bots:[[5.75,1.6],[5.75,2.55],[5.75,3.5]]},
+    {id:'reception',label:'Reception',x:7,y:0,w:6,h:4,floor:'#fef3c7',edge:'#fcd34d',view:'reception',lab:[10.1,3.88],people:[8.2,1.75,11.0,1.75],bots:[[12.4,1.7]]},
+    {id:'office',label:'Office',x:0,y:5,w:7,h:4,floor:'#dcfce7',edge:'#86efac',view:'quotations-v2',lab:[3.5,8.9],people:[0.9,6.55,5.6,7.55],bots:[[0.9,8.5],[1.85,8.5],[2.8,8.5],[3.75,8.5],[4.7,8.5],[5.65,8.5]]},
+    {id:'md',label:'MD Room',x:7,y:4,w:3,h:5,floor:'#ede9fe',edge:'#c4b5fd',view:'approval',lab:[8.6,8.9],people:[8.5,5.9,8.5,5.9],bots:[[9.4,7.4]]},
+    {id:'store',label:'Store / Delivery',x:10,y:4,w:3,h:5,floor:'#f1f5f9',edge:'#cbd5e1',view:'trading',lab:[11.5,8.9],people:[11.0,6.2,12.3,6.2],bots:[[10.55,5.3],[11.55,5.3]]}],
+  furniture:[ // [x, y, w, d, h, colour] — benches, counter, desks, shelves
+    [0.3,0.3,3.0,0.8,0.55,'#cbd5e1'],[3.8,0.3,2.8,0.8,0.55,'#cbd5e1'],[0.3,1.5,0.8,2.6,0.55,'#cbd5e1'],
+    [7.4,2.35,3.8,0.65,0.62,'#d6a46b'],[0.5,5.4,1.6,0.8,0.45,'#e2c799'],[2.7,5.4,1.6,0.8,0.45,'#e2c799'],[4.9,5.4,1.6,0.8,0.45,'#e2c799'],
+    [7.6,4.4,2.0,0.8,0.45,'#a78b6d'],[10.25,4.25,2.4,0.6,1.1,'#94a3b8']],
+  racks:{incoming:[7.35,0.35,'📥 Incoming'],ready:[10.7,0.35,'📤 Ready to collect'],lab:[1.6,3.85,'🧪 In the lab'],done:[3.9,3.85,'✅ Done'],away:[11.0,7.6,'🚚 At vendor']},
+  screens:{labx:['x',0.9,5.6],lab:['y',0.5,4.4],reception:['x',7.5,12.5],office:['y',5.5,8.6]}, // wall screens on the outer back walls
+  roleRoom:{Engineer:'lab',Manager:'lab','Quality Manager':'office',Coordinator:'office',Sales:'office',HR:'office',Receptionist:'reception',Driver:'store','Managing Director':'md',Admin:'md'},
+  roleView:{Engineer:'equipment',Manager:'equipment','Quality Manager':'capa',Coordinator:'invoices',Sales:'quotations-v2',HR:'attendance',Receptionist:'reception',Driver:'trips','Managing Director':'approval',Admin:'approval'},
+  roleColour:{Engineer:'#2563eb',Manager:'#1d4ed8','Quality Manager':'#be123c',Coordinator:'#0f766e',Sales:'#ea580c',HR:'#7c3aed',Receptionist:'#d97706',Driver:'#475569','Managing Director':'#111827',Admin:'#111827'}
+};
+let _asstDash={at:0,data:null,busy:false}, _loData=null, _loTimer=null, _loTv=false, _loBusy=false;
+const asstEsc=s=>escapeHtml(String(s==null?'':s));
+function asstOpenView(v){ if(!v) return; try{ if(typeof viewAllowed==='function'&&!viewAllowed(v)){ showView('dashboard'); return; } showView(v); }catch(e){ console.warn(e); } }
+
+// ── 🤖 the dashboard card: my own list ──
+async function asstDashRender(force){
+  const dash=el('view-dashboard'); if(!dash||!currentUser) return; let box=el('asst-dash-box');
+  if(!box){ box=document.createElement('div'); box.id='asst-dash-box'; box.style.marginBottom='16px'; const na=el('needs-attention-box'); if(na) na.insertAdjacentElement('afterend',box); else dash.appendChild(box); }
+  if(!force&&_asstDash.data&&Date.now()-_asstDash.at<60000){ asstDashPaint(box); return; }
+  if(_asstDash.busy) return; _asstDash.busy=true;
+  try{ _asstDash.data=await apiFetch('/api/assistants'+(force?'?fresh=1':'')); _asstDash.at=Date.now(); }catch(e){ console.warn('assistants',e); }
+  finally{ _asstDash.busy=false; } asstDashPaint(box); }
+function asstDashPaint(box){ const d=_asstDash.data; if(!d){ box.innerHTML=''; return; }
+  const defs=Object.fromEntries((d.defs||[]).map(x=>[x.id,x])); const L=(d.items||[]).slice().sort((a,b)=>(b.red?1:0)-(a.red?1:0)); const red=L.filter(i=>i.red).length; const adm=isAdmin(currentUser);
+  const lo=adm?`<button class="btn btn-outline btn-sm" onclick="showView('live-office')">🏢 Live Office</button>`:'';
+  if(!L.length){ box.innerHTML=`<div class="dash-attn" style="padding:10px 16px;font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:17px;">🤖</span><span style="flex:1;">Your assistants have nothing for you today.</span>${lo}</div>`; return; }
+  box.innerHTML=`<div class="dash-attn">
+    <div style="padding:9px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border);"><span style="font-weight:700;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);">🤖 Assistant</span>
+      <span style="font-size:12px;color:var(--text-muted);">${L.length} item${L.length>1?'s':''}${red?` · <b style="color:#dc2626;">${red} urgent</b>`:''} · updated ${new Date(d.at||Date.now()).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
+      <span style="margin-left:auto;display:flex;gap:6px;">${lo}<button class="btn btn-outline btn-sm" title="Check again" onclick="asstDashRender(true)">↻</button></span></div>
+    ${L.map((i,k)=>{ const a=defs[i.a]||{}; return `<div class="dash-attn-row${k>=6&&!window._asstAll?' attn-more':''}"><span class="dash-attn-dot" style="background:${i.red?'#dc2626':'#f59e0b'};"></span>
+      <span style="font-size:15px;" title="${asstEsc(a.name||'')}">${asstEsc(a.icon||'🤖')}</span><span style="flex:1;font-size:13px;"><span style="font-size:11px;color:var(--text-muted);">${asstEsc(a.name||'')} · </span>${asstEsc(i.t)}</span>
+      <button class="btn btn-outline btn-sm" onclick="asstOpenView('${escapeForJsAttr(i.v||'dashboard')}')">Open</button></div>`; }).join('')}
+    ${L.length>6?`<div style="padding:6px 16px;text-align:center;"><button class="btn btn-outline btn-sm" onclick="window._asstAll=!window._asstAll;asstDashPaint(el('asst-dash-box'))">${window._asstAll?'Show fewer':`Show all ${L.length}`}</button></div>`:''}</div>`; }
+(function(){ const _rd=window.renderDashboard; if(typeof _rd==='function') window.renderDashboard=function(...a){ const r=_rd.apply(this,a); try{ asstDashRender(false); }catch(e){ console.warn(e); } return r; }; })();
+
+// ── 🏢 Live Office (MD / Admin) ──
+function loEnsure(){ if(!el('view-live-office')){ const d=el('view-dashboard'); if(!d) return; const v=document.createElement('div'); v.className='view'; v.id='view-live-office';
+    v.innerHTML=`<div class="page-header lo-head"><div><div class="page-title">🏢 Live Office</div><div class="page-sub" id="lo-sub">Who is in, what they are doing, where the items are and what the assistants found</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline" onclick="loLoad(true)">↻ Refresh</button><button class="btn btn-primary" onclick="loTv(true)">📺 TV mode</button></div></div><div id="lo-body"></div>`;
+    d.parentElement.appendChild(v); }
+  if(!el('nav-live-office')){ const ref=el('nav-reports')||el('nav-personnel'); if(ref){ const b=document.createElement('button'); b.className='nav-item hidden-nav'; b.id='nav-live-office'; b.setAttribute('onclick',"showView('live-office')"); b.setAttribute('data-label','Live Office');
+      b.innerHTML='<span class="nav-icon"><i class="ti ti-building-community"></i></span><span class="nav-label">Live Office</span>'; ref.insertAdjacentElement('beforebegin',b); } }
+  try{ const a=NAV_CATEGORIES.find(c=>c.id==='admin'); if(a&&!a.items.some(x=>x[0]==='nav-live-office')) a.items.unshift(['nav-live-office','Live view of the office — staff, items, assistants (MD)']); }catch(e){}
+  if(typeof TITLES==='object') TITLES['live-office']='Live Office';
+  if(!el('lo-style')){ const s=document.createElement('style'); s.id='lo-style'; s.textContent=`
+    #lo-svg{width:100%;height:auto;max-height:calc(100vh - 190px);display:block;margin:0 auto;font-family:'DM Sans',Arial,sans-serif;}
+    #lo-svg .lo-click{cursor:pointer;} #lo-svg .lo-click:hover>.lo-hl{opacity:1;} #lo-svg .lo-room:hover polygon.lo-floor{filter:brightness(.97);}
+    .lo-grey{filter:grayscale(1);opacity:.38;}
+    .lo-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:8px;margin-top:10px;}
+    .lo-bot{border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:#fff;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12.5px;}
+    .lo-bot:hover{border-color:#93c5fd;background:#f8fbff;} .lo-bot b{font-size:15px;}
+    .lo-n{margin-left:auto;min-width:24px;text-align:center;border-radius:999px;padding:1px 7px;font-weight:700;font-size:12px;color:#fff;}
+    body.lo-tv #sidebar, body.lo-tv .topbar, body.lo-tv #topbar, body.lo-tv #qbar, body.lo-tv .lo-head{display:none!important;}
+    body.lo-tv #content, body.lo-tv .main, body.lo-tv #main{margin:0!important;padding:0!important;max-width:none!important;}
+    body.lo-tv #view-live-office{position:fixed;inset:0;z-index:900;background:#0f172a;padding:10px 16px;overflow:hidden;}
+    body.lo-tv #lo-svg{max-height:calc(100vh - 118px);} body.lo-tv .lo-bot{background:#1e293b;border-color:#334155;color:#e2e8f0;} body.lo-tv .lo-strip{grid-template-columns:repeat(13,1fr);}
+    .lo-list{border:1px solid var(--border);border-radius:10px;background:#fff;margin-bottom:10px;} .lo-list>div{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:8px;align-items:center;}
+    .lo-list>div:last-child{border-bottom:none;}`; document.head.appendChild(s); } }
+function loNavSync(){ loEnsure(); const b=el('nav-live-office'); if(b) b.classList.toggle('hidden-nav',!(currentUser&&isAdmin(currentUser))); if(typeof renderCategoryNav==='function') try{ renderCategoryNav(); }catch(e){} }
+(function(){ const _ar=window.applyRoleUI; if(typeof _ar==='function') window.applyRoleUI=function(...a){ const r=_ar.apply(this,a); try{ loNavSync(); }catch(e){ console.warn(e); } return r; };
+  const _sv=window.showView; window.showView=function(name,...rest){ if(name==='live-office') loEnsure(); const r=_sv.call(this,name,...rest);
+    if(name==='live-office'&&el('view-live-office')?.classList.contains('active')) loLoad(false); else { loStop(); if(_loTv) loTv(false); }
+    if(name==='settings') setTimeout(asstSettingsCard,0); return r; }; })();
+function loStop(){ if(_loTimer){ clearInterval(_loTimer); _loTimer=null; } }
+async function loLoad(fresh){ if(!isAdmin(currentUser)) return; const box=el('lo-body'); if(!box) return; if(!_loData) box.innerHTML='<div class="empty-state"><p>Loading the office…</p></div>';
+  if(_loBusy) return; _loBusy=true;
+  try{ _loData=await apiFetch('/api/live-office?'+(_loTv?'tv=1&':'')+(fresh?'fresh=1':'')); }catch(e){ box.innerHTML=`<div class="empty-state"><p>${asstEsc(e.userMessage||e.message||e)}</p></div>`; _loBusy=false; return; }
+  _loBusy=false; loRender(); loStop(); _loTimer=setInterval(()=>{ if(el('view-live-office')?.classList.contains('active')&&!document.hidden) loLoad(false); else loStop(); },60000); }
+function loTv(on){ _loTv=!!on; document.body.classList.toggle('lo-tv',_loTv);
+  if(_loTv){ try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){} _loData=null; loLoad(true); }
+  else { try{ if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); }catch(e){} if(el('view-live-office')?.classList.contains('active')){ _loData=null; loLoad(true); } } }
+document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement&&_loTv) loTv(false); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&_loTv) loTv(false); });
+const loMoney=n=>'RM '+(+n||0).toLocaleString('en-MY',{minimumFractionDigits:0,maximumFractionDigits:0});
+function loRender(){ const box=el('lo-body'), d=_loData; if(!box||!d) return;
+  const sub=el('lo-sub'); if(sub) sub.textContent=`${fmtDateShort(d.today)} · updated ${new Date(d.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} · refreshes every minute`;
+  if(window.matchMedia('(max-width: 700px)').matches&&!_loTv){ box.innerHTML=loListHtml(d); return; }
+  const tvBar=_loTv?`<div style="display:flex;align-items:center;gap:14px;color:#e2e8f0;margin-bottom:4px;"><span style="font-size:22px;font-weight:700;">🏢 Westlab — Live Office</span><span style="font-size:15px;color:#94a3b8;">${asstEsc(fmtDateShort(d.today))} · ${new Date(d.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span><button class="btn btn-outline btn-sm" style="margin-left:auto;color:#e2e8f0;border-color:#475569;background:transparent;" onclick="loTv(false)">✕ Exit TV</button></div>`:'';
+  box.innerHTML=tvBar+`<div style="background:${_loTv?'#0f172a':'linear-gradient(#f8fafc,#eef2f7)'};border:${_loTv?'none':'1px solid var(--border)'};border-radius:14px;padding:6px;">${loSvg(d)}</div>
+    <div class="lo-strip">${d.assistants.filter(a=>a.on!==false).map(a=>`<div class="lo-bot" onclick="loBot('${escapeForJsAttr(a.id)}')" title="${asstEsc(a.name)} → ${asstEsc(a.who)}"><b>${asstEsc(a.icon)}</b><span>${asstEsc(a.name.replace(' assistant',''))}</span><span class="lo-n" style="background:${a.red?'#dc2626':a.count?'#f59e0b':'#16a34a'};">${a.count||'✓'}</span></div>`).join('')}</div>
+    ${_loTv?'':`<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Click a person or a room to open that screen · click a robot for its list · lit = clocked in, grey = not in / on leave · money figures are shown to the MD only and never in TV mode.</div>`}`; }
+function loListHtml(d){ const st={in:'🟢 In',site:'🚐 On site',out:'⚪ Left',leave:'🏖️ On leave',absent:'⚪ Not in'};
+  const s=d.screens; const m=s.money;
+  return `<div class="lo-list"><div><b>📊 Now</b></div><div>Open jobs <b style="margin-left:auto;">${s.openJobs}</b></div><div>Overdue items <b style="margin-left:auto;color:${s.overdue?'#dc2626':''};">${s.overdue}</b></div><div>Certificates to approve <b style="margin-left:auto;">${s.toApprove}</b></div><div>Ready to collect <b style="margin-left:auto;">${s.ready}</b></div><div>At vendors <b style="margin-left:auto;">${s.atVendor}</b></div>${m?`<div>Outstanding <b style="margin-left:auto;">${loMoney(m.outstanding)}</b></div>`:''}</div>
+    <div class="lo-list"><div><b>👥 Staff (${s.staffIn} of ${s.staffAll} in)</b></div>${d.staff.map(p=>`<div onclick="asstOpenView('${escapeForJsAttr(LIVE_OFFICE_LAYOUT.roleView[p.role]||'dashboard')}')"><span style="min-width:92px;">${st[p.st]||''}</span><span style="flex:1;"><b>${asstEsc(p.name)}</b><div style="font-size:11.5px;color:var(--text-muted);">${asstEsc(p.task||'')}</div></span>${p.todo?`<span class="lo-n" style="background:${p.red?'#dc2626':'#f59e0b'};">${p.todo}</span>`:''}</div>`).join('')}</div>
+    <div class="lo-list"><div><b>🤖 Assistants</b></div>${d.assistants.filter(a=>a.on!==false).map(a=>`<div onclick="loBot('${escapeForJsAttr(a.id)}')"><span>${asstEsc(a.icon)}</span><span style="flex:1;">${asstEsc(a.name)}</span><span class="lo-n" style="background:${a.red?'#dc2626':a.count?'#f59e0b':'#16a34a'};">${a.count||'✓'}</span></div>`).join('')}</div>`; }
+function loBot(id){ const a=(_loData?.assistants||[]).find(x=>x.id===id); if(!a) return; if(_loTv) return;
+  cOv(`${a.icon} ${a.name}`,`<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Reports to: ${asstEsc(a.who)}</div>${(a.items||[]).length?(a.items||[]).map(i=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);"><span class="dash-attn-dot" style="margin-top:6px;background:${i.red?'#dc2626':'#f59e0b'};"></span><span style="flex:1;">${i.red?'🔴 ':''}${asstEsc(i.t)}</span><button class="btn btn-outline btn-sm" onclick="f027Close();asstOpenView('${escapeForJsAttr(i.v||'dashboard')}')">Open</button></div>`).join(''):'<div style="color:var(--text-muted);">✅ Nothing open.</div>'}`,620); }
+// isometric drawing — plain inline SVG, no libraries; everything placed from LIVE_OFFICE_LAYOUT
+function loSvg(d){ const C=LIVE_OFFICE_LAYOUT, [TW,TH]=C.tile, hw=TW/2, hh=TH/2, WZ=C.wallH/TH, [GW,GH]=C.grid, tv=_loTv, E=asstEsc;
+  const ox=GH*hw+24, oy=C.wallH+40; const P=(x,y,z=0)=>[ox+(x-y)*hw, oy+(x+y)*hh-z*TH]; const pt=a=>a.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const W=(GW+GH)*hw+48, H=(GW+GH)*hh+C.wallH+60; let floor='', walls=''; const objs=[]; const s=d.screens;
+  const box=(x,y,w,dd,h,c)=>{ const t=[P(x,y,h),P(x+w,y,h),P(x+w,y+dd,h),P(x,y+dd,h)], l=[P(x,y+dd,h),P(x+w,y+dd,h),P(x+w,y+dd,0),P(x,y+dd,0)], r=[P(x+w,y,h),P(x+w,y+dd,h),P(x+w,y+dd,0),P(x+w,y,0)];
+    return `<polygon points="${pt(l)}" fill="${c}" style="filter:brightness(.84)"/><polygon points="${pt(r)}" fill="${c}" style="filter:brightness(.7)"/><polygon points="${pt(t)}" fill="${c}"/>`; };
+  const go=v=>`class="lo-click" onclick="asstOpenView('${escapeForJsAttr(v)}')"`;
+  // floors (with tile lines)
+  C.rooms.forEach(r=>{ let g=`<polygon class="lo-floor" points="${pt([P(r.x,r.y),P(r.x+r.w,r.y),P(r.x+r.w,r.y+r.h),P(r.x,r.y+r.h)])}" fill="${tv?'#1e293b':r.floor}" stroke="${tv?'#334155':r.edge}" stroke-width="1.5"/>`;
+    for(let i=1;i<r.w;i++) g+=`<line x1="${P(r.x+i,r.y)[0]}" y1="${P(r.x+i,r.y)[1]}" x2="${P(r.x+i,r.y+r.h)[0]}" y2="${P(r.x+i,r.y+r.h)[1]}" stroke="${tv?'#2a3a52':r.edge}" stroke-opacity=".4"/>`;
+    for(let i=1;i<r.h;i++) g+=`<line x1="${P(r.x,r.y+i)[0]}" y1="${P(r.x,r.y+i)[1]}" x2="${P(r.x+r.w,r.y+i)[0]}" y2="${P(r.x+r.w,r.y+i)[1]}" stroke="${tv?'#2a3a52':r.edge}" stroke-opacity=".4"/>`;
+    floor+=`<g class="lo-room lo-click" onclick="asstOpenView('${r.view}')"><title>${E(r.label)} — open</title>${g}</g>`; });
+  // outer back walls (with a skirting line) and the low partitions between rooms
+  const wc=tv?'#334155':'#e8edf3', wc2=tv?'#2b3a4f':'#d5dde7';
+  walls+=`<polygon points="${pt([P(0,0,0),P(GW,0,0),P(GW,0,WZ),P(0,0,WZ)])}" fill="${wc}" stroke="${wc2}"/><polygon points="${pt([P(0,0,0),P(0,GH,0),P(0,GH,WZ),P(0,0,WZ)])}" fill="${wc2}" stroke="${wc2}"/>`;
+  walls+=`<polygon points="${pt([P(0,0,WZ),P(GW,0,WZ),P(GW,-0.18,WZ),P(-0.18,-0.18,WZ),P(-0.18,GH,WZ),P(0,GH,WZ)])}" fill="${tv?'#475569':'#c3ccd8'}"/>`;
+  C.rooms.forEach(r=>{ if(r.y>0) objs.push({k:r.x+r.y-0.6,h:box(r.x,r.y-0.05,r.w,0.1,0.32,tv?'#475569':'#f8fafc')}); if(r.x>0) objs.push({k:r.x+r.y-0.6,h:box(r.x-0.05,r.y,0.1,r.h,0.32,tv?'#475569':'#f8fafc')}); });
+  // wall screens with live numbers
+  const scr=(k,lines,v)=>{ const sd=C.screens[k]; if(!sd) return; const [ax,a0,a1]=sd; const z0=WZ*0.38, z1=WZ*0.9;
+    const q=ax==='x'?[P(a0,0,z1),P(a1,0,z1),P(a1,0,z0),P(a0,0,z0)]:[P(0,a1,z1),P(0,a0,z1),P(0,a0,z0),P(0,a1,z0)]; const [x0,y0]=q[0], m=ax==='x'?0.5:-0.5;
+    walls+=`<g ${go(v)}><polygon points="${pt(q)}" fill="#0b1220" stroke="#64748b" stroke-width="2.5"/><g transform="matrix(1,${m},0,1,${x0.toFixed(1)},${y0.toFixed(1)})">${lines.map((l,i)=>`<text x="9" y="${17+i*15}" font-size="${i?11.5:12}" font-weight="${i?500:800}" fill="${l[1]||'#e2e8f0'}">${E(l[0])}</text>`).join('')}</g></g>`; };
+  scr('labx',[['🧪 LAB NOW','#93c5fd'],[`Overdue ${s.overdue} · due today ${s.dueToday}`,s.overdue?'#fca5a5':''],[`To approve ${s.toApprove} · on site ${s.onsite}`]],'equipment');
+  scr('lab',[['📋 TODAY','#93c5fd'],[`Staff in ${s.staffIn} of ${s.staffAll}`],[`Open jobs ${s.openJobs}`]],'equipment');
+  scr('reception',[['📥 RECEPTION','#fcd34d'],[`In ${d.items.incoming.n} · ready ${s.ready}`],[`At vendors ${s.atVendor}`]],'reception');
+  scr('office',[['💼 OFFICE','#86efac'],[`Quotes out ${s.quotesOpen}`],[`Open jobs ${s.openJobs}`]],'quotations-v2');
+  // furniture
+  C.furniture.forEach(f=>objs.push({k:f[0]+f[1]+(f[2]+f[3])*0.5,h:box(f[0],f[1],f[2],f[3],f[4],tv?'#64748b':f[5])}));
+  // item boxes where they are
+  Object.entries(C.racks).forEach(([key,[x,y,lab]])=>{ const n=(d.items[key]||{}).n||0, show=Math.min(n,9); let h=box(x,y,1.5,0.7,0.12,tv?'#475569':'#94a3b8');
+    for(let i=0;i<show;i++){ const cx=x+0.08+(i%3)*0.48, cz=0.12+Math.floor(i/3)*0.36; h+=box(cx,y+0.12,0.38,0.42,0.34,['#f59e0b','#fbbf24','#d97706'][i%3]); }
+    const [lx,ly]=P(x+0.75,y+0.35,0.12+Math.ceil(show/3)*0.36); const t=`${lab} · ${n}`; const w=t.length*6.1+18;
+    h+=`<g ${go(key==='away'?'outsourcing-queue':key==='ready'||key==='incoming'?'reception':'equipment')}><title>${E(t)}</title><rect x="${(lx-w/2).toFixed(1)}" y="${ly-24}" width="${w.toFixed(1)}" height="17" rx="8.5" fill="${tv?'#0b1220':'#fff'}" stroke="${tv?'#475569':'#cbd5e1'}"/><text x="${lx}" y="${ly-12}" text-anchor="middle" font-size="10.5" font-weight="600" fill="${tv?'#e2e8f0':'#334155'}">${E(t)}</text></g>`;
+    objs.push({k:x+y+1.1,h}); });
+  // the assistants' robots in their rooms
+  const robot=(x,y,a)=>{ const [X,Y]=P(x,y); const c=a.red?'#dc2626':a.count?'#f59e0b':'#16a34a';
+    return `<g class="lo-click" onclick="loBot('${escapeForJsAttr(a.id)}')"><title>${E(a.name)} — ${a.count} open${a.red?`, ${a.red} urgent`:''} (click for the list)</title><ellipse cx="${X}" cy="${Y}" rx="12" ry="5" fill="#000" opacity=".16"/>
+      <rect x="${X-8}" y="${Y-21}" width="16" height="16" rx="4" fill="#cbd5e1" stroke="#64748b"/><rect x="${X-11}" y="${Y-37}" width="22" height="16" rx="5" fill="#f1f5f9" stroke="#64748b"/>
+      <circle cx="${X-4.5}" cy="${Y-29}" r="2.3" fill="#0ea5e9"/><circle cx="${X+4.5}" cy="${Y-29}" r="2.3" fill="#0ea5e9"/><line x1="${X}" y1="${Y-37}" x2="${X}" y2="${Y-43}" stroke="#64748b" stroke-width="1.5"/><circle cx="${X}" cy="${Y-44}" r="2.4" fill="${c}"/>
+      <text x="${X}" y="${Y-9}" text-anchor="middle" font-size="9">${E(a.icon)}</text>
+      <circle cx="${X+13}" cy="${Y-37}" r="8.5" fill="${c}" stroke="#fff" stroke-width="1.5"/><text x="${X+13}" y="${Y-33.8}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">${a.count||'✓'}</text></g>`; };
+  const byRoom={}; d.assistants.filter(a=>a.on!==false).forEach(a=>(byRoom[a.room]=byRoom[a.room]||[]).push(a));
+  C.rooms.forEach(r=>(byRoom[r.id]||[]).forEach((a,i)=>{ const sl=r.bots[i]||[r.bots[r.bots.length-1][0]-0.9*(i-r.bots.length+1),r.bots[r.bots.length-1][1]]; objs.push({k:sl[0]+sl[1],h:robot(sl[0],sl[1],a)}); }));
+  // staff figures (lit = clocked in; grey = not in / left / on leave); on-site staff stand in the store / delivery bay
+  const per={}; d.staff.forEach(p=>{ const room=p.st==='site'?'store':(C.roleRoom[p.role]||'office'); (per[room]=per[room]||[]).push(p); });
+  const fig=(x,y,p)=>{ const [X,Y]=P(x,y); const lit=p.st==='in'||p.st==='site'; const col=C.roleColour[p.role]||'#334155'; const nm=String(p.name||'').split(' ')[0].slice(0,12);
+    const badge={leave:'🏖️ On leave',out:`Left ${p.out||''}`,absent:'Not in',site:'🚐 On site'}[p.st]||''; const task=lit?String(p.task||'').slice(0,34):''; const bw=Math.max(44,task.length*5.8+16);
+    return `<g class="lo-click" onclick="asstOpenView('${escapeForJsAttr(C.roleView[p.role]||'dashboard')}')"><title>${E(p.name)} — ${E(p.role)}${p.in?` · in ${E(p.in)}`:''}${p.task?` · ${E(p.task)}`:''}</title>
+      <g ${lit?'':`style="filter:grayscale(1);opacity:${tv?.5:.4}"`}><ellipse cx="${X}" cy="${Y}" rx="12" ry="5" fill="#000" opacity=".18"/><rect x="${X-6}" y="${Y-9}" width="4.5" height="9" rx="2" fill="#334155"/><rect x="${X+1.5}" y="${Y-9}" width="4.5" height="9" rx="2" fill="#334155"/>
+      <rect x="${X-10}" y="${Y-30}" width="20" height="23" rx="8" fill="${col}"/><circle cx="${X}" cy="${Y-38}" r="9" fill="#f2c9a0" stroke="#d6a77a"/><path d="M${X-9},${Y-40} q9,-12 18,0 q-3,-5 -9,-5 q-6,0 -9,5z" fill="#3f2a1d"/>
+      <circle cx="${X-3}" cy="${Y-38}" r="1.3" fill="#1f2937"/><circle cx="${X+3}" cy="${Y-38}" r="1.3" fill="#1f2937"/><path d="M${X-3},${Y-34} q3,2.5 6,0" stroke="#1f2937" stroke-width="1" fill="none"/></g>
+      <rect x="${X-34}" y="${Y+3}" width="68" height="16" rx="8" fill="${tv?'#0b1220':'#fff'}" stroke="${lit?col:(tv?'#475569':'#cbd5e1')}" stroke-width="${lit?1.6:1}"/><text x="${X}" y="${Y+14.5}" text-anchor="middle" font-size="11" font-weight="700" fill="${tv?'#e2e8f0':'#0f172a'}">${E(nm)}</text>
+      ${badge?`<text x="${X}" y="${Y+28}" text-anchor="middle" font-size="9" fill="${tv?'#94a3b8':'#64748b'}">${E(badge)}</text>`:''}
+      ${p.todo&&!tv?`<circle cx="${X+13}" cy="${Y-45}" r="7.5" fill="${p.red?'#dc2626':'#f59e0b'}" stroke="#fff"/><text x="${X+13}" y="${Y-42}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff">${p.todo}</text>`:''}
+      ${task?`<g><rect x="${(X-bw/2).toFixed(1)}" y="${Y-70}" width="${bw.toFixed(1)}" height="18" rx="9" fill="#fff" stroke="#94a3b8"/><path d="M${X-4},${Y-52.5} l4,5.5 l3.5,-5.5" fill="#fff" stroke="#94a3b8"/><rect x="${X-4.6}" y="${Y-55}" width="9" height="2.6" fill="#fff"/><text x="${X}" y="${Y-58}" text-anchor="middle" font-size="10.5" fill="#0f172a">${E(task)}</text></g>`:''}</g>`; };
+  C.rooms.forEach(r=>{ const L=(per[r.id]||[]).slice().sort((a,b)=>((b.st==='in'||b.st==='site')?1:0)-((a.st==='in'||a.st==='site')?1:0)); if(!L.length) return;
+    const [x0,y0,x1,y1]=r.people; const cols=Math.max(1,Math.round((x1-x0)/1.3)+1), rows=Math.max(1,Math.round((y1-y0)/1.0)+1);
+    L.forEach((p,i)=>{ const c=i%cols, rw=Math.floor(i/cols)%rows, layer=Math.floor(i/(cols*rows)); const x=x0+(cols>1?c*(x1-x0)/(cols-1):0)+layer*0.35, y=y0+(rows>1?rw*(y1-y0)/(rows-1):0)+layer*0.35; objs.push({k:x+y+0.1,h:fig(x,y,p)}); }); });
+  // MD money board — MD / Admin only, never on the TV (the server leaves the figures out)
+  let money=''; if(s.money&&!tv){ money=`<g ${go('invoices')}><title>Money this month — MD only</title><rect x="12" y="54" width="214" height="78" rx="9" fill="#0b1220" stroke="#7c3aed" stroke-width="2.5"/>
+      <text x="24" y="73" font-size="11" font-weight="800" fill="#c4b5fd">💰 ${E(new Date(d.at).toLocaleString('en-GB',{month:'long'}))} — MD only</text>
+      <text x="24" y="90" font-size="10.5" fill="#e2e8f0">Invoiced ${E(loMoney(s.money.invoicedMonth))} · collected ${E(loMoney(s.money.collectedMonth))}</text>
+      <text x="24" y="106" font-size="10.5" fill="#e2e8f0">Outstanding ${E(loMoney(s.money.outstanding))}</text><text x="24" y="122" font-size="10.5" fill="${s.money.overdue?'#fca5a5':'#e2e8f0'}">Overdue ${E(loMoney(s.money.overdue))}</text></g>`; }
+  objs.sort((a,b)=>a.k-b.k);
+  const labels=C.rooms.map(r=>{ const [X,Y]=P(r.lab[0],r.lab[1]); const w=r.label.length*7.1+24; return `<g ${go(r.view)}><rect x="${(X-w/2).toFixed(1)}" y="${Y-11}" width="${w.toFixed(1)}" height="20" rx="10" fill="${tv?'#334155':'#0f172a'}" opacity=".9"/><text x="${X}" y="${Y+3}" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">${E(r.label)}</text></g>`; }).join('');
+  const head=`<text x="14" y="24" font-size="14" font-weight="700" fill="${tv?'#e2e8f0':'#0f172a'}">👥 ${s.staffIn} of ${s.staffAll} in</text><text x="14" y="41" font-size="11" fill="${tv?'#94a3b8':'#64748b'}">Open jobs ${s.openJobs} · overdue ${s.overdue} · to approve ${s.toApprove} · ready ${s.ready}</text>`;
+  return `<svg id="lo-svg" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Live office">${head}${money}${floor}${walls}${objs.map(o=>o.h).join('')}${labels}</svg>`; }
+// ── Settings → 🤖 Assistants (MD / Admin) ──
+let _asstCfg=null;
+async function asstSettingsCard(){ if(!currentUser||!isAdmin(currentUser)) return; const view=el('view-settings'); if(!view) return; let c=el('asst-settings-card');
+  if(!c){ c=document.createElement('div'); c.className='card'; c.id='asst-settings-card'; c.style.marginBottom='16px'; view.appendChild(c); try{ const t=SETTINGS_TABS.find(x=>x[0]==='ops'); if(t&&!t[2].includes('Assistants')) t[2].push('Assistants'); }catch(e){} }
+  c.innerHTML='<div class="card-header"><span class="card-title">🤖 Assistants</span></div><div class="card-body" style="font-size:13px;">Loading…</div>'; if(typeof applySettingsTabs==='function') try{ applySettingsTabs(); }catch(e){}
+  try{ _asstCfg=await apiFetch('/api/assistants-config'); }catch(e){ c.querySelector('.card-body').textContent=e.userMessage||e.message||String(e); return; }
+  const {cfg,defs,labels}=_asstCfg; const inp=(id,k,v)=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 10px 2px 0;">${asstEsc((k==='approvalWaitDays'&&id==='hr'?labels.approvalWaitDays_hr:labels[k])||k)} <input class="form-control" data-asst="${id}" data-k="${k}" value="${asstEsc(v)}" style="width:${k==='clockInBy'?72:58}px;padding:3px 6px;font-size:12px;"${k==='clockInBy'?' placeholder="09:00"':' type="number" min="0"'}/></label>`;
+  c.querySelector('.card-body').innerHTML=`<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;line-height:1.6;">Rule-based assistants (no AI). Each person gets ONE email at <b>8:00 am</b> Monday–Saturday when they have items (none on Sundays / public holidays), a <b>2:00 pm</b> reminder only for 🔴 urgent items still open, and the same list on their dashboard. The MD gets one daily summary and a weekly report every Monday 8:00 am. Emails go from the LIMS mailbox and are kept in the email log.${cfg.at?` Last changed ${asstEsc(fmtDateShort(cfg.at))} by ${asstEsc(staffNameOf(cfg.by)||cfg.by)}.`:''}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;">${[['email','Send emails'],['pm','2:00 pm 🔴 reminder'],['mdSummary','MD daily summary'],['weekly','MD weekly report (Monday)']].map(([k,l])=>`<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="asst-g-${k}" ${cfg[k]?'checked':''}/> ${l}</label>`).join('')}</div>
+    <div class="table-wrap"><table class="m-cards" style="font-size:12.5px;"><thead><tr><th style="width:34px;">On</th><th>Assistant</th><th>Goes to</th><th>Limits</th></tr></thead><tbody>
+    ${defs.map(a=>`<tr><td><input type="checkbox" id="asst-on-${a.id}" ${cfg.on[a.id]?'checked':''}/></td><td style="white-space:nowrap;"><b>${asstEsc(a.icon)} ${asstEsc(a.name)}</b></td><td>${asstEsc(a.roles.map(r=>r==='Manager'?'TM':r==='Managing Director'?'MD':r).join(', '))}${a.id==='lab'?' (approvals → signatories)':a.id==='daily'?' + engineers on duty':a.id==='hr'?' (approvals → TM / MD)':''}</td>
+      <td><div style="display:flex;flex-wrap:wrap;">${Object.keys(a.lim).map(k=>inp(a.id,k,cfg.lim[a.id][k])).join('')||'<span style="color:var(--text-muted);">low level per sticker type (Calibration Stickers above)</span>'}</div></td></tr>`).join('')}</tbody></table></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="btn btn-primary" onclick="asstSettingsSave()">💾 Save assistants</button><button class="btn btn-outline" onclick="asstPreview('am')">👁 Preview 8 am emails</button><button class="btn btn-outline" onclick="asstPreview('pm')">👁 Preview 2 pm reminders</button><button class="btn btn-outline" onclick="asstPreview('weekly')">👁 Preview weekly report</button><button class="btn btn-outline" onclick="asstSendMe()">✉️ Send my 8 am email to me now</button></div>`; }
+async function asstSettingsSave(){ if(!_asstCfg) return; const cfg={on:{},lim:{}}; ['email','pm','mdSummary','weekly'].forEach(k=>cfg[k]=!!el('asst-g-'+k)?.checked);
+  _asstCfg.defs.forEach(a=>{ cfg.on[a.id]=!!el('asst-on-'+a.id)?.checked; cfg.lim[a.id]={}; }); document.querySelectorAll('#asst-settings-card [data-asst]').forEach(i=>{ cfg.lim[i.dataset.asst][i.dataset.k]=i.value.trim(); });
+  try{ await apiFetch('/api/assistants-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cfg})}); showToast('✅ Assistants saved','success',2000); _asstDash.at=0; if(typeof addAudit==='function') addAudit('🤖','Assistant settings changed'); asstSettingsCard(); }
+  catch(e){ alert(e.userMessage||e.message||e); } }
+async function asstPreview(kind){ try{ const r=await apiFetch('/api/assistants-run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind})});
+    const L=r.sent||[]; cOv(`👁 Preview — ${kind==='am'?'8:00 am emails':kind==='pm'?'2:00 pm reminders':'weekly report'}`,`<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Nothing was sent. ${L.length} email${L.length===1?'':'s'} would go out now${r.skipped?' ('+asstEsc(r.skipped)+')':''}.</div>
+      ${L.map((m,i)=>`<details style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;margin-bottom:6px;" ${i===0?'open':''}><summary style="cursor:pointer;"><b>${asstEsc((m.to||[]).join(', '))}</b> — ${asstEsc(m.subject)}</summary><iframe sandbox="" style="width:100%;height:340px;border:0;margin-top:6px;" srcdoc="${asstEsc(m.html||'')}"></iframe></details>`).join('')||'<div>No emails — nobody has items.</div>'}`,760); }
+  catch(e){ alert(e.userMessage||e.message||e); } }
+async function asstSendMe(){ if(!confirm('Send your own 8 am assistant email to your address now (a test)?')) return;
+  try{ const r=await apiFetch('/api/assistants-run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'am',send:true})}); const L=r.sent||[];
+    alert(L.length?L.map(m=>`${m.ok?'✅':'❌'} ${(m.to||[]).join(', ')} — ${m.subject}`).join('\n'):'Nothing to send — your list is empty (or your staff record has no email).'); }catch(e){ alert(e.userMessage||e.message||e); } }
 </script>
 
 </body>
