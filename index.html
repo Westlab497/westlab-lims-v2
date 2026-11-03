@@ -2203,7 +2203,7 @@ html.wl-test #sidebar{top:22px;} html.wl-test #main{padding-top:22px;}
       <div class="card" id="backup-card" style="margin-bottom:16px;display:none;">
         <div class="card-header"><span class="card-title">🔐 Backups</span></div>
         <div class="card-body">
-          <div style="font-size:12.5px;margin-bottom:10px;">Every <b>Monday at 7:30 am</b> an <b>encrypted</b> copy of all LIMS data is made and a <b>download link</b> (valid 14 days) is emailed to you — download the file to your computer / external hard disk each week. Only your backup password can open it — keep the files and the password safe. If a Monday backup is not sent, a red alert shows on your dashboard and in the 8 am email.</div>
+          <div style="font-size:12.5px;margin-bottom:10px;">Every <b>Sunday at 2 pm</b> an <b>encrypted</b> copy of all LIMS data is made and a <b>download link</b> (valid 14 days) is emailed to you — download the file to your computer / external hard disk each week. Only your backup password can open it — keep the files and the password safe. If a Monday backup is not sent, a red alert shows on your dashboard and in the 8 am email.</div>
           <button class="btn btn-outline btn-sm" onclick="sendBackupNow()">📧 Send a backup now</button>
           <span id="backup-now-status" style="font-size:12px;color:var(--text-muted);margin-left:8px;"></span>
           <div style="border-top:1px solid var(--border);margin:14px 0 10px;"></div>
@@ -12375,7 +12375,7 @@ async function addReviewedHolidays(){
   if(el('ls-holidays')) el('ls-holidays').value=getPublicHolidays().slice().sort((a,b)=>a.date.localeCompare(b.date)).map(h=>(h.date+' '+(h.name||'')).trim()).join('\n');
 }
 function renderHolidaySettingsInfo(){ const i=el('ls-hol-info'); if(!i) return; const f=_holidayFeed; const n=newFeedHolidays().length;
-  i.innerHTML=`${f?.checkedAt?`Checked automatically every Monday · last ${new Date(f.checkedAt).toLocaleString('en-MY')}`:'Checked automatically every Monday'}${n?` · <b style="color:#b45309;">${n} new to review</b>`:''} · Holiday data: <a href="https://calendarific.com" target="_blank" rel="noopener">Calendarific</a>`; }
+  i.innerHTML=`${f?.checkedAt?`Checked automatically every Sunday · last ${new Date(f.checkedAt).toLocaleString('en-MY')}`:'Checked automatically every Sunday'}${n?` · <b style="color:#b45309;">${n} new to review</b>`:''} · Holiday data: <a href="https://calendarific.com" target="_blank" rel="noopener">Calendarific</a>`; }
 // r15 item 7: January–March reminders about carried-forward annual leave (each staff: own days; HR / MD: everyone's),
 // and once in January an email to each staff with carried days, copied in a summary to HR
 function leaveCarryRows(){ const y=leaveYearOf(klDay()); return (_staff||[]).filter(s=>s&&s.active!==false).map(s=>({s,b:leaveBreakdown(s.username,'Annual Leave',y)})).filter(x=>x.b.carryLeft>0); }
